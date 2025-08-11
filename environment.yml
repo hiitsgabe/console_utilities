@@ -1,0 +1,11 @@
+name: roms_downloader
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pygame>=2.0.0
+  - requests>=2.25.0
+  - pip
+  - pip:
+    - requests

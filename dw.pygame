@@ -4,15 +4,25 @@ import json
 import pygame
 import requests
 import traceback
+import re
 from zipfile import ZipFile
 from io import BytesIO
 from datetime import datetime
+from urllib.parse import urljoin, unquote, quote
 
-# Constants
-JSON_FILE = "/userdata/roms/pygame/downloader/download.json"
-WORK_DIR = "/userdata/py_downloads"
-ROMS_DIR = "/userdata/roms"
-LOG_FILE = "/userdata/roms/pygame/downloader/error.log"
+# Auto-detect environment and set paths
+if os.path.exists("/userdata/roms"):
+    # Console environment
+    JSON_FILE = "/userdata/roms/pygame/downloader/download.json"
+    WORK_DIR = "/userdata/py_downloads"
+    ROMS_DIR = "/userdata/roms"
+    LOG_FILE = "/userdata/roms/pygame/downloader/error.log"
+else:
+    # Local development environment
+    JSON_FILE = "download.json"
+    WORK_DIR = "./py_downloads"
+    ROMS_DIR = "./roms"
+    LOG_FILE = "./error.log"
 FPS = 30
 SCREEN_WIDTH, SCREEN_HEIGHT = 800, 600
 FONT_SIZE = 28
@@ -32,6 +42,7 @@ def log_error(error_msg, error_type=None, traceback_str=None):
         f.write(log_message)
 
 # Initialize error log
+os.makedirs(os.path.dirname(LOG_FILE) if os.path.dirname(LOG_FILE) else ".", exist_ok=True)
 with open(LOG_FILE, "w") as f:
     f.write(f"Error Log - Started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
     f.write("-" * 80 + "\n")
@@ -43,9 +54,14 @@ try:
     clock = pygame.time.Clock()
     font = pygame.font.Font(None, FONT_SIZE)
 
+    # Initialize joystick if available, otherwise use keyboard
     pygame.joystick.init()
-    joystick = pygame.joystick.Joystick(0)
-    joystick.init()
+    joystick = None
+    if pygame.joystick.get_count() > 0:
+        joystick = pygame.joystick.Joystick(0)
+        joystick.init()
+    else:
+        print("No joystick detected, use keyboard: Arrow keys, Enter, Escape, Space")
 
     WHITE = (255, 255, 255)
     BLACK = (0, 0, 0)
@@ -64,6 +80,10 @@ try:
     selected_games = set()
     game_list = []
     mode = "systems"  # systems or games
+    
+    # Pagination variables for Switch
+    current_page = 0
+    total_pages = 1
     highlighted = 0
 
     os.makedirs(WORK_DIR, exist_ok=True)
@@ -92,7 +112,7 @@ try:
         bar_height = 20
         bar_y = 70
         bar_width = min(SCREEN_WIDTH - 80, 600)
-        bar_x = (SCREEN_WIDTH - bar_width) // 2
+        bar_x = 20
         pygame.draw.rect(screen, GRAY, (bar_x, bar_y, bar_width, bar_height))
         
         # Draw progress
@@ -102,7 +122,7 @@ try:
         # Draw percentage text
         percent_text = f"{percent}%"
         percent_surf = font.render(percent_text, True, BLACK)
-        percent_x = SCREEN_WIDTH // 2 - percent_surf.get_width() // 2
+        percent_x = bar_x + (bar_width - percent_surf.get_width()) // 2
         screen.blit(percent_surf, (percent_x, bar_y + 2))
         
         # Draw size and speed info
@@ -111,7 +131,7 @@ try:
             if speed > 0:
                 size_text += f" - {format_size(speed)}/s"
             size_surf = font.render(size_text, True, BLACK)
-            size_x = SCREEN_WIDTH // 2 - size_surf.get_width() // 2
+            size_x = bar_x + (bar_width - size_surf.get_width()) // 2
             screen.blit(size_surf, (size_x, bar_y + bar_height + 10))
         
         # Draw instructions
@@ -171,7 +191,15 @@ try:
             # Color is green if item is highlighted or selected
             color = GREEN if actual_idx == highlighted or actual_idx in selected_indices else BLACK
             prefix = "[x] " if actual_idx in selected_indices else "[ ] " if mode == "games" else ""
-            item_surf = font.render(prefix + item, True, color)
+            
+            # Handle different item formats (Switch vs regular)
+            if isinstance(item, dict):
+                display_text = item['name']
+            else:
+                # Remove file extension for display
+                display_text = os.path.splitext(item)[0]
+                
+            item_surf = font.render(prefix + display_text, True, color)
             screen.blit(item_surf, (20, y))
             y += FONT_SIZE + 10
 
@@ -181,6 +209,13 @@ try:
             message_surf = font.render(message, True, GREEN)
             message_y = SCREEN_HEIGHT - 50
             screen.blit(message_surf, (20, message_y))
+        
+        # Draw pagination info for Switch
+        if mode == "games" and len(data) > 0 and data[selected_system].get('supports_pagination', False):
+            page_message = f"Page {current_page + 1} (L/R to change page)"
+            page_surf = font.render(page_message, True, GRAY)
+            page_y = SCREEN_HEIGHT - 30
+            screen.blit(page_surf, (20, page_y))
 
         pygame.display.flip()
 
@@ -212,7 +247,6 @@ try:
     def download_files(system, selected_game_indices):
         try:
             sys_data = data[system]
-            download_url = sys_data['download_url']
             formats = sys_data.get('file_format', [])
             roms_folder = os.path.join(ROMS_DIR, sys_data['roms_folder'])
             os.makedirs(roms_folder, exist_ok=True)
@@ -221,15 +255,36 @@ try:
             total = len(selected_files)
             cancelled = False
 
-            for idx, filename in enumerate(selected_files):
+            for idx, game_item in enumerate(selected_files):
                 if cancelled:
                     break
                 
+                # Handle different game formats
+                if isinstance(game_item, dict):
+                    # Switch API format
+                    game_name = game_item['name']
+                    title_id = game_item['title_id']
+                    filename = f"{game_name} [{title_id}][v0].nsz"
+                else:
+                    # Regular filename
+                    game_name = game_item
+                    filename = game_item
+                
                 # Calculate overall progress
                 overall_progress = int((idx / total) * 100)
-                draw_progress_bar(f"Downloading {filename} ({idx+1}/{total})", overall_progress)
+                draw_progress_bar(f"Downloading {game_name} ({idx+1}/{total})", overall_progress)
                 
-                url = f"{download_url}/{filename}"
+                # Build download URL based on format
+                if sys_data.get('use_api', False) and 'download_url' in sys_data:
+                    # Switch API format - encode game name for URL
+                    encoded_filename = quote(filename)
+                    url = f"{sys_data['download_url']}{encoded_filename}"
+                elif 'download_url' in sys_data:
+                    # Old format
+                    url = f"{sys_data['download_url']}/{filename}"
+                elif 'url' in sys_data:
+                    # New format - construct URL by joining base URL with filename
+                    url = urljoin(sys_data['url'], filename)
                 try:
                     r = requests.get(url, stream=True, timeout=10)
                     r.raise_for_status()
@@ -274,10 +329,11 @@ try:
                             os.remove(file_path)
                         break
 
-                    if filename.endswith(".zip"):
+                    if filename.endswith(".zip") and sys_data.get('should_unzip', False):
                         draw_progress_bar(f"Extracting {filename}...", 0)
                         with ZipFile(file_path, 'r') as zip_ref:
                             zip_ref.extractall(WORK_DIR)
+                        os.remove(file_path)
 
                     # Move files to ROMS
                     draw_progress_bar(f"Moving files to ROMS folder...", 0)
@@ -298,22 +354,95 @@ try:
         except Exception as e:
             log_error(f"Error in download_files for system {system}", type(e).__name__, traceback.format_exc())
 
-    def list_files(system):
+    def list_files(system, page=0):
         try:
             draw_loading_message(f"Loading games for {data[system]['name']}...")
             sys_data = data[system]
-            list_url = sys_data['list_url']
             formats = sys_data.get('file_format', [])
-            array_path = sys_data.get('list_json_file_location', "files")
-            file_id = sys_data.get('list_item_id', "name")
-            r = requests.get(list_url, timeout=10)
-            response = r.json()
             
-            # Handle the response with "files" array
-            if isinstance(response, dict) and "files" in response:
-                files = response[array_path]
-                if isinstance(files, list):
-                    return [f[file_id] for f in files if any(f[file_id].lower().endswith(ext.lower()) for ext in formats)]
+            # Check if this uses API format (like Switch)
+            if sys_data.get('use_api', False) and 'api_url' in sys_data:
+                # API format - like Switch with pagination
+                api_url = sys_data['api_url']
+                if 'limit=' in api_url:
+                    # Add page offset to API URL
+                    base_url = api_url.split('?')[0]
+                    params = api_url.split('?')[1]
+                    limit = int([p.split('=')[1] for p in params.split('&') if p.startswith('limit=')][0])
+                    offset = page * limit
+                    paginated_url = f"{base_url}?{params}&offset={offset}"
+                else:
+                    paginated_url = api_url
+                
+                r = requests.get(paginated_url, timeout=10)
+                response = r.json()
+                
+                files = []
+                for game_id, game_data in response.items():
+                    game_name = game_data.get('name', {}).get('en', game_data.get('name', {}).get('default', game_id))
+                    files.append({
+                        'name': game_name,
+                        'title_id': game_id,
+                        'size': game_data.get('size', 0)
+                    })
+                
+                return sorted(files, key=lambda x: x['name'])
+            
+            # Check if this is the old JSON API format
+            elif 'list_url' in sys_data:
+                # Old format - JSON API
+                list_url = sys_data['list_url']
+                array_path = sys_data.get('list_json_file_location', "files")
+                file_id = sys_data.get('list_item_id', "name")
+                r = requests.get(list_url, timeout=10)
+                response = r.json()
+                
+                if isinstance(response, dict) and "files" in response:
+                    files = response[array_path]
+                    if isinstance(files, list):
+                        return [f[file_id] for f in files if any(f[file_id].lower().endswith(ext.lower()) for ext in formats)]
+            
+            elif 'url' in sys_data:
+                # New format - HTML directory listing
+                url = sys_data['url']
+                regex_pattern = sys_data.get('regex', '<a href="([^"]+)"[^>]*>([^<]+)</a>')
+                
+                r = requests.get(url, timeout=10)
+                r.raise_for_status()
+                html_content = r.text
+                
+                # Extract file links using regex
+                if 'regex' in sys_data:
+                    # Use the provided named capture group regex
+                    matches = re.finditer(regex_pattern, html_content)
+                    files = []
+                    for match in matches:
+                        try:
+                            # Try to get the filename from named groups
+                            if 'text' in match.groupdict():
+                                filename = unquote(match.group('text'))
+                            elif 'href' in match.groupdict():
+                                filename = unquote(match.group('href'))
+                            else:
+                                # Fallback to first group
+                                filename = unquote(match.group(1))
+                            
+                            # Filter by file format
+                            if any(filename.lower().endswith(ext.lower()) for ext in formats):
+                                files.append(filename)
+                        except:
+                            continue
+                else:
+                    # Simple regex for href links
+                    matches = re.findall(r'<a href="([^"]+)"[^>]*>([^<]+)</a>', html_content)
+                    files = []
+                    for href, text in matches:
+                        filename = unquote(text or href)
+                        if any(filename.lower().endswith(ext.lower()) for ext in formats):
+                            files.append(filename)
+                
+                return sorted(files)
+            
             return []
         except Exception as e:
             log_error(f"Failed to fetch list for system {system}", type(e).__name__, traceback.format_exc())
@@ -357,12 +486,52 @@ try:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
+                elif event.type == pygame.KEYDOWN:
+                    # Keyboard controls (same logic as joystick)
+                    if event.key == pygame.K_RETURN:  # Enter = Select (Button 4)
+                        if mode == "systems":
+                            selected_system = highlighted
+                            current_page = 0
+                            game_list = list_files(selected_system, current_page)
+                            selected_games = set()
+                            mode = "games"
+                            highlighted = 0
+                        elif mode == "games":
+                            if highlighted in selected_games:
+                                selected_games.remove(highlighted)
+                            else:
+                                selected_games.add(highlighted)
+                    elif event.key == pygame.K_ESCAPE:  # Escape = Back (Button 3)
+                        if mode == "games":
+                            mode = "systems"
+                            highlighted = 0
+                    elif event.key == pygame.K_SPACE:  # Space = Start Download (Button 10)
+                        if mode == "games" and selected_games:
+                            draw_loading_message("Starting download...")
+                            download_files(selected_system, selected_games)
+                            mode = "systems"
+                            highlighted = 0
+                    elif event.key == pygame.K_UP:
+                        max_items = len(game_list) if mode == "games" else len(data)
+                        if max_items > 0:
+                            highlighted = (highlighted - 1) % max_items
+                    elif event.key == pygame.K_DOWN:
+                        max_items = len(game_list) if mode == "games" else len(data)
+                        if max_items > 0:
+                            highlighted = (highlighted + 1) % max_items
+                    elif event.key == pygame.K_LEFT and mode == "games":
+                        if game_list:
+                            highlighted = find_next_letter_index(game_list, highlighted, -1)
+                    elif event.key == pygame.K_RIGHT and mode == "games":
+                        if game_list:
+                            highlighted = find_next_letter_index(game_list, highlighted, 1)
                 elif event.type == pygame.JOYBUTTONDOWN:
                     # Button 4 = Select, Button 3 = Back, Button 10 = Start Download
                     if event.button == 4:  # Select
                         if mode == "systems":
                             selected_system = highlighted  # Use the highlighted index
-                            game_list = list_files(selected_system)
+                            current_page = 0
+                            game_list = list_files(selected_system, current_page)
                             selected_games = set()
                             mode = "games"
                             highlighted = 0
@@ -375,6 +544,23 @@ try:
                         if mode == "games":
                             mode = "systems"
                             highlighted = 0
+                    elif event.button == 6:  # Left shoulder - Previous page
+                        if mode == "games" and data[selected_system].get('supports_pagination', False):
+                            if current_page > 0:
+                                current_page -= 1
+                                game_list = list_files(selected_system, current_page)
+                                highlighted = 0
+                                selected_games = set()
+                    elif event.button == 7:  # Right shoulder - Next page
+                        if mode == "games" and data[selected_system].get('supports_pagination', False):
+                            current_page += 1
+                            new_games = list_files(selected_system, current_page)
+                            if new_games:  # Only move if there are games on next page
+                                game_list = new_games
+                                highlighted = 0
+                                selected_games = set()
+                            else:
+                                current_page -= 1  # Revert if no games found
                     elif event.button == 10:  # Start Download
                         if mode == "games" and selected_games:
                             draw_loading_message("Starting download...")

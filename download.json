@@ -1,12 +1,203 @@
 [
   {
-    "name": "PSP",
-    "list_url": "https://archive.org/metadata/XXXXXXXX",
-    "list_json_file_location": "files",
-    "list_item_id": "name",
-    "download_url": "https://archive.org/download/XXXXXX",
-    "commands": [],
-    "file_format": [".iso"],
-    "roms_folder": "psp"
+    "name": "PlayStation 1",
+    "url": "https://myrient.erista.me/files/Redump/Sony%20-%20PlayStation/",
+    "regex": "<tr><td class=\"link\"><a href=\"(?P<href>[^\"]+)\" title=\"(?P<title>[^\"]+)\">(?P<text>[^<]+)</a></td><td class=\"size\">(?P<size>[^<]+)</td><td class=\"date\">[^<]*</td></tr>",
+    "file_format": [".bin", ".cue", ".iso", ".zip"],
+    "roms_folder": "psx",
+    "boxarts": "https://thumbnails.libretro.com/Sony%20-%20PlayStation/Named_Boxarts/",
+    "should_unzip": false
+  },
+  {
+    "name": "PlayStation 2",
+    "url": "https://myrient.erista.me/files/Redump/Sony%20-%20PlayStation%202/",
+    "file_format": [".iso", ".zip"],
+    "roms_folder": "ps2",
+    "boxarts": "https://thumbnails.libretro.com/Sony%20-%20PlayStation%202/Named_Boxarts/",
+    "should_unzip": true
+  },
+  {
+    "name": "PlayStation 3",
+    "url": "https://myrient.erista.me/files/Redump/Sony%20-%20PlayStation%203/",
+    "file_format": [".iso", ".pkg", ".zip"],
+    "roms_folder": "ps3",
+    "should_unzip": true
+  },
+  {
+    "name": "PlayStation Portable",
+    "url": "https://myrient.erista.me/files/Redump/Sony%20-%20PlayStation%20Portable/",
+    "file_format": [".iso", ".cso", ".zip"],
+    "roms_folder": "psp",
+    "boxarts": "https://thumbnails.libretro.com/Sony%20-%20PlayStation%20Portable/Named_Boxarts/",
+    "should_unzip": true
+  },
+  {
+    "name": "Game Boy",
+    "url": "https://myrient.erista.me/files/No-Intro/Nintendo%20-%20Game%20Boy/",
+    "file_format": [".gb", ".zip"],
+    "roms_folder": "gb",
+    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Game%20Boy/Named_Boxarts/",
+    "should_unzip": true
+  },
+  {
+    "name": "Game Boy Color",
+    "url": "https://myrient.erista.me/files/No-Intro/Nintendo%20-%20Game%20Boy%20Color/",
+    "file_format": [".gbc", ".zip"],
+    "roms_folder": "gbc",
+    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Game%20Boy%20Color/Named_Boxarts/",
+    "should_unzip": true
+  },
+  {
+    "name": "Game Boy Advance",
+    "url": "https://myrient.erista.me/files/No-Intro/Nintendo%20-%20Game%20Boy%20Advance/",
+    "file_format": [".gba", ".zip"],
+    "roms_folder": "gba",
+    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Game%20Boy%20Advance/Named_Boxarts/",
+    "should_unzip": true
+  },
+  {
+    "name": "Nintendo DS",
+    "url": "https://myrient.erista.me/files/No-Intro/Nintendo%20-%20Nintendo%20DS%20%28Decrypted%29/",
+    "file_format": [".nds", ".zip"],
+    "roms_folder": "nds",
+    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20DS/Named_Boxarts/",
+    "should_unzip": true
+  },
+  {
+    "name": "Nintendo 3DS",
+    "url": "https://myrient.erista.me/files/No-Intro/Nintendo%20-%20Nintendo%203DS%20%28Decrypted%29/",
+    "file_format": [".3ds", ".cia", ".zip"],
+    "roms_folder": "n3ds",
+    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%203DS/Named_Boxarts/",
+    "should_unzip": true
+  },
+  {
+    "name": "Nintendo Entertainment System",
+    "url": "https://myrient.erista.me/files/No-Intro/Nintendo%20-%20Nintendo%20Entertainment%20System%20%28Headered%29/",
+    "file_format": [".nes", ".zip"],
+    "roms_folder": "nes",
+    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20Entertainment%20System/Named_Boxarts/",
+    "should_unzip": true
+  },
+  {
+    "name": "Super Nintendo",
+    "url": "https://myrient.erista.me/files/No-Intro/Nintendo%20-%20Super%20Nintendo%20Entertainment%20System/",
+    "file_format": [".sfc", ".smc", ".zip"],
+    "roms_folder": "snes",
+    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Super%20Nintendo%20Entertainment%20System/Named_Boxarts/",
+    "should_unzip": true
+  },
+  {
+    "name": "Nintendo 64",
+    "url": "https://myrient.erista.me/files/No-Intro/Nintendo%20-%20Nintendo%2064%20%28BigEndian%29/",
+    "file_format": [".n64", ".z64", ".zip"],
+    "roms_folder": "n64",
+    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%2064/Named_Boxarts/",
+    "should_unzip": true
+  },
+  {
+    "name": "Nintendo Game Cube",
+    "url": "https://myrient.erista.me/files/Redump/Nintendo%20-%20GameCube%20-%20NKit%20RVZ%20%5Bzstd-19-128k%5D/",
+    "file_format": [".rvz", ".iso", ".zip"],
+    "roms_folder": "gc",
+    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20GameCube/Named_Boxarts/",
+    "should_unzip": true
+  },
+  {
+    "name": "Nintendo Wii",
+    "url": "https://myrient.erista.me/files/Redump/Nintendo%20-%20Wii%20-%20NKit%20RVZ%20%5Bzstd-19-128k%5D/",
+    "file_format": [".rvz", ".iso", ".zip"],
+    "roms_folder": "wii",
+    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Wii/Named_Boxarts/",
+    "should_unzip": true
+  },
+  {
+    "name": "Nintendo Wii U",
+    "url": "https://myrient.erista.me/files/Redump/Nintendo%20-%20Wii%20U%20-%20WUX/",
+    "file_format": [".wux", ".zip"],
+    "roms_folder": "wiiu",
+    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Wii%20U/Named_Boxarts/",
+    "should_unzip": true
+  },
+  {
+    "name": "Xbox",
+    "url": "https://myrient.erista.me/files/Redump/Microsoft%20-%20Xbox/",
+    "file_format": [".iso", ".zip"],
+    "roms_folder": "xbox",
+    "boxarts": "https://thumbnails.libretro.com/Microsoft%20-%20Xbox/Named_Boxarts/",
+    "should_unzip": true
+  },
+  {
+    "name": "Xbox 360",
+    "url": "https://myrient.erista.me/files/Redump/Microsoft%20-%20Xbox%20360/",
+    "file_format": [".iso", ".zip"],
+    "roms_folder": "xbox360",
+    "should_unzip": true
+  },
+  {
+    "name": "Sega Genesis",
+    "url": "https://myrient.erista.me/files/No-Intro/Sega%20-%20Mega%20Drive%20-%20Genesis/",
+    "file_format": [".md", ".gen", ".zip"],
+    "roms_folder": "genesis",
+    "boxarts": "https://thumbnails.libretro.com/Sega%20-%20Mega%20Drive%20-%20Genesis/Named_Boxarts/",
+    "should_unzip": true
+  },
+  {
+    "name": "Game Gear",
+    "url": "https://myrient.erista.me/files/No-Intro/Sega%20-%20Game%20Gear/",
+    "file_format": [".gg", ".zip"],
+    "roms_folder": "gamegear",
+    "boxarts": "https://thumbnails.libretro.com/Sega%20-%20Game%20Gear/Named_Boxarts/",
+    "should_unzip": true
+  },
+  {
+    "name": "Sega Saturn",
+    "url": "https://myrient.erista.me/files/Redump/Sega%20-%20Saturn/",
+    "file_format": [".cue", ".bin", ".zip"],
+    "roms_folder": "saturn",
+    "boxarts": "https://thumbnails.libretro.com/Sega%20-%20Saturn/Named_Boxarts/",
+    "should_unzip": true
+  },
+  {
+    "name": "Sega Dreamcast",
+    "url": "https://myrient.erista.me/files/Redump/Sega%20-%20Dreamcast/",
+    "file_format": [".cue", ".gdi", ".zip"],
+    "roms_folder": "dreamcast",
+    "boxarts": "https://thumbnails.libretro.com/Sega%20-%20Dreamcast/Named_Boxarts/",
+    "should_unzip": true
+  },
+  {
+    "name": "Panasonic 3DO",
+    "url": "https://myrient.erista.me/files/Redump/Panasonic%20-%203DO%20Interactive%20Multiplayer/",
+    "file_format": [".iso", ".cue", ".zip"],
+    "roms_folder": "3do",
+    "boxarts": "https://thumbnails.libretro.com/The%203DO%20Company%20-%203DO/Named_Boxarts/",
+    "should_unzip": true
+  },
+  {
+    "name": "ColecoVision",
+    "url": "https://myrient.erista.me/files/No-Intro/Coleco%20-%20ColecoVision/",
+    "file_format": [".col", ".zip"],
+    "roms_folder": "colecovision",
+    "boxarts": "https://thumbnails.libretro.com/Coleco%20-%20ColecoVision/Named_Boxarts/",
+    "should_unzip": true
+  },
+  {
+    "name": "Intellivision",
+    "url": "https://myrient.erista.me/files/No-Intro/Mattel%20-%20Intellivision/",
+    "file_format": [".int", ".zip"],
+    "roms_folder": "intellivision",
+    "boxarts": "https://thumbnails.libretro.com/Mattel%20-%20Intellivision/Named_Boxarts/",
+    "should_unzip": true
+  },
+  {
+    "name": "Nintendo Switch",
+    "api_url": "https://api.ultranx.ru/games/?limit=100",
+    "download_url": "https://wow-vicious.com/NSPdir/base/",
+    "file_format": [".nsz", ".nsp", ".zip"],
+    "roms_folder": "switch",
+    "should_unzip": true,
+    "use_api": true,
+    "supports_pagination": true
   }
 ]
