@@ -9,25 +9,22 @@ from zipfile import ZipFile
 from io import BytesIO
 from datetime import datetime
 from urllib.parse import urljoin, unquote, quote
+from threading import Thread
+from queue import Queue
 
 # Auto-detect environment and set paths
-if os.path.exists("/userdata/roms"):
-    # Console environment
-    JSON_FILE = "/userdata/roms/pygame/downloader/download.json"
-    WORK_DIR = "/userdata/py_downloads"
-    ROMS_DIR = "/userdata/roms"
-    LOG_FILE = "/userdata/roms/pygame/downloader/error.log"
-else:
-    # Local development environment
-    JSON_FILE = "download.json"
-    WORK_DIR = "./py_downloads"
-    ROMS_DIR = "./roms"
-    LOG_FILE = "./error.log"
+# Get the directory where the script is located
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Set static paths (WORK_DIR and ROMS_DIR will be loaded from settings later)
+JSON_FILE = os.path.join(SCRIPT_DIR, "download.json")
+LOG_FILE = os.path.join(SCRIPT_DIR, "error.log")
+CONFIG_FILE = os.path.join(SCRIPT_DIR, "config.json")
 FPS = 30
 SCREEN_WIDTH, SCREEN_HEIGHT = 800, 600
 FONT_SIZE = 28
-SCROLL_DELAY = 150  # milliseconds between scrolls when holding D-pad
-INITIAL_SCROLL_DELAY = 300  # initial delay before continuous scrolling starts
+SCROLL_DELAY = 600  # milliseconds between scrolls when holding D-pad (slower)
+INITIAL_SCROLL_DELAY = 3000  # initial delay before continuous scrolling starts (1.5 seconds)
 
 def log_error(error_msg, error_type=None, traceback_str=None):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -79,15 +76,32 @@ try:
     selected_system = 0
     selected_games = set()
     game_list = []
-    mode = "systems"  # systems or games
+    mode = "systems"  # systems, games, or settings
     
     # Pagination variables for Switch
     current_page = 0
     total_pages = 1
     highlighted = 0
+    
+    # Settings will be loaded after functions are defined
+    settings = {}
+    settings_list = [
+        "Enable Box-art Display",
+        "Enable Image Cache", 
+        "Reset Image Cache",
+        "Update from GitHub",
+        "View Type",
+        "USA Games Only",
+        "Work Directory",
+        "ROMs Directory"
+    ]
 
-    os.makedirs(WORK_DIR, exist_ok=True)
-    os.makedirs(ROMS_DIR, exist_ok=True)
+    # Directories will be created after settings are loaded
+
+    # Image cache for thumbnails
+    image_cache = {}
+    image_queue = Queue()
+    THUMBNAIL_SIZE = (64, 64)
 
     def format_size(size_bytes):
         """Convert bytes to human readable format"""
@@ -96,6 +110,246 @@ try:
                 return f"{size_bytes:.1f} {unit}"
             size_bytes /= 1024
         return f"{size_bytes:.1f} TB"
+
+    def load_settings():
+        """Load settings from config file"""
+        # Default paths based on environment
+        if os.path.exists("/userdata/roms"):
+            default_work_dir = "/userdata/py_downloads"
+            default_roms_dir = "/userdata/roms"
+        else:
+            default_work_dir = os.path.join(SCRIPT_DIR, "py_downloads")
+            default_roms_dir = os.path.join(SCRIPT_DIR, "roms")
+        
+        default_settings = {
+            "enable_boxart": True,
+            "cache_enabled": True,
+            "view_type": "list",
+            "usa_only": False,
+            "work_dir": default_work_dir,
+            "roms_dir": default_roms_dir
+        }
+        
+        try:
+            if os.path.exists(CONFIG_FILE):
+                with open(CONFIG_FILE, 'r') as f:
+                    loaded_settings = json.load(f)
+                    # Merge with defaults to handle new settings
+                    default_settings.update(loaded_settings)
+            else:
+                # Create config file with defaults
+                save_settings(default_settings)
+        except Exception as e:
+            log_error("Failed to load settings, using defaults", type(e).__name__, traceback.format_exc())
+        
+        return default_settings
+
+    def save_settings(settings_to_save):
+        """Save settings to config file"""
+        try:
+            # Create directory if it doesn't exist
+            os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+            
+            with open(CONFIG_FILE, 'w') as f:
+                json.dump(settings_to_save, f, indent=2)
+        except Exception as e:
+            log_error("Failed to save settings", type(e).__name__, traceback.format_exc())
+
+    def load_image_async(url, cache_key):
+        """Load image in background thread"""
+        try:
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            
+            # Load image from bytes
+            image_data = BytesIO(response.content)
+            image = pygame.image.load(image_data)
+            
+            # Scale to thumbnail size
+            scaled_image = pygame.transform.scale(image, THUMBNAIL_SIZE)
+            
+            # Add to queue for main thread to process
+            image_queue.put((cache_key, scaled_image))
+        except Exception as e:
+            log_error(f"Failed to load image from {url}", type(e).__name__, traceback.format_exc())
+            # Put None to indicate failed load
+            image_queue.put((cache_key, None))
+
+    def get_thumbnail(game_item, boxart_url):
+        """Get thumbnail for game, loading async if not cached"""
+        # Check if box-art is enabled
+        if not settings["enable_boxart"]:
+            return None
+        
+        # Handle Switch API format with direct image URLs
+        if isinstance(game_item, dict) and 'banner_url' in game_item and game_item['banner_url']:
+            # Switch API format - use direct banner URL (JPG format)
+            image_url = game_item['banner_url']
+            cache_key = f"switch_{game_item['title_id']}"
+        elif isinstance(game_item, dict) and 'icon_url' in game_item and game_item['icon_url']:
+            # Fallback to icon_url if banner_url not available
+            image_url = game_item['icon_url']
+            cache_key = f"switch_{game_item.get('title_id', 'unknown')}"
+        elif boxart_url:
+            # Regular format - construct URL from boxart base + game name
+            game_name = game_item if isinstance(game_item, str) else game_item.get('name', '')
+            base_name = os.path.splitext(game_name)[0]
+            image_url = urljoin(boxart_url, f"{base_name}.png")
+            cache_key = f"{boxart_url}_{game_name}"
+        else:
+            return None
+        
+        # Return cached image if available and cache is enabled
+        if settings["cache_enabled"] and cache_key in image_cache:
+            return image_cache[cache_key]
+        
+        # If cache is disabled but we have the image, return it
+        if not settings["cache_enabled"] and cache_key in image_cache:
+            return image_cache[cache_key]
+        
+        # Start loading if not already in cache
+        if cache_key not in image_cache:
+            image_cache[cache_key] = "loading"  # Mark as loading
+            
+            if isinstance(game_item, dict) and ('banner_url' in game_item or 'icon_url' in game_item):
+                # Switch format - load direct URL
+                thread = Thread(target=load_image_async, args=(image_url, cache_key))
+                thread.daemon = True
+                thread.start()
+            else:
+                # Regular format - try multiple image formats
+                game_name = game_item if isinstance(game_item, str) else game_item.get('name', '')
+                base_name = os.path.splitext(game_name)[0]
+                image_formats = [".png", ".jpg", ".jpeg", ".gif", ".bmp"]
+                thread = Thread(target=load_image_with_fallback, args=(boxart_url, base_name, image_formats, cache_key))
+                thread.daemon = True
+                thread.start()
+        
+        return None  # Not ready yet
+
+    def load_image_with_fallback(base_url, base_name, formats, cache_key):
+        """Try loading image with different format extensions"""
+        for fmt in formats:
+            try:
+                image_url = urljoin(base_url, f"{base_name}{fmt}")
+                response = requests.get(image_url, timeout=5)
+                response.raise_for_status()
+                
+                # Load image from bytes
+                image_data = BytesIO(response.content)
+                image = pygame.image.load(image_data)
+                
+                # Scale to thumbnail size
+                scaled_image = pygame.transform.scale(image, THUMBNAIL_SIZE)
+                
+                # Add to queue for main thread to process
+                image_queue.put((cache_key, scaled_image))
+                return  # Success, exit
+                
+            except Exception:
+                continue  # Try next format
+        
+        # All formats failed
+        image_queue.put((cache_key, None))
+
+    def update_image_cache():
+        """Process loaded images from background threads"""
+        while not image_queue.empty():
+            try:
+                cache_key, image = image_queue.get_nowait()
+                image_cache[cache_key] = image
+            except:
+                break
+
+    def reset_image_cache():
+        """Clear all cached images"""
+        global image_cache
+        image_cache.clear()
+        
+        # Clear the queue as well
+        while not image_queue.empty():
+            try:
+                image_queue.get_nowait()
+            except:
+                break
+
+    def update_from_github():
+        """Download latest files from GitHub repository"""
+        try:
+            draw_loading_message("Checking for updates...")
+            
+            # GitHub raw URLs for the files
+            files_to_update = {
+                "download.json": "https://raw.githubusercontent.com/gabrielmoterani/roms_downloader/main/download.json",
+                "dw.pygame": "https://raw.githubusercontent.com/gabrielmoterani/roms_downloader/main/dw.pygame"
+            }
+            
+            total_files = len(files_to_update)
+            updated_files = []
+            failed_files = []
+            
+            for i, (filename, url) in enumerate(files_to_update.items()):
+                progress = int((i / total_files) * 100)
+                draw_progress_bar(f"Updating {filename}...", progress)
+                
+                try:
+                    response = requests.get(url, timeout=30)
+                    response.raise_for_status()
+                    
+                    # Determine the correct file path
+                    if filename == "download.json":
+                        file_path = JSON_FILE
+                    elif filename == "dw.pygame":
+                        file_path = __file__  # Current script path
+                    
+                    # Create backup of existing file
+                    backup_path = f"{file_path}.backup"
+                    if os.path.exists(file_path):
+                        try:
+                            with open(file_path, 'r') as original:
+                                with open(backup_path, 'w') as backup:
+                                    backup.write(original.read())
+                        except Exception as backup_error:
+                            log_error(f"Failed to create backup for {filename}", type(backup_error).__name__, traceback.format_exc())
+                    
+                    # Write new content
+                    with open(file_path, 'w', encoding='utf-8') as f:
+                        f.write(response.text)
+                    
+                    updated_files.append(filename)
+                    
+                except Exception as e:
+                    log_error(f"Failed to update {filename}", type(e).__name__, traceback.format_exc())
+                    failed_files.append(filename)
+                    
+                    # Restore backup if it exists
+                    backup_path = f"{file_path}.backup"
+                    if os.path.exists(backup_path):
+                        try:
+                            with open(backup_path, 'r') as backup:
+                                with open(file_path, 'w') as original:
+                                    original.write(backup.read())
+                        except Exception as restore_error:
+                            log_error(f"Failed to restore backup for {filename}", type(restore_error).__name__, traceback.format_exc())
+            
+            # Show results
+            if updated_files and not failed_files:
+                draw_loading_message("Update completed successfully!")
+                if "dw.pygame" in updated_files:
+                    pygame.time.wait(2000)
+                    draw_loading_message("Please restart the application to use the updated version.")
+                    pygame.time.wait(3000)
+            elif updated_files and failed_files:
+                draw_loading_message(f"Partial update: {len(updated_files)} updated, {len(failed_files)} failed")
+                pygame.time.wait(3000)
+            else:
+                draw_loading_message("Update failed. Check error log for details.")
+                pygame.time.wait(3000)
+                
+        except Exception as e:
+            log_error("Error during GitHub update", type(e).__name__, traceback.format_exc())
+            draw_loading_message("Update failed. Check internet connection.")
+            pygame.time.wait(3000)
 
     def draw_progress_bar(text, percent, downloaded=0, total_size=0, speed=0):
         screen.fill(WHITE)
@@ -111,7 +365,8 @@ try:
         # Draw progress bar background
         bar_height = 20
         bar_y = 70
-        bar_width = min(SCREEN_WIDTH - 80, 600)
+        screen_width, screen_height = screen.get_size()
+        bar_width = min(screen_width - 80, 600)
         bar_x = 20
         pygame.draw.rect(screen, GRAY, (bar_x, bar_y, bar_width, bar_height))
         
@@ -122,7 +377,7 @@ try:
         # Draw percentage text
         percent_text = f"{percent}%"
         percent_surf = font.render(percent_text, True, BLACK)
-        percent_x = bar_x + (bar_width - percent_surf.get_width()) // 2
+        percent_x = bar_x + 5
         screen.blit(percent_surf, (percent_x, bar_y + 2))
         
         # Draw size and speed info
@@ -131,7 +386,7 @@ try:
             if speed > 0:
                 size_text += f" - {format_size(speed)}/s"
             size_surf = font.render(size_text, True, BLACK)
-            size_x = bar_x + (bar_width - size_surf.get_width()) // 2
+            size_x = bar_x + 5
             screen.blit(size_surf, (size_x, bar_y + bar_height + 10))
         
         # Draw instructions
@@ -143,8 +398,197 @@ try:
         y = bar_y + bar_height + 40
         for instruction in instructions:
             inst_surf = font.render(instruction, True, GRAY)
-            screen.blit(inst_surf, (SCREEN_WIDTH // 2 - inst_surf.get_width() // 2, y))
+            screen.blit(inst_surf, (20, y))
             y += FONT_SIZE + 5
+        
+        pygame.display.flip()
+
+    def draw_settings_menu():
+        screen.fill(WHITE)
+        y = 10
+        
+        # Draw title
+        title_surf = font.render("Settings", True, BLACK)
+        screen.blit(title_surf, (20, y))
+        y += FONT_SIZE + 10
+        
+        # Draw instructions
+        instructions = [
+            "Use D-pad to navigate",
+            "Press B to toggle settings",
+            "Press A to go back"
+        ]
+        
+        for instruction in instructions:
+            inst_surf = font.render(instruction, True, GRAY)
+            screen.blit(inst_surf, (20, y))
+            y += FONT_SIZE + 5
+        
+        y += 20
+        
+        # Draw settings items
+        for i, setting_name in enumerate(settings_list):
+            color = GREEN if i == highlighted else BLACK
+            
+            # Get current setting value
+            setting_value = ""
+            if i == 0:  # Enable Box-art Display
+                setting_value = "ON" if settings["enable_boxart"] else "OFF"
+            elif i == 1:  # Enable Image Cache
+                setting_value = "ON" if settings["cache_enabled"] else "OFF"
+            elif i == 2:  # Reset Image Cache
+                setting_value = "Press B to reset"
+            elif i == 3:  # Update from GitHub
+                setting_value = "Press B to update"
+            elif i == 4:  # View Type
+                setting_value = settings["view_type"].upper()
+            elif i == 5:  # USA Games Only
+                setting_value = "ON" if settings["usa_only"] else "OFF"
+            elif i == 6:  # Work Directory
+                work_dir = settings.get("work_dir", "")
+                setting_value = work_dir[-30:] + "..." if len(work_dir) > 30 else work_dir
+            elif i == 7:  # ROMs Directory
+                roms_dir = settings.get("roms_dir", "")
+                setting_value = roms_dir[-30:] + "..." if len(roms_dir) > 30 else roms_dir
+            
+            setting_text = f"{setting_name}: {setting_value}"
+            setting_surf = font.render(setting_text, True, color)
+            screen.blit(setting_surf, (20, y))
+            y += FONT_SIZE + 10
+        
+        # Show cache info
+        y += 20
+        cache_info = f"Cached images: {len([k for k, v in image_cache.items() if v != 'loading' and v is not None])}"
+        info_surf = font.render(cache_info, True, GRAY)
+        screen.blit(info_surf, (20, y))
+        
+        pygame.display.flip()
+
+    def draw_grid_view(title, items, selected_indices):
+        screen.fill(WHITE)
+        y = 10
+        
+        # Draw title
+        title_surf = font.render(title, True, BLACK)
+        screen.blit(title_surf, (20, y))
+        y += FONT_SIZE + 10
+        
+        # Draw instructions
+        instructions = [
+            "Use D-pad to navigate",
+            "Press B to select/unselect games",
+            "Press A to go back to systems",
+            f"Press START to download {len(selected_indices)} selected games"
+        ]
+        
+        for instruction in instructions:
+            inst_surf = font.render(instruction, True, GRAY)
+            screen.blit(inst_surf, (20, y))
+            y += FONT_SIZE + 5
+        
+        y += 20
+        
+        # Grid layout parameters
+        cols = 4  # Number of columns
+        screen_width, screen_height = screen.get_size()
+        cell_width = (screen_width - 40) // cols
+        cell_height = max(THUMBNAIL_SIZE[1] + 40, 100)
+        start_x = 20
+        start_y = y
+        
+        # Calculate visible items
+        rows_per_screen = (screen_height - start_y - 50) // cell_height
+        items_per_screen = cols * rows_per_screen
+        
+        # Calculate grid position of highlighted item
+        highlighted_row = highlighted // cols
+        highlighted_col = highlighted % cols
+        
+        # Calculate scroll offset to keep highlighted item visible
+        start_row = max(0, highlighted_row - rows_per_screen // 2)
+        visible_items = items[start_row * cols:(start_row + rows_per_screen) * cols]
+        
+        # Draw grid items
+        for i, item in enumerate(visible_items):
+            actual_idx = start_row * cols + i
+            if actual_idx >= len(items):
+                break
+                
+            row = i // cols
+            col = i % cols
+            
+            x = start_x + col * cell_width
+            y = start_y + row * cell_height
+            
+            # Handle different item formats
+            if isinstance(item, dict):
+                display_text = item['name']
+                original_name = item['name']
+            else:
+                display_text = os.path.splitext(item)[0]
+                original_name = item
+            
+            # Highlight background if selected or highlighted
+            is_highlighted = actual_idx == highlighted
+            is_selected = actual_idx in selected_indices
+            
+            if is_highlighted:
+                highlight_rect = pygame.Rect(x, y, cell_width - 5, cell_height - 5)
+                pygame.draw.rect(screen, GREEN, highlight_rect, 2)
+            
+            # Draw thumbnail if available
+            thumb_y = y + 5
+            boxart_url = data[selected_system].get('boxarts', '') if selected_system < len(data) else ''
+            thumbnail = get_thumbnail(item, boxart_url)
+            
+            if thumbnail and thumbnail != "loading":
+                # Center thumbnail in cell
+                thumb_x = x + 5
+                thumb_rect = pygame.Rect(thumb_x, thumb_y, THUMBNAIL_SIZE[0], THUMBNAIL_SIZE[1])
+                screen.blit(thumbnail, thumb_rect)
+                
+                # Draw border around thumbnail
+                pygame.draw.rect(screen, BLACK, thumb_rect, 1)
+            
+            # Draw selection indicator
+            checkbox_x = x + 5
+            checkbox_y = y + 5
+            checkbox_rect = pygame.Rect(checkbox_x, checkbox_y, 15, 15)
+            pygame.draw.rect(screen, WHITE, checkbox_rect)
+            pygame.draw.rect(screen, BLACK, checkbox_rect, 1)
+            
+            if is_selected:
+                # Draw X for selected
+                pygame.draw.line(screen, GREEN, (checkbox_x + 3, checkbox_y + 3), (checkbox_x + 12, checkbox_y + 12), 2)
+                pygame.draw.line(screen, GREEN, (checkbox_x + 12, checkbox_y + 3), (checkbox_x + 3, checkbox_y + 12), 2)
+            
+            # Draw text (truncated to fit cell width)
+            text_y = thumb_y + THUMBNAIL_SIZE[1] + 5
+            max_text_width = cell_width - 10
+            
+            # Truncate text if too long
+            test_surf = font.render(display_text, True, BLACK)
+            if test_surf.get_width() > max_text_width:
+                # Truncate text
+                for length in range(len(display_text), 0, -1):
+                    truncated = display_text[:length] + "..."
+                    test_surf = font.render(truncated, True, BLACK)
+                    if test_surf.get_width() <= max_text_width:
+                        display_text = truncated
+                        break
+            
+            text_color = GREEN if is_selected else BLACK
+            text_surf = font.render(display_text, True, text_color)
+            text_x = x + 5
+            screen.blit(text_surf, (text_x, text_y))
+        
+        # Draw bottom message if games are selected
+        if selected_indices:
+            message = f"Selected: {len(selected_indices)} games"
+            message_surf = font.render(message, True, GREEN)
+            screen_width, screen_height = screen.get_size()
+            message_y = screen_height - 30
+            screen.blit(message_surf, (20, message_y))
         
         pygame.display.flip()
 
@@ -181,7 +625,9 @@ try:
         y += 20  # Add some space after instructions
         
         # Calculate visible items based on screen height
-        items_per_page = (SCREEN_HEIGHT - y - 50) // (FONT_SIZE + 10)  # Leave space for bottom message
+        row_height = max(FONT_SIZE + 10, THUMBNAIL_SIZE[1] + 10) if mode == "games" else FONT_SIZE + 10
+        screen_width, screen_height = screen.get_size()
+        items_per_page = (screen_height - y - 50) // row_height  # Leave space for bottom message
         start_idx = max(0, highlighted - items_per_page // 2)
         visible_items = items[start_idx:start_idx + items_per_page]
         
@@ -195,26 +641,49 @@ try:
             # Handle different item formats (Switch vs regular)
             if isinstance(item, dict):
                 display_text = item['name']
+                original_name = item['name']
             else:
                 # Remove file extension for display
                 display_text = os.path.splitext(item)[0]
+                original_name = item
+            
+            # Draw thumbnail if in games mode and boxart available
+            text_x = 20
+            if mode == "games":
+                boxart_url = data[selected_system].get('boxarts', '') if selected_system < len(data) else ''
+                thumbnail = get_thumbnail(item, boxart_url)
                 
+                if thumbnail and thumbnail != "loading":
+                    # Draw thumbnail
+                    thumb_rect = pygame.Rect(20, y, THUMBNAIL_SIZE[0], THUMBNAIL_SIZE[1])
+                    screen.blit(thumbnail, thumb_rect)
+                    
+                    # Draw border around thumbnail if highlighted
+                    if actual_idx == highlighted:
+                        pygame.draw.rect(screen, GREEN, thumb_rect, 2)
+                    
+                    text_x = 20 + THUMBNAIL_SIZE[0] + 10  # Move text after thumbnail
+            
+            # Draw text
             item_surf = font.render(prefix + display_text, True, color)
-            screen.blit(item_surf, (20, y))
-            y += FONT_SIZE + 10
+            text_y = y + (row_height - FONT_SIZE) // 2  # Center text vertically
+            screen.blit(item_surf, (text_x, text_y))
+            y += row_height
 
         # Draw bottom message if games are selected
         if mode == "games" and selected_games:
             message = f"Selected: {len(selected_games)} games"
             message_surf = font.render(message, True, GREEN)
-            message_y = SCREEN_HEIGHT - 50
+            screen_width, screen_height = screen.get_size()
+            message_y = screen_height - 50
             screen.blit(message_surf, (20, message_y))
         
         # Draw pagination info for Switch
         if mode == "games" and len(data) > 0 and data[selected_system].get('supports_pagination', False):
             page_message = f"Page {current_page + 1} (L/R to change page)"
             page_surf = font.render(page_message, True, GRAY)
-            page_y = SCREEN_HEIGHT - 30
+            screen_width, screen_height = screen.get_size()
+            page_y = screen_height - 30
             screen.blit(page_surf, (20, page_y))
 
         pygame.display.flip()
@@ -239,7 +708,7 @@ try:
         y = 100
         for instruction in instructions:
             inst_surf = font.render(instruction, True, GRAY)
-            screen.blit(inst_surf, (SCREEN_WIDTH // 2 - inst_surf.get_width() // 2, y))
+            screen.blit(inst_surf, (20, y))
             y += FONT_SIZE + 5
         
         pygame.display.flip()
@@ -383,9 +852,13 @@ try:
                     files.append({
                         'name': game_name,
                         'title_id': game_id,
-                        'size': game_data.get('size', 0)
+                        'size': game_data.get('size', 0),
+                        'banner_url': game_data.get('banner_url'),
+                        'icon_url': game_data.get('icon_url'),
+                        'screenshots_urls': game_data.get('screenshots_urls', [])
                     })
                 
+                # Switch games are not filtered for USA
                 return sorted(files, key=lambda x: x['name'])
             
             # Check if this is the old JSON API format
@@ -400,7 +873,11 @@ try:
                 if isinstance(response, dict) and "files" in response:
                     files = response[array_path]
                     if isinstance(files, list):
-                        return [f[file_id] for f in files if any(f[file_id].lower().endswith(ext.lower()) for ext in formats)]
+                        filtered_files = [f[file_id] for f in files if any(f[file_id].lower().endswith(ext.lower()) for ext in formats)]
+                        # Apply USA filter if enabled
+                        if settings.get("usa_only", False):
+                            filtered_files = [f for f in filtered_files if "(USA)" in f]
+                        return filtered_files
             
             elif 'url' in sys_data:
                 # New format - HTML directory listing
@@ -441,6 +918,10 @@ try:
                         if any(filename.lower().endswith(ext.lower()) for ext in formats):
                             files.append(filename)
                 
+                # Apply USA filter if enabled
+                if settings.get("usa_only", False):
+                    files = [f for f in files if "(USA)" in f]
+                
                 return sorted(files)
             
             return []
@@ -453,16 +934,41 @@ try:
         if not items:
             return current_index
         
-        current_letter = items[current_index][0].upper()
+        # Get display name for current item
+        current_item = items[current_index]
+        if isinstance(current_item, dict):
+            current_name = current_item.get('name', '')
+        else:
+            current_name = current_item
+        
+        if not current_name:
+            return current_index
+        
+        current_letter = current_name[0].upper()
         if direction > 0:  # Moving right/forward
             for i in range(current_index + 1, len(items)):
-                if items[i][0].upper() > current_letter:
+                item = items[i]
+                item_name = item.get('name', '') if isinstance(item, dict) else item
+                if item_name and item_name[0].upper() > current_letter:
                     return i
         else:  # Moving left/backward
             for i in range(current_index - 1, -1, -1):
-                if items[i][0].upper() < current_letter:
+                item = items[i]
+                item_name = item.get('name', '') if isinstance(item, dict) else item
+                if item_name and item_name[0].upper() < current_letter:
                     return i
         return current_index
+
+    # Load settings after all functions are defined
+    settings = load_settings()
+
+    # Set up directories from settings
+    WORK_DIR = settings["work_dir"]
+    ROMS_DIR = settings["roms_dir"]
+    
+    # Create directories
+    os.makedirs(WORK_DIR, exist_ok=True)
+    os.makedirs(ROMS_DIR, exist_ok=True)
 
     # Main loop
     running = True
@@ -474,14 +980,24 @@ try:
         try:
             clock.tick(FPS)
             current_time = pygame.time.get_ticks()
+            
+            # Update image cache from background threads
+            update_image_cache()
                 
             if mode == "systems":
-                draw_menu("Select a System", [d['name'] for d in data], set())
+                # Add Settings option to systems list
+                systems_with_settings = [d['name'] for d in data] + ["Settings"]
+                draw_menu("Select a System", systems_with_settings, set())
             elif mode == "games":
                 if game_list:  # Only draw if we have games
-                    draw_menu("Select Games", game_list, selected_games)
+                    if settings["view_type"] == "grid":
+                        draw_grid_view("Select Games", game_list, selected_games)
+                    else:
+                        draw_menu("Select Games", game_list, selected_games)
                 else:
                     draw_loading_message("No games found for this system")
+            elif mode == "settings":
+                draw_settings_menu()
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -490,19 +1006,86 @@ try:
                     # Keyboard controls (same logic as joystick)
                     if event.key == pygame.K_RETURN:  # Enter = Select (Button 4)
                         if mode == "systems":
-                            selected_system = highlighted
-                            current_page = 0
-                            game_list = list_files(selected_system, current_page)
-                            selected_games = set()
-                            mode = "games"
-                            highlighted = 0
+                            systems_count = len(data)
+                            if highlighted == systems_count:  # Settings option
+                                mode = "settings"
+                                highlighted = 0
+                            else:
+                                selected_system = highlighted
+                                current_page = 0
+                                game_list = list_files(selected_system, current_page)
+                                selected_games = set()
+                                mode = "games"
+                                highlighted = 0
                         elif mode == "games":
                             if highlighted in selected_games:
                                 selected_games.remove(highlighted)
                             else:
                                 selected_games.add(highlighted)
+                        elif mode == "settings":
+                            # Toggle settings or reset cache
+                            if highlighted == 0:  # Enable Box-art Display
+                                settings["enable_boxart"] = not settings["enable_boxart"]
+                                save_settings(settings)
+                            elif highlighted == 1:  # Enable Image Cache
+                                settings["cache_enabled"] = not settings["cache_enabled"]
+                                if not settings["cache_enabled"]:
+                                    reset_image_cache()
+                                save_settings(settings)
+                            elif highlighted == 2:  # Reset Image Cache
+                                reset_image_cache()
+                            elif highlighted == 3:  # Update from GitHub
+                                update_from_github()
+                            elif highlighted == 4:  # View Type
+                                settings["view_type"] = "grid" if settings["view_type"] == "list" else "list"
+                                save_settings(settings)
+                            elif highlighted == 5:  # USA Games Only
+                                settings["usa_only"] = not settings["usa_only"]
+                                save_settings(settings)
+                            elif highlighted == 6:  # Work Directory
+                                # Cycle between common work directories for retro gaming systems
+                                current_work = settings["work_dir"]
+                                work_options = [
+                                    "/userdata/downloads",        # Batocera
+                                    "/userdata/system/downloads", # Batocera alternative
+                                    "/storage/downloads",         # Knulli
+                                    "/opt/system/downloads",      # muOS
+                                    "/tmp/downloads",             # General Linux temp
+                                    "/media/downloads",           # External storage
+                                    os.path.join(SCRIPT_DIR, "py_downloads")  # Script directory
+                                ]
+                                try:
+                                    current_index = work_options.index(current_work)
+                                    settings["work_dir"] = work_options[(current_index + 1) % len(work_options)]
+                                except ValueError:
+                                    settings["work_dir"] = work_options[0]
+                                save_settings(settings)
+                            elif highlighted == 7:  # ROMs Directory  
+                                # Cycle between common ROM directories for retro gaming systems
+                                current_roms = settings["roms_dir"]
+                                roms_options = [
+                                    "/userdata/roms",             # Batocera standard
+                                    "/storage/roms",              # Knulli standard
+                                    "/opt/muos/device/ROMS",      # muOS standard
+                                    "/media/SDCARD/ROMS",         # muOS SD card
+                                    "/storage/SDCARD/roms",       # Knulli SD card
+                                    "/media/fat/games",           # MiSTer FPGA
+                                    "/storage/roms2",             # Batocera second drive
+                                    "/home/ark/roms",             # ArkOS
+                                    "/roms2/ports",               # Batocera ports
+                                    os.path.join(SCRIPT_DIR, "roms")  # Script directory
+                                ]
+                                try:
+                                    current_index = roms_options.index(current_roms)
+                                    settings["roms_dir"] = roms_options[(current_index + 1) % len(roms_options)]
+                                except ValueError:
+                                    settings["roms_dir"] = roms_options[0]
+                                save_settings(settings)
                     elif event.key == pygame.K_ESCAPE:  # Escape = Back (Button 3)
                         if mode == "games":
+                            mode = "systems"
+                            highlighted = 0
+                        elif mode == "settings":
                             mode = "systems"
                             highlighted = 0
                     elif event.key == pygame.K_SPACE:  # Space = Start Download (Button 10)
@@ -512,36 +1095,143 @@ try:
                             mode = "systems"
                             highlighted = 0
                     elif event.key == pygame.K_UP:
-                        max_items = len(game_list) if mode == "games" else len(data)
-                        if max_items > 0:
-                            highlighted = (highlighted - 1) % max_items
+                        if mode == "games" and settings["view_type"] == "grid":
+                            # Grid navigation: move up
+                            cols = 4
+                            if highlighted >= cols:
+                                highlighted -= cols
+                        else:
+                            # Regular navigation for list view and other modes
+                            if mode == "games":
+                                max_items = len(game_list)
+                            elif mode == "settings":
+                                max_items = len(settings_list)
+                            else:  # systems
+                                max_items = len(data) + 1  # +1 for Settings option
+                            
+                            if max_items > 0:
+                                highlighted = (highlighted - 1) % max_items
                     elif event.key == pygame.K_DOWN:
-                        max_items = len(game_list) if mode == "games" else len(data)
-                        if max_items > 0:
-                            highlighted = (highlighted + 1) % max_items
+                        if mode == "games" and settings["view_type"] == "grid":
+                            # Grid navigation: move down
+                            cols = 4
+                            if highlighted + cols < len(game_list):
+                                highlighted += cols
+                        else:
+                            # Regular navigation for list view and other modes
+                            if mode == "games":
+                                max_items = len(game_list)
+                            elif mode == "settings":
+                                max_items = len(settings_list)
+                            else:  # systems
+                                max_items = len(data) + 1  # +1 for Settings option
+                            
+                            if max_items > 0:
+                                highlighted = (highlighted + 1) % max_items
                     elif event.key == pygame.K_LEFT and mode == "games":
                         if game_list:
-                            highlighted = find_next_letter_index(game_list, highlighted, -1)
+                            if settings["view_type"] == "grid":
+                                # Grid navigation: move left
+                                cols = 4
+                                if highlighted % cols > 0:
+                                    highlighted -= 1
+                            else:
+                                # List navigation: jump to different letter
+                                highlighted = find_next_letter_index(game_list, highlighted, -1)
                     elif event.key == pygame.K_RIGHT and mode == "games":
                         if game_list:
-                            highlighted = find_next_letter_index(game_list, highlighted, 1)
+                            if settings["view_type"] == "grid":
+                                # Grid navigation: move right
+                                cols = 4
+                                if highlighted % cols < cols - 1 and highlighted < len(game_list) - 1:
+                                    highlighted += 1
+                            else:
+                                # List navigation: jump to different letter
+                                highlighted = find_next_letter_index(game_list, highlighted, 1)
                 elif event.type == pygame.JOYBUTTONDOWN:
                     # Button 4 = Select, Button 3 = Back, Button 10 = Start Download
                     if event.button == 4:  # Select
                         if mode == "systems":
-                            selected_system = highlighted  # Use the highlighted index
-                            current_page = 0
-                            game_list = list_files(selected_system, current_page)
-                            selected_games = set()
-                            mode = "games"
-                            highlighted = 0
+                            systems_count = len(data)
+                            if highlighted == systems_count:  # Settings option
+                                mode = "settings"
+                                highlighted = 0
+                            else:
+                                selected_system = highlighted
+                                current_page = 0
+                                game_list = list_files(selected_system, current_page)
+                                selected_games = set()
+                                mode = "games"
+                                highlighted = 0
                         elif mode == "games":
                             if highlighted in selected_games:
                                 selected_games.remove(highlighted)
                             else:
                                 selected_games.add(highlighted)
+                        elif mode == "settings":
+                            # Toggle settings or reset cache
+                            if highlighted == 0:  # Enable Box-art Display
+                                settings["enable_boxart"] = not settings["enable_boxart"]
+                                save_settings(settings)
+                            elif highlighted == 1:  # Enable Image Cache
+                                settings["cache_enabled"] = not settings["cache_enabled"]
+                                if not settings["cache_enabled"]:
+                                    reset_image_cache()
+                                save_settings(settings)
+                            elif highlighted == 2:  # Reset Image Cache
+                                reset_image_cache()
+                            elif highlighted == 3:  # Update from GitHub
+                                update_from_github()
+                            elif highlighted == 4:  # View Type
+                                settings["view_type"] = "grid" if settings["view_type"] == "list" else "list"
+                                save_settings(settings)
+                            elif highlighted == 5:  # USA Games Only
+                                settings["usa_only"] = not settings["usa_only"]
+                                save_settings(settings)
+                            elif highlighted == 6:  # Work Directory
+                                # Cycle between common work directories for retro gaming systems
+                                current_work = settings["work_dir"]
+                                work_options = [
+                                    "/userdata/downloads",        # Batocera
+                                    "/userdata/system/downloads", # Batocera alternative
+                                    "/storage/downloads",         # Knulli
+                                    "/opt/system/downloads",      # muOS
+                                    "/tmp/downloads",             # General Linux temp
+                                    "/media/downloads",           # External storage
+                                    os.path.join(SCRIPT_DIR, "py_downloads")  # Script directory
+                                ]
+                                try:
+                                    current_index = work_options.index(current_work)
+                                    settings["work_dir"] = work_options[(current_index + 1) % len(work_options)]
+                                except ValueError:
+                                    settings["work_dir"] = work_options[0]
+                                save_settings(settings)
+                            elif highlighted == 7:  # ROMs Directory  
+                                # Cycle between common ROM directories for retro gaming systems
+                                current_roms = settings["roms_dir"]
+                                roms_options = [
+                                    "/userdata/roms",             # Batocera standard
+                                    "/storage/roms",              # Knulli standard
+                                    "/opt/muos/device/ROMS",      # muOS standard
+                                    "/media/SDCARD/ROMS",         # muOS SD card
+                                    "/storage/SDCARD/roms",       # Knulli SD card
+                                    "/media/fat/games",           # MiSTer FPGA
+                                    "/storage/roms2",             # Batocera second drive
+                                    "/home/ark/roms",             # ArkOS
+                                    "/roms2/ports",               # Batocera ports
+                                    os.path.join(SCRIPT_DIR, "roms")  # Script directory
+                                ]
+                                try:
+                                    current_index = roms_options.index(current_roms)
+                                    settings["roms_dir"] = roms_options[(current_index + 1) % len(roms_options)]
+                                except ValueError:
+                                    settings["roms_dir"] = roms_options[0]
+                                save_settings(settings)
                     elif event.button == 3:  # Back
                         if mode == "games":
+                            mode = "systems"
+                            highlighted = 0
+                        elif mode == "settings":
                             mode = "systems"
                             highlighted = 0
                     elif event.button == 6:  # Left shoulder - Previous page
@@ -571,28 +1261,80 @@ try:
                     hat = joystick.get_hat(0)
                     if hat[1] != 0:  # Up or Down
                         if not is_scrolling:
-                            # Initial press
-                            highlighted = (highlighted - 1) % len(game_list if mode == "games" else data) if hat[1] == 1 else (highlighted + 1) % len(game_list if mode == "games" else data)
+                            if mode == "games" and settings["view_type"] == "grid":
+                                # Grid navigation: move up/down
+                                cols = 4
+                                if hat[1] == 1:  # Up
+                                    if highlighted >= cols:
+                                        highlighted -= cols
+                                else:  # Down
+                                    if highlighted + cols < len(game_list):
+                                        highlighted += cols
+                            else:
+                                # Regular navigation for list view and other modes
+                                if mode == "games":
+                                    max_items = len(game_list)
+                                elif mode == "settings":
+                                    max_items = len(settings_list)
+                                else:  # systems
+                                    max_items = len(data) + 1  # +1 for Settings option
+                                
+                                if max_items > 0:
+                                    highlighted = (highlighted - 1) % max_items if hat[1] == 1 else (highlighted + 1) % max_items
                             last_scroll_time = current_time
                             is_scrolling = True
                     elif hat[0] != 0 and mode == "games":  # Left or Right (only in games mode)
-                        items = game_list
-                        if hat[0] < 0:  # Left
-                            highlighted = find_next_letter_index(items, highlighted, -1)
-                        else:  # Right
-                            highlighted = find_next_letter_index(items, highlighted, 1)
+                        if settings["view_type"] == "grid":
+                            # Grid navigation: move left/right
+                            cols = 4
+                            if hat[0] < 0:  # Left
+                                if highlighted % cols > 0:
+                                    highlighted -= 1
+                            else:  # Right
+                                if highlighted % cols < cols - 1 and highlighted < len(game_list) - 1:
+                                    highlighted += 1
+                        else:
+                            # List navigation: jump to different letter
+                            items = game_list
+                            if hat[0] < 0:  # Left
+                                highlighted = find_next_letter_index(items, highlighted, -1)
+                            else:  # Right
+                                highlighted = find_next_letter_index(items, highlighted, 1)
                     else:
-                        is_scrolling = False
+                        is_scrolling = True
 
             # Handle continuous scrolling
-            if is_scrolling and mode == "games":
+            if is_scrolling and joystick:
                 hat = joystick.get_hat(0)
                 if hat[1] != 0:
-                    if current_time - last_scroll_time >= (INITIAL_SCROLL_DELAY if current_time - last_scroll_time < INITIAL_SCROLL_DELAY else SCROLL_DELAY):
-                        highlighted = (highlighted - 1) % len(game_list) if hat[1] == 1 else (highlighted + 1) % len(game_list)
-                        last_scroll_time = current_time
+                    # Check if enough time has passed for the next scroll (initial delay then regular delay)
+                    time_since_start = current_time - last_scroll_time
+                    if time_since_start >= INITIAL_SCROLL_DELAY:
+                        # After initial delay, scroll at regular intervals
+                        scroll_intervals = (time_since_start - INITIAL_SCROLL_DELAY) // SCROLL_DELAY
+                        if scroll_intervals > 0 and (time_since_start - INITIAL_SCROLL_DELAY) % SCROLL_DELAY < 50:  # 50ms tolerance
+                            if mode == "games" and settings["view_type"] == "grid":
+                                # Grid continuous scrolling: move up/down by rows
+                                cols = 4
+                                if hat[1] == 1:  # Up
+                                    if highlighted >= cols:
+                                        highlighted -= cols
+                                else:  # Down
+                                    if highlighted + cols < len(game_list):
+                                        highlighted += cols
+                            else:
+                                # Regular continuous scrolling for list view and other modes
+                                if mode == "games":
+                                    max_items = len(game_list)
+                                elif mode == "settings":
+                                    max_items = len(settings_list)
+                                else:  # systems
+                                    max_items = len(data) + 1  # +1 for Settings option
+                                
+                                if max_items > 0:
+                                    highlighted = (highlighted - 1) % max_items if hat[1] == 1 else (highlighted + 1) % max_items
                 else:
-                    is_scrolling = False
+                    is_scrolling = True
 
         except Exception as e:
             log_error("Error in main loop", type(e).__name__, traceback.format_exc())

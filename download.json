@@ -192,7 +192,7 @@
   },
   {
     "name": "Nintendo Switch",
-    "api_url": "https://api.ultranx.ru/games/?limit=100",
+    "api_url": "https://api.ultranx.ru/games/?limit=100000",
     "download_url": "https://wow-vicious.com/NSPdir/base/",
     "file_format": [".nsz", ".nsp", ".zip"],
     "roms_folder": "switch",
