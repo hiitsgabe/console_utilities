@@ -1,0 +1,12 @@
+[
+  {
+    "name": "PSP",
+    "list_url": "https://archive.org/metadata/XXXXXXXX",
+    "list_json_file_location": "files",
+    "list_item_id": "name",
+    "download_url": "https://archive.org/download/XXXXXX",
+    "commands": [],
+    "file_format": [".iso"],
+    "roms_folder": "psp"
+  }
+]
