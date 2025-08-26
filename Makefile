@@ -1,0 +1,83 @@
+.PHONY: run watch install dev clean test lint format setup build-android
+
+CONDA_ENV = console_utilities
+CONDA_ACTIVATE = conda run -n $(CONDA_ENV)
+
+# Default target
+run:
+	DEV_MODE=true $(CONDA_ACTIVATE) watchmedo auto-restart --patterns="*.py;download.json" --recursive --signal SIGTERM python src/index.py
+
+# Setup development environment
+setup:
+	conda env create -f environment.yml
+	$(CONDA_ACTIVATE) pip install -e .[dev]
+
+# Install in development mode
+install:
+	$(CONDA_ACTIVATE) pip install -e .
+
+# Install with dev dependencies
+dev:
+	$(CONDA_ACTIVATE) pip install -e .[dev]
+
+# Clean generated files
+clean:
+	rm -rf build/
+	rm -rf dist/
+	rm -rf *.egg-info/
+	rm -f error.log
+	rm -f config.json
+	rm -rf py_downloads/
+	rm -rf downloads/
+	find . -type d -name __pycache__ -exec rm -rf {} +
+	find . -type f -name "*.pyc" -delete
+
+# Create distribution package for console deployment
+build:
+	mkdir -p dist
+	cp src/index.py dist/dw.pygame
+	cp assets/config/download.json dist/download.json
+	@echo "Distribution created in dist/ folder"
+	@echo "Copy dist/dw.pygame and dist/download.json to console pygame directory"
+
+# Build Android APK using custom buildozer Docker image
+CMD ?= debug
+
+build-android:
+	@echo "🚀 Building Console Utilities Android APK ($(CMD))..."
+	@mkdir -p dist
+	docker build --platform linux/amd64 -f docker/dockerfile.android -t console-utilities-builder .
+	docker run --platform linux/amd64 --rm \
+		--entrypoint "" \
+		--volume "$(HOME)/.buildozer":/home/user/.buildozer \
+		--volume "$(shell pwd)":/home/user/hostcwd \
+		console-utilities-builder \
+		buildozer android $(CMD)
+	@echo "🎉 APK built successfully!"
+# Format code with black
+format:
+	$(CONDA_ACTIVATE) black src/
+
+# Lint code with flake8
+lint:
+	$(CONDA_ACTIVATE) flake8 src/
+
+# Run tests with pytest
+test:
+	$(CONDA_ACTIVATE) pytest
+
+# Show help
+help:
+	@echo "Available targets:"
+	@echo "  run           - Run the console utilities application"
+	@echo "  watch         - Run with file watching (auto-restart on changes)"
+	@echo "  setup         - Create conda environment"
+	@echo "  install       - Install in development mode"
+	@echo "  dev           - Install with dev dependencies"
+	@echo "  clean         - Clean generated files and caches"
+	@echo "  format        - Format code with black"
+	@echo "  lint          - Lint code with flake8"
+	@echo "  test          - Run tests with pytest"
+	@echo "  build         - Create distribution package"
+	@echo "  build-android - Build Android APK using Docker"
+	@echo "  help          - Show this help message"

@@ -1,0 +1,94 @@
+# Force x86_64 platform for better Android build tools compatibility
+FROM --platform=linux/amd64 ubuntu:20.04
+
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
+# Enable 32-bit architecture for aidl support (now possible on x86_64)
+RUN dpkg --add-architecture i386
+
+# Install system dependencies from the working Google Colab example
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    git \
+    zip \
+    unzip \
+    wget \
+    curl \
+    openjdk-17-jdk \
+    autoconf \
+    libtool \
+    pkg-config \
+    zlib1g-dev \
+    libncurses5-dev \
+    libncursesw5-dev \
+    libtinfo5 \
+    cmake \
+    libffi-dev \
+    libssl-dev \
+    build-essential \
+    python3-dev \
+    ffmpeg \
+    libsdl2-dev \
+    libsdl2-image-dev \
+    libsdl2-mixer-dev \
+    libsdl2-ttf-dev \
+    libportmidi-dev \
+    libswscale-dev \
+    libavformat-dev \
+    libavcodec-dev \
+    libgstreamer1.0 \
+    gstreamer1.0-plugins-base \
+    gstreamer1.0-plugins-good \
+    libsqlite3-dev \
+    sqlite3 \
+    bzip2 \
+    libbz2-dev \
+    openssl \
+    libgdbm-dev \
+    libgdbm-compat-dev \
+    liblzma-dev \
+    libreadline-dev \
+    uuid-dev \
+    libffi7 \
+    lib32stdc++6 \
+    lib32z1 \
+    libc6-i386 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up Java environment for x86_64
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+ENV PATH=$PATH:$JAVA_HOME/bin
+
+# Verify Java installation
+RUN echo "Java Home: $JAVA_HOME" && \
+    ls -la $JAVA_HOME && \
+    java -version
+
+# Install Python packages
+RUN pip3 install --upgrade pip setuptools wheel
+RUN pip3 install buildozer cython==0.29.33
+
+# Pre-install Android NDK to avoid download issues
+RUN mkdir -p /home/user/.buildozer/android/platform && \
+    cd /home/user/.buildozer/android/platform && \
+    wget -q https://dl.google.com/android/repository/android-ndk-r25b-linux.zip && \
+    unzip -o -q android-ndk-r25b-linux.zip && \
+    rm android-ndk-r25b-linux.zip
+
+# Create non-root user
+RUN useradd -m -s /bin/bash user
+
+# Set working directory
+WORKDIR /home/user/hostcwd
+
+# Change ownership to user
+RUN chown -R user:user /home/user
+
+# Switch to non-root user
+USER user
+
+# Default command
+CMD ["buildozer", "android", "debug"]
