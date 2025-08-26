@@ -1,0 +1,55 @@
+# Dockerfile for ARM64 PyInstaller builds using Conda environment
+#
+# Build with:
+# docker build -f docker/Dockerfile.arm64 -t roms-downloader-arm64 .
+#
+# Run with:
+# docker run --rm -v "$PWD/dist":/app/output roms-downloader-arm64
+
+FROM continuumio/miniconda3:latest
+
+# Install system dependencies for Kivy
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    pkg-config \
+    libgl1-mesa-dev \
+    libgles2-mesa-dev \
+    libglib2.0-dev \
+    libgstreamer1.0-dev \
+    libgstreamer-plugins-base1.0-dev \
+    zlib1g-dev \
+    libffi-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy environment file and source code
+COPY environment.yml .
+COPY . .
+
+# Create conda environment from environment.yml
+RUN conda env create -f environment.yml
+
+# Make RUN commands use the new environment
+SHELL ["conda", "run", "-n", "roms_downloader", "/bin/bash", "-c"]
+
+# Install additional dependencies not in environment.yml
+RUN conda run -n roms_downloader pip install pyinstaller
+
+COPY . .
+
+# Build the application using conda environment
+RUN conda run -n roms_downloader pyinstaller --onefile --windowed \
+    --hidden-import kivy \
+    --hidden-import requests \
+    --hidden-import kivymd \
+    --hidden-import PIL \
+    --hidden-import certifi \
+    --hidden-import nsz \
+    --add-data "assets:assets" \
+    --name romsdownloader_arm64 \
+    src/main.py
+
+# Copy binary to output directory and ensure proper permissions
+CMD ["bash", "-c", "cp dist/romsdownloader_arm64 /app/output/ && chmod +x /app/output/romsdownloader_arm64"]

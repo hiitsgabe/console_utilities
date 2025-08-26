@@ -5,12 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "roms_downloader"
 version = "1.0.0"
-description = "A PyGame-based ROM downloader for handheld gaming consoles"
+description = "A Kivy-based ROM downloader for handheld gaming consoles"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "pygame>=2.0.0",
-    "requests>=2.25.0"
+    "requests>=2.25.0",
+    "kivy",
+    "kivymd"
 ]
 
 [project.scripts]

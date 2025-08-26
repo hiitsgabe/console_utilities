@@ -8,6 +8,13 @@ from kivy.uix.label import Label
 from kivy.graphics import Color, Rectangle
 from kivy.clock import Clock
 
+try:
+    import pygame
+    PYGAME_AVAILABLE = True
+except ImportError:
+    PYGAME_AVAILABLE = False
+    pygame = None
+
 from ..atoms.labels import HeadingLabel, SubheadingLabel, BodyLabel, StatusLabel
 from ..atoms.buttons import PrimaryButton, SecondaryButton
 from ..molecules.loading_indicators import LoadingIndicator
@@ -166,7 +173,12 @@ class ControllerMappingModal(ModalView):
     
     def _check_controller_status(self):
         """Check if controllers are available"""
-        import pygame
+        if not PYGAME_AVAILABLE:
+            self.has_controllers = False
+            self.status_label.text = "Controller support not available"
+            self.status_label.color = (0.8, 0.8, 0.2, 1)  # Yellow
+            return
+            
         try:
             # Initialize pygame if needed
             if not pygame.get_init():
@@ -246,8 +258,9 @@ class ControllerMappingModal(ModalView):
     
     def _check_for_input(self, dt):
         """Check for real controller input"""
-        import pygame
-        
+        if not PYGAME_AVAILABLE:
+            return True
+            
         if self.current_button_index >= len(self.essential_buttons):
             self._complete_mapping()
             return False

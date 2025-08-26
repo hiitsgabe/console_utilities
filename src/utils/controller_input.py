@@ -1,7 +1,13 @@
 """
 Controller input integration for Kivy
 """
-import pygame
+try:
+    import pygame
+    PYGAME_AVAILABLE = True
+except ImportError:
+    PYGAME_AVAILABLE = False
+    pygame = None
+
 from typing import Dict, Any, Optional, Callable
 from kivy.clock import Clock
 from kivy.event import EventDispatcher
@@ -36,6 +42,11 @@ class ControllerInput(EventDispatcher):
     
     def _init_pygame_joystick(self):
         """Initialize pygame joystick support"""
+        if not PYGAME_AVAILABLE:
+            print("Pygame not available - controller support disabled")
+            self.pygame_initialized = False
+            return
+            
         try:
             # Only initialize if not already done by Kivy/other components
             if not pygame.get_init():
@@ -97,7 +108,7 @@ class ControllerInput(EventDispatcher):
     
     def _poll_input(self, dt):
         """Poll for controller input"""
-        if not self.pygame_initialized or self.is_paused:
+        if not PYGAME_AVAILABLE or not self.pygame_initialized or self.is_paused:
             return True
         
         try:
@@ -216,7 +227,7 @@ class ControllerInput(EventDispatcher):
             self.input_event = None
         
         # Clean up pygame
-        if self.pygame_initialized:
+        if PYGAME_AVAILABLE and self.pygame_initialized:
             for joystick in self.joysticks:
                 joystick.quit()
             pygame.joystick.quit()

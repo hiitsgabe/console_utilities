@@ -1,0 +1,17 @@
+# Docker ignore file to reduce build context size
+.buildozer/
+bin/
+dist/
+.git/
+.vscode/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+.DS_Store
+Thumbs.db
+*.log

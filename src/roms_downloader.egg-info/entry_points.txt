@@ -1,0 +1,3 @@
+[console_scripts]
+rom-downloader = src.index:main
+roms-dl = src.index:main

@@ -5,4 +5,9 @@ error.log
 added_systems.json
 controller_mapping.json
 
+# Buildozer files
+.buildozer/
+bin/
+dist/
+
 # Don't ignore dist/ - we want to commit built files for GitHub releases

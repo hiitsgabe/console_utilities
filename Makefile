@@ -1,11 +1,11 @@
-.PHONY: run watch install dev clean test lint format setup
+.PHONY: run watch install dev clean test lint format setup build-apk build-arm64
 
 CONDA_ENV = roms_downloader
 CONDA_ACTIVATE = conda run -n $(CONDA_ENV)
 
 # Default target
 run:
-	DEV_MODE=true $(CONDA_ACTIVATE) watchmedo auto-restart --patterns="*.py;download.json" --recursive --signal SIGTERM python src/main.py
+	DEV_MODE=true $(CONDA_ACTIVATE) watchmedo auto-restart --patterns="*.py" --recursive --signal SIGTERM python src/main.py
 
 # Setup development environment
 setup:
@@ -40,6 +40,26 @@ build:
 	@echo "Distribution created in dist/ folder"
 	@echo "Copy dist/dw.pygame and dist/download.json to console pygame directory"
 
+# Build APK using official Buildozer Docker image
+build-apk:
+	mkdir -p dist
+	docker pull ghcr.io/kivy/buildozer:latest
+	docker run --rm \
+		--volume "$(HOME)/.buildozer":/home/user/.buildozer \
+		--volume "$(shell pwd)":/home/user/hostcwd \
+		ghcr.io/kivy/buildozer:latest android debug
+	cp bin/*.apk dist/ 2>/dev/null || echo "APK build completed, check buildozer output"
+	@echo "APK build completed, output available in dist/ directory"
+
+# Build ARM64 binary using Docker and PyInstaller
+build-arm64:
+	mkdir -p dist
+	docker build -f docker/Dockerfile.arm64 -t roms-downloader-arm64 .
+	docker run --rm \
+		--volume "$(shell pwd)/dist":/app/output \
+		roms-downloader-arm64
+	@echo "ARM64 build completed, binary available in dist/romsdownloader_arm64"
+
 # Format code with black
 format:
 	$(CONDA_ACTIVATE) black src/
@@ -64,5 +84,7 @@ help:
 	@echo "  format   - Format code with black"
 	@echo "  lint     - Lint code with flake8"
 	@echo "  test     - Run tests with pytest"
-	@echo "  build    - Create distribution package"
-	@echo "  help     - Show this help message"
+	@echo "  build     - Create distribution package"
+	@echo "  build-apk - Build Android APK using Docker"
+	@echo "  build-arm64 - Build ARM64 binary using Docker and PyInstaller"
+	@echo "  help      - Show this help message"

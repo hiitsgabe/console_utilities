@@ -8,7 +8,6 @@ import shutil
 import sys
 from pathlib import Path
 from typing import Optional, Tuple
-from nsz import decompress
 
 
 class NSZService:
@@ -117,9 +116,9 @@ class NSZService:
         """
         try:
             # Try importing nsz to verify it's available
-            from nsz import decompress
+            import nsz
             return self.keys_path is not None and os.path.isfile(self.keys_path)
-        except ImportError:
+        except (ImportError, EOFError, Exception):
             return False
     
     def get_requirements_status(self) -> dict:
@@ -131,9 +130,9 @@ class NSZService:
         """
         nsz_available = False
         try:
-            from nsz import decompress
+            import nsz
             nsz_available = True
-        except ImportError:
+        except (ImportError, EOFError, Exception):
             pass
         
         return {
@@ -185,6 +184,9 @@ class NSZService:
             # Create Path objects for nsz decompress function
             nsz_path = Path(nsz_file_path).resolve()
             output_path = Path(output_dir).resolve()
+            
+            # Import nsz decompress function only when needed
+            from nsz import decompress
             
             # Call NSZ decompress function directly
             # Parameters: filePath, outputDir, fixPadding
