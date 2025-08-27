@@ -5,6 +5,7 @@ import pygame
 import requests
 import traceback
 import re
+import time
 from zipfile import ZipFile
 from io import BytesIO
 from datetime import datetime
@@ -12,6 +13,22 @@ from urllib.parse import urljoin, unquote, quote
 import html
 from threading import Thread
 from queue import Queue
+
+# Optional nsz import
+try:
+    from nsz import decompress as nsz_decompress
+    NSZ_AVAILABLE = True
+except ImportError:
+    NSZ_AVAILABLE = False
+    nsz_decompress = None
+
+# Optional pygame-emojis import
+try:
+    from pygame_emojis import load_emoji
+    EMOJIS_AVAILABLE = True
+except ImportError:
+    EMOJIS_AVAILABLE = False
+    load_emoji = None
 
 # Check for development mode
 DEV_MODE = os.getenv('DEV_MODE', 'false').lower() == 'true'
@@ -21,13 +38,13 @@ DEV_MODE = os.getenv('DEV_MODE', 'false').lower() == 'true'
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Set static paths (WORK_DIR and ROMS_DIR will be loaded from settings later)
+# JSON_FILE will be set dynamically after settings are loaded
+JSON_FILE = None  # Will be set after settings are loaded
 if DEV_MODE:
-    JSON_FILE = os.path.join(SCRIPT_DIR, "..", "workdir", "download.json")
     LOG_FILE = os.path.join(SCRIPT_DIR, "..", "workdir", "error.log")
     CONFIG_FILE = os.path.join(SCRIPT_DIR, "..", "workdir", "config.json")
     ADDED_SYSTEMS_FILE = os.path.join(SCRIPT_DIR, "..", "workdir", "added_systems.json")
 else:
-    JSON_FILE = os.path.join(SCRIPT_DIR, "download.json")
     LOG_FILE = os.path.join(SCRIPT_DIR, "error.log")
     CONFIG_FILE = os.path.join(SCRIPT_DIR, "config.json")
     ADDED_SYSTEMS_FILE = os.path.join(SCRIPT_DIR, "added_systems.json")
@@ -118,24 +135,13 @@ try:
     GREEN = SECONDARY
     GRAY = TEXT_SECONDARY
 
-    # Load JSON file (optional)
+    # Data will be loaded after settings are initialized
     data = []
-    try:
-        if os.path.exists(JSON_FILE):
-            with open(JSON_FILE) as f:
-                data = json.load(f)
-        else:
-            print(f"Info: {JSON_FILE} not found, starting with empty systems list")
-            data = []
-    except Exception as e:
-        log_error("Failed to load JSON file", type(e).__name__, traceback.format_exc())
-        print("Warning: Could not load download.json, starting with empty systems list")
-        data = []
 
     selected_system = 0
     selected_games = set()
     game_list = []
-    mode = "systems"  # systems, games, settings, add_systems, systems_settings, or system_settings
+    mode = "systems"  # systems, games, settings, utils, add_systems, systems_settings, or system_settings
     
     # Add systems state
     available_systems = []
@@ -157,6 +163,9 @@ try:
     # Search functionality variables
     search_mode = False
     search_query = ""
+    
+    # URL input context tracking
+    url_input_context = "archive_json"  # "archive_json" or "direct_download"
     filtered_game_list = []
     char_selector_mode = False
     char_x = 0
@@ -379,6 +388,10 @@ try:
                     max_items = len(current_game_list)
                 elif mode == "settings":
                     max_items = len(settings_list)
+                elif mode == "utils":
+                    max_items = 2  # Download from URL and NSZ to NSP Converter
+                elif mode == "credits":
+                    max_items = 0  # No navigable items in credits
                 elif mode == "add_systems":
                     max_items = len(available_systems)
                 elif mode == "systems_settings":
@@ -388,7 +401,7 @@ try:
                     max_items = 2  # Hide from menu + Custom ROM folder
                 else:  # systems
                     visible_systems = get_visible_systems()
-                    max_items = len(visible_systems) + 1  # +1 for Settings option
+                    max_items = len(visible_systems) + 3  # +3 for Utils, Settings, and Credits options
                 
                 if max_items > 0:
                     if mode == "add_systems":
@@ -469,6 +482,7 @@ try:
         "Enable Box-art Display",
         "Update from GitHub",
         "Archive JSON URL",
+        "Select Archive Json",
         "View Type",
         "USA Games Only",
         "Work Directory",
@@ -522,6 +536,7 @@ try:
             "work_dir": default_work_dir,
             "roms_dir": default_roms_dir,
             "nsz_keys_path": "",
+            "archive_json_path": "",
             "cache_enabled": True,
             "archive_json_url": ""
         }
@@ -550,6 +565,230 @@ try:
                 json.dump(settings_to_save, f, indent=2)
         except Exception as e:
             log_error("Failed to save settings", type(e).__name__, traceback.format_exc())
+
+    def draw_background():
+        """Draw the background image or solid color for all screens"""
+        if background_image:
+            # Scale and draw the background image to fill the screen
+            screen_size = screen.get_size()
+            scaled_bg = pygame.transform.scale(background_image, screen_size)
+            screen.blit(scaled_bg, (0, 0))
+            
+            # Add semi-transparent overlay for better text readability
+            overlay = pygame.Surface(screen_size)
+            overlay.set_alpha(100)  # Adjust transparency as needed
+            overlay.fill((0, 0, 0))  # Black overlay
+            screen.blit(overlay, (0, 0))
+        else:
+            draw_background()
+
+    def load_background_image():
+        """Load the background image from assets"""
+        try:
+            # Try multiple possible paths for the background image
+            possible_paths = [
+                os.path.join(SCRIPT_DIR, "assets", "images", "background.png"),
+                os.path.join(os.getcwd(), "assets", "images", "background.png"),
+                os.path.join("assets", "images", "background.png"),
+                "./assets/images/background.png"
+            ]
+            
+            print(f"SCRIPT_DIR: {SCRIPT_DIR}")
+            print(f"Current working directory: {os.getcwd()}")
+            
+            for background_path in possible_paths:
+                print(f"Trying path: {background_path}")
+                print(f"Path exists: {os.path.exists(background_path)}")
+                
+                if os.path.exists(background_path):
+                    background_image = pygame.image.load(background_path)
+                    print(f"Background image loaded successfully from: {background_path}")
+                    print(f"Image size: {background_image.get_size()}")
+                    return background_image
+            
+            print("Background image file not found in any location")
+            
+        except Exception as e:
+            print(f"Failed to load background image: {e}")
+            log_error(f"Failed to load background image", type(e).__name__, traceback.format_exc())
+        return None
+
+    def draw_emoji_icon(emoji_char, x, y, size=16):
+        """Draw an emoji at the specified position using pygame-emojis"""
+        print(f"Drawing emoji icon: {emoji_char} at ({x}, {y}) size {size}")
+        print(f"EMOJIS_AVAILABLE: {EMOJIS_AVAILABLE}, load_emoji: {load_emoji is not None}")
+        
+        if EMOJIS_AVAILABLE and load_emoji:
+            try:
+                # pygame-emojis expects size as a tuple (width, height)
+                emoji_surface = load_emoji(emoji_char, (size, size))
+                if emoji_surface:
+                    screen.blit(emoji_surface, (x, y))
+                    print(f"Emoji rendered successfully: {emoji_char}")
+                    return True
+            except Exception as e:
+                print(f"Failed to render emoji {emoji_char}: {e}")
+        else:
+            print("pygame-emojis not available, trying text fallback")
+        
+        # Try text fallback
+        try:
+            emoji_font = pygame.font.Font(None, size)
+            emoji_surf = emoji_font.render(emoji_char, True, TEXT_PRIMARY)
+            if emoji_surf and emoji_surf.get_width() > 0:
+                screen.blit(emoji_surf, (x, y))
+                print(f"Text fallback rendered: {emoji_char}")
+                # Return False to indicate we used fallback, not actual emoji
+                return False
+        except Exception as e:
+            print(f"Text fallback also failed: {e}")
+        
+        print(f"All emoji rendering methods failed for: {emoji_char}")
+        return False
+
+    def convert_nsz_to_nsp(nsz_file_path):
+        """Convert NSZ file to NSP in the same directory"""
+        try:
+            import subprocess
+            import shutil
+            
+            # Get the directory and filename info
+            nsz_dir = os.path.dirname(nsz_file_path)
+            nsz_filename = os.path.basename(nsz_file_path)
+            nsp_filename = nsz_filename.replace('.nsz', '.nsp')
+            
+            draw_progress_bar(f"Converting {nsz_filename} to NSP...", 0)
+            pygame.display.flip()
+            
+            # Check if NSZ keys are configured and exist
+            keys_path = settings.get("nsz_keys_path", "")
+            keys_available = False
+            actual_keys_path = None
+            
+            if keys_path:
+                if os.path.isfile(keys_path) and keys_path.lower().endswith('.keys'):
+                    # Direct file path
+                    keys_available = True
+                    actual_keys_path = keys_path
+                elif os.path.isdir(keys_path):
+                    # Directory path, look for prod.keys
+                    prod_keys_path = os.path.join(keys_path, "prod.keys")
+                    if os.path.exists(prod_keys_path):
+                        keys_available = True
+                        actual_keys_path = prod_keys_path
+            
+            # Also check default locations if not configured
+            if not keys_available:
+                default_keys_paths = [
+                    os.path.expanduser("~/.nsz/prod.keys"),
+                    os.path.join(nsz_dir, "keys.txt"),
+                    os.path.join(nsz_dir, "prod.keys")
+                ]
+                for default_path in default_keys_paths:
+                    if os.path.exists(default_path):
+                        keys_available = True
+                        actual_keys_path = default_path
+                        break
+            
+            if not keys_available:
+                draw_progress_bar(f"NSZ conversion failed - NSZ keys not found", 0)
+                log_error(f"NSZ conversion failed for {nsz_filename}: NSZ keys not found. Configure path in Settings > NSZ Keys")
+                pygame.time.wait(3000)
+                return
+            
+            # Set up environment for NSZ with keys
+            env = os.environ.copy()
+            
+            # Copy keys to expected location if needed
+            nsz_home_dir = os.path.expanduser("~/.nsz")
+            if not os.path.exists(nsz_home_dir):
+                os.makedirs(nsz_home_dir, exist_ok=True)
+            
+            expected_keys = os.path.join(nsz_home_dir, "prod.keys")
+            if not os.path.exists(expected_keys) and actual_keys_path != expected_keys:
+                shutil.copy2(actual_keys_path, expected_keys)
+            
+            # Try NSZ conversion using library directly first
+            nsz_success = False
+            
+            if NSZ_AVAILABLE and nsz_decompress:
+                try:
+                    # Use nsz library directly with keys - output to same directory
+                    nsz_decompress([nsz_file_path], output_dir=nsz_dir, keys_path=actual_keys_path)
+                    nsz_success = True
+                    draw_progress_bar(f"Converting {nsz_filename}... Complete", 100)
+                    print("NSZ conversion successful using nsz library")
+                except Exception as e:
+                    print(f"NSZ library conversion failed: {e}")
+            
+            # Fallback to subprocess if library method failed or unavailable
+            if not nsz_success:
+                # Method 1: Try nsz command directly
+                try:
+                    result = subprocess.run([
+                        'nsz', '-D', nsz_file_path
+                    ], capture_output=True, text=True, cwd=nsz_dir, timeout=300, env=env)
+                    
+                    if result.returncode == 0:
+                        nsz_success = True
+                        draw_progress_bar(f"Converting {nsz_filename}... Complete", 100)
+                        print("NSZ conversion successful using 'nsz' command")
+                    else:
+                        print(f"NSZ command failed: {result.stderr}")
+                except Exception as e:
+                    print(f"NSZ command method failed: {e}")
+                
+                # Method 2: Try python -m nsz if first method failed
+                if not nsz_success:
+                    try:
+                        result = subprocess.run([
+                            sys.executable, '-m', 'nsz', '-D', nsz_file_path
+                        ], capture_output=True, text=True, cwd=nsz_dir, timeout=300, env=env)
+                        
+                        if result.returncode == 0:
+                            nsz_success = True
+                            draw_progress_bar(f"Converting {nsz_filename}... Complete", 100)
+                            print("NSZ conversion successful using 'python -m nsz'")
+                        else:
+                            print(f"Python -m nsz failed: {result.stderr}")
+                    except Exception as e:
+                        print(f"Python -m nsz method failed: {e}")
+            
+            if nsz_success:
+                pygame.time.wait(1000)
+                
+                # Check if NSP file was created in the same directory
+                expected_nsp_path = os.path.join(nsz_dir, nsp_filename)
+                if os.path.exists(expected_nsp_path):
+                    draw_progress_bar(f"NSP file created: {nsp_filename}", 100)
+                    print(f"NSZ conversion complete: {expected_nsp_path}")
+                else:
+                    # Look for any NSP files that might have been created
+                    nsp_files = [f for f in os.listdir(nsz_dir) if f.endswith('.nsp')]
+                    if nsp_files:
+                        draw_progress_bar(f"NSP file(s) created: {', '.join(nsp_files)}", 100)
+                        print(f"NSZ conversion complete. Created NSP files: {', '.join(nsp_files)}")
+                    else:
+                        draw_progress_bar(f"Conversion completed but NSP file not found", 50)
+                        print("NSZ conversion reported success but NSP file not found")
+                
+                pygame.time.wait(2000)
+            else:
+                draw_progress_bar(f"NSZ conversion failed - check logs", 0)
+                log_error(f"All NSZ conversion methods failed for {nsz_filename}")
+                pygame.time.wait(3000)
+                
+        except Exception as e:
+            draw_progress_bar(f"NSZ conversion error: {str(e)}", 0)
+            log_error(f"NSZ conversion error for {nsz_file_path}", type(e).__name__, traceback.format_exc())
+            pygame.time.wait(3000)
+
+    def update_json_file_path():
+        """Update the global JSON_FILE variable based on archive_json_path setting"""
+        global JSON_FILE
+        archive_path = settings.get("archive_json_path", "")
+        if archive_path and os.path.exists(archive_path):
+            JSON_FILE = archive_path
 
     def load_controller_mapping():
         """Load controller mapping from file or create new mapping"""
@@ -632,7 +871,7 @@ try:
             current_time = pygame.time.get_ticks()
             
             # Clear screen
-            screen.fill(BACKGROUND)
+            draw_background()
             
             # Title
             title_text = "Controller Setup"
@@ -1203,8 +1442,83 @@ try:
             pygame.time.wait(2000)
             return False
 
+    def download_direct_file(url):
+        """Download a file directly to the work directory"""
+        try:
+            # Validate URL format
+            if not url or not url.strip():
+                draw_loading_message("Error: No URL provided")
+                pygame.time.wait(2000)
+                return False
+                
+            if not (url.startswith('http://') or url.startswith('https://')):
+                draw_loading_message("Error: URL must start with http:// or https://")
+                pygame.time.wait(2000)
+                return False
+            
+            draw_loading_message("Starting download...")
+            
+            # Get work directory from settings
+            work_dir = settings.get("work_dir", os.path.join(SCRIPT_DIR, "py_downloads"))
+            if not os.path.exists(work_dir):
+                os.makedirs(work_dir, exist_ok=True)
+            
+            # Extract filename from URL
+            parsed_url = url.rstrip('/')
+            filename = parsed_url.split('/')[-1]
+            if not filename or '.' not in filename:
+                # Use a default filename if we can't extract one
+                filename = "downloaded_file"
+            
+            file_path = os.path.join(work_dir, filename)
+            
+            # Start download
+            try:
+                response = requests.get(url, stream=True, timeout=30, allow_redirects=True)
+                response.raise_for_status()
+                
+                total_size = int(response.headers.get('content-length', 0))
+                downloaded = 0
+                
+                with open(file_path, 'wb') as f:
+                    start_time = time.time()
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                            
+                            # Calculate speed and show progress
+                            elapsed_time = time.time() - start_time
+                            if elapsed_time > 0:
+                                speed = downloaded / elapsed_time
+                                
+                            if total_size > 0:
+                                percent = int((downloaded / total_size) * 100)
+                                draw_progress_bar(f"Downloading {filename}", percent, downloaded, total_size, speed)
+                            else:
+                                draw_progress_bar(f"Downloading {filename}", 0, downloaded, 0, speed)
+                
+                draw_loading_message(f"Downloaded to work directory: {filename}")
+                pygame.time.wait(2000)
+                return True
+                
+            except requests.exceptions.RequestException as req_error:
+                error_msg = "Network error downloading file"
+                if hasattr(req_error, 'response') and req_error.response:
+                    error_msg += f" (HTTP {req_error.response.status_code})"
+                log_error(error_msg, type(req_error).__name__, traceback.format_exc())
+                draw_loading_message(f"Error: Network error - check URL")
+                pygame.time.wait(2000)
+                return False
+                
+        except Exception as e:
+            log_error("Error downloading file", type(e).__name__, traceback.format_exc())
+            draw_loading_message("Download failed. Check error log for details.")
+            pygame.time.wait(2000)
+            return False
+
     def draw_progress_bar(text, percent, downloaded=0, total_size=0, speed=0):
-        screen.fill(BACKGROUND)
+        draw_background()
         
         # Draw title with modern styling
         title_font = pygame.font.Font(None, int(FONT_SIZE * 1.3))
@@ -1288,7 +1602,7 @@ try:
 
     def draw_settings_menu():
         global settings_scroll_offset
-        screen.fill(BACKGROUND)
+        draw_background()
         y = 10
         
         # Draw title
@@ -1353,31 +1667,37 @@ try:
             elif actual_idx == 2:  # Archive JSON URL
                 select_button_name = get_button_name("select")
                 setting_value = f"Press {select_button_name} to set archive"
-            elif actual_idx == 3:  # View Type
+            elif actual_idx == 3:  # Select Archive Json
+                archive_path = settings.get("archive_json_path", "")
+                if archive_path and os.path.exists(archive_path):
+                    setting_value = archive_path[-30:] + "..." if len(archive_path) > 30 else archive_path
+                else:
+                    setting_value = "Not configured"
+            elif actual_idx == 4:  # View Type
                 setting_value = settings["view_type"].upper()
-            elif actual_idx == 4:  # USA Games Only
+            elif actual_idx == 5:  # USA Games Only
                 setting_value = "ON" if settings["usa_only"] else "OFF"
-            elif actual_idx == 5:  # Work Directory
+            elif actual_idx == 6:  # Work Directory
                 work_dir = settings.get("work_dir", "")
                 setting_value = work_dir[-30:] + "..." if len(work_dir) > 30 else work_dir
-            elif actual_idx == 6:  # ROMs Directory
+            elif actual_idx == 7:  # ROMs Directory
                 roms_dir = settings.get("roms_dir", "")
                 setting_value = roms_dir[-30:] + "..." if len(roms_dir) > 30 else roms_dir
-            elif actual_idx == 7:  # NSZ Keys
+            elif actual_idx == 8:  # NSZ Keys
                 keys_path = settings.get("nsz_keys_path", "")
                 if keys_path and os.path.exists(keys_path):
                     setting_value = keys_path[-30:] + "..." if len(keys_path) > 30 else keys_path
                 else:
                     setting_value = "Not configured"
-            elif actual_idx == 8:  # Remap Controller
+            elif actual_idx == 9:  # Remap Controller
                 if controller_mapping:
                     setting_value = f"{len(controller_mapping)} buttons mapped"
                 else:
                     setting_value = "Not configured"
-            elif actual_idx == 9:  # Add Systems
+            elif actual_idx == 10:  # Add Systems
                 select_button_name = get_button_name("select")
                 setting_value = f"Press {select_button_name} to add"
-            elif actual_idx == 10:  # Systems Settings
+            elif actual_idx == 11:  # Systems Settings
                 select_button_name = get_button_name("select")
                 setting_value = f"Press {select_button_name} to configure"
             
@@ -1389,7 +1709,7 @@ try:
         
 
     def draw_add_systems_menu():
-        screen.fill(BACKGROUND)
+        draw_background()
         y = 10
         
         # Draw title
@@ -1450,7 +1770,7 @@ try:
 
     def draw_systems_settings_menu():
         """Draw the systems settings menu that lists all systems"""
-        screen.fill(BACKGROUND)
+        draw_background()
         y = 10
         
         # Draw title
@@ -1521,12 +1841,105 @@ try:
                 screen.blit(down_arrow, (screen_width - 50, screen_height - 30))
         
 
+    def draw_utils_menu():
+        """Draw the utils menu for downloading files"""
+        utils_options = [
+            "Download from URL",
+            "NSZ to NSP Converter"
+        ]
+        
+        # Enhanced title
+        title = "Utilities"
+        
+        draw_menu(title, utils_options, set())
+
+    def draw_credits_menu():
+        """Draw the credits menu"""
+        draw_background()
+        screen_width, screen_height = screen.get_size()
+        
+        # Title
+        title_font = pygame.font.Font(None, int(FONT_SIZE * 1.5))
+        title_surf = title_font.render("Credits", True, TEXT_PRIMARY)
+        title_x = (screen_width - title_surf.get_width()) // 2
+        y = 20
+        screen.blit(title_surf, (title_x, y))
+        y += title_surf.get_height() + 30
+        
+        # Credits content with your specified text
+        credits_content = [
+            "",
+            "Developer: hiitsgabe @ github.",
+            "",
+            "Made w/ ❤️ in Toronto.",
+            "",
+            "DISCLAIMER:",
+            "This app is meant to help you organize games that",
+            "you legally own and to manage legally acquired copies",
+            "of your games. We do not condone piracy or illegal",
+            "distribution of copyrighted content in any form.",
+            "Users are responsible for ensuring they comply with",
+            "all applicable copyright laws in their jurisdiction.",
+            "",
+            "Made w/: Pygame+Buildozer, NSZ Library and Python.",
+            ""
+        ]
+        
+        # Center the credits content
+        for line in credits_content:
+            if line:  # Non-empty lines
+                if "❤️" in line:
+                    # Special handling for the heart emoji line
+                    parts = line.split("❤️")
+                    if len(parts) == 2:
+                        # Render the text parts
+                        part1_surf = font.render(parts[0], True, TEXT_PRIMARY)
+                        part2_surf = font.render(parts[1], True, TEXT_PRIMARY)
+                        
+                        # Calculate total width including heart emoji
+                        heart_size = 20
+                        total_width = part1_surf.get_width() + heart_size + part2_surf.get_width()
+                        
+                        # Start position to center everything
+                        start_x = (screen_width - total_width) // 2
+                        
+                        # Draw first part
+                        screen.blit(part1_surf, (start_x, y))
+                        
+                        # Draw heart emoji
+                        heart_x = start_x + part1_surf.get_width()
+                        heart_y = y + (FONT_SIZE - heart_size) // 2  # Vertically center with text
+                        draw_emoji_icon("❤️", heart_x, heart_y, heart_size)
+                        
+                        # Draw second part
+                        part2_x = heart_x + heart_size
+                        screen.blit(part2_surf, (part2_x, y))
+                    else:
+                        # Fallback if split doesn't work as expected
+                        line_surf = font.render(line, True, TEXT_PRIMARY)
+                        line_x = (screen_width - line_surf.get_width()) // 2
+                        screen.blit(line_surf, (line_x, y))
+                else:
+                    # Regular text line
+                    line_surf = font.render(line, True, TEXT_PRIMARY)
+                    line_x = (screen_width - line_surf.get_width()) // 2
+                    screen.blit(line_surf, (line_x, y))
+            y += FONT_SIZE + 8
+        
+        # Instructions at the bottom
+        back_button_name = get_button_name("back")
+        instruction = f"Press {back_button_name} to go back"
+        inst_surf = font.render(instruction, True, TEXT_DISABLED)
+        inst_x = (screen_width - inst_surf.get_width()) // 2
+        inst_y = screen_height - 50
+        screen.blit(inst_surf, (inst_x, inst_y))
+
     def draw_system_settings_menu():
         """Draw the individual system settings menu"""
         if not selected_system_for_settings:
             return
             
-        screen.fill(BACKGROUND)
+        draw_background()
         y = 10
         
         # Draw title
@@ -1582,7 +1995,7 @@ try:
         
 
     def draw_grid_view(title, items, selected_indices):
-        screen.fill(BACKGROUND)
+        draw_background()
         y = 20
         
         # Draw title with modern styling and gradient effect
@@ -1806,35 +2219,28 @@ try:
             screen.blit(message_surf, (20, message_y))
         
         
-        if not show_game_details:
-            pygame.display.flip()
+        # Display flip handled by main loop to prevent blinking
 
     def draw_menu(title, items, selected_indices):
-        screen.fill(BACKGROUND)
+        # Use background image for all screens
+        draw_background()
+            
         y = 30  # Start with more margin
         
-        # Enhanced title styling with gradient-like effect
-        title_font = pygame.font.Font(None, int(FONT_SIZE * 1.5))  # Even larger title
+        # Simple title styling like other screens
+        title_font = pygame.font.Font(None, int(FONT_SIZE * 1.5))
         title_surf = title_font.render(title, True, TEXT_PRIMARY)
         
-        # Add a subtle background for the title area
-        screen_width = screen.get_width()
-        title_bg_rect = pygame.Rect(0, 0, screen_width, title_surf.get_height() + 40)
-        pygame.draw.rect(screen, SURFACE, title_bg_rect)
-        
         # Center the title horizontally
+        screen_width = screen.get_width()
         title_x = (screen_width - title_surf.get_width()) // 2
         screen.blit(title_surf, (title_x, y))
         
-        # Draw enhanced underline for title with gradient effect
+        # Simple underline for title
         title_width = title_surf.get_width()
         underline_y = y + title_surf.get_height() + 8
-        # Main underline
         pygame.draw.line(screen, PRIMARY, (title_x, underline_y), 
                         (title_x + title_width, underline_y), 3)
-        # Subtle glow effect
-        pygame.draw.line(screen, PRIMARY_LIGHT, (title_x, underline_y + 1), 
-                        (title_x + title_width, underline_y + 1), 1)
         
         y += title_surf.get_height() + 35
 
@@ -1999,26 +2405,42 @@ try:
             else:
                 text_x = 35  # Standard margin for non-games with more padding
                 
-                # Add simple visual indicators for system menu items
+                # Add emoji icons for system menu items
                 if mode == "systems":
                     icon_x = item_margin + 12
-                    icon_y = y + (row_height - 16) // 2
-                    icon_size = 12
+                    icon_y = y + (row_height - 20) // 2
+                    icon_size = 20
                     
-                    # Simple geometric icons for different items
+                    # Emoji icons for different items with geometric fallback
                     if item == "Settings":
-                        # Gear icon (simple squares pattern)
-                        gear_color = SECONDARY if is_highlighted else TEXT_DISABLED
-                        pygame.draw.rect(screen, gear_color, (icon_x, icon_y, icon_size, icon_size), 2)
-                        pygame.draw.rect(screen, gear_color, (icon_x + 3, icon_y + 3, icon_size - 6, icon_size - 6))
+                        if not draw_emoji_icon("⚙️", icon_x, icon_y, icon_size):
+                            # Fallback: gear icon (geometric)
+                            gear_color = SECONDARY if is_highlighted else TEXT_PRIMARY
+                            pygame.draw.rect(screen, gear_color, (icon_x, icon_y, 16, 16), 2)
+                            pygame.draw.rect(screen, gear_color, (icon_x + 4, icon_y + 4, 8, 8))
+                    elif item == "Utils":
+                        if not draw_emoji_icon("🔧", icon_x, icon_y, icon_size):
+                            # Fallback: wrench icon (geometric)  
+                            utils_color = SECONDARY if is_highlighted else TEXT_PRIMARY
+                            pygame.draw.line(screen, utils_color, (icon_x + 2, icon_y + 2), (icon_x + 14, icon_y + 14), 2)
+                            pygame.draw.line(screen, utils_color, (icon_x + 6, icon_y + 14), (icon_x + 14, icon_y + 6), 2)
+                    elif item == "Credits":
+                        if not draw_emoji_icon("❤️", icon_x, icon_y, icon_size):
+                            # Fallback: heart icon (geometric)
+                            credits_color = SECONDARY if is_highlighted else TEXT_PRIMARY
+                            center_x, center_y = icon_x + 8, icon_y + 8
+                            heart_points = [(center_x, center_y - 4), (center_x + 4, center_y), (center_x, center_y + 4), (center_x - 4, center_y)]
+                            pygame.draw.polygon(screen, credits_color, heart_points, 2)
                     else:
-                        # Game controller icon (simple rectangle with smaller rects)
-                        controller_color = PRIMARY if is_highlighted else TEXT_DISABLED
-                        pygame.draw.rect(screen, controller_color, (icon_x, icon_y + 2, icon_size, icon_size - 4), 2)
-                        pygame.draw.rect(screen, controller_color, (icon_x + 2, icon_y, 3, 3))
-                        pygame.draw.rect(screen, controller_color, (icon_x + icon_size - 5, icon_y, 3, 3))
+                        # Game controller emoji for game systems
+                        if not draw_emoji_icon("🎮", icon_x, icon_y, icon_size):
+                            # Fallback: controller icon (geometric)
+                            controller_color = PRIMARY if is_highlighted else TEXT_PRIMARY
+                            pygame.draw.rect(screen, controller_color, (icon_x, icon_y + 4, 16, 8), 2)
+                            pygame.draw.rect(screen, controller_color, (icon_x + 2, icon_y + 2, 3, 3))
+                            pygame.draw.rect(screen, controller_color, (icon_x + 11, icon_y + 2, 3, 3))
                     
-                    text_x += 25  # Move text over to make room for icon
+                    text_x += 30  # Move text over to make room for larger emoji icon
             
             # Draw text with enhanced styling
             text_y = y + (row_height - FONT_SIZE) // 2  # Center text vertically
@@ -2059,8 +2481,7 @@ try:
             screen.blit(page_surf, (20, page_y))
 
 
-        if not show_game_details:
-            pygame.display.flip()
+        # Display flip handled by main loop to prevent blinking
 
     def draw_game_details_modal(game_item):
         """Draw the game details modal overlay with enhanced styling"""
@@ -2307,6 +2728,8 @@ try:
                 title_text = f"Select Work Directory"
             elif selected_system_to_add.get("type") == "nsz_keys":
                 title_text = f"Select NSZ Keys File"
+            elif selected_system_to_add.get("type") == "archive_json":
+                title_text = f"Select Archive JSON File"
             else:
                 title_text = f"Select ROM Folder for {selected_system_to_add['name']}"
         else:
@@ -2344,6 +2767,20 @@ try:
                     f"Use D-pad to navigate",
                     f"Press {select_button_name} to enter [DIR] or select [KEY] file",
                     f"Press {detail_button_name} to select current folder path",
+                    f"Press {back_button_name} to cancel"
+                ]
+            elif selected_system_to_add.get("type") == "archive_json":
+                instructions = [
+                    f"Use D-pad to navigate",
+                    f"Press {select_button_name} to enter [DIR] or select [JSON] file",
+                    f"Navigate to find JSON configuration files",
+                    f"Press {back_button_name} to cancel"
+                ]
+            elif selected_system_to_add.get("type") == "nsz_converter":
+                instructions = [
+                    f"Use D-pad to navigate",
+                    f"Press {select_button_name} to enter [DIR] or select [NSZ] file",
+                    f"Navigate to find NSZ files to convert to NSP",
                     f"Press {back_button_name} to cancel"
                 ]
             else:
@@ -2414,6 +2851,10 @@ try:
                 color = GRAY
             elif item["type"] == "keys_file":
                 display_name = f"[KEY] {item['name']}"
+            elif item["type"] == "json_file":
+                display_name = f"[JSON] {item['name']}"
+            elif item["type"] == "nsz_file":
+                display_name = f"[NSZ] {item['name']}"
             else:
                 display_name = item['name']
             
@@ -2436,7 +2877,7 @@ try:
 
 
     def draw_loading_message(message):
-        screen.fill(BACKGROUND)
+        draw_background()
         
         # Create centered layout
         screen_width, screen_height = screen.get_size()
@@ -2497,7 +2938,7 @@ try:
 
     def draw_character_selector():
         """Draw the character selector for search input"""
-        screen.fill(BACKGROUND)
+        draw_background()
         
         # Create centered layout
         screen_width, screen_height = screen.get_size()
@@ -2833,37 +3274,48 @@ try:
                                 if not os.path.exists(expected_keys) and actual_keys_path != expected_keys:
                                     shutil.copy2(actual_keys_path, expected_keys)
                                 
-                                # Try multiple NSZ execution methods
+                                # Try NSZ decompression using library directly
                                 nsz_success = False
                                 
-                                # Method 1: Try nsz command directly
-                                try:
-                                    result = subprocess.run([
-                                        'nsz', '-D', file_path
-                                    ], capture_output=True, text=True, cwd=WORK_DIR, timeout=300, env=env)
-                                    
-                                    if result.returncode == 0:
+                                if NSZ_AVAILABLE and nsz_decompress:
+                                    try:
+                                        # Use nsz library directly with keys
+                                        nsz_decompress([file_path], output_dir=WORK_DIR, keys_path=actual_keys_path)
                                         nsz_success = True
-                                        print("NSZ decompression successful using 'nsz' command")
-                                    else:
-                                        print(f"NSZ command failed: {result.stderr}")
-                                except Exception as e:
-                                    print(f"NSZ command method failed: {e}")
+                                        print("NSZ decompression successful using nsz library")
+                                    except Exception as e:
+                                        print(f"NSZ library decompression failed: {e}")
                                 
-                                # Method 2: Try python -m nsz if first method failed
+                                # Fallback to subprocess if library method failed or unavailable
                                 if not nsz_success:
+                                    # Method 1: Try nsz command directly
                                     try:
                                         result = subprocess.run([
-                                            sys.executable, '-m', 'nsz', '-D', file_path
+                                            'nsz', '-D', file_path
                                         ], capture_output=True, text=True, cwd=WORK_DIR, timeout=300, env=env)
                                         
                                         if result.returncode == 0:
                                             nsz_success = True
-                                            print("NSZ decompression successful using 'python -m nsz'")
+                                            print("NSZ decompression successful using 'nsz' command")
                                         else:
-                                            print(f"Python -m nsz failed: {result.stderr}")
+                                            print(f"NSZ command failed: {result.stderr}")
                                     except Exception as e:
-                                        print(f"Python -m nsz method failed: {e}")
+                                        print(f"NSZ command method failed: {e}")
+                                    
+                                    # Method 2: Try python -m nsz if first method failed
+                                    if not nsz_success:
+                                        try:
+                                            result = subprocess.run([
+                                                sys.executable, '-m', 'nsz', '-D', file_path
+                                            ], capture_output=True, text=True, cwd=WORK_DIR, timeout=300, env=env)
+                                            
+                                            if result.returncode == 0:
+                                                nsz_success = True
+                                                print("NSZ decompression successful using 'python -m nsz'")
+                                            else:
+                                                print(f"Python -m nsz failed: {result.stderr}")
+                                        except Exception as e:
+                                            print(f"Python -m nsz method failed: {e}")
                                 
                                 if nsz_success:
                                     draw_progress_bar(f"Decompressing {filename}... Complete", 100)
@@ -3080,12 +3532,16 @@ try:
                         if os.path.isdir(entry_path) and not entry.startswith('.'):
                             items.append({"name": entry, "type": "folder", "path": entry_path})
                     
-                    # Add .keys files if we're selecting NSZ keys
-                    if selected_system_to_add and selected_system_to_add.get("type") == "nsz_keys":
+                    # Add .keys files if we're selecting NSZ keys, .json files if selecting archive JSON, or .nsz files if converting
+                    if selected_system_to_add:
                         for entry in entries:
                             entry_path = os.path.join(path, entry)
-                            if os.path.isfile(entry_path) and entry.lower().endswith('.keys'):
+                            if selected_system_to_add.get("type") == "nsz_keys" and os.path.isfile(entry_path) and entry.lower().endswith('.keys'):
                                 items.append({"name": entry, "type": "keys_file", "path": entry_path})
+                            elif selected_system_to_add.get("type") == "archive_json" and os.path.isfile(entry_path) and entry.lower().endswith('.json'):
+                                items.append({"name": entry, "type": "json_file", "path": entry_path})
+                            elif selected_system_to_add.get("type") == "nsz_converter" and os.path.isfile(entry_path) and entry.lower().endswith('.nsz'):
+                                items.append({"name": entry, "type": "nsz_file", "path": entry_path})
                     
                 except PermissionError:
                     items.append({"name": "Permission denied", "type": "error", "path": path})
@@ -3269,9 +3725,9 @@ try:
     def load_main_systems_data():
         """Load main systems data including added systems"""
         try:
-            # Load main systems (optional)
+            # Load main systems (optional) - uses global JSON_FILE which may be archive or default
             main_data = []
-            if os.path.exists(JSON_FILE):
+            if JSON_FILE and os.path.exists(JSON_FILE):
                 with open(JSON_FILE) as f:
                     main_data = json.load(f)
             else:
@@ -3353,6 +3809,17 @@ try:
 
     # Load settings after all functions are defined
     settings = load_settings()
+    
+    # Update JSON_FILE path based on archive_json_path setting
+    update_json_file_path()
+    
+    # Load background image
+    print("Loading background image...")
+    background_image = load_background_image()
+    print(f"Background image result: {background_image is not None}")
+    
+    # Load main systems data now that settings and JSON_FILE are available
+    data[:] = load_main_systems_data()
     
     # NSZ functionality is available - will attempt decompression when needed
     nsz_available = True
@@ -3577,13 +4044,19 @@ try:
         folder_name_cursor_position = 0
         folder_name_char_index = 0
 
-    def show_url_input_modal():
-        """Show the URL input modal for archive JSON URL"""
-        global show_url_input, url_input_text, url_cursor_position
+    def show_url_input_modal(context="archive_json"):
+        """Show the URL input modal for archive JSON URL or direct download"""
+        global show_url_input, url_input_text, url_cursor_position, url_input_context
+        
+        # Set the context for URL input handling
+        url_input_context = context
         
         # Open the URL input modal
         show_url_input = True
-        url_input_text = settings.get("archive_json_url", "")
+        if context == "archive_json":
+            url_input_text = settings.get("archive_json_url", "")
+        else:  # direct_download
+            url_input_text = ""
         url_cursor_position = 0
 
     def restart_app():
@@ -3818,7 +4291,11 @@ try:
         
         # Enhanced title with styling
         title_font = pygame.font.Font(None, int(FONT_SIZE * 1.3))
-        title_surf = title_font.render("Set Archive URL", True, TEXT_PRIMARY)
+        if url_input_context == "direct_download":
+            title_text = "Download File from URL"
+        else:
+            title_text = "Set Archive URL"
+        title_surf = title_font.render(title_text, True, TEXT_PRIMARY)
         title_x = modal_x + 25
         title_y = modal_y + 25
         screen.blit(title_surf, (title_x, title_y))
@@ -4002,6 +4479,10 @@ try:
                     max_items = len(current_game_list)
                 elif mode == "settings":
                     max_items = len(settings_list)
+                elif mode == "utils":
+                    max_items = 2  # Download from URL and NSZ to NSP Converter
+                elif mode == "credits":
+                    max_items = 0  # No navigable items in credits
                 elif mode == "add_systems":
                     max_items = len(available_systems)
                 elif mode == "systems_settings":
@@ -4011,7 +4492,7 @@ try:
                     max_items = 2  # Hide from menu + Custom ROM folder
                 else:  # systems
                     visible_systems = get_visible_systems()
-                    max_items = len(visible_systems) + 1  # +1 for Settings option
+                    max_items = len(visible_systems) + 3  # +3 for Utils, Settings, and Credits options
                 
                 if max_items > 0:
                     if mode == "add_systems":
@@ -4127,8 +4608,8 @@ try:
                 visible_systems = get_visible_systems()
                 regular_systems = [d['name'] for d in visible_systems]
                 
-                # Always show Settings, with systems if available
-                systems_with_options = regular_systems + ["Settings"]
+                # Always show Utils, Settings, and Credits, with systems if available
+                systems_with_options = regular_systems + ["Utils", "Settings", "Credits"]
                 
                 # Enhanced title with system info if a system was previously selected
                 title = "Console Utils"
@@ -4157,6 +4638,10 @@ try:
                     draw_loading_message("No games found for this system")
             elif mode == "settings":
                 draw_settings_menu()
+            elif mode == "utils":
+                draw_utils_menu()
+            elif mode == "credits":
+                draw_credits_menu()
             elif mode == "add_systems":
                 draw_add_systems_menu()
             elif mode == "systems_settings":
@@ -4256,10 +4741,16 @@ try:
                             visible_systems = get_visible_systems()
                             systems_count = len(visible_systems)
                             
-                            if highlighted == systems_count:  # Settings option (always at the end)
+                            if highlighted == systems_count:  # Utils option
+                                mode = "utils"
+                                highlighted = 0
+                            elif highlighted == systems_count + 1:  # Settings option
                                 mode = "settings"
                                 highlighted = 0
                                 settings_scroll_offset = 0
+                            elif highlighted == systems_count + 2:  # Credits option (always at the end)
+                                mode = "credits"
+                                highlighted = 0
                             elif highlighted < systems_count:
                                 # Map visible system index to original data index
                                 selected_visible_system = visible_systems[highlighted]
@@ -4300,13 +4791,30 @@ try:
                             elif highlighted == 2:  # Archive JSON URL
                                 # Show URL input modal
                                 show_url_input_modal()
-                            elif highlighted == 3:  # View Type
+                            elif highlighted == 3:  # Select Archive Json
+                                # Open folder browser for JSON files (like NSZ Keys)
+                                show_folder_browser = True
+                                # Use current archive path or default to workdir where download.json is
+                                current_archive = settings.get("archive_json_path", "")
+                                if current_archive and os.path.exists(os.path.dirname(current_archive)):
+                                    folder_browser_current_path = os.path.dirname(current_archive)
+                                else:
+                                    # Default to workdir where download.json is located
+                                    workdir_path = os.path.join(SCRIPT_DIR, "..", "workdir")
+                                    if os.path.exists(workdir_path):
+                                        folder_browser_current_path = os.path.abspath(workdir_path)
+                                    else:
+                                        folder_browser_current_path = SCRIPT_DIR
+                                load_folder_contents(folder_browser_current_path)
+                                # Set a flag to indicate we're selecting archive JSON
+                                selected_system_to_add = {"name": "Archive JSON", "type": "archive_json"}
+                            elif highlighted == 4:  # View Type
                                 settings["view_type"] = "grid" if settings["view_type"] == "list" else "list"
                                 save_settings(settings)
-                            elif highlighted == 4:  # USA Games Only
+                            elif highlighted == 5:  # USA Games Only
                                 settings["usa_only"] = not settings["usa_only"]
                                 save_settings(settings)
-                            elif highlighted == 5:  # Work Directory
+                            elif highlighted == 6:  # Work Directory
                                 # Open folder browser for work directory selection
                                 show_folder_browser = True
                                 # Use current work_dir or fallback to a sensible default
@@ -4322,7 +4830,7 @@ try:
                                 load_folder_contents(folder_browser_current_path)
                                 # Set a flag to indicate we're selecting work directory
                                 selected_system_to_add = {"name": "Work Directory", "type": "work_dir"}
-                            elif highlighted == 6:  # ROMs Directory
+                            elif highlighted == 7:  # ROMs Directory
                                 # Open folder browser
                                 show_folder_browser = True
                                 # Use current roms_dir or fallback to a sensible default
@@ -4336,7 +4844,7 @@ try:
                                 else:
                                     folder_browser_current_path = current_roms
                                 load_folder_contents(folder_browser_current_path)
-                            elif highlighted == 7:  # NSZ Keys
+                            elif highlighted == 8:  # NSZ Keys
                                 # Open folder browser for .keys files
                                 show_folder_browser = True
                                 # Use current keys path or default to home directory
@@ -4353,18 +4861,29 @@ try:
                                 load_folder_contents(folder_browser_current_path)
                                 # Set a flag to indicate we're selecting NSZ keys
                                 selected_system_to_add = {"name": "NSZ Keys", "type": "nsz_keys"}
-                            elif highlighted == 8:  # Remap Controller
+                            elif highlighted == 9:  # Remap Controller
                                 # Trigger controller remapping
                                 show_controller_mapping = True
-                            elif highlighted == 9:  # Add Systems
+                            elif highlighted == 10:  # Add Systems
                                 mode = "add_systems"
                                 highlighted = 0
                                 add_systems_highlighted = 0
                                 # Load available systems in background
                                 load_available_systems()
-                            elif highlighted == 10:  # Systems Settings
+                            elif highlighted == 11:  # Systems Settings
                                 mode = "systems_settings"
                                 systems_settings_highlighted = 0
+                                highlighted = 0
+                        elif mode == "utils":
+                            if highlighted == 0:  # Download from URL
+                                # Show URL input modal for direct download
+                                show_url_input_modal("direct_download")
+                            elif highlighted == 1:  # NSZ to NSP Converter
+                                # Start NSZ file browser
+                                show_folder_browser = True
+                                folder_browser_current_path = settings.get("roms_dir", "/userdata/roms")
+                                selected_system_to_add = {"name": "NSZ to NSP Converter", "type": "nsz_converter"}
+                                load_folder_contents(folder_browser_current_path)
                                 highlighted = 0
                         elif mode == "add_systems":
                             # Handle add systems selection
@@ -4535,6 +5054,12 @@ try:
                         elif mode == "settings":
                             mode = "systems"
                             highlighted = 0
+                        elif mode == "utils":
+                            mode = "systems"
+                            highlighted = 0
+                        elif mode == "credits":
+                            mode = "systems"
+                            highlighted = 0
                         elif mode == "add_systems":
                             mode = "settings"
                             highlighted = 8  # Return to Add Systems option
@@ -4604,14 +5129,19 @@ try:
                                     show_url_input = False
                                     url = url_input_text.strip()
                                     if url:
-                                        settings["archive_json_url"] = url
-                                        save_settings(settings)
-                                        # Download and update JSON
-                                        download_archive_json(url)
+                                        if url_input_context == "archive_json":
+                                            settings["archive_json_url"] = url
+                                            save_settings(settings)
+                                            # Download and update JSON
+                                            download_archive_json(url)
+                                        elif url_input_context == "direct_download":
+                                            # Download file directly to work directory
+                                            download_direct_file(url)
                                     else:
-                                        # Clear the setting if URL is empty
-                                        settings["archive_json_url"] = ""
-                                        save_settings(settings)
+                                        if url_input_context == "archive_json":
+                                            # Clear the setting if URL is empty
+                                            settings["archive_json_url"] = ""
+                                            save_settings(settings)
                                 else:
                                     # Add character to URL
                                     url_input_text += selected_char
@@ -4672,6 +5202,43 @@ try:
                                         save_settings(settings)
                                         show_folder_browser = False
                                         selected_system_to_add = None
+                                elif selected_item["type"] == "json_file":
+                                    # Select this .json file for archive configuration
+                                    if selected_system_to_add and selected_system_to_add.get("type") == "archive_json":
+                                        # Save the archive JSON path (like NSZ Keys)
+                                        settings["archive_json_path"] = selected_item["path"]
+                                        save_settings(settings)
+                                        
+                                        # Update global JSON_FILE path
+                                        update_json_file_path()
+                                        
+                                        # Validate the selected JSON file
+                                        try:
+                                            # Read and validate JSON file
+                                            with open(selected_item["path"], 'r') as f:
+                                                json_data = json.load(f)
+                                            
+                                            if not isinstance(json_data, list):
+                                                draw_loading_message("Error: Invalid JSON format (must be array)")
+                                                pygame.time.wait(2000)
+                                            else:
+                                                # Reload data from new JSON file (now uses updated JSON_FILE)
+                                                data[:] = load_main_systems_data()
+                                                
+                                                draw_loading_message("Archive JSON updated successfully!")
+                                                pygame.time.wait(1000)
+                                        except Exception as e:
+                                            draw_loading_message(f"Error loading JSON file: {str(e)}")
+                                            pygame.time.wait(2000)
+                                        
+                                        show_folder_browser = False
+                                        selected_system_to_add = None
+                                elif selected_item["type"] == "nsz_file":
+                                    # Convert this .nsz file to .nsp
+                                    if selected_system_to_add and selected_system_to_add.get("type") == "nsz_converter":
+                                        convert_nsz_to_nsp(selected_item["path"])
+                                        show_folder_browser = False
+                                        selected_system_to_add = None
                         elif mode == "add_systems":
                             # Add systems navigation
                             if available_systems and add_systems_highlighted > 0:
@@ -4706,7 +5273,7 @@ try:
                                 max_items = 2  # Hide from menu + Custom ROM folder
                             else:  # systems
                                 visible_systems = get_visible_systems()
-                                max_items = len(visible_systems) + 1  # +1 for Settings option
+                                max_items = len(visible_systems) + 3  # +3 for Utils, Settings, and Credits options
                             
                             if max_items > 0:
                                 if mode == "add_systems":
@@ -4766,7 +5333,7 @@ try:
                                 max_items = 2  # Hide from menu + Custom ROM folder
                             else:  # systems
                                 visible_systems = get_visible_systems()
-                                max_items = len(visible_systems) + 1  # +1 for Settings option
+                                max_items = len(visible_systems) + 3  # +3 for Utils, Settings, and Credits options
                             
                             if max_items > 0:
                                 if mode == "add_systems":
@@ -4871,7 +5438,7 @@ try:
                                 max_items = 2  # Hide from menu + Custom ROM folder
                             else:  # systems
                                 visible_systems = get_visible_systems()
-                                max_items = len(visible_systems) + 1  # +1 for Settings option
+                                max_items = len(visible_systems) + 3  # +3 for Utils, Settings, and Credits options
                             
                             if max_items > 0:
                                 if mode == "add_systems":
@@ -4935,7 +5502,7 @@ try:
                                 max_items = 2  # Hide from menu + Custom ROM folder
                             else:  # systems
                                 visible_systems = get_visible_systems()
-                                max_items = len(visible_systems) + 1  # +1 for Settings option
+                                max_items = len(visible_systems) + 3  # +3 for Utils, Settings, and Credits options
                             
                             if max_items > 0:
                                 if mode == "add_systems":
@@ -5086,7 +5653,7 @@ try:
                                     max_items = len(available_systems)
                                 else:  # systems
                                     visible_systems = get_visible_systems()
-                                    max_items = len(visible_systems) + 1  # +1 for Settings option
+                                    max_items = len(visible_systems) + 3  # +3 for Utils, Settings, and Credits options
                                 
                                 if max_items > 0:
                                     if mode == "add_systems":
@@ -5184,14 +5751,19 @@ try:
                                     show_url_input = False
                                     url = url_input_text.strip()
                                     if url:
-                                        settings["archive_json_url"] = url
-                                        save_settings(settings)
-                                        # Download and update JSON
-                                        download_archive_json(url)
+                                        if url_input_context == "archive_json":
+                                            settings["archive_json_url"] = url
+                                            save_settings(settings)
+                                            # Download and update JSON
+                                            download_archive_json(url)
+                                        elif url_input_context == "direct_download":
+                                            # Download file directly to work directory
+                                            download_direct_file(url)
                                     else:
-                                        # Clear the setting if URL is empty
-                                        settings["archive_json_url"] = ""
-                                        save_settings(settings)
+                                        if url_input_context == "archive_json":
+                                            # Clear the setting if URL is empty
+                                            settings["archive_json_url"] = ""
+                                            save_settings(settings)
                                 else:
                                     # Add character to URL
                                     url_input_text += selected_char
@@ -5219,15 +5791,58 @@ try:
                                         save_settings(settings)
                                         show_folder_browser = False
                                         selected_system_to_add = None
+                                elif selected_item["type"] == "json_file":
+                                    # Select this .json file for archive configuration
+                                    if selected_system_to_add and selected_system_to_add.get("type") == "archive_json":
+                                        # Save the archive JSON path (like NSZ Keys)
+                                        settings["archive_json_path"] = selected_item["path"]
+                                        save_settings(settings)
+                                        
+                                        # Update global JSON_FILE path
+                                        update_json_file_path()
+                                        
+                                        # Validate the selected JSON file
+                                        try:
+                                            # Read and validate JSON file
+                                            with open(selected_item["path"], 'r') as f:
+                                                json_data = json.load(f)
+                                            
+                                            if not isinstance(json_data, list):
+                                                draw_loading_message("Error: Invalid JSON format (must be array)")
+                                                pygame.time.wait(2000)
+                                            else:
+                                                # Reload data from new JSON file (now uses updated JSON_FILE)
+                                                data[:] = load_main_systems_data()
+                                                
+                                                draw_loading_message("Archive JSON updated successfully!")
+                                                pygame.time.wait(1000)
+                                        except Exception as e:
+                                            draw_loading_message(f"Error loading JSON file: {str(e)}")
+                                            pygame.time.wait(2000)
+                                        
+                                        show_folder_browser = False
+                                        selected_system_to_add = None
+                                elif selected_item["type"] == "nsz_file":
+                                    # Convert this .nsz file to .nsp
+                                    if selected_system_to_add and selected_system_to_add.get("type") == "nsz_converter":
+                                        convert_nsz_to_nsp(selected_item["path"])
+                                        show_folder_browser = False
+                                        selected_system_to_add = None
                         elif mode == "systems":
                             # Use helper function for consistent filtering
                             visible_systems = get_visible_systems()
                             systems_count = len(visible_systems)
                             
-                            if highlighted == systems_count:  # Settings option (always at the end)
+                            if highlighted == systems_count:  # Utils option
+                                mode = "utils"
+                                highlighted = 0
+                            elif highlighted == systems_count + 1:  # Settings option
                                 mode = "settings"
                                 highlighted = 0
                                 settings_scroll_offset = 0
+                            elif highlighted == systems_count + 2:  # Credits option (always at the end)
+                                mode = "credits"
+                                highlighted = 0
                             elif highlighted < systems_count:
                                 # Map visible system index to original data index
                                 selected_visible_system = visible_systems[highlighted]
@@ -5268,13 +5883,30 @@ try:
                             elif highlighted == 2:  # Archive JSON URL
                                 # Show URL input modal
                                 show_url_input_modal()
-                            elif highlighted == 3:  # View Type
+                            elif highlighted == 3:  # Select Archive Json
+                                # Open folder browser for JSON files (like NSZ Keys)
+                                show_folder_browser = True
+                                # Use current archive path or default to workdir where download.json is
+                                current_archive = settings.get("archive_json_path", "")
+                                if current_archive and os.path.exists(os.path.dirname(current_archive)):
+                                    folder_browser_current_path = os.path.dirname(current_archive)
+                                else:
+                                    # Default to workdir where download.json is located
+                                    workdir_path = os.path.join(SCRIPT_DIR, "..", "workdir")
+                                    if os.path.exists(workdir_path):
+                                        folder_browser_current_path = os.path.abspath(workdir_path)
+                                    else:
+                                        folder_browser_current_path = SCRIPT_DIR
+                                load_folder_contents(folder_browser_current_path)
+                                # Set a flag to indicate we're selecting archive JSON
+                                selected_system_to_add = {"name": "Archive JSON", "type": "archive_json"}
+                            elif highlighted == 4:  # View Type
                                 settings["view_type"] = "grid" if settings["view_type"] == "list" else "list"
                                 save_settings(settings)
-                            elif highlighted == 4:  # USA Games Only
+                            elif highlighted == 5:  # USA Games Only
                                 settings["usa_only"] = not settings["usa_only"]
                                 save_settings(settings)
-                            elif highlighted == 5:  # Work Directory
+                            elif highlighted == 6:  # Work Directory
                                 # Open folder browser for work directory selection
                                 show_folder_browser = True
                                 # Use current work_dir or fallback to a sensible default
@@ -5290,7 +5922,7 @@ try:
                                 load_folder_contents(folder_browser_current_path)
                                 # Set a flag to indicate we're selecting work directory
                                 selected_system_to_add = {"name": "Work Directory", "type": "work_dir"}
-                            elif highlighted == 6:  # ROMs Directory  
+                            elif highlighted == 7:  # ROMs Directory  
                                 # Open folder browser
                                 show_folder_browser = True
                                 # Use current roms_dir or fallback to a sensible default
@@ -5304,7 +5936,7 @@ try:
                                 else:
                                     folder_browser_current_path = current_roms
                                 load_folder_contents(folder_browser_current_path)
-                            elif highlighted == 7:  # NSZ Keys
+                            elif highlighted == 8:  # NSZ Keys
                                 # Open folder browser for .keys files
                                 show_folder_browser = True
                                 # Use current keys path or default to home directory
@@ -5321,18 +5953,29 @@ try:
                                 load_folder_contents(folder_browser_current_path)
                                 # Set a flag to indicate we're selecting NSZ keys
                                 selected_system_to_add = {"name": "NSZ Keys", "type": "nsz_keys"}
-                            elif highlighted == 8:  # Remap Controller
+                            elif highlighted == 9:  # Remap Controller
                                 # Trigger controller remapping
                                 show_controller_mapping = True
-                            elif highlighted == 9:  # Add Systems
+                            elif highlighted == 10:  # Add Systems
                                 mode = "add_systems"
                                 highlighted = 0
                                 add_systems_highlighted = 0
                                 # Load available systems in background
                                 load_available_systems()
-                            elif highlighted == 10:  # Systems Settings
+                            elif highlighted == 11:  # Systems Settings
                                 mode = "systems_settings"
                                 systems_settings_highlighted = 0
+                                highlighted = 0
+                        elif mode == "utils":
+                            if highlighted == 0:  # Download from URL
+                                # Show URL input modal for direct download
+                                show_url_input_modal("direct_download")
+                            elif highlighted == 1:  # NSZ to NSP Converter
+                                # Start NSZ file browser
+                                show_folder_browser = True
+                                folder_browser_current_path = settings.get("roms_dir", "/userdata/roms")
+                                selected_system_to_add = {"name": "NSZ to NSP Converter", "type": "nsz_converter"}
+                                load_folder_contents(folder_browser_current_path)
                                 highlighted = 0
                         elif mode == "add_systems":
                             # Handle add systems selection
@@ -5496,6 +6139,12 @@ try:
                             mode = "systems"
                             highlighted = 0
                         elif mode == "settings":
+                            mode = "systems"
+                            highlighted = 0
+                        elif mode == "utils":
+                            mode = "systems"
+                            highlighted = 0
+                        elif mode == "credits":
                             mode = "systems"
                             highlighted = 0
                         elif mode == "add_systems":

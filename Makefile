@@ -46,13 +46,14 @@ CMD ?= debug
 build-android:
 	@echo "🚀 Building Console Utilities Android APK ($(CMD))..."
 	@mkdir -p dist
-	docker build --platform linux/amd64 -f docker/dockerfile.android -t console-utilities-builder .
-	docker run --platform linux/amd64 --rm \
-		--entrypoint "" \
-		--volume "$(HOME)/.buildozer":/home/user/.buildozer \
-		--volume "$(shell pwd)":/home/user/hostcwd \
-		console-utilities-builder \
-		buildozer android $(CMD)
+	@echo "🚀 Building Docker Image..."
+	docker build -t rom-builder -f docker/dockerfile.android .
+	@echo "🚀 Running Docker Container..."
+	docker run --name rom-build rom-builder
+	@echo "🚀 Copying APK..."
+	docker cp rom-build:/dist ./dist
+	@echo "🚀 Removing Docker Container..."
+	docker rm rom-build
 	@echo "🎉 APK built successfully!"
 # Format code with black
 format:

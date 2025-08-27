@@ -12,3 +12,4 @@ dependencies:
     - pyinstaller
     - watchdog
     - nsz
+    - pygame-emojis
