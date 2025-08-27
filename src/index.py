@@ -146,7 +146,7 @@ try:
     system_settings_highlighted = 0
     selected_system_for_settings = None
     
-    # Pagination variables for Switch
+    # Pagination variables
     current_page = 0
     total_pages = 1
     highlighted = 0
@@ -473,7 +473,7 @@ try:
         "USA Games Only",
         "Work Directory",
         "ROMs Directory",
-        "NS Prod Keys",
+        "NSZ Keys",
         "Remap Controller",
         "Add Systems",
         "Systems Settings"
@@ -485,6 +485,11 @@ try:
     image_cache = {}
     image_queue = Queue()
     THUMBNAIL_SIZE = (96, 96)  # Increased thumbnail size for better quality and visibility
+    
+    # High-resolution image cache for detail modal
+    hires_image_cache = {}
+    hires_image_queue = Queue()
+    HIRES_IMAGE_SIZE = (400, 400)  # High-resolution size for detail modal
 
     def format_size(size_bytes):
         """Convert bytes to human readable format"""
@@ -516,7 +521,7 @@ try:
             "usa_only": False,
             "work_dir": default_work_dir,
             "roms_dir": default_roms_dir,
-            "switch_keys_path": "",
+            "nsz_keys_path": "",
             "cache_enabled": True,
             "archive_json_url": ""
         }
@@ -773,61 +778,72 @@ try:
             # Put None to indicate failed load
             image_queue.put((cache_key, None))
 
+    def load_hires_image_async(url, cache_key, game_name=None):
+        """Load high-resolution image in background thread"""
+        try:
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            
+            # Load image from bytes
+            image_data = BytesIO(response.content)
+            image = pygame.image.load(image_data)
+            
+            # Scale to high-resolution size
+            scaled_image = pygame.transform.scale(image, HIRES_IMAGE_SIZE)
+            
+            # Add to queue for main thread to process
+            hires_image_queue.put((cache_key, scaled_image))
+        except Exception as e:
+            log_error(f"Failed to load high-res image from {url}", type(e).__name__, traceback.format_exc())
+            
+            # Try placeholder image if game name is available
+            if game_name:
+                try:
+                    initials = get_game_initials(game_name)
+                    placeholder_url = f"https://placehold.co/400x400?text={initials}"
+                    response = requests.get(placeholder_url, timeout=5)
+                    response.raise_for_status()
+                    
+                    # Load placeholder image from bytes
+                    image_data = BytesIO(response.content)
+                    image = pygame.image.load(image_data)
+                    
+                    # Scale to high-resolution size
+                    scaled_image = pygame.transform.scale(image, HIRES_IMAGE_SIZE)
+                    
+                    # Add to queue for main thread to process
+                    hires_image_queue.put((cache_key, scaled_image))
+                    return
+                except Exception:
+                    pass  # Fallback to None if placeholder also fails
+            
+            # Put None to indicate failed load
+            hires_image_queue.put((cache_key, None))
+
     def get_thumbnail(game_item, boxart_url):
         """Get thumbnail for game, loading async if not cached"""
         # Check if box-art is enabled
         if not settings["enable_boxart"]:
             return None
-        
-        # Handle Nintendo Switch boxart with title ID extraction and pre-loaded API data
+            
+        # Handle game item formats
         if isinstance(game_item, str):
             game_name = game_item
         elif isinstance(game_item, dict):
             if 'name' in game_item:
-                # Switch API format
                 game_name = game_item.get('name', '')
             elif 'filename' in game_item:
-                # New format with filename and href
                 game_name = game_item.get('filename', '')
             else:
                 game_name = str(game_item)
         else:
             game_name = str(game_item)
         
-        # Check if this is Nintendo Switch and boxart_url contains the API URL
-        if boxart_url and "api.ultranx.ru" in boxart_url:
-            title_id = extract_switch_title_id(game_name)
-            if title_id and boxart_url in switch_api_cache:
-                # Use pre-loaded Switch API data for boxart
-                cache_key = f"switch_{title_id}"
-                
-                # Return cached image if available
-                if settings["cache_enabled"] and cache_key in image_cache:
-                    return image_cache[cache_key]
-                
-                if not settings["cache_enabled"] and cache_key in image_cache:
-                    return image_cache[cache_key]
-                
-                # Start loading from pre-loaded Switch API data if not already in cache
-                if cache_key not in image_cache:
-                    image_cache[cache_key] = "loading"
-                    api_data = switch_api_cache[boxart_url]
-                    thread = Thread(target=load_switch_boxart_from_cache, args=(title_id, cache_key, api_data))
-                    thread.daemon = True
-                    thread.start()
-                
-                return None  # Not ready yet
-            # If no title ID found or API not cached, fall back to regular handling
-        
-        # Handle Switch API format with direct image URLs (legacy support)
-        if isinstance(game_item, dict) and 'banner_url' in game_item and game_item['banner_url']:
-            # Switch API format - use direct banner URL (JPG format)
-            image_url = game_item['banner_url']
-            cache_key = f"switch_{game_item['title_id']}"
-        elif isinstance(game_item, dict) and 'icon_url' in game_item and game_item['icon_url']:
-            # Fallback to icon_url if banner_url not available
-            image_url = game_item['icon_url']
-            cache_key = f"switch_{game_item.get('title_id', 'unknown')}"
+        # Handle different image URL formats
+        if isinstance(game_item, dict) and ('banner_url' in game_item) and game_item.get('banner_url') is not None:
+            # Direct URL format (e.g., Nintendo Switch API)
+            image_url = game_item.get('banner_url') or game_item.get('icon_url')
+            cache_key = f"direct_{image_url}_{game_name}"
         elif boxart_url:
             # Regular format - construct URL from boxart base + game name
             base_name = os.path.splitext(game_name)[0]
@@ -849,8 +865,7 @@ try:
             image_cache[cache_key] = "loading"  # Mark as loading
             
             if isinstance(game_item, dict) and ('banner_url' in game_item or 'icon_url' in game_item):
-                # Switch format - load direct URL
-                game_name = game_item.get('name', '')
+                # Direct URL format - use the URL as-is
                 thread = Thread(target=load_image_async, args=(image_url, cache_key, game_name))
                 thread.daemon = True
                 thread.start()
@@ -864,159 +879,7 @@ try:
         
         return None  # Not ready yet
 
-    def load_switch_boxart_from_cache(title_id, cache_key, api_data):
-        """Load Nintendo Switch boxart using pre-loaded API data"""
-        try:
-            # Look for the specific title ID in the pre-loaded API data
-            if title_id in api_data:
-                game_data = api_data[title_id]
-                banner_url = game_data.get('banner_url')
-                icon_url = game_data.get('icon_url')
-                
-                # Try banner first, then icon
-                image_url = banner_url or icon_url
-                
-                if image_url:
-                    # Load the image
-                    image_response = requests.get(image_url, timeout=10)
-                    image_response.raise_for_status()
-                    
-                    # Load image from bytes
-                    image_data = BytesIO(image_response.content)
-                    image = pygame.image.load(image_data)
-                    
-                    # Scale to thumbnail size
-                    scaled_image = pygame.transform.scale(image, THUMBNAIL_SIZE)
-                    
-                    # Add to queue for main thread to process
-                    image_queue.put((cache_key, scaled_image))
-                    return
-            
-            # If title ID not found in API data, create placeholder
-            game_name = f"Switch Game {title_id[:8]}"  # Use first 8 chars of title ID
-            initials = get_game_initials(game_name)
-            placeholder_url = f"https://placehold.co/50x50?text={initials}"
-            
-            try:
-                response = requests.get(placeholder_url, timeout=5)
-                response.raise_for_status()
-                
-                image_data = BytesIO(response.content)
-                image = pygame.image.load(image_data)
-                scaled_image = pygame.transform.scale(image, THUMBNAIL_SIZE)
-                
-                image_queue.put((cache_key, scaled_image))
-            except:
-                # If placeholder fails, create simple colored rectangle
-                placeholder_surface = pygame.Surface(THUMBNAIL_SIZE)
-                placeholder_surface.fill((64, 128, 255))  # Blue color for Switch
-                
-                # Add title ID text if possible
-                try:
-                    font_obj = pygame.font.Font(None, 12)
-                    text = font_obj.render(title_id[:8], True, (255, 255, 255))
-                    text_rect = text.get_rect(center=(THUMBNAIL_SIZE[0]//2, THUMBNAIL_SIZE[1]//2))
-                    placeholder_surface.blit(text, text_rect)
-                except:
-                    pass
-                
-                image_queue.put((cache_key, placeholder_surface))
-            
-        except Exception as e:
-            # On error, create a simple colored placeholder
-            try:
-                placeholder_surface = pygame.Surface(THUMBNAIL_SIZE)
-                placeholder_surface.fill((64, 128, 255))  # Blue color for Switch
-                
-                # Add title ID text if possible
-                try:
-                    font_obj = pygame.font.Font(None, 12)
-                    text = font_obj.render(title_id[:8], True, (255, 255, 255))
-                    text_rect = text.get_rect(center=(THUMBNAIL_SIZE[0]//2, THUMBNAIL_SIZE[1]//2))
-                    placeholder_surface.blit(text, text_rect)
-                except:
-                    pass
-                
-                image_queue.put((cache_key, placeholder_surface))
-            except:
-                # Complete fallback - mark as failed
-                image_queue.put((cache_key, None))
 
-    def load_switch_boxart(title_id, cache_key, api_url):
-        """Load Nintendo Switch boxart using title ID and ultranx API"""
-        global switch_api_cache
-        
-        try:
-            # Check if we already have the API data cached
-            if api_url not in switch_api_cache:
-                # Fetch the full API data
-                response = requests.get(api_url, timeout=10)
-                response.raise_for_status()
-                api_data = response.json()
-                switch_api_cache[api_url] = api_data
-            else:
-                api_data = switch_api_cache[api_url]
-            
-            # Look for the specific title ID in the API data
-            if title_id in api_data:
-                game_data = api_data[title_id]
-                banner_url = game_data.get('banner_url')
-                icon_url = game_data.get('icon_url')
-                
-                # Try banner first, then icon
-                image_url = banner_url or icon_url
-                
-                if image_url:
-                    # Load the image
-                    image_response = requests.get(image_url, timeout=10)
-                    image_response.raise_for_status()
-                    
-                    # Load image from bytes
-                    image_data = BytesIO(image_response.content)
-                    image = pygame.image.load(image_data)
-                    
-                    # Scale to thumbnail size
-                    scaled_image = pygame.transform.scale(image, THUMBNAIL_SIZE)
-                    
-                    # Add to queue for main thread to process
-                    image_queue.put((cache_key, scaled_image))
-                    return
-            
-            # If title ID not found or no image URL, create placeholder
-            game_name = f"Switch Game {title_id[:8]}"  # Use first 8 chars of title ID
-            initials = get_game_initials(game_name)
-            placeholder_url = f"https://placehold.co/50x50?text={initials}"
-            
-            response = requests.get(placeholder_url, timeout=5)
-            response.raise_for_status()
-            
-            image_data = BytesIO(response.content)
-            image = pygame.image.load(image_data)
-            scaled_image = pygame.transform.scale(image, THUMBNAIL_SIZE)
-            
-            image_queue.put((cache_key, scaled_image))
-            
-        except Exception as e:
-            # On error, mark as failed and optionally create a simple colored placeholder
-            try:
-                # Create a simple colored rectangle as fallback
-                placeholder_surface = pygame.Surface(THUMBNAIL_SIZE)
-                placeholder_surface.fill((64, 128, 255))  # Blue color for Switch
-                
-                # Add title ID text if possible
-                try:
-                    import pygame.font
-                    font = pygame.font.Font(None, 12)
-                    text = font.render(title_id[:8], True, (255, 255, 255))
-                    text_rect = text.get_rect(center=(THUMBNAIL_SIZE[0]//2, THUMBNAIL_SIZE[1]//2))
-                    placeholder_surface.blit(text, text_rect)
-                except:
-                    pass
-                
-                image_queue.put((cache_key, placeholder_surface))
-            except:
-                # Complete fallback - mark as failed
-                image_queue.put((cache_key, None))
 
     def load_image_with_fallback(base_url, base_name, formats, cache_key, game_name=None):
         """Try loading image with different format extensions"""
@@ -1075,15 +938,122 @@ try:
 
     def reset_image_cache():
         """Clear all cached images"""
-        global image_cache
+        global image_cache, hires_image_cache
         image_cache.clear()
+        hires_image_cache.clear()
         
-        # Clear the queue as well
+        # Clear the queues as well
         while not image_queue.empty():
             try:
                 image_queue.get_nowait()
             except:
                 break
+        while not hires_image_queue.empty():
+            try:
+                hires_image_queue.get_nowait()
+            except:
+                break
+
+    def load_hires_image_with_fallback(base_url, base_name, formats, cache_key, game_name=None):
+        """Try loading high-resolution image with different format extensions"""
+        for fmt in formats:
+            try:
+                url = f"{base_url}/{base_name}{fmt}"
+                response = requests.get(url, timeout=10)
+                response.raise_for_status()
+                
+                image_data = BytesIO(response.content)
+                image = pygame.image.load(image_data)
+                
+                # Keep original image for high quality, only scale if it's extremely large
+                original_size = image.get_size()
+                max_dimension = max(original_size[0], original_size[1])
+                
+                if max_dimension > 800:  # Only scale down if extremely large
+                    scale_factor = 800 / max_dimension
+                    new_width = int(original_size[0] * scale_factor)
+                    new_height = int(original_size[1] * scale_factor)
+                    scaled_image = pygame.transform.smoothscale(image, (new_width, new_height))
+                else:
+                    scaled_image = image  # Keep original size for better quality
+                
+                # Add to queue for main thread to process
+                hires_image_queue.put((cache_key, scaled_image))
+                return
+                
+            except:
+                continue
+        
+        # Try to load from image_cache if available as fallback
+        if cache_key in image_cache and image_cache[cache_key] != "loading":
+            fallback_image = image_cache[cache_key]
+            if fallback_image:
+                # Scale up the thumbnail for better quality than nothing
+                upscaled = pygame.transform.smoothscale(fallback_image, HIRES_IMAGE_SIZE)
+                hires_image_queue.put((cache_key, upscaled))
+                return
+        
+        hires_image_queue.put((cache_key, None))
+
+    def update_hires_image_cache():
+        """Process loaded high-resolution images from background threads"""
+        while not hires_image_queue.empty():
+            try:
+                cache_key, image = hires_image_queue.get_nowait()
+                hires_image_cache[cache_key] = image
+            except:
+                break
+
+    def get_hires_thumbnail(game_item, boxart_url):
+        """Get high-resolution thumbnail for detail modal, loading async if not cached"""
+        if not settings["enable_boxart"]:
+            return None
+        
+        # Handle game item formats
+        if isinstance(game_item, str):
+            game_name = game_item
+        elif isinstance(game_item, dict):
+            if 'name' in game_item:
+                game_name = game_item.get('name', '')
+            elif 'filename' in game_item:
+                game_name = game_item.get('filename', '')
+            else:
+                game_name = str(game_item)
+        else:
+            game_name = str(game_item)
+        
+        # Handle different image URL formats
+        if isinstance(game_item, dict) and ('banner_url' in game_item) and game_item.get('banner_url') is not None:
+            # Direct URL format (e.g., Nintendo Switch API)
+            image_url = game_item.get('banner_url') or game_item.get('icon_url')
+            cache_key = f"hires_direct_{image_url}_{game_name}"
+        elif boxart_url:
+            cache_key = f"hires_{game_name}_{boxart_url}"
+        else:
+            return None
+                
+        # Return cached high-res image if available
+        if cache_key in hires_image_cache:
+            return hires_image_cache[cache_key]
+        
+        # Start loading high-res image if not already in cache
+        if cache_key not in hires_image_cache:
+            hires_image_cache[cache_key] = "loading"
+            
+            if isinstance(game_item, dict) and ('banner_url' in game_item) and game_item.get('banner_url') is not None:
+                # Direct URL format - use the URL as-is
+                thread = Thread(target=load_hires_image_async, args=(image_url, cache_key, game_name))
+                thread.daemon = True
+                thread.start()
+            elif boxart_url:
+                # Standard format - try different extensions
+                base_name = os.path.splitext(game_name)[0]
+                image_formats = [".png", ".jpg", ".jpeg", ".gif", ".bmp"]
+                thread = Thread(target=load_hires_image_with_fallback, args=(boxart_url, base_name, image_formats, cache_key, game_name))
+                thread.daemon = True
+                thread.start()
+        
+        return "loading"
 
     def update_from_github():
         """Download latest files from GitHub repository"""
@@ -1182,12 +1152,7 @@ try:
             draw_loading_message("Downloading archive configuration...")
             
             try:
-                # Add user agent and headers for better compatibility
-                headers = {
-                    'User-Agent': 'Mozilla/5.0 (compatible; Console-Utilities/1.0)',
-                    'Accept': 'application/json, text/plain, */*'
-                }
-                response = requests.get(url, timeout=30, headers=headers, allow_redirects=True)
+                response = requests.get(url, timeout=30, allow_redirects=True)
                 response.raise_for_status()
                 
                 # Try to parse as JSON to validate
@@ -1398,8 +1363,8 @@ try:
             elif actual_idx == 6:  # ROMs Directory
                 roms_dir = settings.get("roms_dir", "")
                 setting_value = roms_dir[-30:] + "..." if len(roms_dir) > 30 else roms_dir
-            elif actual_idx == 7:  # NS Prod Keys
-                keys_path = settings.get("switch_keys_path", "")
+            elif actual_idx == 7:  # NSZ Keys
+                keys_path = settings.get("nsz_keys_path", "")
                 if keys_path and os.path.exists(keys_path):
                     setting_value = keys_path[-30:] + "..." if len(keys_path) > 30 else keys_path
                 else:
@@ -1701,7 +1666,6 @@ try:
             # Handle different item formats
             if isinstance(item, dict):
                 if 'name' in item:
-                    # Switch API format
                     display_text = item['name']
                     original_name = item['name']
                 elif 'filename' in item:
@@ -1903,12 +1867,30 @@ try:
         
         y += 10  # Add some space after instructions
         
-        # Calculate visible items based on screen height
+        # Calculate visible items based on screen height (similar to grid mode)
         row_height = max(FONT_SIZE + 10, THUMBNAIL_SIZE[1] + 10) if mode == "games" else FONT_SIZE + 10
         screen_width, screen_height = screen.get_size()
-        items_per_page = (screen_height - y - 50) // row_height  # Leave space for bottom message
-        start_idx = max(0, highlighted - items_per_page // 2)
-        visible_items = items[start_idx:start_idx + items_per_page]
+        
+        # Calculate how many items can fit, with a more generous approach like grid mode
+        available_height = screen_height - y - 30  # Less bottom margin for more content
+        if available_height > 0:
+            calculated_items = available_height // row_height
+            items_per_page = max(10, calculated_items)  # Minimum 10 items, similar to grid's min 4 rows
+        else:
+            items_per_page = 10  # Fallback minimum
+            
+        # Keep highlighted item in the upper third (like grid's second row)
+        target_position = max(2, items_per_page // 4)  # Position highlighted item in upper quarter
+        start_idx = max(0, highlighted - target_position)
+        
+        # Show more items by extending beyond the calculated page size when possible
+        end_idx = min(len(items), start_idx + items_per_page)
+        if end_idx < len(items) and (end_idx - start_idx) < items_per_page:
+            # If we have room and more items available, extend the view
+            additional_items = min(items_per_page - (end_idx - start_idx), len(items) - end_idx)
+            end_idx += additional_items
+            
+        visible_items = items[start_idx:end_idx]
         
         # Draw items with enhanced styling
         for i, item in enumerate(visible_items):
@@ -1970,10 +1952,9 @@ try:
             
             prefix = ""  # Remove old text prefix since we have visual indicators
             
-            # Handle different item formats (Switch vs regular)
+            # Handle different item formats
             if isinstance(item, dict):
                 if 'name' in item:
-                    # Switch API format
                     display_text = item['name']
                     original_name = item['name']
                 elif 'filename' in item:
@@ -2067,7 +2048,7 @@ try:
             
             screen.blit(message_surf, (20, message_y))
         
-        # Draw pagination info for Switch
+        # Draw pagination info if supported
         if mode == "games" and len(data) > 0 and selected_system < len(data) and data[selected_system].get('supports_pagination', False):
             page_message = f"Page {current_page + 1} - Use L/R to change page"
             page_surf = font.render(page_message, True, TEXT_DISABLED)
@@ -2162,14 +2143,18 @@ try:
         # Draw large image if available with enhanced styling
         image_y = name_y + len(lines) * (FONT_SIZE + 8) + 25
         boxart_url = data[selected_system].get('boxarts', '') if selected_system < len(data) else ''
-        thumbnail = get_thumbnail(game_item, boxart_url)
+        
+        # Try to get high-resolution image first, fallback to thumbnail
+        hires_image = get_hires_thumbnail(game_item, boxart_url)
+        thumbnail = hires_image if hires_image and hires_image != "loading" else get_thumbnail(game_item, boxart_url)
         
         if thumbnail and thumbnail != "loading":
             # Calculate appropriate image size that fits within modal responsively
             available_width = modal_width - (margin * 2)  # Use responsive margins
             available_height = modal_height - (image_y - modal_y) - (margin * 3)  # Space for instructions
-            # Scale max image size based on modal size, but set reasonable limits for better quality
-            max_image_size = min(available_width, available_height, min(modal_width // 2, 300))
+            
+            # Increase max image size for better quality - use up to 60% of modal size or 500px max
+            max_image_size = min(available_width, available_height, min(max(modal_width * 0.6, 400), 500))
             
             try:
                 # Scale image proportionally to fit within the available space with better quality
@@ -2179,20 +2164,73 @@ try:
                 new_height = int(original_size[1] * scale_factor)
                 large_size = (new_width, new_height)
                 
-                # Use smoothscale for better image quality
+                # Enhanced scaling with multiple quality approaches
+                large_image = None
+                
+                # Try multiple scaling methods for best quality
                 try:
-                    large_image = pygame.transform.smoothscale(thumbnail, large_size)
-                except:
-                    # Fallback to regular scale if smoothscale fails
-                    large_image = pygame.transform.scale(thumbnail, large_size)
-                image_x = modal_x + (modal_width - large_size[0]) // 2
+                    # Method 1: Multi-step scaling for very large scale factors (better quality)
+                    if scale_factor < 0.5:
+                        # For significant downscaling, do it in steps for better quality
+                        temp_image = thumbnail
+                        current_factor = 1.0
+                        
+                        while current_factor > scale_factor * 2:
+                            current_factor *= 0.75  # Scale down by 75% each step
+                            temp_size = (int(original_size[0] * current_factor), int(original_size[1] * current_factor))
+                            temp_image = pygame.transform.smoothscale(temp_image, temp_size)
+                        
+                        # Final scaling to exact target size
+                        large_image = pygame.transform.smoothscale(temp_image, large_size)
+                    else:
+                        # For moderate scaling, use direct smoothscale
+                        large_image = pygame.transform.smoothscale(thumbnail, large_size)
+                        
+                except Exception as e:
+                    # Method 2: Fallback to direct smoothscale
+                    try:
+                        large_image = pygame.transform.smoothscale(thumbnail, large_size)
+                    except:
+                        # Method 3: Last resort - regular scale with post-processing
+                        large_image = pygame.transform.scale(thumbnail, large_size)
+                        
+                        # Apply simple sharpening filter by blending with a slightly scaled version
+                        try:
+                            # Create a slightly smaller version and blend for sharpening effect
+                            sharp_size = (max(1, new_width - 2), max(1, new_height - 2))
+                            sharp_image = pygame.transform.scale(thumbnail, sharp_size)
+                            sharp_image = pygame.transform.scale(sharp_image, large_size)
+                            
+                            # Blend original and sharpened (simple sharpening)
+                            large_image.set_alpha(200)
+                            sharp_image.set_alpha(55)
+                            temp_surface = pygame.Surface(large_size, pygame.SRCALPHA)
+                            temp_surface.blit(large_image, (0, 0))
+                            temp_surface.blit(sharp_image, (0, 0), special_flags=pygame.BLEND_ADD)
+                            large_image = temp_surface
+                        except:
+                            pass  # Use basic scaled image if sharpening fails
                 
-                # Draw the scaled image directly
-                screen.blit(large_image, (image_x, image_y))
-                
-                # Draw simple border around image
-                image_rect = pygame.Rect(image_x, image_y, large_size[0], large_size[1])
-                pygame.draw.rect(screen, PRIMARY, image_rect, 2, border_radius=THUMBNAIL_BORDER_RADIUS)
+                if large_image:
+                    image_x = modal_x + (modal_width - large_size[0]) // 2
+                    
+                    # Add subtle drop shadow for better visual separation
+                    shadow_offset = 3
+                    shadow_rect = pygame.Rect(image_x + shadow_offset, image_y + shadow_offset, large_size[0], large_size[1])
+                    shadow_surface = pygame.Surface((large_size[0], large_size[1]), pygame.SRCALPHA)
+                    shadow_surface.fill((0, 0, 0, 40))  # Semi-transparent black
+                    screen.blit(shadow_surface, (image_x + shadow_offset, image_y + shadow_offset))
+                    
+                    # Draw the enhanced scaled image
+                    screen.blit(large_image, (image_x, image_y))
+                    
+                    # Draw enhanced border with subtle glow effect
+                    image_rect = pygame.Rect(image_x, image_y, large_size[0], large_size[1])
+                    # Outer glow
+                    glow_rect = pygame.Rect(image_x - 1, image_y - 1, large_size[0] + 2, large_size[1] + 2)
+                    pygame.draw.rect(screen, PRIMARY_LIGHT, glow_rect, 1, border_radius=THUMBNAIL_BORDER_RADIUS + 1)
+                    # Main border
+                    pygame.draw.rect(screen, PRIMARY, image_rect, 2, border_radius=THUMBNAIL_BORDER_RADIUS)
                 
             except:
                 # Fallback to original thumbnail with enhanced styling
@@ -2267,8 +2305,8 @@ try:
         if selected_system_to_add is not None:
             if selected_system_to_add.get("type") == "work_dir":
                 title_text = f"Select Work Directory"
-            elif selected_system_to_add.get("type") == "switch_keys":
-                title_text = f"Select NS Prod Keys File"
+            elif selected_system_to_add.get("type") == "nsz_keys":
+                title_text = f"Select NSZ Keys File"
             else:
                 title_text = f"Select ROM Folder for {selected_system_to_add['name']}"
         else:
@@ -2301,7 +2339,7 @@ try:
                     f"Press {detail_button_name} to select this folder as work directory",
                     f"Press {back_button_name} to cancel"
                 ]
-            elif selected_system_to_add.get("type") == "switch_keys":
+            elif selected_system_to_add.get("type") == "nsz_keys":
                 instructions = [
                     f"Use D-pad to navigate",
                     f"Press {select_button_name} to enter [DIR] or select [KEY] file",
@@ -2562,20 +2600,7 @@ try:
             # If all decoding fails, return the original
             return raw_filename
 
-    def extract_switch_title_id(game_name):
-        """Extract Nintendo Switch title ID from game name (format: [TITLEID])"""
-        try:
-            # Look for pattern like [01234567890ABCDEF] (16 characters)
-            import re
-            match = re.search(r'\[([0-9A-Fa-f]{16})\]', game_name)
-            if match:
-                return match.group(1).upper()
-            return None
-        except Exception:
-            return None
 
-    # Cache for Switch API data to avoid repeated requests
-    switch_api_cache = {}
 
     def filter_games_by_search(games, query):
         """Filter games list based on search query"""
@@ -2588,7 +2613,6 @@ try:
         for game in games:
             if isinstance(game, dict):
                 if 'name' in game:
-                    # Switch API format
                     game_name = game.get('name', '').lower()
                 elif 'filename' in game:
                     # New format with filename and href
@@ -2632,10 +2656,8 @@ try:
                 # Handle different game formats
                 if isinstance(game_item, dict):
                     if 'name' in game_item:
-                        # Switch API format
                         game_name = game_item['name']
-                        title_id = game_item['title_id']
-                        filename = f"{game_name} [{title_id}][v0].nsz"
+                        filename = game_name
                     elif 'filename' in game_item:
                         # New format with filename and href
                         game_name = game_item['filename']
@@ -2653,22 +2675,38 @@ try:
                 draw_progress_bar(f"Downloading {game_name} ({idx+1}/{total})", overall_progress)
                 
                 if 'download_url' in sys_data:
-                    # Old format
-                    url = f"{sys_data['download_url']}/{filename}"
+                    url = game_item['href']
+                    if '.' not in filename:
+                        format = sys_data.get('file_format', [])[0]
+                        filename = filename + format
                 elif 'url' in sys_data:
-                    # New format - use href from object if available, otherwise construct URL
                     if isinstance(game_item, dict) and 'href' in game_item:
                         url = urljoin(sys_data['url'], game_item['href'])
                     else:
                         url = urljoin(sys_data['url'], filename)
                 try:
-                    r = requests.get(url, stream=True, timeout=10)
+                    # Prepare request headers and cookies for authentication
+                    headers = {}
+                    cookies = {}
+                    
+                    # Check if authentication is configured for this system
+                    if 'auth' in sys_data:
+                        auth_config = sys_data['auth']
+                        if auth_config.get('cookies', False) and 'token' in auth_config:
+                            # Use cookie-based authentication
+                            cookie_name = auth_config.get('cookie_name', 'auth_token')
+                            cookies[cookie_name] = auth_config['token']
+                        elif 'token' in auth_config:
+                            # Use header-based authentication (Bearer token)
+                            headers['Authorization'] = f"Bearer {auth_config['token']}"
+                    
+                    r = requests.get(url, stream=True, timeout=10, headers=headers, cookies=cookies)
                     r.raise_for_status()
                     total_size = int(r.headers.get('content-length', 0))
                     downloaded = 0
                     start_time = pygame.time.get_ticks()
                     last_update = start_time
-                    last_downloaded = 0
+                    last_downloaded = 0 
                     
                     file_path = os.path.join(WORK_DIR, filename)
                     with open(file_path, 'wb') as f:
@@ -2739,7 +2777,7 @@ try:
                         if not cancelled:
                             os.remove(file_path)
                     
-                    # Handle NSZ decompression for Nintendo Switch games
+                    # Handle NSZ decompression
                     elif filename.endswith(".nsz"):
                         draw_progress_bar(f"Attempting NSZ decompression for {filename}...", 0)
                         
@@ -2747,8 +2785,8 @@ try:
                             import subprocess
                             import shutil
                             
-                            # Check if NS Prod keys are configured and exist
-                            keys_path = settings.get("switch_keys_path", "")
+                            # Check if NSZ keys are configured and exist
+                            keys_path = settings.get("nsz_keys_path", "")
                             keys_available = False
                             
                             if keys_path:
@@ -2766,7 +2804,7 @@ try:
                             # Also check default locations if not configured
                             if not keys_available:
                                 default_keys_paths = [
-                                    os.path.expanduser("~/.switch/prod.keys"),
+                                    os.path.expanduser("~/.nsz/prod.keys"),
                                     os.path.join(WORK_DIR, "keys.txt"),
                                     os.path.join(WORK_DIR, "prod.keys")
                                 ]
@@ -2777,8 +2815,8 @@ try:
                                         break
                             
                             if not keys_available:
-                                draw_progress_bar(f"NSZ decompression skipped - NS Prod keys not found", 0)
-                                log_error(f"NSZ decompression skipped for {filename}: NS Prod keys not found. Configure path in Settings > NS Prod Keys")
+                                draw_progress_bar(f"NSZ decompression skipped - NSZ keys not found", 0)
+                                log_error(f"NSZ decompression skipped for {filename}: NSZ keys not found. Configure path in Settings > NSZ Keys")
                                 pygame.time.wait(2000)
                             else:
                                 draw_progress_bar(f"Decompressing {filename}...", 0)
@@ -2787,11 +2825,11 @@ try:
                                 env = os.environ.copy()
                                 
                                 # Copy keys to expected location if needed
-                                switch_dir = os.path.expanduser("~/.switch")
-                                if not os.path.exists(switch_dir):
-                                    os.makedirs(switch_dir, exist_ok=True)
+                                nsz_dir = os.path.expanduser("~/.nsz")
+                                if not os.path.exists(nsz_dir):
+                                    os.makedirs(nsz_dir, exist_ok=True)
                                 
-                                expected_keys = os.path.join(switch_dir, "prod.keys")
+                                expected_keys = os.path.join(nsz_dir, "prod.keys")
                                 if not os.path.exists(expected_keys) and actual_keys_path != expected_keys:
                                     shutil.copy2(actual_keys_path, expected_keys)
                                 
@@ -2890,7 +2928,24 @@ try:
                 list_url = sys_data['list_url']
                 array_path = sys_data.get('list_json_file_location', "files")
                 file_id = sys_data.get('list_item_id', "name")
-                r = requests.get(list_url, timeout=10)
+                # Prepare request headers and cookies for authentication
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                }
+                cookies = {}
+                
+                # Check if authentication is configured for this system
+                if 'auth' in sys_data:
+                    auth_config = sys_data['auth']
+                    if auth_config.get('cookies', False) and 'token' in auth_config:
+                        # Use cookie-based authentication
+                        cookie_name = auth_config.get('cookie_name', 'auth_token')
+                        cookies[cookie_name] = auth_config['token']
+                    elif 'token' in auth_config:
+                        # Use header-based authentication (Bearer token)
+                        headers['Authorization'] = f"Bearer {auth_config['token']}"
+                
+                r = requests.get(list_url, timeout=10, headers=headers, cookies=cookies)
                 response = r.json()
                 
                 if isinstance(response, dict) and "files" in response:
@@ -2904,31 +2959,33 @@ try:
                         return filtered_files
             
             elif 'url' in sys_data:
-                # New format - HTML directory listing
                 url = sys_data['url']
                 regex_pattern = sys_data.get('regex', '<a href="([^"]+)"[^>]*>([^<]+)</a>')
+                # Prepare request headers and cookies for authentication
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                }
+                cookies = {}
                 
-                r = requests.get(url, timeout=10)
+                # Check if authentication is configured for this system
+                if 'auth' in sys_data:
+                    auth_config = sys_data['auth']
+                    if auth_config.get('cookies', False) and 'token' in auth_config:
+                        # Use cookie-based authentication
+                        cookie_name = auth_config.get('cookie_name', 'auth_token')
+                        cookies[cookie_name] = auth_config['token']
+                    elif 'token' in auth_config:
+                        # Use header-based authentication (Bearer token)
+                        headers['Authorization'] = f"Bearer {auth_config['token']}"
+                
+                r = requests.get(url, timeout=10, headers=headers, cookies=cookies)
                 r.raise_for_status()
                 html_content = r.text
                 
-                # Check if this is Nintendo Switch and load boxart API data
-                boxart_api_data = {}
-                if sys_data.get('name') == 'Nintendo Switch' and 'boxarts' in sys_data:
-                    try:
-                        boxart_url = sys_data['boxarts']
-                        draw_loading_message(f"Loading boxart data for {sys_data['name']}...")
-                        api_response = requests.get(boxart_url, timeout=30)
-                        api_response.raise_for_status()
-                        boxart_api_data = api_response.json()
-                        switch_api_cache[boxart_url] = boxart_api_data
-                        print(f"Loaded {len(boxart_api_data)} games from Switch API")
-                    except Exception as e:
-                        log_error(f"Failed to load Switch boxart API: {e}")
-                        print(f"Warning: Could not load Switch boxart data: {e}")
                 
                 # Extract file links using regex
                 if 'regex' in sys_data:
+        
                     # Use the provided named capture group regex
                     matches = re.finditer(regex_pattern, html_content)
                     files = []
@@ -2937,14 +2994,27 @@ try:
                             # Try to get the filename and href from named groups
                             href = None
                             filename = None
-                            
-                            if 'href' in match.groupdict():
+                            bannerUrl = None
+
+                            if 'id' in match.groupdict():
+                                id_value = match.groupdict().get('id')
+                                if 'download_url' in sys_data:
+                                    download_url = sys_data['download_url']
+                                    if '<id>' in download_url:
+                                        href = download_url.replace('<id>', id_value)
+                                    else:
+                                        href = id_value
+                                else:
+                                    href = id_value
+                            elif 'href' in match.groupdict():
                                 href = match.groupdict().get('href')
                             if 'text' in match.groupdict():
                                 filename = decode_filename(match.groupdict().get('text'))
                             else:
-                                # Fallback to first group
                                 filename = decode_filename(match.group(1))
+
+                            if 'banner_url' in match.groupdict():
+                                bannerUrl = match.groupdict().get('banner_url')
 
                             if href and not filename:
                                 filename = decode_filename(href)
@@ -2953,7 +3023,9 @@ try:
                                 continue
                             # Filter by file format
                             if any(filename.lower().endswith(ext.lower()) for ext in formats):
-                                files.append({'filename': filename, 'href': href})
+                                files.append({'filename': filename, 'href': href, 'banner_url': bannerUrl})
+                            elif 'ignore_extension_filtering' in sys_data and sys_data['ignore_extension_filtering']:
+                                files.append({'filename': filename, 'href': href, 'banner_url': bannerUrl})
                         except:
                             continue
                 else:
@@ -2967,7 +3039,6 @@ try:
                             continue
                         if any(filename.lower().endswith(ext.lower()) for ext in formats):
                             files.append({'filename': filename, 'href': href})
-                    log_error(f"Files: {files}")
                 
                 # Apply USA filter if enabled and system supports it
                 if settings.get("usa_only", False) and sys_data.get('should_filter_usa', True):
@@ -3009,8 +3080,8 @@ try:
                         if os.path.isdir(entry_path) and not entry.startswith('.'):
                             items.append({"name": entry, "type": "folder", "path": entry_path})
                     
-                    # Add .keys files if we're selecting NS Prod keys
-                    if selected_system_to_add and selected_system_to_add.get("type") == "switch_keys":
+                    # Add .keys files if we're selecting NSZ keys
+                    if selected_system_to_add and selected_system_to_add.get("type") == "nsz_keys":
                         for entry in entries:
                             entry_path = os.path.join(path, entry)
                             if os.path.isfile(entry_path) and entry.lower().endswith('.keys'):
@@ -3052,8 +3123,24 @@ try:
                 available_systems = []
                 return
             
-            # Fetch the HTML content
-            response = requests.get(url, timeout=10)
+            # Prepare request headers and cookies for authentication
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
+            cookies = {}
+            
+            # Check if authentication is configured for this system
+            if 'auth' in list_entry:
+                auth_config = list_entry['auth']
+                if auth_config.get('cookies', False) and 'token' in auth_config:
+                    # Use cookie-based authentication
+                    cookie_name = auth_config.get('cookie_name', 'auth_token')
+                    cookies[cookie_name] = auth_config['token']
+                elif 'token' in auth_config:
+                    # Use header-based authentication (Bearer token)
+                    headers['Authorization'] = f"Bearer {auth_config['token']}"
+            
+            response = requests.get(url, timeout=10, headers=headers, cookies=cookies)
             response.raise_for_status()
             html_content = response.text
             
@@ -4033,6 +4120,7 @@ try:
             
             # Update image cache from background threads
             update_image_cache()
+            update_hires_image_cache()
                 
             if mode == "systems":
                 # Get visible systems and add Settings/Add Systems options
@@ -4248,23 +4336,23 @@ try:
                                 else:
                                     folder_browser_current_path = current_roms
                                 load_folder_contents(folder_browser_current_path)
-                            elif highlighted == 7:  # NS Prod Keys
+                            elif highlighted == 7:  # NSZ Keys
                                 # Open folder browser for .keys files
                                 show_folder_browser = True
                                 # Use current keys path or default to home directory
-                                current_keys = settings.get("switch_keys_path", "")
+                                current_keys = settings.get("nsz_keys_path", "")
                                 if current_keys and os.path.exists(os.path.dirname(current_keys)):
                                     folder_browser_current_path = os.path.dirname(current_keys)
                                 else:
-                                    # Default to ~/.switch directory or home
-                                    switch_dir = os.path.expanduser("~/.switch")
-                                    if os.path.exists(switch_dir):
-                                        folder_browser_current_path = switch_dir
+                                    # Default to ~/.nsz directory or home
+                                    nsz_dir = os.path.expanduser("~/.nsz")
+                                    if os.path.exists(nsz_dir):
+                                        folder_browser_current_path = nsz_dir
                                     else:
                                         folder_browser_current_path = os.path.expanduser("~")
                                 load_folder_contents(folder_browser_current_path)
-                                # Set a flag to indicate we're selecting NS Prod keys
-                                selected_system_to_add = {"name": "NS Prod Keys", "type": "switch_keys"}
+                                # Set a flag to indicate we're selecting NSZ keys
+                                selected_system_to_add = {"name": "NSZ Keys", "type": "nsz_keys"}
                             elif highlighted == 8:  # Remap Controller
                                 # Trigger controller remapping
                                 show_controller_mapping = True
@@ -4344,13 +4432,13 @@ try:
                                     save_settings(settings)
                                     show_folder_browser = False
                                     selected_system_to_add = None
-                                elif selected_system_to_add.get("type") == "switch_keys":
-                                    # Set NS Prod keys path (for folder selection, not file)
-                                    settings["switch_keys_path"] = folder_browser_current_path
+                                elif selected_system_to_add.get("type") == "nsz_keys":
+                                    # Set NSZ keys path (for folder selection, not file)
+                                    settings["nsz_keys_path"] = folder_browser_current_path
                                     save_settings(settings)
                                     show_folder_browser = False
                                     selected_system_to_add = None
-                                    draw_loading_message("NS Prod keys path updated!")
+                                    draw_loading_message("NSZ keys path updated!")
                                     pygame.time.wait(1500)
                                 elif selected_system_to_add.get("type") == "custom_rom_folder":
                                     # Set custom ROM folder for the selected system
@@ -4578,9 +4666,9 @@ try:
                                     print(f"Navigating to folder: {folder_browser_current_path}")
                                     load_folder_contents(folder_browser_current_path)
                                 elif selected_item["type"] == "keys_file":
-                                    # Select this .keys file for Nintendo Switch
-                                    if selected_system_to_add and selected_system_to_add.get("type") == "switch_keys":
-                                        settings["switch_keys_path"] = selected_item["path"]
+                                    # Select this .keys file for NSZ decompression
+                                    if selected_system_to_add and selected_system_to_add.get("type") == "nsz_keys":
+                                        settings["nsz_keys_path"] = selected_item["path"]
                                         save_settings(settings)
                                         show_folder_browser = False
                                         selected_system_to_add = None
@@ -5125,9 +5213,9 @@ try:
                                     print(f"Navigating to folder: {folder_browser_current_path}")
                                     load_folder_contents(folder_browser_current_path)
                                 elif selected_item["type"] == "keys_file":
-                                    # Select this .keys file for Nintendo Switch
-                                    if selected_system_to_add and selected_system_to_add.get("type") == "switch_keys":
-                                        settings["switch_keys_path"] = selected_item["path"]
+                                    # Select this .keys file for NSZ decompression
+                                    if selected_system_to_add and selected_system_to_add.get("type") == "nsz_keys":
+                                        settings["nsz_keys_path"] = selected_item["path"]
                                         save_settings(settings)
                                         show_folder_browser = False
                                         selected_system_to_add = None
@@ -5216,23 +5304,23 @@ try:
                                 else:
                                     folder_browser_current_path = current_roms
                                 load_folder_contents(folder_browser_current_path)
-                            elif highlighted == 7:  # NS Prod Keys
+                            elif highlighted == 7:  # NSZ Keys
                                 # Open folder browser for .keys files
                                 show_folder_browser = True
                                 # Use current keys path or default to home directory
-                                current_keys = settings.get("switch_keys_path", "")
+                                current_keys = settings.get("nsz_keys_path", "")
                                 if current_keys and os.path.exists(os.path.dirname(current_keys)):
                                     folder_browser_current_path = os.path.dirname(current_keys)
                                 else:
-                                    # Default to ~/.switch directory or home
-                                    switch_dir = os.path.expanduser("~/.switch")
-                                    if os.path.exists(switch_dir):
-                                        folder_browser_current_path = switch_dir
+                                    # Default to ~/.nsz directory or home
+                                    nsz_dir = os.path.expanduser("~/.nsz")
+                                    if os.path.exists(nsz_dir):
+                                        folder_browser_current_path = nsz_dir
                                     else:
                                         folder_browser_current_path = os.path.expanduser("~")
                                 load_folder_contents(folder_browser_current_path)
-                                # Set a flag to indicate we're selecting NS Prod keys
-                                selected_system_to_add = {"name": "NS Prod Keys", "type": "switch_keys"}
+                                # Set a flag to indicate we're selecting NSZ keys
+                                selected_system_to_add = {"name": "NSZ Keys", "type": "nsz_keys"}
                             elif highlighted == 8:  # Remap Controller
                                 # Trigger controller remapping
                                 show_controller_mapping = True
@@ -5313,13 +5401,13 @@ try:
                                     save_settings(settings)
                                     show_folder_browser = False
                                     selected_system_to_add = None
-                                elif selected_system_to_add.get("type") == "switch_keys":
-                                    # Set NS Prod keys path (for folder selection, not file)
-                                    settings["switch_keys_path"] = folder_browser_current_path
+                                elif selected_system_to_add.get("type") == "nsz_keys":
+                                    # Set NSZ keys path (for folder selection, not file)
+                                    settings["nsz_keys_path"] = folder_browser_current_path
                                     save_settings(settings)
                                     show_folder_browser = False
                                     selected_system_to_add = None
-                                    draw_loading_message("NS Prod keys path updated!")
+                                    draw_loading_message("NSZ keys path updated!")
                                     pygame.time.wait(1500)
                                 elif selected_system_to_add.get("type") == "custom_rom_folder":
                                     # Set custom ROM folder for the selected system

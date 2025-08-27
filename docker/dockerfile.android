@@ -69,14 +69,7 @@ RUN echo "Java Home: $JAVA_HOME" && \
 
 # Install Python packages
 RUN pip3 install --upgrade pip setuptools wheel
-RUN pip3 install buildozer cython==0.29.33
-
-# Pre-install Android NDK to avoid download issues
-RUN mkdir -p /home/user/.buildozer/android/platform && \
-    cd /home/user/.buildozer/android/platform && \
-    wget -q https://dl.google.com/android/repository/android-ndk-r25b-linux.zip && \
-    unzip -o -q android-ndk-r25b-linux.zip && \
-    rm android-ndk-r25b-linux.zip
+RUN pip3 install buildozer cython==0.29.33 appdirs packaging
 
 # Create non-root user
 RUN useradd -m -s /bin/bash user
@@ -84,11 +77,11 @@ RUN useradd -m -s /bin/bash user
 # Set working directory
 WORKDIR /home/user/hostcwd
 
-# Change ownership to user
-RUN chown -R user:user /home/user
-
-# Switch to non-root user
+# Switch to non-root user first
 USER user
+
+# Create buildozer directories as user
+RUN mkdir -p /home/user/.buildozer/cache /home/user/.buildozer/android/platform
 
 # Default command
 CMD ["buildozer", "android", "debug"]
