@@ -23,5 +23,5 @@ icon.filename = icon.png
 presplash.filename = presplash.png
 
 [buildozer]
-log_level = 2
+log_level = 0
 warn_on_root = 1

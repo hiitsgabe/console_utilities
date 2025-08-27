@@ -104,6 +104,22 @@ try:
     else:
         print("No joystick detected, use keyboard: Arrow keys, Enter, Escape, Space")
 
+    # Initialize touchscreen and mouse support
+    touchscreen_available = False
+    mouse_available = True  # Mouse is always available in pygame
+    try:
+        import pygame._sdl2.touch
+        touch_device_count = pygame._sdl2.touch.get_num_devices()
+        if touch_device_count > 0:
+            touchscreen_available = True
+            print(f"Touchscreen detected: {touch_device_count} touch device(s) available")
+        else:
+            print("No touchscreen detected")
+    except ImportError:
+        print("Touch support not available in this pygame version")
+    
+    print("Mouse navigation available")
+
     # Modern color palette
     BACKGROUND = (18, 20, 24)        # Dark background
     SURFACE = (30, 34, 40)           # Card/surface background
@@ -208,6 +224,29 @@ try:
     NAVIGATION_START_RATE = 400        # ms between repeats when starting (slow)
     NAVIGATION_MAX_RATE = 100          # ms between repeats at maximum speed (fast)
     NAVIGATION_ACCELERATION = 0.90     # rate multiplier each repeat (smaller = faster acceleration)
+    
+    # Touch/click support variables
+    menu_item_rects = []  # Store rectangles for clickable menu items
+    menu_scroll_offset = 0  # Current scroll offset (start_idx) for click mapping
+    scroll_accumulated = 0  # For smooth scrolling
+    
+    # Touch gesture tracking
+    touch_start_pos = None  # Starting position of touch
+    touch_start_time = 0  # Time when touch started
+    touch_last_pos = None  # Last touch position for motion tracking
+    is_scrolling = False  # Whether user is currently scrolling
+    scroll_threshold = 15  # Pixels to move before it's considered scrolling
+    tap_time_threshold = 500  # Max ms for a tap vs scroll
+    scroll_sensitivity = 0.5  # Touch scroll sensitivity multiplier
+    
+    # Double-click tracking for games
+    last_click_time = 0
+    last_clicked_item = -1
+    double_click_threshold = 500  # Max ms between clicks for double-click
+    
+    # On-screen button rectangles
+    back_button_rect = None
+    search_button_rect = None
     
     def update_navigation_state():
         """Update navigation state based on current joystick/controller input"""
@@ -644,6 +683,316 @@ try:
             print(f"Text fallback also failed: {e}")
         
         print(f"All emoji rendering methods failed for: {emoji_char}")
+        return False
+
+    def handle_touch_click_event(pos):
+        """Handle touch/click events by checking if they hit any menu items or buttons"""
+        global highlighted, mode, selected_system, show_game_details, current_game_detail
+        global add_systems_highlighted, systems_settings_highlighted, system_settings_highlighted
+        global show_search_input, show_url_input, show_folder_name_input, show_folder_browser
+        
+        x, y = pos
+        
+        # First check if touch/click hit any on-screen buttons
+        if handle_touch_button_click(pos):
+            return True
+        
+        # Check if click/touch hit any menu item rectangles
+        for i, rect in enumerate(menu_item_rects):
+            if rect.collidepoint(x, y):
+                # Calculate actual item index accounting for scrolling
+                actual_item_index = menu_scroll_offset + i
+                
+                # Update highlighted item and trigger selection
+                if mode == "systems":
+                    visible_systems = get_visible_systems()
+                    regular_systems = [d['name'] for d in visible_systems]
+                    systems_with_options = regular_systems + ["Utils", "Settings", "Credits"]
+                    
+                    if actual_item_index < len(systems_with_options):
+                        highlighted = actual_item_index
+                        # Simulate select button press to activate the item
+                        handle_menu_selection()
+                        return True
+                        
+                elif mode == "games":
+                    current_game_list = filtered_game_list if search_mode and search_query else game_list
+                    if actual_item_index < len(current_game_list):
+                        highlighted = actual_item_index
+                        # For games, just highlight - user can double-click to select
+                        return True
+                        
+                elif mode == "settings":
+                    settings_items = ["Toggle Boxart", "Toggle View Type", "Set Download Directory", "Set Work Directory", "USA Only", "Back"]
+                    if actual_item_index < len(settings_items):
+                        highlighted = actual_item_index
+                        handle_menu_selection()
+                        return True
+                        
+                elif mode == "utils":
+                    utils_items = ["Systems Settings", "Add Systems", "Back"]
+                    if actual_item_index < len(utils_items):
+                        highlighted = actual_item_index
+                        handle_menu_selection()
+                        return True
+                        
+        return False
+
+    def handle_scroll_event(scroll_y):
+        """Handle mouse wheel or touch scroll events"""
+        global highlighted, scroll_accumulated
+        
+        # Accumulate scroll for smooth scrolling
+        scroll_accumulated += scroll_y
+        
+        # Convert accumulated scroll to navigation steps
+        scroll_threshold = 3  # Adjust for scroll sensitivity
+        if abs(scroll_accumulated) >= scroll_threshold:
+            steps = int(scroll_accumulated / scroll_threshold)
+            scroll_accumulated = scroll_accumulated % scroll_threshold
+            
+            # Navigate up or down based on scroll direction
+            if steps > 0:
+                # Scroll up - move selection up
+                for _ in range(abs(steps)):
+                    navigate_up()
+            elif steps < 0:
+                # Scroll down - move selection down  
+                for _ in range(abs(steps)):
+                    navigate_down()
+                    
+        return True
+
+    def navigate_up():
+        """Helper function to navigate up in current context"""
+        global highlighted, add_systems_highlighted, systems_settings_highlighted, system_settings_highlighted
+        
+        if mode == "systems":
+            visible_systems = get_visible_systems()
+            systems_with_options = [d['name'] for d in visible_systems] + ["Utils", "Settings", "Credits"]
+            if highlighted > 0:
+                highlighted -= 1
+                
+        elif mode == "games":
+            current_game_list = filtered_game_list if search_mode and search_query else game_list
+            if settings["view_type"] == "grid":
+                cols = 4
+                if highlighted >= cols:
+                    highlighted -= cols
+            else:
+                if highlighted > 0:
+                    highlighted -= 1
+                    
+        elif mode == "settings":
+            settings_items = ["Toggle Boxart", "Toggle View Type", "Set Download Directory", "Set Work Directory", "USA Only", "Back"]
+            if highlighted > 0:
+                highlighted -= 1
+                
+        elif mode == "add_systems":
+            if add_systems_highlighted > 0:
+                add_systems_highlighted -= 1
+
+    def navigate_down():
+        """Helper function to navigate down in current context"""
+        global highlighted, add_systems_highlighted, systems_settings_highlighted, system_settings_highlighted
+        
+        if mode == "systems":
+            visible_systems = get_visible_systems()
+            systems_with_options = [d['name'] for d in visible_systems] + ["Utils", "Settings", "Credits"]
+            if highlighted < len(systems_with_options) - 1:
+                highlighted += 1
+                
+        elif mode == "games":
+            current_game_list = filtered_game_list if search_mode and search_query else game_list
+            if settings["view_type"] == "grid":
+                cols = 4
+                rows = (len(current_game_list) + cols - 1) // cols
+                if highlighted + cols < len(current_game_list):
+                    highlighted += cols
+            else:
+                if highlighted < len(current_game_list) - 1:
+                    highlighted += 1
+                    
+        elif mode == "settings":
+            settings_items = ["Toggle Boxart", "Toggle View Type", "Set Download Directory", "Set Work Directory", "USA Only", "Back"]
+            if highlighted < len(settings_items) - 1:
+                highlighted += 1
+                
+        elif mode == "add_systems":
+            if add_systems_highlighted < len(available_systems) - 1:
+                add_systems_highlighted += 1
+
+    def handle_menu_selection():
+        """Handle menu item selection - simulate button press"""
+        global mode, highlighted, selected_system, game_list, selected_games, current_page
+        global add_systems_highlighted, systems_settings_highlighted, system_settings_highlighted
+        global settings_scroll_offset, selected_system_for_settings
+        
+        if mode == "systems":
+            # Use helper function for consistent filtering
+            visible_systems = get_visible_systems()
+            systems_count = len(visible_systems)
+            
+            if highlighted == systems_count:  # Utils option
+                mode = "utils"
+                highlighted = 0
+            elif highlighted == systems_count + 1:  # Settings option
+                mode = "settings"
+                highlighted = 0
+                settings_scroll_offset = 0
+            elif highlighted == systems_count + 2:  # Credits option (always at the end)
+                mode = "credits"
+                highlighted = 0
+            elif highlighted < systems_count:
+                # Map visible system index to original data index
+                selected_visible_system = visible_systems[highlighted]
+                selected_system = get_system_index_by_name(selected_visible_system['name'])
+                current_page = 0
+                game_list = list_files(selected_system, current_page)
+                selected_games = set()
+                mode = "games"
+                highlighted = 0
+                
+        elif mode == "games":
+            # Handle game selection with search mode support
+            current_game_list = filtered_game_list if search_mode and search_query else game_list
+            if highlighted < len(current_game_list):
+                # Get the actual game from the current list
+                selected_game = current_game_list[highlighted]
+                # Find the original index in game_list for selected_games tracking
+                if search_mode and search_query:
+                    # In search mode, find original index
+                    original_index = next((i for i, game in enumerate(game_list) if game == selected_game), None)
+                    if original_index is not None:
+                        if original_index in selected_games:
+                            selected_games.remove(original_index)
+                        else:
+                            selected_games.add(original_index)
+                else:
+                    # Normal mode, use highlighted directly
+                    if highlighted in selected_games:
+                        selected_games.remove(highlighted)
+                    else:
+                        selected_games.add(highlighted)
+                        
+        elif mode == "settings":
+            # Handle settings selection (implement key settings items)
+            if highlighted == 0:  # Enable Box-art Display
+                settings["enable_boxart"] = not settings["enable_boxart"]
+                save_settings(settings)
+            elif highlighted == 4:  # View Type
+                settings["view_type"] = "grid" if settings["view_type"] == "list" else "list"
+                save_settings(settings)
+            elif highlighted == 5:  # USA Games Only
+                settings["usa_only"] = not settings["usa_only"]
+                save_settings(settings)
+            # Add more settings handling as needed
+            
+        elif mode == "utils":
+            if highlighted == 0:  # Systems Settings
+                mode = "systems_settings"
+                systems_settings_highlighted = 0
+                highlighted = 0
+            elif highlighted == 1:  # Add Systems
+                mode = "add_systems"
+                highlighted = 0
+                add_systems_highlighted = 0
+                # Load available systems in background
+                load_available_systems()
+            elif highlighted == 2:  # Back
+                mode = "systems"
+                highlighted = 0
+
+    def draw_touch_buttons():
+        """Draw on-screen buttons when touch/mouse is available"""
+        global back_button_rect, search_button_rect
+        
+        if not (touchscreen_available or mouse_available):
+            return
+            
+        screen_width, screen_height = screen.get_size()
+        button_height = 40
+        button_width = 80
+        button_margin = 10
+        
+        # Position buttons at bottom of screen
+        button_y = screen_height - button_height - button_margin
+        
+        # Back button (always show except on systems screen)
+        if mode != "systems":
+            back_x = button_margin
+            back_button_rect = pygame.Rect(back_x, button_y, button_width, button_height)
+            
+            # Draw back button background
+            pygame.draw.rect(screen, SURFACE, back_button_rect, border_radius=8)
+            pygame.draw.rect(screen, PRIMARY, back_button_rect, 2, border_radius=8)
+            
+            # Draw back button text
+            back_text = font.render("Back", True, TEXT_PRIMARY)
+            text_x = back_x + (button_width - back_text.get_width()) // 2
+            text_y = button_y + (button_height - back_text.get_height()) // 2
+            screen.blit(back_text, (text_x, text_y))
+        
+        # Search button (only show in games mode)
+        if mode == "games" and not show_search_input:
+            search_x = screen_width - button_width - button_margin
+            search_button_rect = pygame.Rect(search_x, button_y, button_width, button_height)
+            
+            # Draw search button background
+            pygame.draw.rect(screen, SURFACE, search_button_rect, border_radius=8)
+            pygame.draw.rect(screen, SECONDARY, search_button_rect, 2, border_radius=8)
+            
+            # Draw search button text
+            search_text = font.render("Search", True, TEXT_PRIMARY)
+            text_x = search_x + (button_width - search_text.get_width()) // 2
+            text_y = button_y + (button_height - search_text.get_height()) // 2
+            screen.blit(search_text, (text_x, text_y))
+        
+        # Add a subtle scroll hint for touch users
+        if mode in ["games", "systems"] and (touchscreen_available or mouse_available):
+            hint_text = "↕ Drag to scroll" if touchscreen_available else "↕ Wheel to scroll"
+            hint_font = pygame.font.Font(None, int(FONT_SIZE * 0.7))
+            hint_surface = hint_font.render(hint_text, True, TEXT_DISABLED)
+            hint_x = screen_width - hint_surface.get_width() - button_margin
+            hint_y = button_margin
+            screen.blit(hint_surface, (hint_x, hint_y))
+
+    def handle_touch_button_click(pos):
+        """Handle clicks on touch buttons"""
+        global mode, highlighted, show_search_input, search_cursor_position, selected_system
+        
+        x, y = pos
+        
+        # Check back button
+        if back_button_rect and back_button_rect.collidepoint(x, y):
+            if mode == "games":
+                mode = "systems"
+                highlighted = selected_system if selected_system < len(get_visible_systems()) else 0
+            elif mode == "settings":
+                mode = "systems"
+                highlighted = len(get_visible_systems()) + 1  # Settings option
+            elif mode == "utils":
+                mode = "systems"  
+                highlighted = len(get_visible_systems())  # Utils option
+            elif mode == "credits":
+                mode = "systems"
+                highlighted = len(get_visible_systems()) + 2  # Credits option
+            elif mode == "add_systems":
+                mode = "utils"
+                highlighted = 1
+            elif mode == "systems_settings":
+                mode = "utils"
+                highlighted = 0
+            # Add more back navigation as needed
+            return True
+            
+        # Check search button  
+        if search_button_rect and search_button_rect.collidepoint(x, y):
+            if mode == "games":
+                show_search_input = True
+                search_cursor_position = len("abcdefghijklmnopqrstuvwxyz0123456789") + 3  # Start at DONE
+                return True
+                
         return False
 
     def convert_nsz_to_nsp(nsz_file_path):
@@ -1995,6 +2344,11 @@ try:
         
 
     def draw_grid_view(title, items, selected_indices):
+        # Clear menu item rectangles for touch/click detection
+        global menu_item_rects, menu_scroll_offset
+        menu_item_rects.clear()
+        menu_scroll_offset = 0  # Initialize scroll offset (will be updated with grid scrolling)
+        
         draw_background()
         y = 20
         
@@ -2063,6 +2417,9 @@ try:
         target_row = 1  # Second row (0-indexed)
         start_row = max(0, highlighted_row - target_row)
         visible_items = items[start_row * cols:(start_row + rows_per_screen) * cols]
+        
+        # Store scroll offset for click handling (grid uses row-based offset)
+        menu_scroll_offset = start_row * cols
         
         # Draw grid items
         for i, item in enumerate(visible_items):
@@ -2202,6 +2559,10 @@ try:
             
             # Draw main text (removed shadow to prevent flickering)
             screen.blit(text_surf, (text_x, text_y))
+            
+            # Store clickable rectangle for touch/mouse support (using card bounds)
+            grid_item_rect = pygame.Rect(x, y, cell_width, cell_height)
+            menu_item_rects.append(grid_item_rect)
         
         # Draw bottom status message if games are selected
         if selected_indices:
@@ -2222,6 +2583,11 @@ try:
         # Display flip handled by main loop to prevent blinking
 
     def draw_menu(title, items, selected_indices):
+        # Clear menu item rectangles for touch/click detection
+        global menu_item_rects, menu_scroll_offset
+        menu_item_rects.clear()
+        menu_scroll_offset = 0  # Initialize scroll offset (will be updated if scrolling is used)
+        
         # Use background image for all screens
         draw_background()
             
@@ -2288,6 +2654,9 @@ try:
         # Keep highlighted item in the upper third (like grid's second row)
         target_position = max(2, items_per_page // 4)  # Position highlighted item in upper quarter
         start_idx = max(0, highlighted - target_position)
+        
+        # Store scroll offset for click handling
+        menu_scroll_offset = start_idx
         
         # Show more items by extending beyond the calculated page size when possible
         end_idx = min(len(items), start_idx + items_per_page)
@@ -2453,6 +2822,11 @@ try:
                 item_surf = font.render(display_text, True, text_color)
             
             screen.blit(item_surf, (text_x, text_y))
+            
+            # Store clickable rectangle for touch/mouse support (use current y position)
+            item_rect = pygame.Rect(0, y, screen.get_width(), row_height)
+            menu_item_rects.append(item_rect)
+            
             y += row_height
 
         # Draw bottom status message if games are selected
@@ -4667,6 +5041,10 @@ try:
                 draw_folder_browser_modal()
                 modal_drawn = True
             
+            # Draw touch buttons if available
+            if not modal_drawn:
+                draw_touch_buttons()
+                
             # Flip display once at the end
             if modal_drawn or not (show_game_details or show_folder_browser or show_folder_name_input):
                 pygame.display.flip()
@@ -4674,6 +5052,79 @@ try:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    # Handle mouse clicks
+                    if event.button == 1:  # Left mouse button
+                        handle_touch_click_event(event.pos)
+                elif event.type == pygame.MOUSEWHEEL:
+                    # Handle mouse wheel scrolling
+                    handle_scroll_event(event.y)
+                elif event.type == pygame.FINGERDOWN:
+                    # Handle touchscreen press start
+                    if touchscreen_available:
+                        # Convert normalized coordinates (0.0-1.0) to pixel coordinates
+                        screen_width, screen_height = screen.get_size()
+                        x = int(event.x * screen_width)
+                        y = int(event.y * screen_height)
+                        
+                        # Initialize touch tracking
+                        touch_start_pos = (x, y)
+                        touch_last_pos = (x, y)
+                        touch_start_time = pygame.time.get_ticks()
+                        is_scrolling = False
+                        
+                elif event.type == pygame.FINGERUP:
+                    # Handle touchscreen release
+                    if touchscreen_available and touch_start_pos:
+                        # Convert normalized coordinates (0.0-1.0) to pixel coordinates
+                        screen_width, screen_height = screen.get_size()
+                        x = int(event.x * screen_width)
+                        y = int(event.y * screen_height)
+                        
+                        # Calculate distance moved and time elapsed
+                        dx = x - touch_start_pos[0]
+                        dy = y - touch_start_pos[1]
+                        distance = (dx * dx + dy * dy) ** 0.5
+                        time_elapsed = pygame.time.get_ticks() - touch_start_time
+                        
+                        # If it was a short tap without much movement, treat as click
+                        if distance < scroll_threshold and time_elapsed < tap_time_threshold and not is_scrolling:
+                            handle_touch_click_event(touch_start_pos)
+                        
+                        # Reset touch state
+                        touch_start_pos = None
+                        touch_last_pos = None
+                        is_scrolling = False
+                        
+                elif event.type == pygame.FINGERMOTION:
+                    # Handle touch movement (scrolling)
+                    if touchscreen_available and touch_start_pos and touch_last_pos:
+                        # Convert normalized coordinates (0.0-1.0) to pixel coordinates
+                        screen_width, screen_height = screen.get_size()
+                        x = int(event.x * screen_width)
+                        y = int(event.y * screen_height)
+                        
+                        # Calculate total distance from start
+                        dx_total = x - touch_start_pos[0]
+                        dy_total = y - touch_start_pos[1]
+                        total_distance = (dx_total * dx_total + dy_total * dy_total) ** 0.5
+                        
+                        # Calculate motion from last position (for immediate scroll response)
+                        dx_motion = x - touch_last_pos[0]
+                        dy_motion = y - touch_last_pos[1]
+                        
+                        # If moved enough from start, mark as scrolling
+                        if total_distance > scroll_threshold:
+                            is_scrolling = True
+                        
+                        # If currently scrolling and there's vertical motion, scroll immediately
+                        if is_scrolling and abs(dy_motion) > 2:  # Lower threshold for ongoing scroll
+                            # Use motion delta for responsive scrolling
+                            scroll_amount = -dy_motion * scroll_sensitivity
+                            handle_scroll_event(scroll_amount)
+                        
+                        # Update last position for next motion event
+                        touch_last_pos = (x, y)
                 elif event.type == pygame.KEYDOWN:
                     # Handle character selector navigation first
                     if show_search_input:
