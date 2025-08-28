@@ -6,7 +6,8 @@ CONDA_ACTIVATE = conda run -n $(CONDA_ENV)
 # Default target
 run:
 	DEV_MODE=true $(CONDA_ACTIVATE) watchmedo auto-restart --patterns="*.py;download.json" --recursive --signal SIGTERM python src/index.py
-
+	rm -rf py_downloads 
+	rm -rf roms
 # Setup development environment
 setup:
 	conda env create -f environment.yml
@@ -35,8 +36,15 @@ clean:
 # Create distribution package for console deployment
 build:
 	mkdir -p dist
-	cp src/index.py dist/dw.pygame
-	cp assets/config/download.json dist/download.json
+	mkdir -p dist/pygame
+	mkdir -p dist/pygame/assets
+	mkdir -p dist/pygame/assets/images
+	cp src/index.py dist/pygame/console-utilities.pygame
+	cp assets/images/background.png dist/pygame/assets/images/background.png
+	cp assets/docs/pygame.md dist/pygame/README.md
+	cp assets/examples/archive_example.json dist/pygame/example.json
+	cd dist/pygame && zip -r ../pygame.zip *
+	rm -rf dist/pygame
 	@echo "Distribution created in dist/ folder"
 	@echo "Copy dist/dw.pygame and dist/download.json to console pygame directory"
 
@@ -50,8 +58,13 @@ build-android:
 	docker build -t rom-builder -f docker/dockerfile.android .
 	@echo "🚀 Running Docker Container..."
 	docker run --name rom-build rom-builder
+	mkdir -p dist/android
+	cp assets/docs/android.md dist/android/README.md
+	cp assets/examples/archive_example.json dist/android/example.json
 	@echo "🚀 Copying APK..."
-	docker cp rom-build:/dist ./dist
+	docker cp rom-build:/dist/. ./dist/android/
+	cd dist/android && zip -r ../android.zip *
+	rm -rf dist/android
 	@echo "🚀 Removing Docker Container..."
 	docker rm rom-build
 	@echo "🎉 APK built successfully!"

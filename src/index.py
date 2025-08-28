@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import shutil
 import pygame
 import requests
 import traceback
@@ -14,13 +15,6 @@ import html
 from threading import Thread
 from queue import Queue
 
-# Optional nsz import
-try:
-    from nsz import decompress as nsz_decompress
-    NSZ_AVAILABLE = True
-except ImportError:
-    NSZ_AVAILABLE = False
-    nsz_decompress = None
 
 # Optional pygame-emojis import
 try:
@@ -30,6 +24,46 @@ except ImportError:
     EMOJIS_AVAILABLE = False
     load_emoji = None
 
+# Android platform detection and imports
+try:
+    from kivy.utils import platform
+    if platform == "android":
+        from jnius import autoclass
+        from android.permissions import request_permissions, Permission
+        # Android DownloadManager imports
+        DownloadManager = autoclass('android.app.DownloadManager')
+        Uri = autoclass('android.net.Uri')
+        Environment = autoclass('android.os.Environment')
+        PythonActivity = autoclass('org.kivy.android.PythonActivity')
+        Context = autoclass('android.content.Context')
+        Intent = autoclass('android.content.Intent')
+        IntentFilter = autoclass('android.content.IntentFilter')
+        BroadcastReceiver = autoclass('android.content.BroadcastReceiver')
+        ANDROID_AVAILABLE = True
+        IS_ANDROID = True
+    else:
+        ANDROID_AVAILABLE = False
+        IS_ANDROID = False
+except ImportError:
+    ANDROID_AVAILABLE = False
+    IS_ANDROID = False
+
+try:
+    keyspath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "keys.txt")
+    if keyspath and os.path.isfile(keyspath):
+        from nsz import decompress as nsz_decompress
+        NSZ_AVAILABLE = True
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! NSZ AVAILABLE AND KEY")
+    else:
+        NSZ_AVAILABLE = False
+        nsz_decompress = None
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! No Key")
+except (ImportError, AttributeError):
+    NSZ_AVAILABLE = False
+    nsz_decompress = None
+    print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! no NSZ")
+
+    
 # Check for development mode
 DEV_MODE = os.getenv('DEV_MODE', 'false').lower() == 'true'
 
@@ -40,17 +74,35 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 # Set static paths (WORK_DIR and ROMS_DIR will be loaded from settings later)
 # JSON_FILE will be set dynamically after settings are loaded
 JSON_FILE = None  # Will be set after settings are loaded
+# Error logs will go in the same directory as downloads (py_downloads)
+# This will be set after settings are loaded, but create a temporary path for early errors
 if DEV_MODE:
-    LOG_FILE = os.path.join(SCRIPT_DIR, "..", "workdir", "error.log")
+    TEMP_LOG_DIR = os.path.join(SCRIPT_DIR, "..", "py_downloads")
+else:
+    TEMP_LOG_DIR = os.path.join(SCRIPT_DIR, "py_downloads")
+
+os.makedirs(TEMP_LOG_DIR, exist_ok=True)
+LOG_FILE = os.path.join(TEMP_LOG_DIR, "error.log")
+
+# Config files stay in their original locations
+if DEV_MODE:
     CONFIG_FILE = os.path.join(SCRIPT_DIR, "..", "workdir", "config.json")
     ADDED_SYSTEMS_FILE = os.path.join(SCRIPT_DIR, "..", "workdir", "added_systems.json")
 else:
-    LOG_FILE = os.path.join(SCRIPT_DIR, "error.log")
     CONFIG_FILE = os.path.join(SCRIPT_DIR, "config.json")
     ADDED_SYSTEMS_FILE = os.path.join(SCRIPT_DIR, "added_systems.json")
 FPS = 30
 SCREEN_WIDTH, SCREEN_HEIGHT = 800, 600
 FONT_SIZE = 28
+
+def update_log_file_path():
+    """Update LOG_FILE path to use the configured work directory with py_downloads subdirectory"""
+    global LOG_FILE
+    work_dir = settings.get("work_dir", TEMP_LOG_DIR)
+    # Create py_downloads subdirectory within the user's work directory
+    py_downloads_dir = os.path.join(work_dir, "py_downloads")
+    os.makedirs(py_downloads_dir, exist_ok=True)
+    LOG_FILE = os.path.join(py_downloads_dir, "error.log")
 
 def log_error(error_msg, error_type=None, traceback_str=None):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -78,6 +130,207 @@ try:
 except Exception as e:
     print(f"Failed to initialize log file: {e}")
     # Continue without logging if we can't create the log file
+
+# Android Download Manager Class
+class AndroidDownloadManager:
+    def __init__(self):
+        self.active_downloads = {}
+        self.download_manager = None
+        self.context = None
+        self.notifications_enabled = False
+        
+        if ANDROID_AVAILABLE:
+            try:
+                self.context = PythonActivity.mActivity
+                self.download_manager = self.context.getSystemService(Context.DOWNLOAD_SERVICE)
+                self.request_permissions()
+                self.setup_download_receiver()
+                self.notifications_enabled = True
+                print("Android DownloadManager initialized successfully")
+            except Exception as e:
+                print(f"Failed to initialize Android DownloadManager: {e}")
+                ANDROID_AVAILABLE = False
+
+    def request_permissions(self):
+        if ANDROID_AVAILABLE:
+            try:
+                request_permissions([
+                    Permission.INTERNET,
+                    Permission.WRITE_EXTERNAL_STORAGE,
+                    Permission.READ_EXTERNAL_STORAGE,
+                    Permission.ACCESS_NETWORK_STATE
+                ])
+            except Exception as e:
+                print(f"Failed to request permissions: {e}")
+
+    def setup_download_receiver(self):
+        if not ANDROID_AVAILABLE:
+            return
+        
+        try:
+            # Create broadcast receiver for download completion
+            class DownloadReceiver(BroadcastReceiver):
+                def __init__(self, manager):
+                    super().__init__()
+                    self.manager = manager
+                
+                def onReceive(self, context, intent):
+                    download_id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
+                    if download_id in self.manager.active_downloads:
+                        self.manager.handle_download_completion(download_id)
+            
+            self.receiver = DownloadReceiver(self)
+            intent_filter = IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
+            self.context.registerReceiver(self.receiver, intent_filter)
+        except Exception as e:
+            print(f"Failed to setup download receiver: {e}")
+
+    def start_download(self, url, filename, destination_path, sys_data=None):
+        if not ANDROID_AVAILABLE:
+            return None
+        
+        try:
+            # Create download request
+            uri = Uri.parse(url)
+            request = DownloadManager.Request(uri)
+            
+            # Set destination
+            downloads_dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            dest_file = os.path.join(str(downloads_dir.getAbsolutePath()), filename)
+            request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, filename)
+            
+            # Set notification and visibility
+            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            request.setTitle(f"Downloading {filename}")
+            request.setDescription("Console Utilities Download")
+            
+            # Allow download on metered networks
+            request.setAllowedNetworkTypes(DownloadManager.Request.NETWORK_WIFI | DownloadManager.Request.NETWORK_MOBILE)
+            
+            # Start download
+            download_id = self.download_manager.enqueue(request)
+            
+            # Store download info including system data
+            self.active_downloads[download_id] = {
+                'filename': filename,
+                'destination': destination_path,
+                'temp_path': dest_file,
+                'url': url,
+                'sys_data': sys_data or {}
+            }
+            
+            print(f"Started Android download: {filename} (ID: {download_id})")
+            return download_id
+        except Exception as e:
+            print(f"Failed to start Android download: {e}")
+            return None
+
+    def handle_download_completion(self, download_id):
+        if download_id not in self.active_downloads:
+            return
+        
+        download_info = self.active_downloads[download_id]
+        temp_path = download_info['temp_path']
+        final_path = download_info['destination']
+        filename = download_info['filename']
+        
+        try:
+            # Check if download was successful
+            query = DownloadManager.Query()
+            query.setFilterById(download_id)
+            cursor = self.download_manager.query(query)
+            
+            if cursor.moveToFirst():
+                status_index = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
+                status = cursor.getInt(status_index)
+                
+                if status == DownloadManager.STATUS_SUCCESSFUL:
+                    # Get sys_data from download info if available
+                    sys_data = download_info.get('sys_data', {})
+                    # Move file to final destination and handle decompression
+                    self.process_downloaded_file(temp_path, final_path, filename, sys_data)
+                else:
+                    print(f"Download failed for {filename}")
+            
+            cursor.close()
+            
+        except Exception as e:
+            print(f"Error handling download completion: {e}")
+        finally:
+            # Clean up
+            if download_id in self.active_downloads:
+                del self.active_downloads[download_id]
+
+    def process_downloaded_file(self, temp_path, final_path, filename, sys_data):
+        try:
+            # Get the correct ROM folder from final_path
+            roms_folder = os.path.dirname(final_path)
+            
+            # Move file to work directory first for processing
+            work_file_path = os.path.join(WORK_DIR, filename)
+            os.makedirs(WORK_DIR, exist_ok=True)
+            os.rename(temp_path, work_file_path)
+            
+            # Use the unified processing method in background
+            Thread(target=self.process_file_background, 
+                  args=(work_file_path, filename, sys_data, roms_folder), 
+                  daemon=True).start()
+            
+        except Exception as e:
+            print(f"Error processing downloaded file: {e}")
+
+    def process_file_background(self, file_path, filename, sys_data, roms_folder):
+        """Background processing using the unified method with system-specific config"""
+        try:
+            print(f"Starting background processing of {filename}")
+            
+            # Use the unified processing function with proper system data
+            success = process_downloaded_file(file_path, filename, sys_data, roms_folder)
+            
+            if success:
+                print(f"Background processing completed successfully for {filename}")
+            else:
+                print(f"Background processing failed for {filename}")
+                
+        except Exception as e:
+            print(f"Error during background processing: {e}")
+            log_error(f"Android background processing failed for {filename}: {e}")
+
+    def get_download_status(self, download_id):
+        if not ANDROID_AVAILABLE or download_id not in self.active_downloads:
+            return None
+        
+        try:
+            query = DownloadManager.Query()
+            query.setFilterById(download_id)
+            cursor = self.download_manager.query(query)
+            
+            if cursor.moveToFirst():
+                status_index = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
+                bytes_downloaded_index = cursor.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)
+                bytes_total_index = cursor.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
+                
+                status = cursor.getInt(status_index)
+                bytes_downloaded = cursor.getInt(bytes_downloaded_index)
+                bytes_total = cursor.getInt(bytes_total_index)
+                
+                cursor.close()
+                
+                return {
+                    'status': status,
+                    'bytes_downloaded': bytes_downloaded,
+                    'bytes_total': bytes_total,
+                    'progress': (bytes_downloaded / bytes_total * 100) if bytes_total > 0 else 0
+                }
+            
+            cursor.close()
+            return None
+        except Exception as e:
+            print(f"Error getting download status: {e}")
+            return None
+
+# Initialize Android download manager
+android_download_manager = AndroidDownloadManager() if ANDROID_AVAILABLE else None
 
 try:
     print("Initializing pygame...")
@@ -247,6 +500,11 @@ try:
     # On-screen button rectangles
     back_button_rect = None
     search_button_rect = None
+    download_button_rect = None
+    
+    # Modal interaction rectangles
+    modal_char_rects = []  # For character selection modals
+    modal_back_button_rect = None  # Back button for modals
     
     def update_navigation_state():
         """Update navigation state based on current joystick/controller input"""
@@ -518,18 +776,17 @@ try:
     # Controller mapping will be loaded/created dynamically
     controller_mapping = {}
     settings_list = [
-        "Enable Box-art Display",
-        "Update from GitHub",
-        "Archive JSON URL",
         "Select Archive Json",
-        "View Type",
-        "USA Games Only",
         "Work Directory",
         "ROMs Directory",
         "NSZ Keys",
         "Remap Controller",
         "Add Systems",
-        "Systems Settings"
+        "Systems Settings",
+        "--- VIEW OPTIONS ---",
+        "Enable Box-art Display",
+        "View Type",
+        "USA Games Only"
     ]
 
     # Directories will be created after settings are loaded
@@ -555,17 +812,18 @@ try:
     def load_settings():
         """Load settings from config file"""
         # Default paths based on environment
+        # Note: py_downloads subdirectory will be created within work_dir automatically
         if DEV_MODE:
             # Development mode - use local directories since /userdata might not exist
-            default_work_dir = os.path.join(SCRIPT_DIR, "..", "py_downloads")
+            default_work_dir = os.path.join(SCRIPT_DIR, "..", "downloads")
             default_roms_dir = os.path.join(SCRIPT_DIR, "..", "roms")
         elif os.path.exists("/userdata") and os.access("/userdata", os.W_OK):
             # Console environment with writable /userdata
-            default_work_dir = "/userdata/py_downloads"
+            default_work_dir = "/userdata/downloads"
             default_roms_dir = "/userdata/roms"
         else:
             # Fallback - use script directory
-            default_work_dir = os.path.join(SCRIPT_DIR, "py_downloads")
+            default_work_dir = os.path.join(SCRIPT_DIR, "downloads")
             default_roms_dir = os.path.join(SCRIPT_DIR, "roms")
         
         default_settings = {
@@ -654,21 +912,12 @@ try:
 
     def draw_emoji_icon(emoji_char, x, y, size=16):
         """Draw an emoji at the specified position using pygame-emojis"""
-        print(f"Drawing emoji icon: {emoji_char} at ({x}, {y}) size {size}")
-        print(f"EMOJIS_AVAILABLE: {EMOJIS_AVAILABLE}, load_emoji: {load_emoji is not None}")
-        
         if EMOJIS_AVAILABLE and load_emoji:
-            try:
-                # pygame-emojis expects size as a tuple (width, height)
-                emoji_surface = load_emoji(emoji_char, (size, size))
-                if emoji_surface:
-                    screen.blit(emoji_surface, (x, y))
-                    print(f"Emoji rendered successfully: {emoji_char}")
-                    return True
-            except Exception as e:
-                print(f"Failed to render emoji {emoji_char}: {e}")
-        else:
-            print("pygame-emojis not available, trying text fallback")
+            # pygame-emojis expects size as a tuple (width, height)
+            emoji_surface = load_emoji(emoji_char, (size, size))
+            if emoji_surface:
+                screen.blit(emoji_surface, (x, y))
+                return True
         
         # Try text fallback
         try:
@@ -682,7 +931,6 @@ try:
         except Exception as e:
             print(f"Text fallback also failed: {e}")
         
-        print(f"All emoji rendering methods failed for: {emoji_char}")
         return False
 
     def handle_touch_click_event(pos):
@@ -690,10 +938,17 @@ try:
         global highlighted, mode, selected_system, show_game_details, current_game_detail
         global add_systems_highlighted, systems_settings_highlighted, system_settings_highlighted
         global show_search_input, show_url_input, show_folder_name_input, show_folder_browser
+        global last_click_time, last_clicked_item
         
         x, y = pos
         
-        # First check if touch/click hit any on-screen buttons
+        # First check if we're in a modal and handle modal interactions
+        if (show_search_input or show_url_input or show_folder_name_input or 
+            show_folder_browser or show_game_details):
+            if handle_modal_touch_click(pos):
+                return True
+        
+        # Then check if touch/click hit any on-screen buttons
         if handle_touch_button_click(pos):
             return True
         
@@ -718,19 +973,32 @@ try:
                 elif mode == "games":
                     current_game_list = filtered_game_list if search_mode and search_query else game_list
                     if actual_item_index < len(current_game_list):
-                        highlighted = actual_item_index
-                        # For games, just highlight - user can double-click to select
+                        # Check for double-click to select/deselect game
+                        current_time = pygame.time.get_ticks()
+                        if (actual_item_index == last_clicked_item and 
+                            current_time - last_click_time < double_click_threshold):
+                            # Double-click detected - toggle game selection
+                            highlighted = actual_item_index
+                            handle_menu_selection()  # This will toggle the game selection
+                            last_clicked_item = -1  # Reset to prevent triple-click
+                        else:
+                            # Single click - just highlight
+                            highlighted = actual_item_index
+                            last_clicked_item = actual_item_index
+                            last_click_time = current_time
                         return True
                         
                 elif mode == "settings":
-                    settings_items = ["Toggle Boxart", "Toggle View Type", "Set Download Directory", "Set Work Directory", "USA Only", "Back"]
-                    if actual_item_index < len(settings_items):
+                    if actual_item_index < len(settings_list):
+                        # Skip divider clicks
+                        if actual_item_index == 7:  # Divider index (updated)
+                            return True  # Do nothing for divider clicks
                         highlighted = actual_item_index
                         handle_menu_selection()
                         return True
                         
                 elif mode == "utils":
-                    utils_items = ["Systems Settings", "Add Systems", "Back"]
+                    utils_items = ["Download from URL", "NSZ to NSP Converter"]
                     if actual_item_index < len(utils_items):
                         highlighted = actual_item_index
                         handle_menu_selection()
@@ -738,10 +1006,222 @@ try:
                         
         return False
 
+    def handle_modal_touch_click(pos):
+        """Handle touch/click events in modals"""
+        global show_search_input, search_cursor_position, search_input_text
+        global show_url_input, show_folder_name_input, show_folder_browser
+        global search_query, search_mode, filtered_game_list, highlighted
+        global show_game_details, current_game_detail, download_button_rect, close_button_rect
+        global folder_select_button_rect, folder_cancel_button_rect, folder_browser_current_path
+        global folder_browser_highlighted, folder_browser_items, selected_system_to_add, settings, mode
+        
+        x, y = pos
+        
+        # Handle game details modal
+        if show_game_details:
+            # Check download button
+            if download_button_rect and download_button_rect.collidepoint(x, y):
+                if current_game_detail is not None:
+                    # Find the index of the current game detail in the game list
+                    current_game_list = filtered_game_list if search_mode and search_query else game_list
+                    try:
+                        if isinstance(current_game_detail, dict):
+                            game_index = next((i for i, game in enumerate(current_game_list) if game == current_game_detail), None)
+                        else:
+                            game_index = next((i for i, game in enumerate(current_game_list) if game == current_game_detail), None)
+                        
+                        if game_index is not None:
+                            # Start download for this single game
+                            download_files(selected_system, {game_index})
+                            show_game_details = False
+                            current_game_detail = None
+                    except Exception as e:
+                        print(f"Error starting download: {e}")
+                return True
+                
+            # Check close button  
+            if close_button_rect and close_button_rect.collidepoint(x, y):
+                show_game_details = False
+                current_game_detail = None
+                return True
+                
+        # Handle search input modal
+        if show_search_input:
+            # Check back button
+            if modal_back_button_rect and modal_back_button_rect.collidepoint(x, y):
+                show_search_input = False
+                return True
+                
+            # Check character buttons
+            for char_rect, char_index, char in modal_char_rects:
+                if char_rect.collidepoint(x, y):
+                    # Simulate character selection
+                    search_cursor_position = char_index
+                    
+                    # Execute the character action
+                    if char == "DEL":
+                        if search_input_text:
+                            search_input_text = search_input_text[:-1]
+                    elif char == "CLEAR":
+                        search_input_text = ""
+                    elif char == "DONE":
+                        # Finish search input
+                        show_search_input = False
+                        search_query = search_input_text
+                        if search_query:
+                            search_mode = True
+                            filtered_game_list = filter_games_by_search(game_list, search_query)
+                            highlighted = 0
+                        else:
+                            search_mode = False
+                            filtered_game_list = []
+                    else:
+                        # Add character to search query
+                        search_input_text += char
+                    return True
+                    
+        # Handle folder browser modal
+        if show_folder_browser:
+            # Check if click is on any folder browser item
+            for item_rect, item_idx in folder_browser_item_rects:
+                if item_rect.collidepoint(x, y):
+                    # Update highlighted item and trigger selection
+                    global folder_browser_highlighted
+                    folder_browser_highlighted = item_idx
+                    
+                    # Simulate select action (same logic as keyboard/joystick)
+                    if folder_browser_items and folder_browser_highlighted < len(folder_browser_items):
+                        selected_item = folder_browser_items[folder_browser_highlighted]
+                        
+                        if selected_item["type"] == "parent":
+                            # Go back to parent directory
+                            global folder_browser_current_path
+                            parent_path = os.path.dirname(folder_browser_current_path)
+                            if parent_path != folder_browser_current_path:
+                                folder_browser_current_path = parent_path
+                                load_folder_contents(folder_browser_current_path)
+                        elif selected_item["type"] == "folder":
+                            # Enter folder
+                            new_path = selected_item["path"]
+                            folder_browser_current_path = new_path
+                            load_folder_contents(folder_browser_current_path)
+                        elif selected_item["type"] in ["keys_file", "json_file", "nsz_file"]:
+                            # Select file - use same logic as keyboard handling
+                            if selected_system_to_add and selected_system_to_add.get("type") == "nsz_keys":
+                                copy_to = os.path.join(os.path.dirname(os.path.abspath(__file__)), "keys.txt")
+                                # Handle NSZ keys file selection
+                                global settings
+                                settings["nsz_keys_path"] = selected_item["path"]
+                                try:
+                                    shutil.copy2(selected_item["path"], copy_to)
+                                    print(f"Copied {selected_item['path']} to {copy_to}")
+                                except Exception as e:
+                                    print(f"Error copying file: {e}")
+                                save_settings(settings)
+                                show_folder_browser = False
+                                selected_system_to_add = None
+                            elif selected_item["type"] == "nsz_file":
+                                # Handle NSZ file conversion
+                                if selected_system_to_add and selected_system_to_add.get("type") == "nsz_converter":
+                                    convert_nsz_to_nsp(selected_item["path"])
+                                    show_folder_browser = False
+                                    selected_system_to_add = None
+                            elif selected_item["type"] == "json_file":
+                                # Handle archive JSON file selection  
+                                if selected_system_to_add and selected_system_to_add.get("type") == "archive_json":
+                                    settings["archive_json_path"] = selected_item["path"]
+                                    save_settings(settings)
+                                    show_folder_browser = False
+                                    selected_system_to_add = None
+                    return True
+            
+            # Check folder browser buttons
+            if folder_select_button_rect and folder_select_button_rect.collidepoint(x, y):
+                # Handle "Select Folder/File" button - same logic as detail/Y button press
+                if selected_system_to_add is not None:
+                    if selected_system_to_add.get("type") == "work_dir":
+                        # Select current folder as work directory
+                        settings["work_dir"] = folder_browser_current_path
+                        save_settings(settings)
+                        show_folder_browser = False
+                        selected_system_to_add = None
+                    elif selected_system_to_add.get("type") == "nsz_keys":
+                        # Select current folder path for NSZ keys
+                        settings["nsz_keys_path"] = folder_browser_current_path
+                        save_settings(settings)
+                        show_folder_browser = False
+                        selected_system_to_add = None
+                    elif selected_system_to_add.get("type") == "archive_json":
+                        # Select current folder path for archive JSON
+                        settings["archive_json_path"] = folder_browser_current_path
+                        save_settings(settings)
+                        show_folder_browser = False
+                        selected_system_to_add = None
+                    elif selected_system_to_add.get("type") == "system_folder":
+                        # Select current folder for system ROM folder
+                        system_name = selected_system_to_add.get("system_name", "")
+                        if system_name:
+                            if "system_settings" not in settings:
+                                settings["system_settings"] = {}
+                            if system_name not in settings["system_settings"]:
+                                settings["system_settings"][system_name] = {}
+                            settings["system_settings"][system_name]['custom_folder'] = folder_browser_current_path
+                            save_settings(settings)
+                            show_folder_browser = False
+                            selected_system_to_add = None
+                    else:
+                        # ROMs directory selection
+                        settings["roms_dir"] = folder_browser_current_path
+                        save_settings(settings)
+                        show_folder_browser = False
+                        # Reset state
+                        selected_system_to_add = None
+                        show_folder_browser = False
+                        mode = "systems"
+                        highlighted = 0
+                return True
+                
+            # Check folder browser cancel button
+            if folder_cancel_button_rect and folder_cancel_button_rect.collidepoint(x, y):
+                # Close folder browser without selecting
+                show_folder_browser = False
+                selected_system_to_add = None
+                return True
+        
+        return False
+
     def handle_scroll_event(scroll_y):
         """Handle mouse wheel or touch scroll events"""
         global highlighted, scroll_accumulated
+        global folder_browser_highlighted, search_cursor_position
         
+        # Check if we're in a modal first
+        if show_folder_browser:
+            # Handle folder browser scrolling
+            if scroll_y > 0:
+                # Scroll up - move selection up
+                if folder_browser_highlighted > 0:
+                    folder_browser_highlighted -= 1
+            elif scroll_y < 0:
+                # Scroll down - move selection down
+                if folder_browser_highlighted < len(folder_browser_items) - 1:
+                    folder_browser_highlighted += 1
+            return True
+            
+        elif show_search_input:
+            # Handle search input character selection scrolling
+            chars = "abcdefghijklmnopqrstuvwxyz0123456789 DEL CLEAR DONE"
+            if scroll_y > 0:
+                # Scroll up - move character selection up
+                if search_cursor_position > 0:
+                    search_cursor_position -= 1
+            elif scroll_y < 0:
+                # Scroll down - move character selection down
+                if search_cursor_position < len(chars.split()) - 1:
+                    search_cursor_position += 1
+            return True
+        
+        # Handle main menu scrolling (existing logic)
         # Accumulate scroll for smooth scrolling
         scroll_accumulated += scroll_y
         
@@ -784,9 +1264,11 @@ try:
                     highlighted -= 1
                     
         elif mode == "settings":
-            settings_items = ["Toggle Boxart", "Toggle View Type", "Set Download Directory", "Set Work Directory", "USA Only", "Back"]
             if highlighted > 0:
                 highlighted -= 1
+                # Skip over divider when navigating up
+                if highlighted == 7:  # Divider index (updated)
+                    highlighted -= 1
                 
         elif mode == "add_systems":
             if add_systems_highlighted > 0:
@@ -814,9 +1296,11 @@ try:
                     highlighted += 1
                     
         elif mode == "settings":
-            settings_items = ["Toggle Boxart", "Toggle View Type", "Set Download Directory", "Set Work Directory", "USA Only", "Back"]
-            if highlighted < len(settings_items) - 1:
+            if highlighted < len(settings_list) - 1:
                 highlighted += 1
+                # Skip over divider when navigating down
+                if highlighted == 7:  # Divider index (updated)
+                    highlighted += 1
                 
         elif mode == "add_systems":
             if add_systems_highlighted < len(available_systems) - 1:
@@ -827,6 +1311,8 @@ try:
         global mode, highlighted, selected_system, game_list, selected_games, current_page
         global add_systems_highlighted, systems_settings_highlighted, system_settings_highlighted
         global settings_scroll_offset, selected_system_for_settings
+        global show_folder_browser, folder_browser_current_path, selected_system_to_add
+        global show_url_input, url_input_context, show_controller_mapping, settings
         
         if mode == "systems":
             # Use helper function for consistent filtering
@@ -876,38 +1362,114 @@ try:
                         selected_games.add(highlighted)
                         
         elif mode == "settings":
-            # Handle settings selection (implement key settings items)
-            if highlighted == 0:  # Enable Box-art Display
-                settings["enable_boxart"] = not settings["enable_boxart"]
-                save_settings(settings)
-            elif highlighted == 4:  # View Type
-                settings["view_type"] = "grid" if settings["view_type"] == "list" else "list"
-                save_settings(settings)
-            elif highlighted == 5:  # USA Games Only
-                settings["usa_only"] = not settings["usa_only"]
-                save_settings(settings)
-            # Add more settings handling as needed
-            
-        elif mode == "utils":
-            if highlighted == 0:  # Systems Settings
-                mode = "systems_settings"
-                systems_settings_highlighted = 0
-                highlighted = 0
-            elif highlighted == 1:  # Add Systems
+            # Handle settings selection (updated for new organization without GitHub update)
+            # Skip divider (index 7)
+            if highlighted == 7:  # Divider - do nothing
+                pass
+            elif highlighted == 0:  # Select Archive Json
+                # Open folder browser for JSON files
+                show_folder_browser = True
+                # Use current archive path or default to workdir where download.json is
+                current_archive = settings.get("archive_json_path", "")
+                if current_archive and os.path.exists(os.path.dirname(current_archive)):
+                    folder_browser_current_path = os.path.dirname(current_archive)
+                else:
+                    # Default to workdir where download.json is located
+                    workdir_path = os.path.join(SCRIPT_DIR, "..", "workdir")
+                    if os.path.exists(workdir_path):
+                        folder_browser_current_path = os.path.abspath(workdir_path)
+                    else:
+                        folder_browser_current_path = SCRIPT_DIR
+                load_folder_contents(folder_browser_current_path)
+                # Set a flag to indicate we're selecting archive JSON
+                selected_system_to_add = {"name": "Archive JSON", "type": "archive_json"}
+            elif highlighted == 1:  # Work Directory
+                # Open folder browser for work directory selection
+                show_folder_browser = True
+                # Use current work_dir or fallback to a sensible default
+                current_work = settings.get("work_dir", "")
+                if not current_work or not os.path.exists(os.path.dirname(current_work)):
+                    # Use a fallback based on environment
+                    if os.path.exists("/userdata") and os.access("/userdata", os.R_OK):
+                        folder_browser_current_path = "/userdata"
+                    else:
+                        folder_browser_current_path = os.path.expanduser("~")  # Home directory
+                else:
+                    folder_browser_current_path = current_work
+                load_folder_contents(folder_browser_current_path)
+                # Set a flag to indicate we're selecting work directory
+                selected_system_to_add = {"name": "Work Directory", "type": "work_dir"}
+            elif highlighted == 2:  # ROMs Directory
+                # Open folder browser
+                show_folder_browser = True
+                # Use current roms_dir or fallback to a sensible default
+                current_roms = settings.get("roms_dir", "")
+                if not current_roms or not os.path.exists(os.path.dirname(current_roms)):
+                    # Use a fallback based on environment
+                    if os.path.exists("/userdata") and os.access("/userdata", os.R_OK):
+                        folder_browser_current_path = "/userdata/roms"
+                    else:
+                        folder_browser_current_path = os.path.expanduser("~")  # Home directory
+                else:
+                    folder_browser_current_path = current_roms
+                load_folder_contents(folder_browser_current_path)
+            elif highlighted == 3:  # NSZ Keys
+                # Open folder browser for .keys files
+                show_folder_browser = True
+                # Use current keys path or default to home directory
+                current_keys = settings.get("nsz_keys_path", "")
+                if current_keys and os.path.exists(os.path.dirname(current_keys)):
+                    folder_browser_current_path = os.path.dirname(current_keys)
+                else:
+                    # Default to ~/.nsz directory or home
+                    nsz_dir = os.path.expanduser("~/.switch")
+                    if os.path.exists(nsz_dir):
+                        folder_browser_current_path = nsz_dir
+                    else:
+                        folder_browser_current_path = os.path.expanduser("~")
+                load_folder_contents(folder_browser_current_path)
+                # Set a flag to indicate we're selecting NSZ keys
+                selected_system_to_add = {"name": "NSZ Keys", "type": "nsz_keys"}
+            elif highlighted == 4:  # Remap Controller
+                # Trigger controller remapping
+                show_controller_mapping = True
+            elif highlighted == 5:  # Add Systems
                 mode = "add_systems"
                 highlighted = 0
                 add_systems_highlighted = 0
                 # Load available systems in background
                 load_available_systems()
-            elif highlighted == 2:  # Back
-                mode = "systems"
+            elif highlighted == 6:  # Systems Settings
+                mode = "systems_settings"
+                systems_settings_highlighted = 0
+                highlighted = 0
+            elif highlighted == 8:  # Enable Box-art Display
+                settings["enable_boxart"] = not settings["enable_boxart"]
+                save_settings(settings)
+            elif highlighted == 9:  # View Type
+                settings["view_type"] = "grid" if settings["view_type"] == "list" else "list"
+                save_settings(settings)
+            elif highlighted == 10:  # USA Games Only
+                settings["usa_only"] = not settings["usa_only"]
+                save_settings(settings)
+            
+        elif mode == "utils":
+            if highlighted == 0:  # Download from URL
+                # Show URL input modal for direct download
+                show_url_input_modal("direct_download")
+            elif highlighted == 1:  # NSZ to NSP Converter
+                # Start NSZ file browser
+                show_folder_browser = True
+                folder_browser_current_path = settings.get("roms_dir", "/userdata/roms")
+                selected_system_to_add = {"name": "NSZ to NSP Converter", "type": "nsz_converter"}
+                load_folder_contents(folder_browser_current_path)
                 highlighted = 0
 
     def draw_touch_buttons():
         """Draw on-screen buttons when touch/mouse is available"""
-        global back_button_rect, search_button_rect
+        global back_button_rect, search_button_rect, download_button_rect
         
-        if not (touchscreen_available or mouse_available):
+        if not touchscreen_available:
             return
             
         screen_width, screen_height = screen.get_size()
@@ -933,8 +1495,24 @@ try:
             text_y = button_y + (button_height - back_text.get_height()) // 2
             screen.blit(back_text, (text_x, text_y))
         
-        # Search button (only show in games mode)
-        if mode == "games" and not show_search_input:
+        # Download button (only show in games mode when games are selected)
+        if mode == "games" and selected_games:
+            download_width = 150  # Much wider button for "Start Download" text
+            download_x = (screen_width - download_width) // 2  # Center the download button
+            download_button_rect = pygame.Rect(download_x, button_y, download_width, button_height)
+            
+            # Draw download button background
+            pygame.draw.rect(screen, SUCCESS, download_button_rect, border_radius=8)
+            pygame.draw.rect(screen, TEXT_PRIMARY, download_button_rect, 2, border_radius=8)
+            
+            # Draw download button text
+            download_text = font.render("Start Download", True, TEXT_PRIMARY)
+            text_x = download_x + (download_width - download_text.get_width()) // 2
+            text_y = button_y + (button_height - download_text.get_height()) // 2
+            screen.blit(download_text, (text_x, text_y))
+        
+        # Search button (only show in games mode and when no games selected)
+        elif mode == "games" and not show_search_input:
             search_x = screen_width - button_width - button_margin
             search_button_rect = pygame.Rect(search_x, button_y, button_width, button_height)
             
@@ -986,6 +1564,13 @@ try:
             # Add more back navigation as needed
             return True
             
+        # Check download button
+        if download_button_rect and download_button_rect.collidepoint(x, y):
+            if mode == "games" and selected_games:
+                # Start download for selected games
+                download_files(selected_system, selected_games)
+                return True
+                
         # Check search button  
         if search_button_rect and search_button_rect.collidepoint(x, y):
             if mode == "games":
@@ -1009,35 +1594,22 @@ try:
             draw_progress_bar(f"Converting {nsz_filename} to NSP...", 0)
             pygame.display.flip()
             
-            # Check if NSZ keys are configured and exist
             keys_path = settings.get("nsz_keys_path", "")
-            keys_available = False
+            keys_available = NSZ_AVAILABLE
             actual_keys_path = None
             
             if keys_path:
                 if os.path.isfile(keys_path) and keys_path.lower().endswith('.keys'):
-                    # Direct file path
                     keys_available = True
                     actual_keys_path = keys_path
                 elif os.path.isdir(keys_path):
-                    # Directory path, look for prod.keys
                     prod_keys_path = os.path.join(keys_path, "prod.keys")
                     if os.path.exists(prod_keys_path):
                         keys_available = True
                         actual_keys_path = prod_keys_path
             
-            # Also check default locations if not configured
             if not keys_available:
-                default_keys_paths = [
-                    os.path.expanduser("~/.nsz/prod.keys"),
-                    os.path.join(nsz_dir, "keys.txt"),
-                    os.path.join(nsz_dir, "prod.keys")
-                ]
-                for default_path in default_keys_paths:
-                    if os.path.exists(default_path):
-                        keys_available = True
-                        actual_keys_path = default_path
-                        break
+               actual_keys_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "keys.txt")
             
             if not keys_available:
                 draw_progress_bar(f"NSZ conversion failed - NSZ keys not found", 0)
@@ -1045,24 +1617,10 @@ try:
                 pygame.time.wait(3000)
                 return
             
-            # Set up environment for NSZ with keys
-            env = os.environ.copy()
-            
-            # Copy keys to expected location if needed
-            nsz_home_dir = os.path.expanduser("~/.nsz")
-            if not os.path.exists(nsz_home_dir):
-                os.makedirs(nsz_home_dir, exist_ok=True)
-            
-            expected_keys = os.path.join(nsz_home_dir, "prod.keys")
-            if not os.path.exists(expected_keys) and actual_keys_path != expected_keys:
-                shutil.copy2(actual_keys_path, expected_keys)
-            
-            # Try NSZ conversion using library directly first
+            env = os.environ.copy()            
             nsz_success = False
-            
             if NSZ_AVAILABLE and nsz_decompress:
                 try:
-                    # Use nsz library directly with keys - output to same directory
                     nsz_decompress([nsz_file_path], output_dir=nsz_dir, keys_path=actual_keys_path)
                     nsz_success = True
                     draw_progress_bar(f"Converting {nsz_filename}... Complete", 100)
@@ -1070,9 +1628,7 @@ try:
                 except Exception as e:
                     print(f"NSZ library conversion failed: {e}")
             
-            # Fallback to subprocess if library method failed or unavailable
             if not nsz_success:
-                # Method 1: Try nsz command directly
                 try:
                     result = subprocess.run([
                         'nsz', '-D', nsz_file_path
@@ -1085,9 +1641,7 @@ try:
                     else:
                         print(f"NSZ command failed: {result.stderr}")
                 except Exception as e:
-                    print(f"NSZ command method failed: {e}")
-                
-                # Method 2: Try python -m nsz if first method failed
+                    print(f"NSZ command method failed: {e}")                
                 if not nsz_success:
                     try:
                         result = subprocess.run([
@@ -1106,13 +1660,11 @@ try:
             if nsz_success:
                 pygame.time.wait(1000)
                 
-                # Check if NSP file was created in the same directory
                 expected_nsp_path = os.path.join(nsz_dir, nsp_filename)
                 if os.path.exists(expected_nsp_path):
                     draw_progress_bar(f"NSP file created: {nsp_filename}", 100)
                     print(f"NSZ conversion complete: {expected_nsp_path}")
                 else:
-                    # Look for any NSP files that might have been created
                     nsp_files = [f for f in os.listdir(nsz_dir) if f.endswith('.nsp')]
                     if nsp_files:
                         draw_progress_bar(f"NSP file(s) created: {', '.join(nsp_files)}", 100)
@@ -1174,6 +1726,10 @@ try:
 
     def needs_controller_mapping():
         """Check if we need to collect controller mapping"""
+        # If touchscreen mode is enabled, no controller mapping is needed
+        if controller_mapping and controller_mapping.get("touchscreen_mode"):
+            return False
+        
         essential_buttons = ["select", "back", "start", "detail", "search", "up", "down", "left", "right"]
         return not controller_mapping or not all(button in controller_mapping for button in essential_buttons)
 
@@ -1195,7 +1751,99 @@ try:
 
     def collect_controller_mapping():
         """Collect controller button mapping from user input"""
-        global controller_mapping, show_controller_mapping
+        global controller_mapping, show_controller_mapping, touchscreen_available
+        
+        # If already in touchscreen mode and user wants to remap, offer choice
+        if controller_mapping and controller_mapping.get("touchscreen_mode"):
+            # Show choice screen: Keep touchscreen mode or remap controller
+            while True:
+                draw_background()
+                
+                # Title
+                title_text = "Controller Setup"
+                title_surf = font.render(title_text, True, TEXT_PRIMARY)
+                screen.blit(title_surf, (20, 20))
+                
+                # Current status
+                status_text = "Currently using Touchscreen Mode"
+                status_surf = font.render(status_text, True, TEXT_PRIMARY)
+                screen.blit(status_surf, (20, 80))
+                
+                # Options
+                if touchscreen_available:
+                    option1_text = "Keep Touchscreen Mode"
+                    option1_surf = font.render(option1_text, True, TEXT_PRIMARY)
+                    screen.blit(option1_surf, (20, 140))
+                
+                option2_text = "Remap Physical Controller"
+                option2_surf = font.render(option2_text, True, TEXT_PRIMARY)
+                screen.blit(option2_surf, (20, 180))
+                
+                cancel_text = "ESC - Cancel"
+                cancel_surf = font.render(cancel_text, True, GRAY)
+                screen.blit(cancel_surf, (20, 240))
+                
+                # Draw touchscreen buttons if available
+                keep_touchscreen_button_rect = None
+                remap_controller_button_rect = None
+                
+                if touchscreen_available:
+                    screen_width, screen_height = screen.get_size()
+                    # Keep Touchscreen button
+                    button_width = 250
+                    button_height = 40
+                    button_x = (screen_width - button_width) // 2
+                    button_y = screen_height - 120
+                    keep_touchscreen_button_rect = pygame.Rect(button_x, button_y, button_width, button_height)
+                    
+                    pygame.draw.rect(screen, SUCCESS, keep_touchscreen_button_rect, border_radius=8)
+                    pygame.draw.rect(screen, TEXT_PRIMARY, keep_touchscreen_button_rect, 2, border_radius=8)
+                    
+                    button_text = font.render("Keep Touchscreen", True, TEXT_PRIMARY)
+                    text_x = button_x + (button_width - button_text.get_width()) // 2
+                    text_y = button_y + (button_height - button_text.get_height()) // 2
+                    screen.blit(button_text, (text_x, text_y))
+                    
+                    # Remap Controller button
+                    button_y = screen_height - 70
+                    remap_controller_button_rect = pygame.Rect(button_x, button_y, button_width, button_height)
+                    
+                    pygame.draw.rect(screen, PRIMARY, remap_controller_button_rect, border_radius=8)
+                    pygame.draw.rect(screen, TEXT_PRIMARY, remap_controller_button_rect, 2, border_radius=8)
+                    
+                    button_text = font.render("Remap Controller", True, TEXT_PRIMARY)
+                    text_x = button_x + (button_width - button_text.get_width()) // 2
+                    text_y = button_y + (button_height - button_text.get_height()) // 2
+                    screen.blit(button_text, (text_x, text_y))
+                
+                pygame.display.flip()
+                
+                # Handle events
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        return False
+                    elif event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_ESCAPE:
+                            return True  # Keep current setting
+                        elif event.key == pygame.K_1 and touchscreen_available:
+                            return True  # Keep touchscreen mode
+                        elif event.key == pygame.K_2:
+                            # Clear mapping and proceed to remap
+                            controller_mapping = {}
+                            break
+                    elif event.type == pygame.MOUSEBUTTONDOWN:
+                        if touchscreen_available and keep_touchscreen_button_rect and keep_touchscreen_button_rect.collidepoint(event.pos):
+                            return True  # Keep touchscreen mode
+                        elif remap_controller_button_rect and remap_controller_button_rect.collidepoint(event.pos):
+                            # Clear mapping and proceed to remap
+                            controller_mapping = {}
+                            break
+                
+                pygame.time.wait(16)
+                
+                # If we broke out of the choice loop, continue to controller mapping
+                if not controller_mapping:
+                    break
         
         essential_buttons = [
             ("up", "D-pad UP"),
@@ -1211,10 +1859,13 @@ try:
             ("right_shoulder", "Right Shoulder button (R/RB)")
         ]
         
-        controller_mapping = {}
+        # Initialize mapping if empty
+        if not controller_mapping:
+            controller_mapping = {}
         current_button_index = 0
         collecting_input = True
         last_input_time = 0
+        touchscreen_button_rect = None
         
         while collecting_input and current_button_index < len(essential_buttons):
             current_time = pygame.time.get_ticks()
@@ -1246,12 +1897,38 @@ try:
                     mapped_surf = font.render(mapped_text, True, GREEN)
                     screen.blit(mapped_surf, (20, y_offset + i * 25))
             
+            # Draw "Use Touchscreen" button if touchscreen is available
+            if touchscreen_available:
+                screen_width, screen_height = screen.get_size()
+                button_width = 200
+                button_height = 50
+                button_x = (screen_width - button_width) // 2
+                button_y = screen_height - 80
+                touchscreen_button_rect = pygame.Rect(button_x, button_y, button_width, button_height)
+                
+                # Draw button background
+                pygame.draw.rect(screen, SUCCESS, touchscreen_button_rect, border_radius=8)
+                pygame.draw.rect(screen, TEXT_PRIMARY, touchscreen_button_rect, 2, border_radius=8)
+                
+                # Draw button text
+                button_text = font.render("Use Touchscreen", True, TEXT_PRIMARY)
+                text_x = button_x + (button_width - button_text.get_width()) // 2
+                text_y = button_y + (button_height - button_text.get_height()) // 2
+                screen.blit(button_text, (text_x, text_y))
+            
             pygame.display.flip()
             
             # Handle events
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     return False
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    # Handle touchscreen button
+                    if touchscreen_available and touchscreen_button_rect and touchscreen_button_rect.collidepoint(event.pos):
+                        # Skip controller mapping and use touchscreen mode
+                        controller_mapping = {"touchscreen_mode": True}
+                        save_controller_mapping()
+                        return True
                 elif event.type == pygame.JOYBUTTONDOWN:
                     # Debounce input (prevent double registration)
                     if current_time - last_input_time > 300:
@@ -1643,85 +2320,6 @@ try:
         
         return "loading"
 
-    def update_from_github():
-        """Download latest files from GitHub repository"""
-        try:
-            draw_loading_message("Checking for updates...")
-            
-            # GitHub raw URLs for the files from dist folder
-            files_to_update = {
-                "download.json": "https://raw.githubusercontent.com/hiitsgabe/console_utilities/main/dist/download.json",
-                "dw.pygame": "https://raw.githubusercontent.com/hiitsgabe/console_utilities/main/dist/dw.pygame"
-            }
-            
-            total_files = len(files_to_update)
-            updated_files = []
-            failed_files = []
-            
-            for i, (filename, url) in enumerate(files_to_update.items()):
-                progress = int((i / total_files) * 100)
-                draw_progress_bar(f"Updating {filename}...", progress)
-                
-                try:
-                    response = requests.get(url, timeout=30)
-                    response.raise_for_status()
-                    
-                    # Determine the correct file path
-                    if filename == "download.json":
-                        file_path = JSON_FILE
-                    elif filename == "dw.pygame":
-                        file_path = __file__  # Current script path
-                    
-                    # Create backup of existing file
-                    backup_path = f"{file_path}.backup"
-                    if os.path.exists(file_path):
-                        try:
-                            with open(file_path, 'r') as original:
-                                with open(backup_path, 'w') as backup:
-                                    backup.write(original.read())
-                        except Exception as backup_error:
-                            log_error(f"Failed to create backup for {filename}", type(backup_error).__name__, traceback.format_exc())
-                    
-                    # Write new content
-                    with open(file_path, 'w', encoding='utf-8') as f:
-                        f.write(response.text)
-                    
-                    updated_files.append(filename)
-                    
-                except Exception as e:
-                    log_error(f"Failed to update {filename}", type(e).__name__, traceback.format_exc())
-                    failed_files.append(filename)
-                    
-                    # Restore backup if it exists
-                    backup_path = f"{file_path}.backup"
-                    if os.path.exists(backup_path):
-                        try:
-                            with open(backup_path, 'r') as backup:
-                                with open(file_path, 'w') as original:
-                                    original.write(backup.read())
-                        except Exception as restore_error:
-                            log_error(f"Failed to restore backup for {filename}", type(restore_error).__name__, traceback.format_exc())
-            
-            # Show results
-            if updated_files and not failed_files:
-                draw_loading_message("Update completed successfully!")
-                if "dw.pygame" in updated_files:
-                    pygame.time.wait(2000)
-                    draw_loading_message("Application will exit now. Please restart to use the updated version.")
-                    pygame.time.wait(2000)
-                    pygame.quit()
-                    sys.exit(0)
-            elif updated_files and failed_files:
-                draw_loading_message(f"Partial update: {len(updated_files)} updated, {len(failed_files)} failed")
-                pygame.time.wait(3000)
-            else:
-                draw_loading_message("Update failed. Check error log for details.")
-                pygame.time.wait(3000)
-                
-        except Exception as e:
-            log_error("Error during GitHub update", type(e).__name__, traceback.format_exc())
-            draw_loading_message("Update failed. Check internet connection.")
-            pygame.time.wait(3000)
 
     def download_archive_json(url):
         """Download and update download.json from remote URL"""
@@ -1807,10 +2405,11 @@ try:
             
             draw_loading_message("Starting download...")
             
-            # Get work directory from settings
+            # Get work directory from settings and create py_downloads subdirectory
             work_dir = settings.get("work_dir", os.path.join(SCRIPT_DIR, "py_downloads"))
-            if not os.path.exists(work_dir):
-                os.makedirs(work_dir, exist_ok=True)
+            py_downloads_dir = os.path.join(work_dir, "py_downloads")
+            if not os.path.exists(py_downloads_dir):
+                os.makedirs(py_downloads_dir, exist_ok=True)
             
             # Extract filename from URL
             parsed_url = url.rstrip('/')
@@ -1819,7 +2418,7 @@ try:
                 # Use a default filename if we can't extract one
                 filename = "downloaded_file"
             
-            file_path = os.path.join(work_dir, filename)
+            file_path = os.path.join(py_downloads_dir, filename)
             
             # Start download
             try:
@@ -1949,8 +2548,90 @@ try:
         
         pygame.display.flip()
 
+    def draw_android_download_summary(download_ids, selected_files):
+        """Show Android download summary and status"""
+        waiting_for_input = True
+        
+        while waiting_for_input:
+            draw_background()
+            
+            # Title
+            title_font = pygame.font.Font(None, int(FONT_SIZE * 1.3))
+            title_surf = title_font.render("Background Downloads Started", True, TEXT_PRIMARY)
+            screen.blit(title_surf, (20, 20))
+            
+            # Draw subtle underline for title
+            title_width = title_surf.get_width()
+            pygame.draw.line(screen, PRIMARY, (20, 20 + title_surf.get_height() + 5), 
+                           (20 + title_width, 20 + title_surf.get_height() + 5), 2)
+            
+            # Show download list
+            y_offset = 80
+            for i, (download_id, file_info) in enumerate(zip(download_ids, selected_files)):
+                if isinstance(file_info, dict):
+                    filename = file_info.get('name') or file_info.get('filename', str(file_info))
+                else:
+                    filename = str(file_info)
+                
+                # Truncate long filenames
+                if len(filename) > 45:
+                    filename = filename[:42] + "..."
+                
+                status_text = f"{i+1}. {filename}"
+                
+                # Get download status if available
+                if android_download_manager:
+                    status = android_download_manager.get_download_status(download_id)
+                    if status:
+                        progress = status.get('progress', 0)
+                        status_text += f" - {progress:.1f}%"
+                
+                status_surf = font.render(status_text, True, TEXT_SECONDARY)
+                screen.blit(status_surf, (20, y_offset))
+                y_offset += 30
+                
+                # Don't overflow the screen
+                if y_offset > 450:
+                    break
+            
+            # Instructions
+            y_bottom = SCREEN_HEIGHT - 120
+            info_lines = [
+                "Downloads are running in the background.",
+                "You can minimize the app and downloads will continue.",
+                "Check your notification panel for download progress."
+            ]
+            
+            for line in info_lines:
+                info_surf = font.render(line, True, TEXT_DISABLED)
+                screen.blit(info_surf, (20, y_bottom))
+                y_bottom += 25
+            
+            # Back instruction
+            back_button_name = get_button_name("a")
+            back_text = f"Press {back_button_name} to return to main menu"
+            back_surf = font.render(back_text, True, PRIMARY)
+            screen.blit(back_surf, (20, SCREEN_HEIGHT - 40))
+            
+            pygame.display.flip()
+            clock.tick(FPS)
+            
+            # Handle input
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    waiting_for_input = False
+                elif event.type == pygame.JOYBUTTONDOWN:
+                    if event.button == get_controller_button("a"):
+                        waiting_for_input = False
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
+                        waiting_for_input = False
+
     def draw_settings_menu():
-        global settings_scroll_offset
+        global settings_scroll_offset, menu_item_rects, menu_scroll_offset
+        menu_item_rects.clear()
+        menu_scroll_offset = 0  # Initialize scroll offset
+        
         draw_background()
         y = 10
         
@@ -2001,58 +2682,80 @@ try:
         end_idx = min(start_idx + items_per_screen, total_items)
         visible_settings = settings_list[start_idx:end_idx]
         
+        # Store scroll offset for click handling
+        menu_scroll_offset = start_idx
+        
         # Draw settings items
         for i, setting_name in enumerate(visible_settings):
             actual_idx = start_idx + i
             color = PRIMARY if actual_idx == highlighted else TEXT_PRIMARY
             
-            # Get current setting value
+            # Handle divider differently
+            if setting_name == "--- VIEW OPTIONS ---":
+                # Draw divider
+                setting_surf = font.render(setting_name, True, TEXT_DISABLED)
+                screen.blit(setting_surf, (20, y))
+                
+                # Draw a line under the divider
+                line_y = y + FONT_SIZE + 2
+                pygame.draw.line(screen, TEXT_DISABLED, (20, line_y), (screen_width - 40, line_y), 1)
+                
+                # Store a non-clickable rectangle (negative index to indicate non-selectable)
+                item_rect = pygame.Rect(0, y, screen.get_width(), row_height)
+                menu_item_rects.append(item_rect)
+                
+                y += row_height
+                continue
+            
+            # Get current setting value based on new indices
             setting_value = ""
-            if actual_idx == 0:  # Enable Box-art Display
-                setting_value = "ON" if settings["enable_boxart"] else "OFF"
-            elif actual_idx == 1:  # Update from GitHub
-                select_button_name = get_button_name("select")
-                setting_value = f"Press {select_button_name} to update"
-            elif actual_idx == 2:  # Archive JSON URL
-                select_button_name = get_button_name("select")
-                setting_value = f"Press {select_button_name} to set archive"
-            elif actual_idx == 3:  # Select Archive Json
+            if actual_idx == 0:  # Select Archive Json
                 archive_path = settings.get("archive_json_path", "")
                 if archive_path and os.path.exists(archive_path):
                     setting_value = archive_path[-30:] + "..." if len(archive_path) > 30 else archive_path
                 else:
                     setting_value = "Not configured"
-            elif actual_idx == 4:  # View Type
-                setting_value = settings["view_type"].upper()
-            elif actual_idx == 5:  # USA Games Only
-                setting_value = "ON" if settings["usa_only"] else "OFF"
-            elif actual_idx == 6:  # Work Directory
+            elif actual_idx == 1:  # Work Directory
                 work_dir = settings.get("work_dir", "")
                 setting_value = work_dir[-30:] + "..." if len(work_dir) > 30 else work_dir
-            elif actual_idx == 7:  # ROMs Directory
+            elif actual_idx == 2:  # ROMs Directory
                 roms_dir = settings.get("roms_dir", "")
                 setting_value = roms_dir[-30:] + "..." if len(roms_dir) > 30 else roms_dir
-            elif actual_idx == 8:  # NSZ Keys
+            elif actual_idx == 3:  # NSZ Keys
                 keys_path = settings.get("nsz_keys_path", "")
                 if keys_path and os.path.exists(keys_path):
                     setting_value = keys_path[-30:] + "..." if len(keys_path) > 30 else keys_path
                 else:
                     setting_value = "Not configured"
-            elif actual_idx == 9:  # Remap Controller
+            elif actual_idx == 4:  # Remap Controller
                 if controller_mapping:
-                    setting_value = f"{len(controller_mapping)} buttons mapped"
+                    if controller_mapping.get("touchscreen_mode"):
+                        setting_value = "Touchscreen Mode"
+                    else:
+                        setting_value = f"{len(controller_mapping)} buttons mapped"
                 else:
                     setting_value = "Not configured"
-            elif actual_idx == 10:  # Add Systems
+            elif actual_idx == 5:  # Add Systems
                 select_button_name = get_button_name("select")
                 setting_value = f"Press {select_button_name} to add"
-            elif actual_idx == 11:  # Systems Settings
+            elif actual_idx == 6:  # Systems Settings
                 select_button_name = get_button_name("select")
                 setting_value = f"Press {select_button_name} to configure"
+            elif actual_idx == 8:  # Enable Box-art Display (after divider)
+                setting_value = "ON" if settings["enable_boxart"] else "OFF"
+            elif actual_idx == 9:  # View Type
+                setting_value = settings["view_type"].upper()
+            elif actual_idx == 10:  # USA Games Only
+                setting_value = "ON" if settings["usa_only"] else "OFF"
             
             setting_text = f"{setting_name}: {setting_value}"
             setting_surf = font.render(setting_text, True, color)
             screen.blit(setting_surf, (20, y))
+            
+            # Store clickable rectangle for touch/mouse support
+            item_rect = pygame.Rect(0, y, screen.get_width(), row_height)
+            menu_item_rects.append(item_rect)
+            
             y += row_height
         
         
@@ -2868,9 +3571,9 @@ try:
         overlay.fill(BACKGROUND)
         screen.blit(overlay, (0, 0))
         
-        # Responsive modal sizing with better proportions
+        # Responsive modal sizing with better proportions (increased height for buttons)
         modal_width = min(max(int(screen_width * 0.85), 350), 600)
-        modal_height = min(max(int(screen_height * 0.75), 300), 500)
+        modal_height = min(max(int(screen_height * 0.75), 350), 550)  # Increased min and max height for buttons
         modal_x = (screen_width - modal_width) // 2
         modal_y = (screen_height - modal_height) // 2
         
@@ -2946,10 +3649,15 @@ try:
         if thumbnail and thumbnail != "loading":
             # Calculate appropriate image size that fits within modal responsively
             available_width = modal_width - (margin * 2)  # Use responsive margins
-            available_height = modal_height - (image_y - modal_y) - (margin * 3)  # Space for instructions
+            # Reserve space for instructions and buttons (more space if touchscreen for buttons)
+            button_space = 100 if touchscreen_available else 50
+            available_height = modal_height - (image_y - modal_y) - (margin * 2) - button_space
             
-            # Increase max image size for better quality - use up to 60% of modal size or 500px max
-            max_image_size = min(available_width, available_height, min(max(modal_width * 0.6, 400), 500))
+            # Increase max image size for touchscreen - use up to 70% of modal size or 600px max for touchscreen, 60%/500px for non-touchscreen
+            if touchscreen_available:
+                max_image_size = min(available_width, available_height, min(max(modal_width * 0.7, 450), 600))
+            else:
+                max_image_size = min(available_width, available_height, min(max(modal_width * 0.6, 400), 500))
             
             try:
                 # Scale image proportionally to fit within the available space with better quality
@@ -3046,21 +3754,52 @@ try:
             
             screen.blit(no_image_surf, (no_image_x, image_y))
         
-        # Enhanced instructions with responsive positioning
+        # Add download and close buttons (only for touchscreen)
+        global download_button_rect, close_button_rect
+        if touchscreen_available:
+            button_height = 40
+            button_width = 120
+            button_spacing = 20
+            
+            # Ensure buttons fit within modal by positioning them with adequate margin
+            download_button_x = modal_x + (modal_width - (button_width * 2 + button_spacing)) // 2
+            download_button_y = modal_y + modal_height - button_height - 20  # Fixed 20px margin from bottom
+            
+            # Download button
+            download_button_rect = pygame.Rect(download_button_x, download_button_y, button_width, button_height)
+            pygame.draw.rect(screen, SUCCESS, download_button_rect, border_radius=BORDER_RADIUS)
+            pygame.draw.rect(screen, TEXT_PRIMARY, download_button_rect, 2, border_radius=BORDER_RADIUS)
+            
+            download_text = font.render("Download", True, TEXT_PRIMARY)
+            download_text_x = download_button_x + (button_width - download_text.get_width()) // 2
+            download_text_y = download_button_y + (button_height - download_text.get_height()) // 2
+            screen.blit(download_text, (download_text_x, download_text_y))
+            
+            # Close button  
+            close_button_x = download_button_x + button_width + button_spacing
+            close_button_y = download_button_y
+            
+            close_button_rect = pygame.Rect(close_button_x, close_button_y, button_width, button_height)
+            pygame.draw.rect(screen, SURFACE_HOVER, close_button_rect, border_radius=BORDER_RADIUS)
+            pygame.draw.rect(screen, TEXT_PRIMARY, close_button_rect, 2, border_radius=BORDER_RADIUS)
+            
+            close_text = font.render("Close", True, TEXT_PRIMARY)
+            close_text_x = close_button_x + (button_width - close_text.get_width()) // 2
+            close_text_y = close_button_y + (button_height - close_text.get_height()) // 2
+            screen.blit(close_text, (close_text_x, close_text_y))
+        else:
+            # Reset button rects when not showing touchscreen buttons
+            download_button_rect = None
+            close_button_rect = None
+        
+        # Enhanced instructions with responsive positioning (moved up to accommodate buttons)
         back_button_name = get_button_name("back")
-        instruction_text = f"Press {back_button_name} to close"
+        instruction_text = f"Press {back_button_name} to close or tap buttons"
         instruction_surf = font.render(instruction_text, True, TEXT_PRIMARY)
         instruction_x = modal_x + (modal_width - instruction_surf.get_width()) // 2
         
-        # Position instructions either below modal or at bottom of screen if modal is too tall
-        instruction_y_below = modal_y + modal_height + margin
-        instruction_y_bottom = screen_height - 35
-        
-        # Use whichever position fits better on screen
-        if instruction_y_below + instruction_surf.get_height() <= screen_height - 10:
-            instruction_y = instruction_y_below
-        else:
-            instruction_y = instruction_y_bottom
+        # Position instructions above the buttons
+        instruction_y = download_button_y - instruction_surf.get_height() - 15
         
         # Draw enhanced instruction background
         inst_width = instruction_surf.get_width()
@@ -3075,7 +3814,8 @@ try:
 
     def draw_folder_browser_modal():
         """Draw the folder browser modal overlay"""
-        global folder_browser_scroll_offset
+        global folder_browser_scroll_offset, folder_browser_item_rects
+        folder_browser_item_rects = []  # Clear previous rects
         
         # Get actual screen dimensions
         screen_width, screen_height = screen.get_size()
@@ -3248,6 +3988,77 @@ try:
             # Draw item
             item_surf = font.render(display_name, True, color)
             screen.blit(item_surf, (title_x, item_y))
+            
+            # Store clickable rectangle for touch/mouse support
+            item_rect = pygame.Rect(modal_x + 10, item_y - 2, modal_width - 20, row_height)
+            folder_browser_item_rects.append((item_rect, actual_idx))
+        
+        # Add selection buttons at the bottom of the modal (only for touchscreen)
+        if touchscreen_available:
+            button_height = 40
+            button_width = 150  # Increased width to fit longer button text
+            button_spacing = 20
+            button_y = modal_y + modal_height - button_height - 15
+            
+            # Determine what type of selection is appropriate based on context and highlighted item
+            select_button_text = "Select Folder"
+            if selected_system_to_add:
+                selection_type = selected_system_to_add.get("type", "")
+                
+                # Check what's currently highlighted
+                highlighted_item_type = None
+                if folder_browser_items and folder_browser_highlighted < len(folder_browser_items):
+                    highlighted_item_type = folder_browser_items[folder_browser_highlighted]["type"]
+                
+                if selection_type == "nsz_keys":
+                    if highlighted_item_type == "keys_file":
+                        select_button_text = "Select Keys File"
+                    else:
+                        select_button_text = "Use This Folder"
+                elif selection_type == "archive_json":
+                    if highlighted_item_type == "json_file":
+                        select_button_text = "Select JSON File"
+                    else:
+                        select_button_text = "Use This Folder"
+                elif selection_type == "nsz_converter":
+                    if highlighted_item_type == "nsz_file":
+                        select_button_text = "Convert NSZ File"
+                    else:
+                        select_button_text = "Browse Here"
+                elif selection_type == "work_dir":
+                    select_button_text = "Set Work Dir"
+                elif selection_type == "system_folder":
+                    select_button_text = "Set ROM Folder"
+                else:
+                    select_button_text = "Set ROM Dir"
+            
+            # Select button (left)
+            select_button_x = modal_x + (modal_width - (button_width * 2 + button_spacing)) // 2
+            
+            global folder_select_button_rect, folder_cancel_button_rect
+            folder_select_button_rect = pygame.Rect(select_button_x, button_y, button_width, button_height)
+            pygame.draw.rect(screen, SUCCESS, folder_select_button_rect, border_radius=8)
+            pygame.draw.rect(screen, TEXT_PRIMARY, folder_select_button_rect, 2, border_radius=8)
+            
+            select_text = font.render(select_button_text, True, TEXT_PRIMARY)
+            select_text_x = select_button_x + (button_width - select_text.get_width()) // 2
+            select_text_y = button_y + (button_height - select_text.get_height()) // 2
+            screen.blit(select_text, (select_text_x, select_text_y))
+            
+            # Cancel button (right)
+            cancel_button_x = select_button_x + button_width + button_spacing
+            folder_cancel_button_rect = pygame.Rect(cancel_button_x, button_y, button_width, button_height)
+            pygame.draw.rect(screen, SURFACE_HOVER, folder_cancel_button_rect, border_radius=8)
+            pygame.draw.rect(screen, TEXT_PRIMARY, folder_cancel_button_rect, 2, border_radius=8)
+            
+            cancel_text = font.render("Cancel", True, TEXT_PRIMARY)
+            cancel_text_x = cancel_button_x + (button_width - cancel_text.get_width()) // 2
+            cancel_text_y = button_y + (button_height - cancel_text.get_height()) // 2
+            screen.blit(cancel_text, (cancel_text_x, cancel_text_y))
+        else:
+            # Reset button rects when not showing touchscreen buttons
+            folder_select_button_rect = None
+            folder_cancel_button_rect = None
 
 
     def draw_loading_message(message):
@@ -3279,6 +4090,121 @@ try:
         title_x = center_x - title_surf.get_width() // 2
         title_y = card_y + 30
         screen.blit(title_surf, (title_x, title_y))
+        
+        # Draw the actual loading message
+        message_font = pygame.font.Font(None, FONT_SIZE)
+        message_surf = message_font.render(message, True, TEXT_SECONDARY)
+        message_x = center_x - message_surf.get_width() // 2
+        message_y = card_y + 80
+        screen.blit(message_surf, (message_x, message_y))
+        
+        # Draw loading animation (optional spinner or dots)
+        dots = "..." if pygame.time.get_ticks() % 1500 < 500 else ".." if pygame.time.get_ticks() % 1500 < 1000 else "."
+        dots_surf = message_font.render(dots, True, PRIMARY)
+        dots_x = center_x - dots_surf.get_width() // 2
+        dots_y = card_y + 120
+        screen.blit(dots_surf, (dots_x, dots_y))
+        
+        # Update the display so the loading message is visible
+        pygame.display.flip()
+        
+    def draw_error_message(title, error_lines, wait_time=5000):
+        """Display detailed error message with multiple lines"""
+        draw_background()
+        
+        # Create centered layout
+        screen_width, screen_height = screen.get_size()
+        center_x = screen_width // 2
+        center_y = screen_height // 2
+        
+        # Calculate required height based on number of lines
+        line_height = FONT_SIZE + 4
+        content_height = len(error_lines) * line_height + 120
+        card_height = min(max(content_height, 250), screen_height - 60)
+        
+        # Draw modern card background
+        card_width = min(screen_width - 60, 800)
+        card_x = center_x - card_width // 2
+        card_y = center_y - card_height // 2
+        
+        # Draw card shadow
+        shadow_rect = pygame.Rect(card_x + 4, card_y + 4, card_width, card_height)
+        pygame.draw.rect(screen, (0, 0, 0, 40), shadow_rect, border_radius=12)
+        
+        # Draw card background
+        card_rect = pygame.Rect(card_x, card_y, card_width, card_height)
+        pygame.draw.rect(screen, SURFACE, card_rect, border_radius=12)
+        pygame.draw.rect(screen, (220, 53, 69), card_rect, 2, border_radius=12)  # Red border for errors
+        
+        # Draw title
+        title_font = pygame.font.Font(None, int(FONT_SIZE * 1.4))
+        title_surf = title_font.render(title, True, (220, 53, 69))  # Red title
+        title_x = center_x - title_surf.get_width() // 2
+        title_y = card_y + 20
+        screen.blit(title_surf, (title_x, title_y))
+        
+        # Draw accent line under title
+        line_width = title_surf.get_width() // 2
+        line_x = center_x - line_width // 2
+        line_y = title_y + title_surf.get_height() + 8
+        pygame.draw.line(screen, (220, 53, 69), (line_x, line_y), (line_x + line_width, line_y), 3)
+        
+        # Draw error lines with scrolling if needed
+        start_y = line_y + 20
+        max_display_lines = (card_height - 140) // line_height
+        
+        if len(error_lines) <= max_display_lines:
+            # Show all lines
+            for i, line in enumerate(error_lines):
+                line_surf = font.render(line, True, TEXT_SECONDARY)
+                line_x = card_x + 20
+                line_y = start_y + i * line_height
+                screen.blit(line_surf, (line_x, line_y))
+        else:
+            # Show first lines and indicate truncation
+            for i in range(max_display_lines - 1):
+                line = error_lines[i]
+                line_surf = font.render(line, True, TEXT_SECONDARY)
+                line_x = card_x + 20
+                line_y = start_y + i * line_height
+                screen.blit(line_surf, (line_x, line_y))
+            
+            # Show truncation indicator
+            truncated_surf = font.render(f"... ({len(error_lines) - max_display_lines + 1} more lines)", True, TEXT_SECONDARY)
+            line_x = card_x + 20
+            line_y = start_y + (max_display_lines - 1) * line_height
+            screen.blit(truncated_surf, (line_x, line_y))
+        
+        # Draw instructions
+        back_button_name = get_button_name("back")
+        instructions = [f"Press {back_button_name} to continue"]
+        
+        inst_y = card_y + card_height - 40
+        for instruction in instructions:
+            inst_surf = font.render(instruction, True, TEXT_SECONDARY)
+            inst_x = center_x - inst_surf.get_width() // 2
+            screen.blit(inst_surf, (inst_x, inst_y))
+            inst_y += inst_surf.get_height() + 5
+        
+        pygame.display.flip()
+        
+        # Wait for user input or timeout
+        start_time = pygame.time.get_ticks()
+        waiting = True
+        while waiting and (pygame.time.get_ticks() - start_time) < wait_time:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    exit()
+                elif (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE) or \
+                     (event.type == pygame.JOYBUTTONDOWN and event.button == joystick_mapping.get("back", 1)):
+                    waiting = False
+                elif hasattr(pygame, '_sdl2') and hasattr(pygame._sdl2, 'touch') and touch_available:
+                    if event.type == pygame.FINGERDOWN:
+                        waiting = False
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    waiting = False
+            pygame.time.wait(50)
         
         # Draw accent line under title
         line_width = title_surf.get_width() // 2
@@ -3443,7 +4369,253 @@ try:
         
         return filtered
 
+    def process_downloaded_file(file_path, filename, sys_data, roms_folder, progress_callback=None):
+        """
+        Unified file processing for both Android and standard downloads.
+        Handles ZIP extraction, NSZ decompression, and file organization.
+        
+        Args:
+            file_path: Path to the downloaded file
+            filename: Name of the file
+            sys_data: System data configuration
+            roms_folder: Target ROM folder
+            progress_callback: Optional callback for progress updates (text, percent)
+        
+        Returns:
+            bool: True if processing was successful, False otherwise
+        """
+        try:
+            formats = sys_data.get('file_format', [])
+            
+            def update_progress(text, percent=0):
+                if progress_callback:
+                    progress_callback(text, percent)
+                else:
+                    print(f"{text} - {percent}%")
+            
+            # Handle ZIP extraction
+            if filename.endswith(".zip") and sys_data.get('should_unzip', False):
+                update_progress(f"Extracting {filename}...", 0)
+                
+                with ZipFile(file_path, 'r') as zip_ref:
+                    total_files = len(zip_ref.namelist())
+                    extracted_files = 0
+                    
+                    for file_info in zip_ref.infolist():
+                        zip_ref.extract(file_info, WORK_DIR)
+                        extracted_files += 1
+                        
+                        if extracted_files % 10 == 0 or file_info.file_size > 1024*1024:
+                            progress = int((extracted_files / total_files) * 100)
+                            update_progress(f"Extracting {filename}... ({extracted_files}/{total_files})", progress)
+                    
+                    update_progress(f"Extracting {filename}... Complete", 100)
+                
+                os.remove(file_path)
+                
+            elif filename.endswith(".nsz"):
+                update_progress(f"Attempting NSZ decompression for {filename}...", 0)
+                
+                try:
+                    import subprocess
+                    import shutil
+                    
+                    keys_path = settings.get("nsz_keys_path", "")
+                    keys_available = NSZ_AVAILABLE
+                    actual_keys_path = None
+                    
+                    if keys_path:
+                        if os.path.isfile(keys_path) and keys_path.lower().endswith('.keys'):
+                            keys_available = True
+                            actual_keys_path = keys_path
+                        elif os.path.isdir(keys_path):
+                            prod_keys_path = os.path.join(keys_path, "prod.keys")
+                            if os.path.exists(prod_keys_path):
+                                keys_available = True
+                                actual_keys_path = prod_keys_path
+                    
+                    if not keys_available:
+                        actual_keys_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "keys.txt")
+                    
+                    if not keys_available:
+                        log_error(f"NSZ decompression skipped for {filename}: NSZ keys not found")
+                        update_progress(f"NSZ keys not found for {filename}", 0)
+                        return False
+                    
+                    update_progress(f"Decompressing {filename}...", 0)
+                    
+                    # Set up environment for NSZ with keys
+                    env = os.environ.copy()
+                    
+                    # Copy keys to expected location if needed
+                    nsz_dir = os.path.expanduser("~/.nsz")
+                    if not os.path.exists(nsz_dir):
+                        os.makedirs(nsz_dir, exist_ok=True)
+                    
+                    expected_keys = os.path.join(nsz_dir, "prod.keys")
+                    if not os.path.exists(expected_keys) and actual_keys_path != expected_keys:
+                        shutil.copy2(actual_keys_path, expected_keys)
+                    
+                    # Try NSZ decompression using library directly
+                    nsz_success = False
+                    
+                    if NSZ_AVAILABLE and nsz_decompress:
+                        try:
+                            nsz_decompress([file_path], output_dir=WORK_DIR, keys_path=actual_keys_path)
+                            nsz_success = True
+                            print("NSZ decompression successful using nsz library")
+                        except Exception as e:
+                            print(f"NSZ library decompression failed: {e}")
+                    
+                    # Fallback to subprocess methods
+                    if not nsz_success:
+                        # Try nsz command directly
+                        try:
+                            result = subprocess.run([
+                                'nsz', '-D', file_path
+                            ], capture_output=True, text=True, cwd=WORK_DIR, timeout=300, env=env)
+                            
+                            if result.returncode == 0:
+                                nsz_success = True
+                                print("NSZ decompression successful using 'nsz' command")
+                        except:
+                            pass
+                    
+                    # Try python -m nsz if still failed
+                    if not nsz_success:
+                        try:
+                            result = subprocess.run([
+                                sys.executable, '-m', 'nsz', '-D', file_path
+                            ], capture_output=True, text=True, cwd=WORK_DIR, timeout=300, env=env)
+                            
+                            if result.returncode == 0:
+                                nsz_success = True
+                                print("NSZ decompression successful using 'python -m nsz'")
+                        except:
+                            pass
+                    
+                    if nsz_success:
+                        update_progress(f"Decompressing {filename}... Complete", 100)
+                        
+                        # Find and move all NSP files in work directory
+                        for file in os.listdir(WORK_DIR):
+                            if file.endswith('.nsp'):
+                                src_path = os.path.join(WORK_DIR, file)
+                                dst_path = os.path.join(roms_folder, file)
+                                os.rename(src_path, dst_path)
+                                print(f"Moved decompressed NSP: {file}")
+                        
+                        # Remove original NSZ file
+                        if os.path.exists(file_path):
+                            os.remove(file_path)
+                        
+                        return True
+                    else:
+                        log_error(f"NSZ decompression failed for {filename}: All methods failed")
+                        update_progress(f"NSZ decompression failed for {filename}", 0)
+                        return False
+                        
+                except Exception as e:
+                    log_error(f"NSZ decompression failed for {filename}: {e}")
+                    update_progress(f"NSZ decompression error: {e}", 0)
+                    return False
+            
+            # Move all compatible files from work directory to ROMs folder
+            update_progress(f"Moving files to ROMS folder...", 0)
+            
+            files_moved = 0
+            for f in os.listdir(WORK_DIR):
+                if any(f.endswith(ext) for ext in formats):
+                    src_path = os.path.join(WORK_DIR, f)
+                    dst_path = os.path.join(roms_folder, f)
+                    os.rename(src_path, dst_path)
+                    files_moved += 1
+                    print(f"Moved file: {f}")
+            
+            # Clean up remaining files in work directory
+            for f in os.listdir(WORK_DIR):
+                file_to_remove = os.path.join(WORK_DIR, f)
+                if os.path.isfile(file_to_remove):
+                    os.remove(file_to_remove)
+            
+            update_progress(f"Processing complete", 100)
+            return True
+            
+        except Exception as e:
+            log_error(f"Error processing file {filename}: {e}")
+            if progress_callback:
+                progress_callback(f"Error processing {filename}: {e}", 0)
+            return False
+
     def download_files(system, selected_game_indices):
+        # Route to Android or standard download based on platform
+        if IS_ANDROID and android_download_manager and android_download_manager.notifications_enabled:
+            return download_files_android(system, selected_game_indices)
+        else:
+            return download_files_standard(system, selected_game_indices)
+
+    def download_files_android(system, selected_game_indices):
+        """Android-optimized download using DownloadManager with background support"""
+        try:
+            sys_data = data[system]
+            system_name = sys_data['name']
+            system_settings = settings.get("system_settings", {})
+            custom_folder = system_settings.get(system_name, {}).get('custom_folder', '')
+            
+            if custom_folder and os.path.exists(custom_folder):
+                roms_folder = custom_folder
+            else:
+                roms_folder = os.path.join(ROMS_DIR, sys_data['roms_folder'])
+            
+            os.makedirs(roms_folder, exist_ok=True)
+            
+            selected_files = [game_list[i] for i in selected_game_indices]
+            download_ids = []
+            
+            # Start all downloads using Android DownloadManager
+            for game_item in selected_files:
+                if isinstance(game_item, dict):
+                    if 'name' in game_item:
+                        filename = game_item['name']
+                    elif 'filename' in game_item:
+                        filename = game_item['filename']
+                    else:
+                        filename = str(game_item)
+                else:
+                    filename = game_item
+                
+                # Build URL
+                if 'download_url' in sys_data:
+                    url = game_item['href']
+                    if '.' not in filename:
+                        format = sys_data.get('file_format', [])[0]
+                        filename = filename + format
+                elif 'url' in sys_data:
+                    if isinstance(game_item, dict) and 'href' in game_item:
+                        url = urljoin(sys_data['url'], game_item['href'])
+                    else:
+                        url = urljoin(sys_data['url'], filename)
+                
+                # Determine final destination
+                final_path = os.path.join(roms_folder, filename)
+                
+                # Start Android download with system data
+                download_id = android_download_manager.start_download(url, filename, final_path, sys_data)
+                if download_id:
+                    download_ids.append(download_id)
+                    print(f"Queued for background download: {filename}")
+            
+            # Show summary screen
+            draw_android_download_summary(download_ids, selected_files)
+            return True
+            
+        except Exception as e:
+            log_error(f"Error in Android download: {str(e)}", "AndroidDownload", traceback.format_exc())
+            # Fall back to standard download
+            return download_files_standard(system, selected_game_indices)
+
+    def download_files_standard(system, selected_game_indices):
+        """Standard download implementation for non-Android platforms"""
         try:
             sys_data = data[system]
             formats = sys_data.get('file_format', [])
@@ -3558,180 +4730,31 @@ try:
                             os.remove(file_path)
                         break
 
-                    # Handle ZIP extraction
-                    if filename.endswith(".zip") and sys_data.get('should_unzip', False):
-                        draw_progress_bar(f"Extracting {filename}...", 0)
-                        with ZipFile(file_path, 'r') as zip_ref:
-                            # Get total number of files to extract
-                            total_files = len(zip_ref.namelist())
-                            extracted_files = 0
-                            
-                            # Extract files with progress tracking
-                            for file_info in zip_ref.infolist():
-                                zip_ref.extract(file_info, WORK_DIR)
-                                extracted_files += 1
-                                
-                                # Update progress every few files or for large files
-                                if extracted_files % 10 == 0 or file_info.file_size > 1024*1024:  # Every 10 files or files > 1MB
-                                    progress = int((extracted_files / total_files) * 100)
-                                    draw_progress_bar(f"Extracting {filename}... ({extracted_files}/{total_files})", progress)
-                                
-                                # Check for cancel button
-                                for event in pygame.event.get():
-                                    if event.type == pygame.JOYBUTTONDOWN and event.button == get_controller_button("back"):
-                                        cancelled = True
-                                        break
-                                if cancelled:
-                                    break
-                            
-                            # Show final extraction progress
-                            if not cancelled:
-                                draw_progress_bar(f"Extracting {filename}... Complete", 100)
-                                pygame.time.wait(500)  # Brief pause to show completion
+                    # Use unified file processing method
+                    if not cancelled:
+                        def progress_callback(text, percent):
+                            draw_progress_bar(text, percent)
+                            # Check for cancel during processing
+                            for event in pygame.event.get():
+                                if event.type == pygame.JOYBUTTONDOWN and event.button == get_controller_button("back"):
+                                    nonlocal cancelled
+                                    cancelled = True
+                                    return
                         
-                        if not cancelled:
-                            os.remove(file_path)
+                        success = process_downloaded_file(file_path, filename, sys_data, roms_folder, progress_callback)
+                        if not success and not cancelled:
+                            # If processing failed, still try to move the original file
+                            try:
+                                if any(filename.endswith(ext) for ext in formats):
+                                    dst_path = os.path.join(roms_folder, filename)
+                                    os.rename(file_path, dst_path)
+                                    print(f"Moved unprocessed file: {filename}")
+                            except Exception as e:
+                                print(f"Failed to move unprocessed file: {e}")
+                        
+                        # Skip the old individual file processing since unified method handles it
+                        continue
                     
-                    # Handle NSZ decompression
-                    elif filename.endswith(".nsz"):
-                        draw_progress_bar(f"Attempting NSZ decompression for {filename}...", 0)
-                        
-                        try:
-                            import subprocess
-                            import shutil
-                            
-                            # Check if NSZ keys are configured and exist
-                            keys_path = settings.get("nsz_keys_path", "")
-                            keys_available = False
-                            
-                            if keys_path:
-                                if os.path.isfile(keys_path) and keys_path.lower().endswith('.keys'):
-                                    # Direct file path
-                                    keys_available = True
-                                    actual_keys_path = keys_path
-                                elif os.path.isdir(keys_path):
-                                    # Directory path, look for prod.keys
-                                    prod_keys_path = os.path.join(keys_path, "prod.keys")
-                                    if os.path.exists(prod_keys_path):
-                                        keys_available = True
-                                        actual_keys_path = prod_keys_path
-                            
-                            # Also check default locations if not configured
-                            if not keys_available:
-                                default_keys_paths = [
-                                    os.path.expanduser("~/.nsz/prod.keys"),
-                                    os.path.join(WORK_DIR, "keys.txt"),
-                                    os.path.join(WORK_DIR, "prod.keys")
-                                ]
-                                for default_path in default_keys_paths:
-                                    if os.path.exists(default_path):
-                                        keys_available = True
-                                        actual_keys_path = default_path
-                                        break
-                            
-                            if not keys_available:
-                                draw_progress_bar(f"NSZ decompression skipped - NSZ keys not found", 0)
-                                log_error(f"NSZ decompression skipped for {filename}: NSZ keys not found. Configure path in Settings > NSZ Keys")
-                                pygame.time.wait(2000)
-                            else:
-                                draw_progress_bar(f"Decompressing {filename}...", 0)
-                                
-                                # Set up environment for NSZ with keys
-                                env = os.environ.copy()
-                                
-                                # Copy keys to expected location if needed
-                                nsz_dir = os.path.expanduser("~/.nsz")
-                                if not os.path.exists(nsz_dir):
-                                    os.makedirs(nsz_dir, exist_ok=True)
-                                
-                                expected_keys = os.path.join(nsz_dir, "prod.keys")
-                                if not os.path.exists(expected_keys) and actual_keys_path != expected_keys:
-                                    shutil.copy2(actual_keys_path, expected_keys)
-                                
-                                # Try NSZ decompression using library directly
-                                nsz_success = False
-                                
-                                if NSZ_AVAILABLE and nsz_decompress:
-                                    try:
-                                        # Use nsz library directly with keys
-                                        nsz_decompress([file_path], output_dir=WORK_DIR, keys_path=actual_keys_path)
-                                        nsz_success = True
-                                        print("NSZ decompression successful using nsz library")
-                                    except Exception as e:
-                                        print(f"NSZ library decompression failed: {e}")
-                                
-                                # Fallback to subprocess if library method failed or unavailable
-                                if not nsz_success:
-                                    # Method 1: Try nsz command directly
-                                    try:
-                                        result = subprocess.run([
-                                            'nsz', '-D', file_path
-                                        ], capture_output=True, text=True, cwd=WORK_DIR, timeout=300, env=env)
-                                        
-                                        if result.returncode == 0:
-                                            nsz_success = True
-                                            print("NSZ decompression successful using 'nsz' command")
-                                        else:
-                                            print(f"NSZ command failed: {result.stderr}")
-                                    except Exception as e:
-                                        print(f"NSZ command method failed: {e}")
-                                    
-                                    # Method 2: Try python -m nsz if first method failed
-                                    if not nsz_success:
-                                        try:
-                                            result = subprocess.run([
-                                                sys.executable, '-m', 'nsz', '-D', file_path
-                                            ], capture_output=True, text=True, cwd=WORK_DIR, timeout=300, env=env)
-                                            
-                                            if result.returncode == 0:
-                                                nsz_success = True
-                                                print("NSZ decompression successful using 'python -m nsz'")
-                                            else:
-                                                print(f"Python -m nsz failed: {result.stderr}")
-                                        except Exception as e:
-                                            print(f"Python -m nsz method failed: {e}")
-                                
-                                if nsz_success:
-                                    draw_progress_bar(f"Decompressing {filename}... Complete", 100)
-                                    pygame.time.wait(500)
-                                    
-                                    # Find and move all NSP files in work directory
-                                    for file in os.listdir(WORK_DIR):
-                                        if file.endswith('.nsp'):
-                                            src_path = os.path.join(WORK_DIR, file)
-                                            dst_path = os.path.join(roms_folder, file)
-                                            os.rename(src_path, dst_path)
-                                            print(f"Moved decompressed NSP: {file}")
-                                    
-                                    # Remove original NSZ file after successful decompression
-                                    if os.path.exists(file_path):
-                                        os.remove(file_path)
-                                        
-                                    # Skip the normal file moving process for this file since we handled it here
-                                    continue
-                                else:
-                                    log_error(f"NSZ decompression failed for {filename}: All methods failed")
-                                    draw_progress_bar(f"NSZ decompression failed for {filename}", 0)
-                                    pygame.time.wait(2000)
-                                
-                        except subprocess.TimeoutExpired:
-                            log_error(f"NSZ decompression timed out for {filename}")
-                            draw_progress_bar(f"NSZ decompression timed out for {filename}", 0)
-                            pygame.time.wait(2000)
-                        except Exception as e:
-                            log_error(f"NSZ decompression failed for {filename}: {e}")
-                            draw_progress_bar(f"NSZ decompression failed for {filename}", 0)
-                            pygame.time.wait(2000)
-
-                    # Move files to ROMS
-                    draw_progress_bar(f"Moving files to ROMS folder...", 0)
-                    for f in os.listdir(WORK_DIR):
-                        if any(f.endswith(ext) for ext in formats):
-                            os.rename(os.path.join(WORK_DIR, f), os.path.join(roms_folder, f))
-
-                    # Clean work dir
-                    for f in os.listdir(WORK_DIR):
-                        os.remove(os.path.join(WORK_DIR, f))
 
                 except Exception as e:
                     log_error(f"Failed to download {filename}", type(e).__name__, traceback.format_exc())
@@ -4184,6 +5207,9 @@ try:
     # Load settings after all functions are defined
     settings = load_settings()
     
+    # Update error log path to use configured work directory
+    update_log_file_path()
+    
     # Update JSON_FILE path based on archive_json_path setting
     update_json_file_path()
     
@@ -4195,8 +5221,7 @@ try:
     # Load main systems data now that settings and JSON_FILE are available
     data[:] = load_main_systems_data()
     
-    # NSZ functionality is available - will attempt decompression when needed
-    nsz_available = True
+    # NSZ will be imported dynamically only when needed and keys are available
     
     # Load or create controller mapping
     mapping_exists = load_controller_mapping()
@@ -4223,7 +5248,9 @@ try:
         # Keep original data if loading fails
 
     # Set up directories from settings
-    WORK_DIR = settings["work_dir"]
+    # Create py_downloads subdirectory within user's work directory for temporary downloads
+    base_work_dir = settings["work_dir"]
+    WORK_DIR = os.path.join(base_work_dir, "py_downloads")
     ROMS_DIR = settings["roms_dir"]
     
     # Create directories with error handling
@@ -4294,6 +5321,7 @@ try:
     # Game details modal state
     show_game_details = False
     current_game_detail = None
+    close_button_rect = None
     
     # Folder browser modal state
     show_folder_browser = False
@@ -4301,6 +5329,9 @@ try:
     folder_browser_items = []
     folder_browser_highlighted = 0
     folder_browser_scroll_offset = 0
+    folder_browser_item_rects = []
+    folder_select_button_rect = None
+    folder_cancel_button_rect = None
     
     # System name input modal state
     show_system_input = False
@@ -4317,6 +5348,9 @@ try:
     show_url_input = False
     url_input_text = ""
     url_cursor_position = 0
+    
+    # Controller mapping modal state
+    show_controller_mapping = False
     
     # Main loop
     running = True
@@ -4484,6 +5518,9 @@ try:
 
     def draw_search_input_modal():
         """Draw the search input modal overlay with modern styling"""
+        global modal_char_rects, modal_back_button_rect
+        modal_char_rects.clear()
+        
         # Get actual screen dimensions
         screen_width, screen_height = screen.get_size()
         
@@ -4613,6 +5650,9 @@ try:
             char_text_x = char_x + (char_size - char_surf.get_width()) // 2
             char_text_y = char_y_pos + (char_size - char_surf.get_height()) // 2
             screen.blit(char_surf, (char_text_x, char_text_y))
+            
+            # Store character rectangle for touch/click detection
+            modal_char_rects.append((char_rect, i, char))
         
         # Enhanced instructions with modern layout
         instructions_y = char_start_y + (len(chars) // chars_per_row + 1) * (char_size + char_spacing) + 15
@@ -4637,6 +5677,23 @@ try:
                 inst_y += FONT_SIZE + 3
             
             inst_x += modal_width // 2  # Move to next column
+        
+        # Add back button for touch/mouse users
+        if touchscreen_available or mouse_available:
+            back_button_width = 80
+            back_button_height = 35
+            back_button_x = modal_x + modal_width - back_button_width - 20
+            back_button_y = modal_y + modal_height - back_button_height - 20
+            modal_back_button_rect = pygame.Rect(back_button_x, back_button_y, back_button_width, back_button_height)
+            
+            # Draw back button
+            pygame.draw.rect(screen, SURFACE_HOVER, modal_back_button_rect, border_radius=8)
+            pygame.draw.rect(screen, TEXT_DISABLED, modal_back_button_rect, 2, border_radius=8)
+            
+            back_text = font.render("Back", True, TEXT_PRIMARY)
+            text_x = back_button_x + (back_button_width - back_text.get_width()) // 2
+            text_y = back_button_y + (back_button_height - back_text.get_height()) // 2
+            screen.blit(back_text, (text_x, text_y))
 
     def draw_url_input_modal():
         """Draw the URL input modal overlay for archive JSON URL"""
@@ -5233,98 +6290,8 @@ try:
                                     else:
                                         selected_games.add(highlighted)
                         elif mode == "settings":
-                            # Toggle settings or reset cache
-                            if highlighted == 0:  # Enable Box-art Display
-                                settings["enable_boxart"] = not settings["enable_boxart"]
-                                save_settings(settings)
-                            elif highlighted == 1:  # Update from GitHub
-                                update_from_github()
-                            elif highlighted == 2:  # Archive JSON URL
-                                # Show URL input modal
-                                show_url_input_modal()
-                            elif highlighted == 3:  # Select Archive Json
-                                # Open folder browser for JSON files (like NSZ Keys)
-                                show_folder_browser = True
-                                # Use current archive path or default to workdir where download.json is
-                                current_archive = settings.get("archive_json_path", "")
-                                if current_archive and os.path.exists(os.path.dirname(current_archive)):
-                                    folder_browser_current_path = os.path.dirname(current_archive)
-                                else:
-                                    # Default to workdir where download.json is located
-                                    workdir_path = os.path.join(SCRIPT_DIR, "..", "workdir")
-                                    if os.path.exists(workdir_path):
-                                        folder_browser_current_path = os.path.abspath(workdir_path)
-                                    else:
-                                        folder_browser_current_path = SCRIPT_DIR
-                                load_folder_contents(folder_browser_current_path)
-                                # Set a flag to indicate we're selecting archive JSON
-                                selected_system_to_add = {"name": "Archive JSON", "type": "archive_json"}
-                            elif highlighted == 4:  # View Type
-                                settings["view_type"] = "grid" if settings["view_type"] == "list" else "list"
-                                save_settings(settings)
-                            elif highlighted == 5:  # USA Games Only
-                                settings["usa_only"] = not settings["usa_only"]
-                                save_settings(settings)
-                            elif highlighted == 6:  # Work Directory
-                                # Open folder browser for work directory selection
-                                show_folder_browser = True
-                                # Use current work_dir or fallback to a sensible default
-                                current_work = settings.get("work_dir", "")
-                                if not current_work or not os.path.exists(os.path.dirname(current_work)):
-                                    # Use a fallback based on environment
-                                    if os.path.exists("/userdata") and os.access("/userdata", os.R_OK):
-                                        folder_browser_current_path = "/userdata"
-                                    else:
-                                        folder_browser_current_path = os.path.expanduser("~")  # Home directory
-                                else:
-                                    folder_browser_current_path = current_work
-                                load_folder_contents(folder_browser_current_path)
-                                # Set a flag to indicate we're selecting work directory
-                                selected_system_to_add = {"name": "Work Directory", "type": "work_dir"}
-                            elif highlighted == 7:  # ROMs Directory
-                                # Open folder browser
-                                show_folder_browser = True
-                                # Use current roms_dir or fallback to a sensible default
-                                current_roms = settings.get("roms_dir", "")
-                                if not current_roms or not os.path.exists(os.path.dirname(current_roms)):
-                                    # Use a fallback based on environment
-                                    if os.path.exists("/userdata") and os.access("/userdata", os.R_OK):
-                                        folder_browser_current_path = "/userdata/roms"
-                                    else:
-                                        folder_browser_current_path = os.path.expanduser("~")  # Home directory
-                                else:
-                                    folder_browser_current_path = current_roms
-                                load_folder_contents(folder_browser_current_path)
-                            elif highlighted == 8:  # NSZ Keys
-                                # Open folder browser for .keys files
-                                show_folder_browser = True
-                                # Use current keys path or default to home directory
-                                current_keys = settings.get("nsz_keys_path", "")
-                                if current_keys and os.path.exists(os.path.dirname(current_keys)):
-                                    folder_browser_current_path = os.path.dirname(current_keys)
-                                else:
-                                    # Default to ~/.nsz directory or home
-                                    nsz_dir = os.path.expanduser("~/.nsz")
-                                    if os.path.exists(nsz_dir):
-                                        folder_browser_current_path = nsz_dir
-                                    else:
-                                        folder_browser_current_path = os.path.expanduser("~")
-                                load_folder_contents(folder_browser_current_path)
-                                # Set a flag to indicate we're selecting NSZ keys
-                                selected_system_to_add = {"name": "NSZ Keys", "type": "nsz_keys"}
-                            elif highlighted == 9:  # Remap Controller
-                                # Trigger controller remapping
-                                show_controller_mapping = True
-                            elif highlighted == 10:  # Add Systems
-                                mode = "add_systems"
-                                highlighted = 0
-                                add_systems_highlighted = 0
-                                # Load available systems in background
-                                load_available_systems()
-                            elif highlighted == 11:  # Systems Settings
-                                mode = "systems_settings"
-                                systems_settings_highlighted = 0
-                                highlighted = 0
+                            # Settings are now handled by handle_menu_selection()
+                            handle_menu_selection()
                         elif mode == "utils":
                             if highlighted == 0:  # Download from URL
                                 # Show URL input modal for direct download
@@ -5653,6 +6620,11 @@ try:
                                         save_settings(settings)
                                         show_folder_browser = False
                                         selected_system_to_add = None
+                                        
+                                        # Keys configured - NSZ will be imported when needed
+                                        draw_loading_message("NSZ keys configured successfully! Restart the App")
+                                        pygame.display.flip()
+                                        pygame.time.wait(1500)
                                 elif selected_item["type"] == "json_file":
                                     # Select this .json file for archive configuration
                                     if selected_system_to_add and selected_system_to_add.get("type") == "archive_json":
@@ -6242,6 +7214,11 @@ try:
                                         save_settings(settings)
                                         show_folder_browser = False
                                         selected_system_to_add = None
+                                        
+                                        # Keys configured - NSZ will be imported when needed
+                                        draw_loading_message("NSZ keys configured successfully!")
+                                        pygame.display.flip()
+                                        pygame.time.wait(1500)
                                 elif selected_item["type"] == "json_file":
                                     # Select this .json file for archive configuration
                                     if selected_system_to_add and selected_system_to_add.get("type") == "archive_json":
@@ -6325,98 +7302,8 @@ try:
                                     else:
                                         selected_games.add(highlighted)
                         elif mode == "settings":
-                            # Toggle settings or reset cache
-                            if highlighted == 0:  # Enable Box-art Display
-                                settings["enable_boxart"] = not settings["enable_boxart"]
-                                save_settings(settings)
-                            elif highlighted == 1:  # Update from GitHub
-                                update_from_github()
-                            elif highlighted == 2:  # Archive JSON URL
-                                # Show URL input modal
-                                show_url_input_modal()
-                            elif highlighted == 3:  # Select Archive Json
-                                # Open folder browser for JSON files (like NSZ Keys)
-                                show_folder_browser = True
-                                # Use current archive path or default to workdir where download.json is
-                                current_archive = settings.get("archive_json_path", "")
-                                if current_archive and os.path.exists(os.path.dirname(current_archive)):
-                                    folder_browser_current_path = os.path.dirname(current_archive)
-                                else:
-                                    # Default to workdir where download.json is located
-                                    workdir_path = os.path.join(SCRIPT_DIR, "..", "workdir")
-                                    if os.path.exists(workdir_path):
-                                        folder_browser_current_path = os.path.abspath(workdir_path)
-                                    else:
-                                        folder_browser_current_path = SCRIPT_DIR
-                                load_folder_contents(folder_browser_current_path)
-                                # Set a flag to indicate we're selecting archive JSON
-                                selected_system_to_add = {"name": "Archive JSON", "type": "archive_json"}
-                            elif highlighted == 4:  # View Type
-                                settings["view_type"] = "grid" if settings["view_type"] == "list" else "list"
-                                save_settings(settings)
-                            elif highlighted == 5:  # USA Games Only
-                                settings["usa_only"] = not settings["usa_only"]
-                                save_settings(settings)
-                            elif highlighted == 6:  # Work Directory
-                                # Open folder browser for work directory selection
-                                show_folder_browser = True
-                                # Use current work_dir or fallback to a sensible default
-                                current_work = settings.get("work_dir", "")
-                                if not current_work or not os.path.exists(os.path.dirname(current_work)):
-                                    # Use a fallback based on environment
-                                    if os.path.exists("/userdata") and os.access("/userdata", os.R_OK):
-                                        folder_browser_current_path = "/userdata"
-                                    else:
-                                        folder_browser_current_path = os.path.expanduser("~")  # Home directory
-                                else:
-                                    folder_browser_current_path = current_work
-                                load_folder_contents(folder_browser_current_path)
-                                # Set a flag to indicate we're selecting work directory
-                                selected_system_to_add = {"name": "Work Directory", "type": "work_dir"}
-                            elif highlighted == 7:  # ROMs Directory  
-                                # Open folder browser
-                                show_folder_browser = True
-                                # Use current roms_dir or fallback to a sensible default
-                                current_roms = settings.get("roms_dir", "")
-                                if not current_roms or not os.path.exists(os.path.dirname(current_roms)):
-                                    # Use a fallback based on environment
-                                    if os.path.exists("/userdata") and os.access("/userdata", os.R_OK):
-                                        folder_browser_current_path = "/userdata/roms"
-                                    else:
-                                        folder_browser_current_path = os.path.expanduser("~")  # Home directory
-                                else:
-                                    folder_browser_current_path = current_roms
-                                load_folder_contents(folder_browser_current_path)
-                            elif highlighted == 8:  # NSZ Keys
-                                # Open folder browser for .keys files
-                                show_folder_browser = True
-                                # Use current keys path or default to home directory
-                                current_keys = settings.get("nsz_keys_path", "")
-                                if current_keys and os.path.exists(os.path.dirname(current_keys)):
-                                    folder_browser_current_path = os.path.dirname(current_keys)
-                                else:
-                                    # Default to ~/.nsz directory or home
-                                    nsz_dir = os.path.expanduser("~/.nsz")
-                                    if os.path.exists(nsz_dir):
-                                        folder_browser_current_path = nsz_dir
-                                    else:
-                                        folder_browser_current_path = os.path.expanduser("~")
-                                load_folder_contents(folder_browser_current_path)
-                                # Set a flag to indicate we're selecting NSZ keys
-                                selected_system_to_add = {"name": "NSZ Keys", "type": "nsz_keys"}
-                            elif highlighted == 9:  # Remap Controller
-                                # Trigger controller remapping
-                                show_controller_mapping = True
-                            elif highlighted == 10:  # Add Systems
-                                mode = "add_systems"
-                                highlighted = 0
-                                add_systems_highlighted = 0
-                                # Load available systems in background
-                                load_available_systems()
-                            elif highlighted == 11:  # Systems Settings
-                                mode = "systems_settings"
-                                systems_settings_highlighted = 0
-                                highlighted = 0
+                            # Settings are now handled by handle_menu_selection()
+                            handle_menu_selection()
                         elif mode == "utils":
                             if highlighted == 0:  # Download from URL
                                 # Show URL input modal for direct download

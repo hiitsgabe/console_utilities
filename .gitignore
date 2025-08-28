@@ -9,3 +9,4 @@ controller_mapping.json
 dist/
 .buildozer/
 workdir/
+src/keys.txt
