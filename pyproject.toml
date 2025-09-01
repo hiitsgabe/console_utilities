@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "console_utilities"
+version = "1.0.0"
+description = "A PyGame-based console utilities application for handheld gaming consoles"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pygame>=2.0.0",
+    "requests>=2.25.0"
+]
+
+[project.scripts]
+console-utilities = "src.index:main"
+console-util = "src.index:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "flake8",
+    "pytest"
+]

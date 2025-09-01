@@ -1,0 +1,15 @@
+[
+  {
+    "name": "Apple I",
+    "url": "https://myrient.erista.me/files/No-Intro/Apple%20-%20I%20%28Tapes%29/",
+    "regex": "<tr><td class=\"link\"><a href=\"(?P<href>[^\"]+)\" title=\"(?P<title>[^\"]+)\">(?P<text>[^<]+)</a></td><td class=\"size\">(?P<size>[^<]+)</td><td class=\"date\">[^<]*</td></tr>",
+    "file_format": [
+      ".zip"
+    ],
+    "roms_folder": "appleI",
+    "usa_regex": "(USA)",
+    "should_filter_usa": true,
+    "boxarts": "https://thumbnails.libretro.com/Sony%20-%20PlayStation/Named_Boxarts/",
+    "should_unzip": false
+  }
+] 

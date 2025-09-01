@@ -1,0 +1,12 @@
+py_downloads/
+roms/
+config.json
+error.log
+added_systems.json
+controller_mapping.json
+
+# Don't ignore dist/ - we want to commit built files for GitHub releases
+dist/
+.buildozer/
+workdir/
+src/keys.txt

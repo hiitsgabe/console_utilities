@@ -1,0 +1,17 @@
+name: console_utilities
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pygame>=2.0.0
+  - requests>=2.25.0
+  - pip
+  - pip:
+    - requests
+    - pyinstaller
+    - watchdog
+    - nsz
+    - pycryptodome
+    - zstandard
+    - enlighten
