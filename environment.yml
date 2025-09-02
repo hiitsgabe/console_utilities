@@ -1,4 +1,4 @@
-name: console_utilities
+name: app_cutil
 channels:
   - conda-forge
   - defaults
@@ -11,7 +11,8 @@ dependencies:
     - requests
     - pyinstaller
     - watchdog
-    - nsz
     - pycryptodome
     - zstandard
     - enlighten
+    - nsz
+    - pygame_emojis

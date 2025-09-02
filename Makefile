@@ -1,6 +1,6 @@
 .PHONY: run watch install dev clean test lint format setup build-android
 
-CONDA_ENV = console_utilities
+CONDA_ENV = app_cutil
 CONDA_ACTIVATE = conda run -n $(CONDA_ENV)
 
 # Default target
@@ -51,6 +51,21 @@ build:
 	@echo "Distribution created in dist/ folder"
 	@echo "Copy dist/dw.pygame and dist/download.json to console pygame directory"
 
+prepare-build-zip:
+	mkdir -p build
+	mkdir -p build/assets/images
+	mkdir -p build/src
+	cp -r src/* build/src
+	cp -r assets/images/background.png build/assets/images/background.png
+	cp -r buildozer.spec build/
+	cp -r main.py build/
+	cp -r assets/images/logo.png build/icon.png
+	cp -r assets/images/logo_big.png build/presplash.png
+	cd build && zip -r ../build.zip *
+	rm -rf build
+	@echo "Distribution created in dist/ folder"
+	@echo "Copy dist/dw.pygame and dist/download.json to console pygame directory"
+
 # Build Android APK using custom buildozer Docker image
 CMD ?= debug
 
@@ -68,8 +83,8 @@ build-android:
 	docker cp rom-build:/dist/. ./dist/android/
 	cd dist/android && zip -r ../android.zip *
 	rm -rf dist/android
-	@echo "🚀 Removing Docker Container..."
-	docker rm rom-build
+# 	@echo "🚀 Removing Docker Container..."
+# 	docker rm rom-build
 	@echo "🎉 APK built successfully!"
 # Format code with black
 format:

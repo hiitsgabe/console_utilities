@@ -5,7 +5,7 @@ package.domain = com.consoleutilities
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas
 version = 0.1
-requirements = python3==3.10.12,kivy==2.3.0,pyjnius==1.5.0,hostpython3==3.10.12,pygame,requests,zstandard,pycryptodomex
+requirements = python3==3.10.12,kivy==2.3.0,pyjnius==1.5.0,hostpython3==3.10.12,pygame,requests,zstandard,pycryptodome,enlighten,pygame_emojis,jnius,android
 orientation = landscape
 osx.python_version = 3
 osx.kivy_version = 1.9.1
@@ -24,5 +24,5 @@ presplash.filename = presplash.png
 android.presplash_color = #ffffff
 
 [buildozer]
-log_level = 1
+log_level = 2
 warn_on_root = 1

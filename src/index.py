@@ -1,7 +1,6 @@
 import os
 import sys
 import json
-import shutil
 import pygame
 import requests
 import traceback
@@ -10,18 +9,31 @@ import time
 from zipfile import ZipFile
 from io import BytesIO
 from datetime import datetime
-from urllib.parse import urljoin, unquote
+from urllib.parse import urljoin, unquote, quote
 import html
 from threading import Thread
 from queue import Queue
-from nsz import decompress as nsz_decompress
+try:
+    from pygame_emojis import load_emoji
+    EMOJIS_AVAILABLE = True
+except ImportError:
+    EMOJIS_AVAILABLE = False
+    load_emoji = None
+try:
+    # Add NSZ directory to Python path
+    nsz_path = os.path.join(os.path.dirname(__file__), "nsz")
+    if nsz_path not in sys.path:
+        sys.path.insert(0, nsz_path)    
+    from nsz import decompress as nsz_decompress
+    NSZ_AVAILABLE = True
+    print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! has NSZ")
+except (ImportError, AttributeError, FileNotFoundError, ModuleNotFoundError) as e:
+    NSZ_AVAILABLE = False
+    nsz_decompress = None
+    print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! no NSZ", str(e))
 
-#-------------------------------------------------------------------------------------#
-#
-#                 Variables        
-##-------------------------------------------------------------------------------------#
+    
 DEV_MODE = os.getenv('DEV_MODE', 'false').lower() == 'true'
-NSZ_AVAILABLE = False
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 JSON_FILE = None  
 if DEV_MODE:
@@ -36,88 +48,93 @@ if DEV_MODE:
 else:
     CONFIG_FILE = os.path.join(SCRIPT_DIR, "config.json")
     ADDED_SYSTEMS_FILE = os.path.join(SCRIPT_DIR, "added_systems.json")
-
-#-------------------------------------------------------------------------------------#
-#
-#                 Constants        
-##-------------------------------------------------------------------------------------#
 FPS = 30
 SCREEN_WIDTH, SCREEN_HEIGHT = 800, 600
-BASE_FONT_SIZE = 28 
-BACKGROUND = (18, 20, 24)        # Dark background
-SURFACE = (30, 34, 40)           # Card/surface background
-SURFACE_HOVER = (40, 44, 50)     # Card hover state
-SURFACE_SELECTED = (45, 50, 60)  # Card selected state
-PRIMARY = (66, 165, 245)         # Primary accent (blue)
-PRIMARY_DARK = (48, 123, 184)    # Darker primary
-PRIMARY_LIGHT = (100, 181, 246)  # Lighter primary
-SECONDARY = (102, 187, 106)      # Secondary accent (green)
-SECONDARY_DARK = (76, 140, 79)   # Darker secondary
-SECONDARY_LIGHT = (129, 199, 132) # Lighter secondary
-TEXT_PRIMARY = (255, 255, 255)   # Primary text (white)
-TEXT_SECONDARY = (189, 189, 189) # Secondary text (light gray)
-TEXT_DISABLED = (117, 117, 117)  # Disabled text (darker gray)
-WARNING = (255, 193, 7)          # Warning color (amber)
-ERROR = (244, 67, 54)            # Error color (red)
-SUCCESS = (76, 175, 80)          # Success color (green)
-SHADOW_COLOR = (0, 0, 0, 60)     # Shadow color with alpha
-GLOW_COLOR = (66, 165, 245, 40)  # Glow color for highlights
-BORDER_RADIUS = 12               # Default border radius
-CARD_PADDING = 8                 # Card padding
-THUMBNAIL_BORDER_RADIUS = 8      # Thumbnail border radius
-WHITE = TEXT_PRIMARY
-BLACK = BACKGROUND
-GREEN = SECONDARY
-GRAY = TEXT_SECONDARY
-FONT_SIZE = BASE_FONT_SIZE
-NAVIGATION_INITIAL_DELAY = 100     # ms before repeating starts (much longer delay)
-NAVIGATION_START_RATE = 400        # ms between repeats when starting (slow)
-NAVIGATION_MAX_RATE = 100          # ms between repeats at maximum speed (fast)
-NAVIGATION_ACCELERATION = 0.90     # rate multiplier each repeat (smaller = faster acceleration)
-THUMBNAIL_SIZE = (96, 96)
-DPAD_DEBOUNCE_MS = 100  # Minimum time between D-pad navigation actions
-HIRES_IMAGE_SIZE = (400, 400) 
+FONT_SIZE = 28
 
-#-------------------------------------------------------------------------------------#
-#
-#                 LOG START        
-##-------------------------------------------------------------------------------------#
 
-try:
-    log_dir = os.path.dirname(LOG_FILE) if os.path.dirname(LOG_FILE) else "."
-    os.makedirs(log_dir, exist_ok=True)
-    with open(LOG_FILE, "w") as f:
-        f.write(f"Error Log - Started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write(f"Python version: {sys.version}\n")
-        f.write(f"Platform: {sys.platform}\n")
-        f.write(f"Script directory: {SCRIPT_DIR}\n")
-        f.write("-" * 80 + "\n")
-    print(f"Log file initialized: {LOG_FILE}")
-except Exception as e:
-    print(f"Failed to initialize log file: {e}")
+def decompress_nsz_file(nsz_file_path, output_dir, progress_callback=None):
+    """
+    Unified NSZ decompression method that tries multiple approaches
+    
+    Args:
+        nsz_file_path: Path to the NSZ file to decompress
+        output_dir: Directory to extract NSP file(s) to
+        keys_path: Path to Nintendo Switch keys file
+        progress_callback: Optional callback for progress updates
+        
+    Returns:
+        bool: True if decompression was successful, False otherwise
+    """
+    from pathlib import Path
+    
+    filename = os.path.basename(nsz_file_path)
 
-#-------------------------------------------------------------------------------------#
-#
-#                 Utils        
-##-------------------------------------------------------------------------------------#
+    log_error(f"NSZ Called for {filename}")
+    log_error("NSZ Starting Checks:")
 
-def get_responsive_font_size(base_size=BASE_FONT_SIZE):
-    """Calculate responsive font size based on screen dimensions"""
-    screen_width, screen_height = screen.get_size()
-    # Scale based on screen width, with minimum and maximum limits
-    scale_factor = min(screen_width / 800, screen_height / 600)
-    font_size = max(16, min(int(base_size * scale_factor), 48))
-    return font_size
+    
+    def update_progress(message, progress):
+        if progress_callback:
+            progress_callback(message, progress)
+        else:
+            print(message)
+    
+    actual_keys_path = settings.get("nsz_keys_path", "")
+    log_error(f"NSZ Key Path: {actual_keys_path}")
+    
+    # Declare nsz_decompress at function scope to avoid UnboundLocalError
+    local_nsz_decompress = nsz_decompress
+    log_error(f"NSZ exists? : {local_nsz_decompress is not None}")
 
-def get_responsive_margin():
-    """Calculate responsive margin based on screen size"""
-    screen_width, screen_height = screen.get_size()
-    return max(10, min(int(screen_width * 0.03), 40))
+    if local_nsz_decompress is None: 
+        try:
+            from nsz import decompress as local_nsz_decompress
+            log_error(f"IMPORTED NSZ AGAIN")
+        except (ImportError, AttributeError) as e:
+            log_error(f"NSZ IMPORT ERROR: {str(e)}")
+            local_nsz_decompress = None
 
-def get_responsive_spacing():
-    """Calculate responsive spacing between elements"""
-    screen_width, screen_height = screen.get_size()
-    return max(5, min(int(screen_width * 0.015), 20))
+    nsz_success = False
+    
+    if actual_keys_path is not None and local_nsz_decompress:
+        try:
+            update_progress(f"Decompressing {filename} using NSZ library...", 30)
+            
+            # Check if NSZ file is valid before attempting decompression
+            if not os.path.exists(nsz_file_path):
+                raise FileNotFoundError(f"NSZ file not found: {nsz_file_path}")
+                
+            file_size = os.path.getsize(nsz_file_path)
+            if file_size == 0:
+                raise ValueError(f"NSZ file is empty: {nsz_file_path}")
+            
+            log_error(f"Attempting NSZ decompression of {filename} ({file_size} bytes)")
+            local_nsz_decompress(Path(nsz_file_path), Path(output_dir), True, None, keys_path=actual_keys_path)
+            nsz_success = True
+            update_progress("NSZ library decompression successful", 80)
+            log_error("NSZ decompression successful using nsz library")
+        except Exception as e:
+            error_msg = f"NSZ library decompression failed: {e}"
+            print(error_msg)
+            log_error(f"NSZ library method failed for {filename}: {str(e)}")
+            log_error(f"NSZ file path: {nsz_file_path}")
+            log_error(f"Output directory: {output_dir}")
+            log_error(f"Keys path: {actual_keys_path}")
+            
+            # Check if it's a corrupted file issue
+            if "read returned empty" in str(e):
+                log_error("NSZ file appears to be corrupted or incomplete")
+                error_msg += " (File may be corrupted or incomplete)"
+    
+    if nsz_success:
+        update_progress(f"Decompressing {filename}... Complete", 100)
+        return True
+    else:
+        log_error(f"NSZ decompression failed for {filename}: All methods failed")
+        update_progress(f"NSZ decompression failed for {filename}", 0)
+        return False
+
 
 def update_log_file_path():
     """Update LOG_FILE path to use the configured work directory with py_downloads subdirectory"""
@@ -140,123 +157,25 @@ def log_error(error_msg, error_type=None, traceback_str=None):
     with open(LOG_FILE, "a") as f:
         f.write(log_message)
 
+try:
+    log_dir = os.path.dirname(LOG_FILE) if os.path.dirname(LOG_FILE) else "."
+    os.makedirs(log_dir, exist_ok=True)
+    with open(LOG_FILE, "w") as f:
+        f.write(f"Error Log - Started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"Python version: {sys.version}\n")
+        f.write(f"Platform: {sys.platform}\n")
+        f.write(f"Script directory: {SCRIPT_DIR}\n")
+        f.write("-" * 80 + "\n")
+    print(f"Log file initialized: {LOG_FILE}")
+except Exception as e:
+    print(f"Failed to initialize log file: {e}")
 
-def format_size(size_bytes):
-    """Convert bytes to human readable format"""
-    for unit in ['B', 'KB', 'MB', 'GB']:
-        if size_bytes < 1024:
-            return f"{size_bytes:.1f} {unit}"
-        size_bytes /= 1024
-    return f"{size_bytes:.1f} TB"
-
-def decompress_nsz_file(nsz_file_path, output_dir, keys_path=None, progress_callback=None):
-    """
-    Unified NSZ decompression method that tries multiple approaches
-    
-    Args:
-        nsz_file_path: Path to the NSZ file to decompress
-        output_dir: Directory to extract NSP file(s) to
-        keys_path: Path to Nintendo Switch keys file
-        progress_callback: Optional callback for progress updates
-        
-    Returns:
-        bool: True if decompression was successful, False otherwise
-    """
-    import shutil
-    from pathlib import Path
-    
-    filename = os.path.basename(nsz_file_path)
-    
-    def update_progress(message, progress):
-        if progress_callback:
-            progress_callback(message, progress)
-        else:
-            print(message)
-    
-    actual_keys_path = settings.get("nsz_keys_path", "")
-    nsz_success = False
-    
-    if actual_keys_path is not None and nsz_decompress:
-        try:
-            update_progress(f"Decompressing {filename} using NSZ library...", 30)
-            nsz_decompress(Path(nsz_file_path), Path(output_dir), True, None, keys_path=actual_keys_path)
-            nsz_success = True
-            update_progress("NSZ library decompression successful", 80)
-            print("NSZ decompression successful using nsz library")
-        except Exception as e:
-            error_msg = f"NSZ library decompression failed: {e}"
-            print(error_msg)
-            log_error(f"NSZ library method failed for {filename}: {str(e)}")
-    
-    if nsz_success:
-        update_progress(f"Decompressing {filename}... Complete", 100)
-        return True
-    else:
-        log_error(f"NSZ decompression failed for {filename}: All methods failed")
-        update_progress(f"NSZ decompression failed for {filename}", 0)
-        return False
-
-def load_settings():
-    """Load settings from config file"""
-    # Default paths based on environment
-    # Note: py_downloads subdirectory will be created within work_dir automatically
-    if DEV_MODE:
-        # Development mode - use local directories since /userdata might not exist
-        default_work_dir = os.path.join(SCRIPT_DIR, "..", "downloads")
-        default_roms_dir = os.path.join(SCRIPT_DIR, "..", "roms")
-    elif os.path.exists("/userdata") and os.access("/userdata", os.W_OK):
-        # Console environment with writable /userdata
-        default_work_dir = "/userdata/downloads"
-        default_roms_dir = "/userdata/roms"
-    else:
-        # Fallback - use script directory
-        default_work_dir = os.path.join(SCRIPT_DIR, "downloads")
-        default_roms_dir = os.path.join(SCRIPT_DIR, "roms")
-    
-    default_settings = {
-        "enable_boxart": True,
-        "view_type": "list",
-        "usa_only": False,
-        "work_dir": default_work_dir,
-        "roms_dir": default_roms_dir,
-        "nsz_keys_path": "",
-        "archive_json_path": "",
-        "cache_enabled": True,
-        "archive_json_url": ""
-    }
-    
-    try:
-        if os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, 'r') as f:
-                loaded_settings = json.load(f)
-                # Merge with defaults to handle new settings
-                default_settings.update(loaded_settings)
-        else:
-            # Create config file with defaults
-            save_settings(default_settings)
-    except Exception as e:
-        log_error("Failed to load settings, using defaults", type(e).__name__, traceback.format_exc())
-    
-    return default_settings
-
-def save_settings(settings_to_save):
-        """Save settings to config file"""
-        try:
-            # Create directory if it doesn't exist
-            os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
-            
-            with open(CONFIG_FILE, 'w') as f:
-                json.dump(settings_to_save, f, indent=2)
-        except Exception as e:
-            log_error("Failed to save settings", type(e).__name__, traceback.format_exc())
-#-------------------------------------------------------------------------------------#
-#
-#                 Pygame Init        
-##-------------------------------------------------------------------------------------#
 try:
     print("Initializing pygame...")
     pygame.init()
-    print("Pygame initialized successfully")    
+    print("Pygame initialized successfully")
+    
+    # Test basic pygame functionality
     print("Testing pygame display...")
     test_screen = pygame.display.set_mode((100, 100))
     print("Display test successful")
@@ -264,9 +183,10 @@ try:
     print("Display cleanup successful")
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     pygame.display.set_caption("Console Utilities")
-    clock = pygame.time.Clock()    
-    responsive_font_size = get_responsive_font_size()
-    font = pygame.font.Font(None, responsive_font_size)
+    clock = pygame.time.Clock()
+    font = pygame.font.Font(None, FONT_SIZE)
+
+    # Initialize joystick if available, otherwise use keyboard
     pygame.joystick.init()
     joystick = None
     if pygame.joystick.get_count() > 0:
@@ -274,8 +194,10 @@ try:
         joystick.init()
     else:
         print("No joystick detected, use keyboard: Arrow keys, Enter, Escape, Space")
+
+    # Initialize touchscreen and mouse support
     touchscreen_available = False
-    mouse_available = True
+    mouse_available = True  # Mouse is always available in pygame
     try:
         import pygame._sdl2.touch
         touch_device_count = pygame._sdl2.touch.get_num_devices()
@@ -289,35 +211,80 @@ try:
     
     print("Mouse navigation available")
 
-#-------------------------------------------------------------------------------------#
-#
-#                 Pygame Required Variables       
-##-------------------------------------------------------------------------------------#
+    # Modern color palette
+    BACKGROUND = (18, 20, 24)        # Dark background
+    SURFACE = (30, 34, 40)           # Card/surface background
+    SURFACE_HOVER = (40, 44, 50)     # Card hover state
+    SURFACE_SELECTED = (45, 50, 60)  # Card selected state
+    PRIMARY = (66, 165, 245)         # Primary accent (blue)
+    PRIMARY_DARK = (48, 123, 184)    # Darker primary
+    PRIMARY_LIGHT = (100, 181, 246)  # Lighter primary
+    SECONDARY = (102, 187, 106)      # Secondary accent (green)
+    SECONDARY_DARK = (76, 140, 79)   # Darker secondary
+    SECONDARY_LIGHT = (129, 199, 132) # Lighter secondary
+    TEXT_PRIMARY = (255, 255, 255)   # Primary text (white)
+    TEXT_SECONDARY = (189, 189, 189) # Secondary text (light gray)
+    TEXT_DISABLED = (117, 117, 117)  # Disabled text (darker gray)
+    WARNING = (255, 193, 7)          # Warning color (amber)
+    ERROR = (244, 67, 54)            # Error color (red)
+    SUCCESS = (76, 175, 80)          # Success color (green)
+    
+    # Additional visual constants
+    SHADOW_COLOR = (0, 0, 0, 60)     # Shadow color with alpha
+    GLOW_COLOR = (66, 165, 245, 40)  # Glow color for highlights
+    BORDER_RADIUS = 12               # Default border radius
+    CARD_PADDING = 8                 # Card padding
+    THUMBNAIL_BORDER_RADIUS = 8      # Thumbnail border radius
+    
+    # Legacy colors for compatibility
+    WHITE = TEXT_PRIMARY
+    BLACK = BACKGROUND
+    GREEN = SECONDARY
+    GRAY = TEXT_SECONDARY
+
+    # Data will be loaded after settings are initialized
     data = []
+
     selected_system = 0
     selected_games = set()
     game_list = []
-    mode = "systems"  # systems, games, settings, utils, add_systems, systems_settings, or system_settings    
+    mode = "systems"  # systems, games, settings, utils, add_systems, systems_settings, or system_settings
+    
+    # Add systems state
     available_systems = []
     add_systems_highlighted = 0
+    
+    # Systems settings variables
     systems_settings_highlighted = 0
     system_settings_highlighted = 0
     selected_system_for_settings = None
+    
+    # Pagination variables
     current_page = 0
     total_pages = 1
     highlighted = 0
+    
+    # Settings scroll variables
     settings_scroll_offset = 0
+    
+    # Search functionality variables
     search_mode = False
     search_query = ""
-    url_input_context = "direct_download" 
+    
+    # URL input context tracking
+    url_input_context = "archive_json"  # "archive_json" or "direct_download"
     filtered_game_list = []
     char_selector_mode = False
     char_x = 0
-    char_y = 0    
+    char_y = 0
+    
+    # Search input modal state
     show_search_input = False
     search_input_text = ""
     search_cursor_position = 0
-    search_cursor_blink_time = 0    
+    search_cursor_blink_time = 0
+    
+    # Continuous navigation state
     navigation_state = {
         'up': False,
         'down': False, 
@@ -342,9 +309,19 @@ try:
         'left': 0,
         'right': 0
     }
+    
+    # Navigation timing constants with progressive acceleration
+    NAVIGATION_INITIAL_DELAY = 100     # ms before repeating starts (much longer delay)
+    NAVIGATION_START_RATE = 400        # ms between repeats when starting (slow)
+    NAVIGATION_MAX_RATE = 100          # ms between repeats at maximum speed (fast)
+    NAVIGATION_ACCELERATION = 0.90     # rate multiplier each repeat (smaller = faster acceleration)
+    
+    # Touch/click support variables
     menu_item_rects = []  # Store rectangles for clickable menu items
     menu_scroll_offset = 0  # Current scroll offset (start_idx) for click mapping
     scroll_accumulated = 0  # For smooth scrolling
+    
+    # Touch gesture tracking
     touch_start_pos = None  # Starting position of touch
     touch_start_time = 0  # Time when touch started
     touch_last_pos = None  # Last touch position for motion tracking
@@ -352,63 +329,20 @@ try:
     scroll_threshold = 15  # Pixels to move before it's considered scrolling
     tap_time_threshold = 500  # Max ms for a tap vs scroll
     scroll_sensitivity = 0.5  # Touch scroll sensitivity multiplier
+    
+    # Double-click tracking for games
     last_click_time = 0
     last_clicked_item = -1
     double_click_threshold = 500  # Max ms between clicks for double-click
+    
+    # On-screen button rectangles
     back_button_rect = None
     search_button_rect = None
     download_button_rect = None
+    
+    # Modal interaction rectangles
     modal_char_rects = []  # For character selection modals
     modal_back_button_rect = None  # Back button for modals
-    settings = {}    
-    controller_mapping = {}
-    settings_list = [
-        "Select Archive Json",
-        "Work Directory",
-        "ROMs Directory",
-        "NSZ Keys",
-        "Remap Controller",
-        "Add Systems",
-        "Systems Settings",
-        "--- VIEW OPTIONS ---",
-        "Enable Box-art Display",
-        "View Type",
-        "USA Games Only"
-    ]
-    image_cache = {}
-    image_queue = Queue()
-    hires_image_cache = {}
-    hires_image_queue = Queue()
-    show_game_details = False
-    current_game_detail = None
-    close_button_rect = None    
-    show_folder_browser = False
-    folder_browser_current_path = "/"
-    folder_browser_items = []
-    folder_browser_highlighted = 0
-    folder_browser_scroll_offset = 0
-    folder_browser_item_rects = []
-    folder_select_button_rect = None
-    folder_cancel_button_rect = None
-    show_system_input = False
-    system_input_text = ""
-    selected_system_to_add = None
-    show_folder_name_input = False
-    folder_name_input_text = ""
-    folder_name_cursor_position = 0
-    folder_name_char_index = 0  # Current character being selected (0-35 for A-Z, 0-9)
-    show_url_input = False
-    url_input_text = ""
-    url_cursor_position = 0
-    show_controller_mapping = False
-    running = True
-    button_delay = 0
-    last_dpad_state = (0, 0)  # Track last D-pad state to detect actual changes
-    last_dpad_time = 0  # Track when last D-pad navigation occurred
-#-------------------------------------------------------------------------------------#
-#
-#                 Navigation handlers        
-##-------------------------------------------------------------------------------------#
     
     def update_navigation_state():
         """Update navigation state based on current joystick/controller input"""
@@ -674,6 +608,99 @@ try:
                 if highlighted != old_highlighted:
                     movement_occurred = True
     
+    # Settings will be loaded after functions are defined
+    settings = {}
+    
+    # Controller mapping will be loaded/created dynamically
+    controller_mapping = {}
+    settings_list = [
+        "Select Archive Json",
+        "Work Directory",
+        "ROMs Directory",
+        "NSZ Keys",
+        "Remap Controller",
+        "Add Systems",
+        "Systems Settings",
+        "--- VIEW OPTIONS ---",
+        "Enable Box-art Display",
+        "View Type",
+        "USA Games Only"
+    ]
+
+    # Directories will be created after settings are loaded
+
+    # Image cache for thumbnails
+    image_cache = {}
+    image_queue = Queue()
+    THUMBNAIL_SIZE = (96, 96)  # Increased thumbnail size for better quality and visibility
+    
+    # High-resolution image cache for detail modal
+    hires_image_cache = {}
+    hires_image_queue = Queue()
+    HIRES_IMAGE_SIZE = (400, 400)  # High-resolution size for detail modal
+
+    def format_size(size_bytes):
+        """Convert bytes to human readable format"""
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if size_bytes < 1024:
+                return f"{size_bytes:.1f} {unit}"
+            size_bytes /= 1024
+        return f"{size_bytes:.1f} TB"
+
+    def load_settings():
+        """Load settings from config file"""
+        # Default paths based on environment
+        # Note: py_downloads subdirectory will be created within work_dir automatically
+        if DEV_MODE:
+            # Development mode - use local directories since /userdata might not exist
+            default_work_dir = os.path.join(SCRIPT_DIR, "..", "downloads")
+            default_roms_dir = os.path.join(SCRIPT_DIR, "..", "roms")
+        elif os.path.exists("/userdata") and os.access("/userdata", os.W_OK):
+            # Console environment with writable /userdata
+            default_work_dir = "/userdata/downloads"
+            default_roms_dir = "/userdata/roms"
+        else:
+            # Fallback - use script directory
+            default_work_dir = os.path.join(SCRIPT_DIR, "downloads")
+            default_roms_dir = os.path.join(SCRIPT_DIR, "roms")
+        
+        default_settings = {
+            "enable_boxart": True,
+            "view_type": "list",
+            "usa_only": False,
+            "work_dir": default_work_dir,
+            "roms_dir": default_roms_dir,
+            "nsz_keys_path": "",
+            "archive_json_path": "",
+            "cache_enabled": True,
+            "archive_json_url": ""
+        }
+        
+        try:
+            if os.path.exists(CONFIG_FILE):
+                with open(CONFIG_FILE, 'r') as f:
+                    loaded_settings = json.load(f)
+                    # Merge with defaults to handle new settings
+                    default_settings.update(loaded_settings)
+            else:
+                # Create config file with defaults
+                save_settings(default_settings)
+        except Exception as e:
+            log_error("Failed to load settings, using defaults", type(e).__name__, traceback.format_exc())
+        
+        return default_settings
+
+    def save_settings(settings_to_save):
+        """Save settings to config file"""
+        try:
+            # Create directory if it doesn't exist
+            os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+            
+            with open(CONFIG_FILE, 'w') as f:
+                json.dump(settings_to_save, f, indent=2)
+        except Exception as e:
+            log_error("Failed to save settings", type(e).__name__, traceback.format_exc())
+
     def draw_background():
         """Draw the background image or solid color for all screens"""
         if background_image:
@@ -720,6 +747,25 @@ try:
             print(f"Failed to load background image: {e}")
             log_error(f"Failed to load background image", type(e).__name__, traceback.format_exc())
         return None
+
+    def draw_emoji_icon(emoji_char, x, y, size=16):
+        """Draw an emoji at the specified position using pygame-emojis"""
+        if EMOJIS_AVAILABLE and load_emoji:
+            emoji_surface = load_emoji(emoji_char, (size, size))
+            if emoji_surface:
+                screen.blit(emoji_surface, (x, y))
+                return True
+        
+        try:
+            emoji_font = pygame.font.Font(None, size)
+            emoji_surf = emoji_font.render(emoji_char, True, TEXT_PRIMARY)
+            if emoji_surf and emoji_surf.get_width() > 0:
+                screen.blit(emoji_surf, (x, y))
+                return False
+        except Exception as e:
+            print(f"Text fallback also failed: {e}")
+        
+        return False
 
     def handle_touch_click_event(pos):
         """Handle touch/click events by checking if they hit any menu items or buttons"""
@@ -896,14 +942,12 @@ try:
                         elif selected_item["type"] in ["keys_file", "json_file", "nsz_file"]:
                             # Select file - use same logic as keyboard handling
                             if selected_system_to_add and selected_system_to_add.get("type") == "nsz_keys":
+                                # Handle NSZ keys file selection
                                 global settings
                                 settings["nsz_keys_path"] = selected_item["path"]
                                 save_settings(settings)
                                 show_folder_browser = False
                                 selected_system_to_add = None
-                                draw_loading_message("ROMs directory changed. Restarting...")
-                                pygame.time.wait(2000)
-                                restart_app()
                             elif selected_item["type"] == "nsz_file":
                                 # Handle NSZ file conversion
                                 if selected_system_to_add and selected_system_to_add.get("type") == "nsz_converter":
@@ -1177,7 +1221,7 @@ try:
                     if os.path.exists("/userdata") and os.access("/userdata", os.R_OK):
                         folder_browser_current_path = "/userdata"
                     else:
-                        folder_browser_current_path = SCRIPT_DIR  
+                        folder_browser_current_path = os.path.expanduser("~")  # Home directory
                 else:
                     folder_browser_current_path = current_work
                 load_folder_contents(folder_browser_current_path)
@@ -1205,7 +1249,12 @@ try:
                 if current_keys and os.path.exists(os.path.dirname(current_keys)):
                     folder_browser_current_path = os.path.dirname(current_keys)
                 else:
-                   folder_browser_current_path = SCRIPT_DIR
+                    # Default to ~/.nsz directory or home
+                    nsz_dir = os.path.expanduser("~/.switch")
+                    if os.path.exists(nsz_dir):
+                        folder_browser_current_path = nsz_dir
+                    else:
+                        folder_browser_current_path = os.path.expanduser("~")
                 load_folder_contents(folder_browser_current_path)
                 # Set a flag to indicate we're selecting NSZ keys
                 selected_system_to_add = {"name": "NSZ Keys", "type": "nsz_keys"}
@@ -1362,23 +1411,20 @@ try:
     def convert_nsz_to_nsp(nsz_file_path):
         """Convert NSZ file to NSP in the same directory"""
         try:
-            # Get the directory and filename info
             nsz_dir = os.path.dirname(nsz_file_path)
             nsz_filename = os.path.basename(nsz_file_path)
             nsp_filename = nsz_filename.replace('.nsz', '.nsp')
+            draw_progress_bar(f"Converting {nsz_filename} to NSP...", 0)
+            pygame.display.flip()
             
-            def progress_callback(message, progress):
-                draw_progress_bar(message, progress)
+            def progress_callback(message, percent):
+                draw_progress_bar(message, percent)
                 pygame.display.flip()
             
-            progress_callback(f"Converting {nsz_filename} to NSP...", 0)
+            nsz_success = decompress_nsz_file(nsz_file_path, nsz_dir, progress_callback=progress_callback)
             
-            # Use the unified NSZ decompression method
-            success = decompress_nsz_file(nsz_file_path, nsz_dir, progress_callback=progress_callback)
-            
-            if success:
+            if nsz_success:
                 pygame.time.wait(1000)
-                
                 expected_nsp_path = os.path.join(nsz_dir, nsp_filename)
                 if os.path.exists(expected_nsp_path):
                     draw_progress_bar(f"NSP file created: {nsp_filename}", 100)
@@ -1395,6 +1441,7 @@ try:
                 pygame.time.wait(2000)
             else:
                 draw_progress_bar(f"NSZ conversion failed - check logs", 0)
+                log_error(f"All NSZ conversion methods failed for {nsz_filename}")
                 pygame.time.wait(3000)
                 
         except Exception as e:
@@ -1862,6 +1909,8 @@ try:
         
         return None  # Not ready yet
 
+
+
     def load_image_with_fallback(base_url, base_name, formats, cache_key, game_name=None):
         """Try loading image with different format extensions"""
         for fmt in formats:
@@ -2035,6 +2084,9 @@ try:
                 thread.start()
         
         return "loading"
+
+
+    def download_archive_json(url):
         """Download and update download.json from remote URL"""
         try:
             # Validate URL format
@@ -2261,6 +2313,8 @@ try:
         
         pygame.display.flip()
 
+    # Removed draw_android_download_summary - Android support disabled
+
     def draw_settings_menu():
         global settings_scroll_offset, menu_item_rects, menu_scroll_offset
         menu_item_rects.clear()
@@ -2392,6 +2446,8 @@ try:
             
             y += row_height
         
+        
+
     def draw_add_systems_menu():
         draw_background()
         y = 10
@@ -2451,6 +2507,7 @@ try:
                     down_arrow = font.render("DOWN", True, GRAY)
                     screen.blit(down_arrow, (screen_width - 50, screen_height - 30))
         
+
     def draw_systems_settings_menu():
         """Draw the systems settings menu that lists all systems"""
         draw_background()
@@ -2523,6 +2580,7 @@ try:
                 down_arrow = font.render("DOWN", True, GRAY)
                 screen.blit(down_arrow, (screen_width - 50, screen_height - 30))
         
+
     def draw_utils_menu():
         """Draw the utils menu for downloading files"""
         utils_options = [
@@ -2553,7 +2611,7 @@ try:
             "",
             "Developer: hiitsgabe @ github.",
             "",
-            "Made with love in Toronto.",
+            "Made w/ ❤️ in Toronto.",
             "",
             "DISCLAIMER:",
             "This app is meant to help you organize games that",
@@ -2570,10 +2628,42 @@ try:
         # Center the credits content
         for line in credits_content:
             if line:  # Non-empty lines
-                # Regular text line
-                line_surf = font.render(line, True, TEXT_PRIMARY)
-                line_x = (screen_width - line_surf.get_width()) // 2
-                screen.blit(line_surf, (line_x, y))
+                if "❤️" in line:
+                    # Special handling for the heart emoji line
+                    parts = line.split("❤️")
+                    if len(parts) == 2:
+                        # Render the text parts
+                        part1_surf = font.render(parts[0], True, TEXT_PRIMARY)
+                        part2_surf = font.render(parts[1], True, TEXT_PRIMARY)
+                        
+                        # Calculate total width including heart emoji
+                        heart_size = 20
+                        total_width = part1_surf.get_width() + heart_size + part2_surf.get_width()
+                        
+                        # Start position to center everything
+                        start_x = (screen_width - total_width) // 2
+                        
+                        # Draw first part
+                        screen.blit(part1_surf, (start_x, y))
+                        
+                        # Draw heart emoji
+                        heart_x = start_x + part1_surf.get_width()
+                        heart_y = y + (FONT_SIZE - heart_size) // 2  # Vertically center with text
+                        draw_emoji_icon("❤️", heart_x, heart_y, heart_size)
+                        
+                        # Draw second part
+                        part2_x = heart_x + heart_size
+                        screen.blit(part2_surf, (part2_x, y))
+                    else:
+                        # Fallback if split doesn't work as expected
+                        line_surf = font.render(line, True, TEXT_PRIMARY)
+                        line_x = (screen_width - line_surf.get_width()) // 2
+                        screen.blit(line_surf, (line_x, y))
+                else:
+                    # Regular text line
+                    line_surf = font.render(line, True, TEXT_PRIMARY)
+                    line_x = (screen_width - line_surf.get_width()) // 2
+                    screen.blit(line_surf, (line_x, y))
             y += FONT_SIZE + 8
         
         # Instructions at the bottom
@@ -2641,7 +2731,8 @@ try:
             option_text = f"{option}: {value}"
             option_surf = font.render(option_text, True, color)
             screen.blit(option_surf, (20, y))
-            y += FONT_SIZE + 10        
+            y += FONT_SIZE + 10
+        
 
     def draw_grid_view(title, items, selected_indices):
         # Clear menu item rectangles for touch/click detection
@@ -3074,36 +3165,42 @@ try:
             else:
                 text_x = 35  # Standard margin for non-games with more padding
                 
-                # Add geometric icons for system menu items
+                # Add emoji icons for system menu items
                 if mode == "systems":
                     icon_x = item_margin + 12
                     icon_y = y + (row_height - 20) // 2
+                    icon_size = 20
                     
-                    # Geometric icons for different items
+                    # Emoji icons for different items with geometric fallback
                     if item == "Settings":
-                        # Gear icon
-                        gear_color = SECONDARY if is_highlighted else TEXT_PRIMARY
-                        pygame.draw.rect(screen, gear_color, (icon_x, icon_y, 16, 16), 2)
-                        pygame.draw.rect(screen, gear_color, (icon_x + 4, icon_y + 4, 8, 8))
+                        if not draw_emoji_icon("⚙️", icon_x, icon_y, icon_size):
+                            # Fallback: gear icon (geometric)
+                            gear_color = SECONDARY if is_highlighted else TEXT_PRIMARY
+                            pygame.draw.rect(screen, gear_color, (icon_x, icon_y, 16, 16), 2)
+                            pygame.draw.rect(screen, gear_color, (icon_x + 4, icon_y + 4, 8, 8))
                     elif item == "Utils":
-                        # Wrench icon
-                        utils_color = SECONDARY if is_highlighted else TEXT_PRIMARY
-                        pygame.draw.line(screen, utils_color, (icon_x + 2, icon_y + 2), (icon_x + 14, icon_y + 14), 2)
-                        pygame.draw.line(screen, utils_color, (icon_x + 6, icon_y + 14), (icon_x + 14, icon_y + 6), 2)
+                        if not draw_emoji_icon("🔧", icon_x, icon_y, icon_size):
+                            # Fallback: wrench icon (geometric)  
+                            utils_color = SECONDARY if is_highlighted else TEXT_PRIMARY
+                            pygame.draw.line(screen, utils_color, (icon_x + 2, icon_y + 2), (icon_x + 14, icon_y + 14), 2)
+                            pygame.draw.line(screen, utils_color, (icon_x + 6, icon_y + 14), (icon_x + 14, icon_y + 6), 2)
                     elif item == "Credits":
-                        # Heart icon
-                        credits_color = SECONDARY if is_highlighted else TEXT_PRIMARY
-                        center_x, center_y = icon_x + 8, icon_y + 8
-                        heart_points = [(center_x, center_y - 4), (center_x + 4, center_y), (center_x, center_y + 4), (center_x - 4, center_y)]
-                        pygame.draw.polygon(screen, credits_color, heart_points, 2)
+                        if not draw_emoji_icon("❤️", icon_x, icon_y, icon_size):
+                            # Fallback: heart icon (geometric)
+                            credits_color = SECONDARY if is_highlighted else TEXT_PRIMARY
+                            center_x, center_y = icon_x + 8, icon_y + 8
+                            heart_points = [(center_x, center_y - 4), (center_x + 4, center_y), (center_x, center_y + 4), (center_x - 4, center_y)]
+                            pygame.draw.polygon(screen, credits_color, heart_points, 2)
                     else:
-                        # Controller icon for game systems
-                        controller_color = PRIMARY if is_highlighted else TEXT_PRIMARY
-                        pygame.draw.rect(screen, controller_color, (icon_x, icon_y + 4, 16, 8), 2)
-                        pygame.draw.rect(screen, controller_color, (icon_x + 2, icon_y + 2, 3, 3))
-                        pygame.draw.rect(screen, controller_color, (icon_x + 11, icon_y + 2, 3, 3))
+                        # Game controller emoji for game systems
+                        if not draw_emoji_icon("🎮", icon_x, icon_y, icon_size):
+                            # Fallback: controller icon (geometric)
+                            controller_color = PRIMARY if is_highlighted else TEXT_PRIMARY
+                            pygame.draw.rect(screen, controller_color, (icon_x, icon_y + 4, 16, 8), 2)
+                            pygame.draw.rect(screen, controller_color, (icon_x + 2, icon_y + 2, 3, 3))
+                            pygame.draw.rect(screen, controller_color, (icon_x + 11, icon_y + 2, 3, 3))
                     
-                    text_x += 30  # Move text over to make room for icon
+                    text_x += 30  # Move text over to make room for larger emoji icon
             
             # Draw text with enhanced styling
             text_y = y + (row_height - FONT_SIZE) // 2  # Center text vertically
@@ -3162,9 +3259,9 @@ try:
         overlay.fill(BACKGROUND)
         screen.blit(overlay, (0, 0))
         
-        # Make modal much larger - prioritize the thumbnail display
-        modal_width = min(int(screen_width * 0.95), max(500, screen_width - 50))
-        modal_height = min(int(screen_height * 0.95), max(400, screen_height - 50))
+        # Responsive modal sizing with better proportions (increased height for buttons)
+        modal_width = min(max(int(screen_width * 0.85), 350), 600)
+        modal_height = min(max(int(screen_height * 0.75), 350), 550)  # Increased min and max height for buttons
         modal_x = (screen_width - modal_width) // 2
         modal_y = (screen_height - modal_height) // 2
         
@@ -3186,14 +3283,11 @@ try:
         else:
             game_name = os.path.splitext(game_item)[0] if isinstance(game_item, str) else 'Unknown Game'
         
-        # Minimize title to prioritize image space
-        responsive_font_size = get_responsive_font_size()
-        title_font = pygame.font.Font(None, int(responsive_font_size * 1.0))  # Smaller title
+        # Draw enhanced title with styling
+        title_font = pygame.font.Font(None, int(FONT_SIZE * 1.2))
         title_surf = title_font.render("Game Details", True, TEXT_PRIMARY)
-        
-        responsive_margin = get_responsive_margin()
-        title_x = modal_x + responsive_margin
-        title_y = modal_y + responsive_margin
+        title_x = modal_x + 25
+        title_y = modal_y + 25
         screen.blit(title_surf, (title_x, title_y))
         
         # Draw title underline
@@ -3201,10 +3295,9 @@ try:
         pygame.draw.line(screen, PRIMARY, (title_x, title_y + title_surf.get_height() + 5), 
                         (title_x + title_width, title_y + title_surf.get_height() + 5), 2)
         
-        # Minimize spacing to maximize image area
-        margin = responsive_margin  # Use consistent responsive margin
-        spacing = get_responsive_spacing()
-        name_y = title_y + title_surf.get_height() + spacing  # Reduced spacing
+        # Draw game name (with text wrapping if needed)
+        margin = max(25, int(modal_width * 0.06))  # Responsive margin (6% of width, min 25px)
+        name_y = title_y + title_surf.get_height() + 25
         max_name_width = modal_width - (margin * 2)
         
         # Simple text wrapping
@@ -3212,11 +3305,9 @@ try:
         lines = []
         current_line = []
         
-        # Use responsive font for text wrapping calculations
-        responsive_text_font = pygame.font.Font(None, responsive_font_size)
         for word in words:
             test_line = ' '.join(current_line + [word])
-            test_surf = responsive_text_font.render(test_line, True, TEXT_PRIMARY)
+            test_surf = font.render(test_line, True, TEXT_PRIMARY)
             if test_surf.get_width() <= max_name_width:
                 current_line.append(word)
             else:
@@ -3229,23 +3320,14 @@ try:
         if current_line:
             lines.append(' '.join(current_line))
         
-        # Minimize text - only show 1-2 lines maximum to prioritize image space
-        max_lines = min(2, len(lines))  # Maximum 2 lines to save space for big image
+        # Draw wrapped text
+        max_lines = max(2, min(3, modal_height // 100))  # Responsive line count based on modal height
         for i, line in enumerate(lines[:max_lines]):
-            name_surf = responsive_text_font.render(line, True, GREEN)
-            screen.blit(name_surf, (modal_x + margin, name_y + i * (responsive_font_size + spacing//2)))
-        
-        # Compact file size display - smaller font to save space
-        size_y = name_y + len(lines[:max_lines]) * (responsive_font_size + spacing//2) + spacing//2
-        if isinstance(game_item, dict) and game_item.get('size'):
-            size_font = pygame.font.Font(None, int(responsive_font_size * 0.75))  # Smaller size text
-            size_text = f"Size: {game_item['size']}"
-            size_surf = size_font.render(size_text, True, TEXT_PRIMARY)
-            screen.blit(size_surf, (modal_x + margin, size_y))
-            size_y += int(responsive_font_size * 0.75) + spacing
+            name_surf = font.render(line, True, GREEN)
+            screen.blit(name_surf, (modal_x + margin, name_y + i * (FONT_SIZE + 5)))
         
         # Draw large image if available with enhanced styling
-        image_y = size_y
+        image_y = name_y + len(lines) * (FONT_SIZE + 8) + 25
         boxart_url = data[selected_system].get('boxarts', '') if selected_system < len(data) else ''
         
         # Try to get high-resolution image first, fallback to thumbnail
@@ -3253,14 +3335,17 @@ try:
         thumbnail = hires_image if hires_image and hires_image != "loading" else get_thumbnail(game_item, boxart_url)
         
         if thumbnail and thumbnail != "loading":
-            # THE IMAGE IS THE MAIN FOCUS - use almost all modal space
-            available_width = modal_width - (margin * 2)
-            # Reserve minimal space only for close button and very basic text
-            reserved_space = responsive_font_size * 3  # Minimal space reservation
-            available_height = modal_height - (image_y - modal_y) - reserved_space
+            # Calculate appropriate image size that fits within modal responsively
+            available_width = modal_width - (margin * 2)  # Use responsive margins
+            # Reserve space for instructions and buttons (more space if touchscreen for buttons)
+            button_space = 100 if touchscreen_available else 50
+            available_height = modal_height - (image_y - modal_y) - (margin * 2) - button_space
             
-            # Use 95% of available space for the image - make it HUGE and dominant!
-            max_image_size = min(available_width * 0.95, available_height * 0.95)
+            # Increase max image size for touchscreen - use up to 70% of modal size or 600px max for touchscreen, 60%/500px for non-touchscreen
+            if touchscreen_available:
+                max_image_size = min(available_width, available_height, min(max(modal_width * 0.7, 450), 600))
+            else:
+                max_image_size = min(available_width, available_height, min(max(modal_width * 0.6, 400), 500))
             
             try:
                 # Scale image proportionally to fit within the available space with better quality
@@ -3360,10 +3445,9 @@ try:
         # Add download and close buttons (only for touchscreen)
         global download_button_rect, close_button_rect
         if touchscreen_available:
-            # Responsive button sizing
-            button_height = max(35, int(responsive_font_size * 1.5))
-            button_width = max(100, int(screen_width * 0.15))
-            button_spacing = spacing * 2
+            button_height = 40
+            button_width = 120
+            button_spacing = 20
             
             # Ensure buttons fit within modal by positioning them with adequate margin
             download_button_x = modal_x + (modal_width - (button_width * 2 + button_spacing)) // 2
@@ -3374,9 +3458,7 @@ try:
             pygame.draw.rect(screen, SUCCESS, download_button_rect, border_radius=BORDER_RADIUS)
             pygame.draw.rect(screen, TEXT_PRIMARY, download_button_rect, 2, border_radius=BORDER_RADIUS)
             
-            # Use responsive font for button text
-            button_font = pygame.font.Font(None, int(responsive_font_size * 0.9))
-            download_text = button_font.render("Download", True, TEXT_PRIMARY)
+            download_text = font.render("Download", True, TEXT_PRIMARY)
             download_text_x = download_button_x + (button_width - download_text.get_width()) // 2
             download_text_y = download_button_y + (button_height - download_text.get_height()) // 2
             screen.blit(download_text, (download_text_x, download_text_y))
@@ -3389,7 +3471,7 @@ try:
             pygame.draw.rect(screen, SURFACE_HOVER, close_button_rect, border_radius=BORDER_RADIUS)
             pygame.draw.rect(screen, TEXT_PRIMARY, close_button_rect, 2, border_radius=BORDER_RADIUS)
             
-            close_text = button_font.render("Close", True, TEXT_PRIMARY)
+            close_text = font.render("Close", True, TEXT_PRIMARY)
             close_text_x = close_button_x + (button_width - close_text.get_width()) // 2
             close_text_y = close_button_y + (button_height - close_text.get_height()) // 2
             screen.blit(close_text, (close_text_x, close_text_y))
@@ -3398,26 +3480,25 @@ try:
             download_button_rect = None
             close_button_rect = None
         
-        # Enhanced instructions with responsive positioning and fonts
-        back_button_name = get_button_name("back")
-        instruction_text = f"Press {back_button_name} to close or tap buttons"
-        instruction_font = pygame.font.Font(None, int(responsive_font_size * 0.8))
-        instruction_surf = instruction_font.render(instruction_text, True, TEXT_PRIMARY)
-        instruction_x = modal_x + (modal_width - instruction_surf.get_width()) // 2
-        
-        # Position instructions above the buttons with responsive spacing
-        instruction_y = download_button_y - instruction_surf.get_height() - spacing * 2 if 'download_button_y' in locals() else modal_y + modal_height - responsive_font_size * 3
-        
-        # Draw enhanced instruction background
-        inst_width = instruction_surf.get_width()
-        inst_height = instruction_surf.get_height()
-        inst_rect = pygame.Rect(instruction_x - 15, instruction_y - 8, inst_width + 30, inst_height + 16)
-        pygame.draw.rect(screen, SURFACE, inst_rect, border_radius=BORDER_RADIUS)
-        pygame.draw.rect(screen, PRIMARY, inst_rect, 2, border_radius=BORDER_RADIUS)
-        
-        # Simple instruction styling without glow
-        
-        screen.blit(instruction_surf, (instruction_x, instruction_y))
+        if touchscreen_available:
+            # Enhanced instructions with responsive positioning (moved up to accommodate buttons)
+            back_button_name = get_button_name("back")
+            instruction_text = f"Press {back_button_name} to close or tap buttons"
+            instruction_surf = font.render(instruction_text, True, TEXT_PRIMARY)
+            instruction_x = modal_x + (modal_width - instruction_surf.get_width()) // 2
+            
+            # Position instructions above the buttons
+            instruction_y = download_button_y - instruction_surf.get_height() - 15
+            
+            # Draw enhanced instruction background
+            inst_width = instruction_surf.get_width()
+            inst_height = instruction_surf.get_height()
+            inst_rect = pygame.Rect(instruction_x - 15, instruction_y - 8, inst_width + 30, inst_height + 16)
+            pygame.draw.rect(screen, SURFACE, inst_rect, border_radius=BORDER_RADIUS)
+            pygame.draw.rect(screen, PRIMARY, inst_rect, 2, border_radius=BORDER_RADIUS)
+            
+            # Simple instruction styling without glow
+            screen.blit(instruction_surf, (instruction_x, instruction_y))
 
     def draw_folder_browser_modal():
         """Draw the folder browser modal overlay"""
@@ -3667,6 +3748,7 @@ try:
             folder_select_button_rect = None
             folder_cancel_button_rect = None
 
+
     def draw_loading_message(message):
         draw_background()
         
@@ -3803,9 +3885,9 @@ try:
                     pygame.quit()
                     exit()
                 elif (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE) or \
-                     (event.type == pygame.JOYBUTTONDOWN and event.button == joystick_mapping.get("back", 1)):
+                     (event.type == pygame.JOYBUTTONDOWN and event.button == controller_mapping.get("back", 1)):
                     waiting = False
-                elif hasattr(pygame, '_sdl2') and hasattr(pygame._sdl2, 'touch') and touch_available:
+                elif hasattr(pygame, '_sdl2') and hasattr(pygame._sdl2, 'touch') and touchscreen_available:
                     if event.type == pygame.FINGERDOWN:
                         waiting = False
                 elif event.type == pygame.MOUSEBUTTONDOWN:
@@ -3819,6 +3901,7 @@ try:
         pygame.draw.line(screen, PRIMARY, (line_x, line_y), (line_x + line_width, line_y), 3)
         
         # Draw message with better positioning
+        message = error_lines[0] if error_lines else "An error occurred"
         message_surf = font.render(message, True, TEXT_SECONDARY)
         message_x = center_x - message_surf.get_width() // 2
         message_y = line_y + 25
@@ -3947,6 +4030,8 @@ try:
             # If all decoding fails, return the original
             return raw_filename
 
+
+
     def filter_games_by_search(games, query):
         """Filter games list based on search query"""
         if not query.strip():
@@ -3975,7 +4060,7 @@ try:
 
     def process_downloaded_file(file_path, filename, sys_data, roms_folder, progress_callback=None):
         """
-        Unified file processing for downloads.
+        Unified file processing for both Android and standard downloads.
         Handles ZIP extraction, NSZ decompression, and file organization.
         
         Args:
@@ -4020,11 +4105,11 @@ try:
             elif filename.endswith(".nsz"):
                 update_progress(f"Attempting NSZ decompression for {filename}...", 0)
                 
-                # Use the unified NSZ decompression method
-                success = decompress_nsz_file(file_path, WORK_DIR, progress_callback=update_progress)
+                # Use the unified decompress_nsz_file function
+                nsz_success = decompress_nsz_file(file_path, WORK_DIR, progress_callback=update_progress)
                 
-                if success:
-                    # Find and move all NSP files in work directory to roms folder
+                if nsz_success:
+                    # Find and move all NSP files in work directory
                     for file in os.listdir(WORK_DIR):
                         if file.endswith('.nsp'):
                             src_path = os.path.join(WORK_DIR, file)
@@ -4067,9 +4152,14 @@ try:
                 progress_callback(f"Error processing {filename}: {e}", 0)
             return False
 
-
     def download_files(system, selected_game_indices):
-        """Standard download implementation"""
+        # Use standard download - Android support removed
+        return download_files_standard(system, selected_game_indices)
+
+    # Removed download_files_android - Android support disabled
+
+    def download_files_standard(system, selected_game_indices):
+        """Standard download implementation for non-Android platforms"""
         try:
             sys_data = data[system]
             formats = sys_data.get('file_format', [])
@@ -4298,7 +4388,6 @@ try:
                             href = None
                             filename = None
                             bannerUrl = None
-                            file_size = None
 
                             if 'id' in match.groupdict():
                                 id_value = match.groupdict().get('id')
@@ -4319,8 +4408,6 @@ try:
 
                             if 'banner_url' in match.groupdict():
                                 bannerUrl = match.groupdict().get('banner_url')
-                            if 'size' in match.groupdict():
-                                file_size = match.groupdict().get('size')
 
                             if href and not filename:
                                 filename = decode_filename(href)
@@ -4329,9 +4416,9 @@ try:
                                 continue
                             # Filter by file format
                             if any(filename.lower().endswith(ext.lower()) for ext in formats):
-                                files.append({'filename': filename, 'href': href, 'banner_url': bannerUrl, 'size': file_size})
+                                files.append({'filename': filename, 'href': href, 'banner_url': bannerUrl})
                             elif 'ignore_extension_filtering' in sys_data and sys_data['ignore_extension_filtering']:
-                                files.append({'filename': filename, 'href': href, 'banner_url': bannerUrl, 'size': file_size})
+                                files.append({'filename': filename, 'href': href, 'banner_url': bannerUrl})
                         except:
                             continue
                 else:
@@ -4344,7 +4431,7 @@ try:
                         if filename and not filename[0].isascii():
                             continue
                         if any(filename.lower().endswith(ext.lower()) for ext in formats):
-                            files.append({'filename': filename, 'href': href, 'size': None})
+                            files.append({'filename': filename, 'href': href})
                 
                 # Apply USA filter if enabled and system supports it
                 if settings.get("usa_only", False) and sys_data.get('should_filter_usa', True):
@@ -4579,7 +4666,6 @@ try:
     def load_main_systems_data():
         """Load main systems data including added systems"""
         try:
-            # Load main systems (optional) - uses global JSON_FILE which may be archive or default
             main_data = []
             if JSON_FILE and os.path.exists(JSON_FILE):
                 with open(JSON_FILE) as f:
@@ -4588,22 +4674,8 @@ try:
                 print(f"Info: {JSON_FILE} not found, starting with empty main systems")
                 main_data = []
             
-            # Load added systems
             added_systems = load_added_systems()
-            
-            # Combine main data with added systems
             combined_data = main_data + added_systems
-            
-            # Debug: Log the merging process
-            print(f"Loaded {len(main_data)} main systems")
-            print(f"Loaded {len(added_systems)} added systems")
-            print(f"Total systems: {len(combined_data)}")
-            
-            # Debug: Show system names
-            if added_systems:
-                print("Added systems:")
-                for system in added_systems:
-                    print(f"  - {system.get('name', 'Unknown')}")
             
             return combined_data
         except Exception as e:
@@ -4660,6 +4732,74 @@ try:
                 if item_name and item_name[0].upper() < current_letter:
                     return i
         return current_index
+
+    # Load settings after all functions are defined
+    settings = load_settings()
+    
+    # Update error log path to use configured work directory
+    update_log_file_path()
+    
+    # Update JSON_FILE path based on archive_json_path setting
+    update_json_file_path()
+    
+    # Load background image
+    print("Loading background image...")
+    background_image = load_background_image()
+    print(f"Background image result: {background_image is not None}")
+    
+    # Load main systems data now that settings and JSON_FILE are available
+    data[:] = load_main_systems_data()
+    
+    # NSZ will be imported dynamically only when needed and keys are available
+    
+    # Load or create controller mapping
+    mapping_exists = load_controller_mapping()
+    
+    # Debug: Print loaded mapping
+    print(f"DEBUG: Controller mapping loaded: {controller_mapping}")
+    print(f"DEBUG: Mapping exists: {mapping_exists}, Needs mapping: {needs_controller_mapping()}")
+    
+    # If no controller mapping exists or is incomplete, collect it on first run
+    if not mapping_exists or needs_controller_mapping():
+        print("Controller mapping needed - will be collected on startup")
+        show_controller_mapping = True
+    else:
+        print("Controller mapping is complete")
+        show_controller_mapping = False
+
+    # Update data to include added systems
+    try:
+        # Fix any issues with existing added systems
+        fix_added_systems_roms_folder()
+        data = load_main_systems_data()
+    except Exception as e:
+        log_error("Failed to load main systems data", type(e).__name__, traceback.format_exc())
+        # Keep original data if loading fails
+
+    # Set up directories from settings
+    # Create py_downloads subdirectory within user's work directory for temporary downloads
+    base_work_dir = settings["work_dir"]
+    WORK_DIR = os.path.join(base_work_dir, "py_downloads")
+    ROMS_DIR = settings["roms_dir"]
+    
+    # Create directories with error handling
+    try:
+        os.makedirs(WORK_DIR, exist_ok=True)
+    except (OSError, PermissionError) as e:
+        log_error(f"Could not create work directory {WORK_DIR}", type(e).__name__, traceback.format_exc())
+        print(f"Warning: Could not create work directory {WORK_DIR}. Downloads may fail.")
+    
+    try:
+        os.makedirs(ROMS_DIR, exist_ok=True)
+    except (OSError, PermissionError) as e:
+        log_error(f"Could not create ROMs directory {ROMS_DIR}", type(e).__name__, traceback.format_exc())
+        print(f"Warning: Could not create ROMs directory {ROMS_DIR}. You may need to create it manually or select a different directory in settings.")
+
+    # Debug controller variables
+    current_pressed_button = ""
+    last_button_time = 0
+    BUTTON_DISPLAY_TIME = 1000  # milliseconds
+    
     
     def get_controller_button(action):
         """Get the button number for a specific action based on dynamic controller mapping"""
@@ -4686,6 +4826,7 @@ try:
         }
         return keyboard_names.get(action.lower(), action.upper())
         
+
     def input_matches_action(event, action):
         """Check if the pygame event matches the mapped action"""
         button_info = get_controller_button(action)
@@ -4703,6 +4844,49 @@ try:
                 return event.value == (expected_x, expected_y)
         
         return False
+
+
+
+    # Game details modal state
+    show_game_details = False
+    current_game_detail = None
+    close_button_rect = None
+    
+    # Folder browser modal state
+    show_folder_browser = False
+    folder_browser_current_path = "/"
+    folder_browser_items = []
+    folder_browser_highlighted = 0
+    folder_browser_scroll_offset = 0
+    folder_browser_item_rects = []
+    folder_select_button_rect = None
+    folder_cancel_button_rect = None
+    
+    # System name input modal state
+    show_system_input = False
+    system_input_text = ""
+    selected_system_to_add = None
+    
+    # Folder name input modal state
+    show_folder_name_input = False
+    folder_name_input_text = ""
+    folder_name_cursor_position = 0
+    folder_name_char_index = 0  # Current character being selected (0-35 for A-Z, 0-9)
+    
+    # URL input modal state
+    show_url_input = False
+    url_input_text = ""
+    url_cursor_position = 0
+    
+    # Controller mapping modal state
+    show_controller_mapping = False
+    
+    # Main loop
+    running = True
+    button_delay = 0
+    last_dpad_state = (0, 0)  # Track last D-pad state to detect actual changes
+    last_dpad_time = 0  # Track when last D-pad navigation occurred
+    DPAD_DEBOUNCE_MS = 100  # Minimum time between D-pad navigation actions
 
     def draw_folder_name_input_modal():
         """Draw the folder name input modal overlay"""
@@ -5353,58 +5537,6 @@ try:
                 if highlighted != old_highlighted:
                     movement_occurred = True
 
-#-------------------------------------------------------------------------------------#
-#
-#                 Pygame Loop        
-##-------------------------------------------------------------------------------------#
-    settings = load_settings()
-    update_log_file_path()    
-    update_json_file_path()
-    background_image = load_background_image()
-    data[:] = load_main_systems_data()
-    mapping_exists = load_controller_mapping()
-    
-    if not mapping_exists or needs_controller_mapping():
-        print("Controller mapping needed - will be collected on startup")
-        show_controller_mapping = True
-    else:
-        print("Controller mapping is complete")
-        show_controller_mapping = False
-
-    try:
-        fix_added_systems_roms_folder()
-        data = load_main_systems_data()
-    except Exception as e:
-        log_error("Failed to load main systems data", type(e).__name__, traceback.format_exc())
-
-    base_work_dir = settings["work_dir"]
-    WORK_DIR = os.path.join(base_work_dir, "py_downloads")
-    ROMS_DIR = settings["roms_dir"]
-    
-    try:
-        os.makedirs(WORK_DIR, exist_ok=True)
-    except (OSError, PermissionError) as e:
-        log_error(f"Could not create work directory {WORK_DIR}", type(e).__name__, traceback.format_exc())
-        print(f"Warning: Could not create work directory {WORK_DIR}. Downloads may fail.")
-    
-    try:
-        os.makedirs(ROMS_DIR, exist_ok=True)
-    except (OSError, PermissionError) as e:
-        log_error(f"Could not create ROMs directory {ROMS_DIR}", type(e).__name__, traceback.format_exc())
-        print(f"Warning: Could not create ROMs directory {ROMS_DIR}. You may need to create it manually or select a different directory in settings.")
-
-    # Check NSZ availability
-    nsz_keys_path = settings.get("nsz_keys_path", "")
-    if nsz_keys_path and os.path.isfile(nsz_keys_path):
-        NSZ_AVAILABLE = True
-        print(f"NSZ functionality enabled: Keys found at {nsz_keys_path}")
-    else:
-        NSZ_AVAILABLE = False
-        if nsz_keys_path:
-            print(f"NSZ functionality disabled: Keys file not found at {nsz_keys_path}")
-        else:
-            print("NSZ functionality disabled: No keys path configured")
-
     while running:
         try:
             clock.tick(FPS)
@@ -5506,12 +5638,6 @@ try:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
-                elif event.type == pygame.VIDEORESIZE:
-                    # Handle window resize - update fonts for new screen size
-                    new_responsive_font_size = get_responsive_font_size()
-                    if new_responsive_font_size != responsive_font_size:
-                        responsive_font_size = new_responsive_font_size
-                        font = pygame.font.Font(None, responsive_font_size)
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     # Handle mouse clicks
                     if event.button == 1:  # Left mouse button
@@ -5778,9 +5904,8 @@ try:
                                     save_settings(settings)
                                     show_folder_browser = False
                                     selected_system_to_add = None
-                                    draw_loading_message("NSZ SELECTED. Restarting...")
-                                    pygame.time.wait(2000)
-                                    restart_app()
+                                    draw_loading_message("NSZ keys path updated!")
+                                    pygame.time.wait(1500)
                                 elif selected_system_to_add.get("type") == "custom_rom_folder":
                                     # Set custom ROM folder for the selected system
                                     system_name = selected_system_for_settings['name']

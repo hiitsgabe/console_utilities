@@ -10,3 +10,7 @@ dist/
 .buildozer/
 workdir/
 src/keys.txt
+build.zip
+bkp.py
+./bkp2.py
+build/
