@@ -14,4 +14,3 @@ dependencies:
     - pycryptodome
     - zstandard
     - nsz
-    - pygame_emojis

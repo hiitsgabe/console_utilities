@@ -13,26 +13,23 @@ from urllib.parse import urljoin, unquote, quote
 import html
 from threading import Thread
 from queue import Queue
+# **************************************************************** #
+#                       NSZ Module                                 #
+# **************************************************************** #
 try:
-    from pygame_emojis import load_emoji
-    EMOJIS_AVAILABLE = True
-except ImportError:
-    EMOJIS_AVAILABLE = False
-    load_emoji = None
-try:
-    # Add NSZ directory to Python path
     nsz_path = os.path.join(os.path.dirname(__file__), "nsz")
     if nsz_path not in sys.path:
         sys.path.insert(0, nsz_path)    
     from nsz import decompress as nsz_decompress
     NSZ_AVAILABLE = True
-    print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! has NSZ")
 except (ImportError, AttributeError, FileNotFoundError, ModuleNotFoundError) as e:
     NSZ_AVAILABLE = False
     nsz_decompress = None
-    print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! no NSZ", str(e))
 
-    
+
+# **************************************************************** #
+#                       Global Constants                           #
+# **************************************************************** #
 DEV_MODE = os.getenv('DEV_MODE', 'false').lower() == 'true'
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 JSON_FILE = None  
@@ -51,8 +48,113 @@ else:
 FPS = 30
 SCREEN_WIDTH, SCREEN_HEIGHT = 800, 600
 FONT_SIZE = 28
+BACKGROUND = (18, 20, 24)        # Dark background
+SURFACE = (30, 34, 40)           # Card/surface background
+SURFACE_HOVER = (40, 44, 50)     # Card hover state
+SURFACE_SELECTED = (45, 50, 60)  # Card selected state
+PRIMARY = (66, 165, 245)         # Primary accent (blue)
+PRIMARY_DARK = (48, 123, 184)    # Darker primary
+PRIMARY_LIGHT = (100, 181, 246)  # Lighter primary
+SECONDARY = (102, 187, 106)      # Secondary accent (green)
+SECONDARY_DARK = (76, 140, 79)   # Darker secondary
+SECONDARY_LIGHT = (129, 199, 132) # Lighter secondary
+TEXT_PRIMARY = (255, 255, 255)   # Primary text (white)
+TEXT_SECONDARY = (189, 189, 189) # Secondary text (light gray)
+TEXT_DISABLED = (117, 117, 117)  # Disabled text (darker gray)
+WARNING = (255, 193, 7)          # Warning color (amber)
+ERROR = (244, 67, 54)            # Error color (red)
+SUCCESS = (76, 175, 80)          # Success color (green)
+SHADOW_COLOR = (0, 0, 0, 60)     # Shadow color with alpha
+GLOW_COLOR = (66, 165, 245, 40)  # Glow color for highlights
+BORDER_RADIUS = 12               # Default border radius
+CARD_PADDING = 8                 # Card padding
+THUMBNAIL_BORDER_RADIUS = 8      # Thumbnail border radius
+WHITE = TEXT_PRIMARY
+BLACK = BACKGROUND
+GREEN = SECONDARY
+GRAY = TEXT_SECONDARY
+NAVIGATION_INITIAL_DELAY = 100     # ms before repeating starts (much longer delay)
+NAVIGATION_START_RATE = 400        # ms between repeats when starting (slow)
+NAVIGATION_MAX_RATE = 100          # ms between repeats at maximum speed (fast)
+NAVIGATION_ACCELERATION = 0.90 
+THUMBNAIL_SIZE = (96, 96) 
+HIRES_IMAGE_SIZE = (400, 400)
 
+# **************************************************************** #
+#                       Global Variables                           #
+# **************************************************************** #
+data = []
 
+selected_system = 0
+selected_games = set()
+game_list = []
+mode = "systems"  # systems, games, settings, utils, add_systems, systems_settings, or system_settings
+available_systems = []
+add_systems_highlighted = 0
+systems_settings_highlighted = 0
+system_settings_highlighted = 0
+selected_system_for_settings = None
+current_page = 0
+total_pages = 1
+highlighted = 0
+settings_scroll_offset = 0
+search_mode = False
+search_query = ""
+url_input_context = "archive_json"  # "archive_json" or "direct_download"
+filtered_game_list = []
+char_selector_mode = False
+char_x = 0
+char_y = 0
+show_search_input = False
+search_input_text = ""
+search_cursor_position = 0
+search_cursor_blink_time = 0
+navigation_state = {
+    'up': False,
+    'down': False, 
+    'left': False,
+    'right': False
+}
+navigation_start_time = {
+    'up': 0,
+    'down': 0,
+    'left': 0, 
+    'right': 0
+}
+navigation_last_repeat = {
+    'up': 0,
+    'down': 0,
+    'left': 0,
+    'right': 0  
+}
+navigation_velocity = {
+    'up': 0,
+    'down': 0,
+    'left': 0,
+    'right': 0
+}
+menu_item_rects = []  # Store rectangles for clickable menu items
+menu_scroll_offset = 0  # Current scroll offset (start_idx) for click mapping
+scroll_accumulated = 0  # For smooth scrolling
+touch_start_pos = None  # Starting position of touch
+touch_start_time = 0  # Time when touch started
+touch_last_pos = None  # Last touch position for motion tracking
+is_scrolling = False  # Whether user is currently scrolling
+scroll_threshold = 8  # Pixels to move before it's considered scrolling (reduced for better touch response)
+tap_time_threshold = 300  # Max ms for a tap vs scroll (reduced for more responsive touch)
+scroll_sensitivity = 1.5  # Touch scroll sensitivity multiplier (increased for better scroll response)
+last_click_time = 0
+last_clicked_item = -1
+double_click_threshold = 500  # Max ms between clicks for double-click
+back_button_rect = None
+search_button_rect = None
+download_button_rect = None
+modal_char_rects = []  # For character selection modals
+modal_back_button_rect = None  # Back button for modals
+    
+# **************************************************************** #
+#                       Utils                                      #
+# **************************************************************** #
 def decompress_nsz_file(nsz_file_path, output_dir, progress_callback=None):
     """
     Unified NSZ decompression method that tries multiple approaches
@@ -135,7 +237,6 @@ def decompress_nsz_file(nsz_file_path, output_dir, progress_callback=None):
         update_progress(f"NSZ decompression failed for {filename}", 0)
         return False
 
-
 def update_log_file_path():
     """Update LOG_FILE path to use the configured work directory with py_downloads subdirectory"""
     global LOG_FILE
@@ -157,6 +258,41 @@ def log_error(error_msg, error_type=None, traceback_str=None):
     with open(LOG_FILE, "a") as f:
         f.write(log_message)
 
+def format_size(size_bytes):
+    """Convert bytes to human readable format"""
+    for unit in ['B', 'KB', 'MB', 'GB']:
+        if size_bytes < 1024:
+            return f"{size_bytes:.1f} {unit}"
+        size_bytes /= 1024
+    return f"{size_bytes:.1f} TB"
+
+def decode_filename(raw_filename):
+    """Properly decode URL-encoded and HTML entity-encoded filenames"""
+    try:
+        # First decode URL encoding (e.g., %20 -> space, %5B -> [)
+        url_decoded = unquote(raw_filename)
+        
+        # Then decode HTML entities (e.g., &gt; -> >, &amp; -> &)
+        html_decoded = html.unescape(url_decoded)
+        
+        # Handle any remaining character encoding issues
+        # Try to encode as latin1 and decode as utf-8 if needed
+        try:
+            if html_decoded.encode('latin1').decode('utf-8') != html_decoded:
+                html_decoded = html_decoded.encode('latin1').decode('utf-8')
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            pass  # Keep original if encoding conversion fails
+        
+        return html_decoded
+    except Exception:
+        # If all decoding fails, return the original
+        return raw_filename
+
+
+
+# **************************************************************** #
+#                       Initialization                           #
+# **************************************************************** #
 try:
     log_dir = os.path.dirname(LOG_FILE) if os.path.dirname(LOG_FILE) else "."
     os.makedirs(log_dir, exist_ok=True)
@@ -170,13 +306,13 @@ try:
 except Exception as e:
     print(f"Failed to initialize log file: {e}")
 
+
+# **************************************************************** #
+#                       Pygame Initialization                      #
+# **************************************************************** #
 try:
-    print("Initializing pygame...")
     pygame.init()
     print("Pygame initialized successfully")
-    
-    # Test basic pygame functionality
-    print("Testing pygame display...")
     test_screen = pygame.display.set_mode((100, 100))
     print("Display test successful")
     pygame.display.quit()
@@ -185,19 +321,15 @@ try:
     pygame.display.set_caption("Console Utilities")
     clock = pygame.time.Clock()
     font = pygame.font.Font(None, FONT_SIZE)
-
-    # Initialize joystick if available, otherwise use keyboard
     pygame.joystick.init()
+    touchscreen_available = False
+    mouse_available = True
     joystick = None
     if pygame.joystick.get_count() > 0:
         joystick = pygame.joystick.Joystick(0)
         joystick.init()
     else:
         print("No joystick detected, use keyboard: Arrow keys, Enter, Escape, Space")
-
-    # Initialize touchscreen and mouse support
-    touchscreen_available = False
-    mouse_available = True  # Mouse is always available in pygame
     try:
         import pygame._sdl2.touch
         touch_device_count = pygame._sdl2.touch.get_num_devices()
@@ -211,139 +343,7 @@ try:
     
     print("Mouse navigation available")
 
-    # Modern color palette
-    BACKGROUND = (18, 20, 24)        # Dark background
-    SURFACE = (30, 34, 40)           # Card/surface background
-    SURFACE_HOVER = (40, 44, 50)     # Card hover state
-    SURFACE_SELECTED = (45, 50, 60)  # Card selected state
-    PRIMARY = (66, 165, 245)         # Primary accent (blue)
-    PRIMARY_DARK = (48, 123, 184)    # Darker primary
-    PRIMARY_LIGHT = (100, 181, 246)  # Lighter primary
-    SECONDARY = (102, 187, 106)      # Secondary accent (green)
-    SECONDARY_DARK = (76, 140, 79)   # Darker secondary
-    SECONDARY_LIGHT = (129, 199, 132) # Lighter secondary
-    TEXT_PRIMARY = (255, 255, 255)   # Primary text (white)
-    TEXT_SECONDARY = (189, 189, 189) # Secondary text (light gray)
-    TEXT_DISABLED = (117, 117, 117)  # Disabled text (darker gray)
-    WARNING = (255, 193, 7)          # Warning color (amber)
-    ERROR = (244, 67, 54)            # Error color (red)
-    SUCCESS = (76, 175, 80)          # Success color (green)
-    
-    # Additional visual constants
-    SHADOW_COLOR = (0, 0, 0, 60)     # Shadow color with alpha
-    GLOW_COLOR = (66, 165, 245, 40)  # Glow color for highlights
-    BORDER_RADIUS = 12               # Default border radius
-    CARD_PADDING = 8                 # Card padding
-    THUMBNAIL_BORDER_RADIUS = 8      # Thumbnail border radius
-    
-    # Legacy colors for compatibility
-    WHITE = TEXT_PRIMARY
-    BLACK = BACKGROUND
-    GREEN = SECONDARY
-    GRAY = TEXT_SECONDARY
 
-    # Data will be loaded after settings are initialized
-    data = []
-
-    selected_system = 0
-    selected_games = set()
-    game_list = []
-    mode = "systems"  # systems, games, settings, utils, add_systems, systems_settings, or system_settings
-    
-    # Add systems state
-    available_systems = []
-    add_systems_highlighted = 0
-    
-    # Systems settings variables
-    systems_settings_highlighted = 0
-    system_settings_highlighted = 0
-    selected_system_for_settings = None
-    
-    # Pagination variables
-    current_page = 0
-    total_pages = 1
-    highlighted = 0
-    
-    # Settings scroll variables
-    settings_scroll_offset = 0
-    
-    # Search functionality variables
-    search_mode = False
-    search_query = ""
-    
-    # URL input context tracking
-    url_input_context = "archive_json"  # "archive_json" or "direct_download"
-    filtered_game_list = []
-    char_selector_mode = False
-    char_x = 0
-    char_y = 0
-    
-    # Search input modal state
-    show_search_input = False
-    search_input_text = ""
-    search_cursor_position = 0
-    search_cursor_blink_time = 0
-    
-    # Continuous navigation state
-    navigation_state = {
-        'up': False,
-        'down': False, 
-        'left': False,
-        'right': False
-    }
-    navigation_start_time = {
-        'up': 0,
-        'down': 0,
-        'left': 0, 
-        'right': 0
-    }
-    navigation_last_repeat = {
-        'up': 0,
-        'down': 0,
-        'left': 0,
-        'right': 0  
-    }
-    navigation_velocity = {
-        'up': 0,
-        'down': 0,
-        'left': 0,
-        'right': 0
-    }
-    
-    # Navigation timing constants with progressive acceleration
-    NAVIGATION_INITIAL_DELAY = 100     # ms before repeating starts (much longer delay)
-    NAVIGATION_START_RATE = 400        # ms between repeats when starting (slow)
-    NAVIGATION_MAX_RATE = 100          # ms between repeats at maximum speed (fast)
-    NAVIGATION_ACCELERATION = 0.90     # rate multiplier each repeat (smaller = faster acceleration)
-    
-    # Touch/click support variables
-    menu_item_rects = []  # Store rectangles for clickable menu items
-    menu_scroll_offset = 0  # Current scroll offset (start_idx) for click mapping
-    scroll_accumulated = 0  # For smooth scrolling
-    
-    # Touch gesture tracking
-    touch_start_pos = None  # Starting position of touch
-    touch_start_time = 0  # Time when touch started
-    touch_last_pos = None  # Last touch position for motion tracking
-    is_scrolling = False  # Whether user is currently scrolling
-    scroll_threshold = 15  # Pixels to move before it's considered scrolling
-    tap_time_threshold = 500  # Max ms for a tap vs scroll
-    scroll_sensitivity = 0.5  # Touch scroll sensitivity multiplier
-    
-    # Double-click tracking for games
-    last_click_time = 0
-    last_clicked_item = -1
-    double_click_threshold = 500  # Max ms between clicks for double-click
-    
-    # On-screen button rectangles
-    back_button_rect = None
-    search_button_rect = None
-    download_button_rect = None
-    
-    # Modal interaction rectangles
-    modal_char_rects = []  # For character selection modals
-    modal_back_button_rect = None  # Back button for modals
-    
     def update_navigation_state():
         """Update navigation state based on current joystick/controller input"""
         global navigation_state, navigation_start_time, navigation_last_repeat, navigation_velocity
@@ -607,11 +607,12 @@ try:
                     highlighted = find_next_letter_index(items, highlighted, 1)
                 if highlighted != old_highlighted:
                     movement_occurred = True
-    
-    # Settings will be loaded after functions are defined
+
+
+    # -------------------------------- #
+    # Pygame Variables
+    # -------------------------------- #
     settings = {}
-    
-    # Controller mapping will be loaded/created dynamically
     controller_mapping = {}
     settings_list = [
         "Select Archive Json",
@@ -626,47 +627,30 @@ try:
         "View Type",
         "USA Games Only"
     ]
-
-    # Directories will be created after settings are loaded
-
-    # Image cache for thumbnails
     image_cache = {}
     image_queue = Queue()
-    THUMBNAIL_SIZE = (96, 96)  # Increased thumbnail size for better quality and visibility
     
-    # High-resolution image cache for detail modal
     hires_image_cache = {}
     hires_image_queue = Queue()
-    HIRES_IMAGE_SIZE = (400, 400)  # High-resolution size for detail modal
 
-    def format_size(size_bytes):
-        """Convert bytes to human readable format"""
-        for unit in ['B', 'KB', 'MB', 'GB']:
-            if size_bytes < 1024:
-                return f"{size_bytes:.1f} {unit}"
-            size_bytes /= 1024
-        return f"{size_bytes:.1f} TB"
-
+    # -------------------------------- #
+    #  Settings Methods
+    # -------------------------------- #
     def load_settings():
         """Load settings from config file"""
-        # Default paths based on environment
-        # Note: py_downloads subdirectory will be created within work_dir automatically
         if DEV_MODE:
-            # Development mode - use local directories since /userdata might not exist
             default_work_dir = os.path.join(SCRIPT_DIR, "..", "downloads")
             default_roms_dir = os.path.join(SCRIPT_DIR, "..", "roms")
         elif os.path.exists("/userdata") and os.access("/userdata", os.W_OK):
-            # Console environment with writable /userdata
             default_work_dir = "/userdata/downloads"
             default_roms_dir = "/userdata/roms"
         else:
-            # Fallback - use script directory
             default_work_dir = os.path.join(SCRIPT_DIR, "downloads")
             default_roms_dir = os.path.join(SCRIPT_DIR, "roms")
         
         default_settings = {
             "enable_boxart": True,
-            "view_type": "list",
+            "view_type": "grid",
             "usa_only": False,
             "work_dir": default_work_dir,
             "roms_dir": default_roms_dir,
@@ -689,7 +673,6 @@ try:
             log_error("Failed to load settings, using defaults", type(e).__name__, traceback.format_exc())
         
         return default_settings
-
     def save_settings(settings_to_save):
         """Save settings to config file"""
         try:
@@ -747,25 +730,6 @@ try:
             print(f"Failed to load background image: {e}")
             log_error(f"Failed to load background image", type(e).__name__, traceback.format_exc())
         return None
-
-    def draw_emoji_icon(emoji_char, x, y, size=16):
-        """Draw an emoji at the specified position using pygame-emojis"""
-        if EMOJIS_AVAILABLE and load_emoji:
-            emoji_surface = load_emoji(emoji_char, (size, size))
-            if emoji_surface:
-                screen.blit(emoji_surface, (x, y))
-                return True
-        
-        try:
-            emoji_font = pygame.font.Font(None, size)
-            emoji_surf = emoji_font.render(emoji_char, True, TEXT_PRIMARY)
-            if emoji_surf and emoji_surf.get_width() > 0:
-                screen.blit(emoji_surf, (x, y))
-                return False
-        except Exception as e:
-            print(f"Text fallback also failed: {e}")
-        
-        return False
 
     def handle_touch_click_event(pos):
         """Handle touch/click events by checking if they hit any menu items or buttons"""
@@ -1491,20 +1455,19 @@ try:
 
     def needs_controller_mapping():
         """Check if we need to collect controller mapping"""
-        # If touchscreen mode is enabled, no controller mapping is needed
-        if controller_mapping and controller_mapping.get("touchscreen_mode"):
-            return False
-        
-        essential_buttons = ["select", "back", "start", "detail", "search", "up", "down", "left", "right"]
-        return not controller_mapping or not all(button in controller_mapping for button in essential_buttons)
+        try: 
+            if controller_mapping and controller_mapping.get("touchscreen_mode"):
+                return False
+            essential_buttons = ["select", "back", "start", "detail", "search", "up", "down", "left", "right"]
+            return not controller_mapping or not all(button in controller_mapping for button in essential_buttons)
+        except Exception as e:
+            log_error("Failed to check controller mapping", type(e).__name__, traceback.format_exc())
+            return True
 
     def get_visible_systems():
         """Get list of systems that are not hidden and not list_systems"""
         system_settings = settings.get("system_settings", {})
         visible_systems = [d for d in data if not d.get('list_systems', False) and not system_settings.get(d['name'], {}).get('hidden', False)]
-        # Remove the last system from the main menu
-        if len(visible_systems) > 0:
-            visible_systems = visible_systems[:-1]
         return visible_systems
 
     def get_system_index_by_name(system_name):
@@ -1909,8 +1872,6 @@ try:
         
         return None  # Not ready yet
 
-
-
     def load_image_with_fallback(base_url, base_name, formats, cache_key, game_name=None):
         """Try loading image with different format extensions"""
         for fmt in formats:
@@ -2085,75 +2046,6 @@ try:
         
         return "loading"
 
-
-    def download_archive_json(url):
-        """Download and update download.json from remote URL"""
-        try:
-            # Validate URL format
-            if not url or not url.strip():
-                draw_loading_message("Error: No URL provided")
-                pygame.time.wait(2000)
-                return False
-                
-            if not (url.startswith('http://') or url.startswith('https://')):
-                draw_loading_message("Error: URL must start with http:// or https://")
-                pygame.time.wait(2000)
-                return False
-            
-            draw_loading_message("Downloading archive configuration...")
-            
-            try:
-                response = requests.get(url, timeout=30, allow_redirects=True)
-                response.raise_for_status()
-                
-                # Try to parse as JSON to validate
-                try:
-                    json_data = response.json()
-                    if not isinstance(json_data, list):
-                        draw_loading_message("Error: Invalid JSON format (must be array)")
-                        pygame.time.wait(2000)
-                        return False
-                except json.JSONDecodeError:
-                    draw_loading_message("Error: Invalid JSON format")
-                    pygame.time.wait(2000)
-                    return False
-                
-                # Create backup of existing file
-                backup_path = f"{JSON_FILE}.backup"
-                if os.path.exists(JSON_FILE):
-                    try:
-                        with open(JSON_FILE, 'r') as original:
-                            with open(backup_path, 'w') as backup:
-                                backup.write(original.read())
-                    except Exception as backup_error:
-                        log_error(f"Failed to create backup for download.json", type(backup_error).__name__, traceback.format_exc())
-                
-                # Create directory if it doesn't exist
-                os.makedirs(os.path.dirname(JSON_FILE), exist_ok=True)
-                
-                # Write new content
-                with open(JSON_FILE, 'w') as f:
-                    json.dump(json_data, f, indent=2)
-                
-                draw_loading_message("Archive configuration updated successfully!")
-                pygame.time.wait(2000)
-                return True
-                
-            except requests.RequestException as req_error:
-                error_msg = f"Failed to download from {url}"
-                if hasattr(req_error, 'response') and req_error.response is not None:
-                    error_msg += f" (HTTP {req_error.response.status_code})"
-                log_error(error_msg, type(req_error).__name__, traceback.format_exc())
-                draw_loading_message(f"Error: Network error - check URL")
-                pygame.time.wait(2000)
-                return False
-                
-        except Exception as e:
-            log_error("Error downloading archive JSON", type(e).__name__, traceback.format_exc())
-            draw_loading_message("Download failed. Check error log for details.")
-            pygame.time.wait(2000)
-            return False
-
     def download_direct_file(url):
         """Download a file directly to the work directory"""
         try:
@@ -2313,8 +2205,6 @@ try:
         
         pygame.display.flip()
 
-    # Removed draw_android_download_summary - Android support disabled
-
     def draw_settings_menu():
         global settings_scroll_offset, menu_item_rects, menu_scroll_offset
         menu_item_rects.clear()
@@ -2446,8 +2336,6 @@ try:
             
             y += row_height
         
-        
-
     def draw_add_systems_menu():
         draw_background()
         y = 10
@@ -2507,7 +2395,6 @@ try:
                     down_arrow = font.render("DOWN", True, GRAY)
                     screen.blit(down_arrow, (screen_width - 50, screen_height - 30))
         
-
     def draw_systems_settings_menu():
         """Draw the systems settings menu that lists all systems"""
         draw_background()
@@ -2580,7 +2467,6 @@ try:
                 down_arrow = font.render("DOWN", True, GRAY)
                 screen.blit(down_arrow, (screen_width - 50, screen_height - 30))
         
-
     def draw_utils_menu():
         """Draw the utils menu for downloading files"""
         utils_options = [
@@ -2611,7 +2497,7 @@ try:
             "",
             "Developer: hiitsgabe @ github.",
             "",
-            "Made w/ ❤️ in Toronto.",
+            "Made with love in Toronto.",
             "",
             "DISCLAIMER:",
             "This app is meant to help you organize games that",
@@ -2628,42 +2514,9 @@ try:
         # Center the credits content
         for line in credits_content:
             if line:  # Non-empty lines
-                if "❤️" in line:
-                    # Special handling for the heart emoji line
-                    parts = line.split("❤️")
-                    if len(parts) == 2:
-                        # Render the text parts
-                        part1_surf = font.render(parts[0], True, TEXT_PRIMARY)
-                        part2_surf = font.render(parts[1], True, TEXT_PRIMARY)
-                        
-                        # Calculate total width including heart emoji
-                        heart_size = 20
-                        total_width = part1_surf.get_width() + heart_size + part2_surf.get_width()
-                        
-                        # Start position to center everything
-                        start_x = (screen_width - total_width) // 2
-                        
-                        # Draw first part
-                        screen.blit(part1_surf, (start_x, y))
-                        
-                        # Draw heart emoji
-                        heart_x = start_x + part1_surf.get_width()
-                        heart_y = y + (FONT_SIZE - heart_size) // 2  # Vertically center with text
-                        draw_emoji_icon("❤️", heart_x, heart_y, heart_size)
-                        
-                        # Draw second part
-                        part2_x = heart_x + heart_size
-                        screen.blit(part2_surf, (part2_x, y))
-                    else:
-                        # Fallback if split doesn't work as expected
-                        line_surf = font.render(line, True, TEXT_PRIMARY)
-                        line_x = (screen_width - line_surf.get_width()) // 2
-                        screen.blit(line_surf, (line_x, y))
-                else:
-                    # Regular text line
-                    line_surf = font.render(line, True, TEXT_PRIMARY)
-                    line_x = (screen_width - line_surf.get_width()) // 2
-                    screen.blit(line_surf, (line_x, y))
+                line_surf = font.render(line, True, TEXT_PRIMARY)
+                line_x = (screen_width - line_surf.get_width()) // 2
+                screen.blit(line_surf, (line_x, y))
             y += FONT_SIZE + 8
         
         # Instructions at the bottom
@@ -2733,7 +2586,6 @@ try:
             screen.blit(option_surf, (20, y))
             y += FONT_SIZE + 10
         
-
     def draw_grid_view(title, items, selected_indices):
         # Clear menu item rectangles for touch/click detection
         global menu_item_rects, menu_scroll_offset
@@ -3165,42 +3017,37 @@ try:
             else:
                 text_x = 35  # Standard margin for non-games with more padding
                 
-                # Add emoji icons for system menu items
+                # Add geometric icons for system menu items
                 if mode == "systems":
                     icon_x = item_margin + 12
                     icon_y = y + (row_height - 20) // 2
                     icon_size = 20
                     
-                    # Emoji icons for different items with geometric fallback
+                    # Geometric icons for different items
                     if item == "Settings":
-                        if not draw_emoji_icon("⚙️", icon_x, icon_y, icon_size):
-                            # Fallback: gear icon (geometric)
-                            gear_color = SECONDARY if is_highlighted else TEXT_PRIMARY
-                            pygame.draw.rect(screen, gear_color, (icon_x, icon_y, 16, 16), 2)
-                            pygame.draw.rect(screen, gear_color, (icon_x + 4, icon_y + 4, 8, 8))
+                        # Gear icon (geometric)
+                        gear_color = SECONDARY if is_highlighted else TEXT_PRIMARY
+                        pygame.draw.rect(screen, gear_color, (icon_x, icon_y, 16, 16), 2)
+                        pygame.draw.rect(screen, gear_color, (icon_x + 4, icon_y + 4, 8, 8))
                     elif item == "Utils":
-                        if not draw_emoji_icon("🔧", icon_x, icon_y, icon_size):
-                            # Fallback: wrench icon (geometric)  
-                            utils_color = SECONDARY if is_highlighted else TEXT_PRIMARY
-                            pygame.draw.line(screen, utils_color, (icon_x + 2, icon_y + 2), (icon_x + 14, icon_y + 14), 2)
-                            pygame.draw.line(screen, utils_color, (icon_x + 6, icon_y + 14), (icon_x + 14, icon_y + 6), 2)
+                        # Wrench icon (geometric)  
+                        utils_color = SECONDARY if is_highlighted else TEXT_PRIMARY
+                        pygame.draw.line(screen, utils_color, (icon_x + 2, icon_y + 2), (icon_x + 14, icon_y + 14), 2)
+                        pygame.draw.line(screen, utils_color, (icon_x + 6, icon_y + 14), (icon_x + 14, icon_y + 6), 2)
                     elif item == "Credits":
-                        if not draw_emoji_icon("❤️", icon_x, icon_y, icon_size):
-                            # Fallback: heart icon (geometric)
-                            credits_color = SECONDARY if is_highlighted else TEXT_PRIMARY
-                            center_x, center_y = icon_x + 8, icon_y + 8
-                            heart_points = [(center_x, center_y - 4), (center_x + 4, center_y), (center_x, center_y + 4), (center_x - 4, center_y)]
-                            pygame.draw.polygon(screen, credits_color, heart_points, 2)
+                        # Heart icon (geometric)
+                        credits_color = SECONDARY if is_highlighted else TEXT_PRIMARY
+                        center_x, center_y = icon_x + 8, icon_y + 8
+                        heart_points = [(center_x, center_y - 4), (center_x + 4, center_y), (center_x, center_y + 4), (center_x - 4, center_y)]
+                        pygame.draw.polygon(screen, credits_color, heart_points, 2)
                     else:
-                        # Game controller emoji for game systems
-                        if not draw_emoji_icon("🎮", icon_x, icon_y, icon_size):
-                            # Fallback: controller icon (geometric)
-                            controller_color = PRIMARY if is_highlighted else TEXT_PRIMARY
-                            pygame.draw.rect(screen, controller_color, (icon_x, icon_y + 4, 16, 8), 2)
-                            pygame.draw.rect(screen, controller_color, (icon_x + 2, icon_y + 2, 3, 3))
-                            pygame.draw.rect(screen, controller_color, (icon_x + 11, icon_y + 2, 3, 3))
+                        # Controller icon (geometric) for game systems
+                        controller_color = PRIMARY if is_highlighted else TEXT_PRIMARY
+                        pygame.draw.rect(screen, controller_color, (icon_x, icon_y + 4, 16, 8), 2)
+                        pygame.draw.rect(screen, controller_color, (icon_x + 2, icon_y + 2, 3, 3))
+                        pygame.draw.rect(screen, controller_color, (icon_x + 11, icon_y + 2, 3, 3))
                     
-                    text_x += 30  # Move text over to make room for larger emoji icon
+                    text_x += 30  # Move text over to make room for icon
             
             # Draw text with enhanced styling
             text_y = y + (row_height - FONT_SIZE) // 2  # Center text vertically
@@ -3748,7 +3595,6 @@ try:
             folder_select_button_rect = None
             folder_cancel_button_rect = None
 
-
     def draw_loading_message(message):
         draw_background()
         
@@ -4008,30 +3854,6 @@ try:
         
         pygame.display.flip()
 
-    def decode_filename(raw_filename):
-        """Properly decode URL-encoded and HTML entity-encoded filenames"""
-        try:
-            # First decode URL encoding (e.g., %20 -> space, %5B -> [)
-            url_decoded = unquote(raw_filename)
-            
-            # Then decode HTML entities (e.g., &gt; -> >, &amp; -> &)
-            html_decoded = html.unescape(url_decoded)
-            
-            # Handle any remaining character encoding issues
-            # Try to encode as latin1 and decode as utf-8 if needed
-            try:
-                if html_decoded.encode('latin1').decode('utf-8') != html_decoded:
-                    html_decoded = html_decoded.encode('latin1').decode('utf-8')
-            except (UnicodeEncodeError, UnicodeDecodeError):
-                pass  # Keep original if encoding conversion fails
-            
-            return html_decoded
-        except Exception:
-            # If all decoding fails, return the original
-            return raw_filename
-
-
-
     def filter_games_by_search(games, query):
         """Filter games list based on search query"""
         if not query.strip():
@@ -4153,12 +3975,6 @@ try:
             return False
 
     def download_files(system, selected_game_indices):
-        # Use standard download - Android support removed
-        return download_files_standard(system, selected_game_indices)
-
-    # Removed download_files_android - Android support disabled
-
-    def download_files_standard(system, selected_game_indices):
         """Standard download implementation for non-Android platforms"""
         try:
             sys_data = data[system]
@@ -4733,33 +4549,48 @@ try:
                     return i
         return current_index
 
-    # Load settings after all functions are defined
-    settings = load_settings()
-    
-    # Update error log path to use configured work directory
-    update_log_file_path()
-    
-    # Update JSON_FILE path based on archive_json_path setting
-    update_json_file_path()
-    
-    # Load background image
+    settings = load_settings()    
+    update_log_file_path()    
+    update_json_file_path()    
     print("Loading background image...")
     background_image = load_background_image()
-    print(f"Background image result: {background_image is not None}")
-    
-    # Load main systems data now that settings and JSON_FILE are available
+    print(f"Background image result: {background_image is not None}")    
     data[:] = load_main_systems_data()
-    
-    # NSZ will be imported dynamically only when needed and keys are available
-    
-    # Load or create controller mapping
     mapping_exists = load_controller_mapping()
-    
-    # Debug: Print loaded mapping
-    print(f"DEBUG: Controller mapping loaded: {controller_mapping}")
-    print(f"DEBUG: Mapping exists: {mapping_exists}, Needs mapping: {needs_controller_mapping()}")
-    
-    # If no controller mapping exists or is incomplete, collect it on first run
+    base_work_dir = settings["work_dir"]
+    WORK_DIR = os.path.join(base_work_dir, "py_downloads")
+    ROMS_DIR = settings["roms_dir"]
+    current_pressed_button = ""
+    last_button_time = 0
+    BUTTON_DISPLAY_TIME = 1000  
+    show_game_details = False
+    current_game_detail = None
+    close_button_rect = None
+    show_folder_browser = False
+    folder_browser_current_path = "/"
+    folder_browser_items = []
+    folder_browser_highlighted = 0
+    folder_browser_scroll_offset = 0
+    folder_browser_item_rects = []
+    folder_select_button_rect = None
+    folder_cancel_button_rect = None
+    show_system_input = False
+    system_input_text = ""
+    selected_system_to_add = None
+    show_folder_name_input = False
+    folder_name_input_text = ""
+    folder_name_cursor_position = 0
+    folder_name_char_index = 0  # Current character being selected (0-35 for A-Z, 0-9)
+    show_url_input = False
+    url_input_text = ""
+    url_cursor_position = 0
+    show_controller_mapping = False
+    running = True
+    button_delay = 0
+    last_dpad_state = (0, 0)  # Track last D-pad state to detect actual changes
+    last_dpad_time = 0  # Track when last D-pad navigation occurred
+    DPAD_DEBOUNCE_MS = 100  # Minimum time between D-pad navigation actions
+
     if not mapping_exists or needs_controller_mapping():
         print("Controller mapping needed - will be collected on startup")
         show_controller_mapping = True
@@ -4767,22 +4598,12 @@ try:
         print("Controller mapping is complete")
         show_controller_mapping = False
 
-    # Update data to include added systems
     try:
-        # Fix any issues with existing added systems
         fix_added_systems_roms_folder()
         data = load_main_systems_data()
     except Exception as e:
         log_error("Failed to load main systems data", type(e).__name__, traceback.format_exc())
-        # Keep original data if loading fails
-
-    # Set up directories from settings
-    # Create py_downloads subdirectory within user's work directory for temporary downloads
-    base_work_dir = settings["work_dir"]
-    WORK_DIR = os.path.join(base_work_dir, "py_downloads")
-    ROMS_DIR = settings["roms_dir"]
-    
-    # Create directories with error handling
+   
     try:
         os.makedirs(WORK_DIR, exist_ok=True)
     except (OSError, PermissionError) as e:
@@ -4795,11 +4616,6 @@ try:
         log_error(f"Could not create ROMs directory {ROMS_DIR}", type(e).__name__, traceback.format_exc())
         print(f"Warning: Could not create ROMs directory {ROMS_DIR}. You may need to create it manually or select a different directory in settings.")
 
-    # Debug controller variables
-    current_pressed_button = ""
-    last_button_time = 0
-    BUTTON_DISPLAY_TIME = 1000  # milliseconds
-    
     
     def get_controller_button(action):
         """Get the button number for a specific action based on dynamic controller mapping"""
@@ -4826,7 +4642,6 @@ try:
         }
         return keyboard_names.get(action.lower(), action.upper())
         
-
     def input_matches_action(event, action):
         """Check if the pygame event matches the mapped action"""
         button_info = get_controller_button(action)
@@ -4844,50 +4659,6 @@ try:
                 return event.value == (expected_x, expected_y)
         
         return False
-
-
-
-    # Game details modal state
-    show_game_details = False
-    current_game_detail = None
-    close_button_rect = None
-    
-    # Folder browser modal state
-    show_folder_browser = False
-    folder_browser_current_path = "/"
-    folder_browser_items = []
-    folder_browser_highlighted = 0
-    folder_browser_scroll_offset = 0
-    folder_browser_item_rects = []
-    folder_select_button_rect = None
-    folder_cancel_button_rect = None
-    
-    # System name input modal state
-    show_system_input = False
-    system_input_text = ""
-    selected_system_to_add = None
-    
-    # Folder name input modal state
-    show_folder_name_input = False
-    folder_name_input_text = ""
-    folder_name_cursor_position = 0
-    folder_name_char_index = 0  # Current character being selected (0-35 for A-Z, 0-9)
-    
-    # URL input modal state
-    show_url_input = False
-    url_input_text = ""
-    url_cursor_position = 0
-    
-    # Controller mapping modal state
-    show_controller_mapping = False
-    
-    # Main loop
-    running = True
-    button_delay = 0
-    last_dpad_state = (0, 0)  # Track last D-pad state to detect actual changes
-    last_dpad_time = 0  # Track when last D-pad navigation occurred
-    DPAD_DEBOUNCE_MS = 100  # Minimum time between D-pad navigation actions
-
     def draw_folder_name_input_modal():
         """Draw the folder name input modal overlay"""
         # Get actual screen dimensions
@@ -5541,15 +5312,9 @@ try:
         try:
             clock.tick(FPS)
             current_time = pygame.time.get_ticks()
-            
-            # Update continuous navigation state
-            update_navigation_state()
-            
-            # Handle continuous navigation (for held buttons/directions)
+            update_navigation_state()            
             if not show_controller_mapping:
-                handle_continuous_navigation()
-            
-            # Check if we need to collect controller mapping first
+                handle_continuous_navigation()            
             if show_controller_mapping:
                 if collect_controller_mapping():
                     show_controller_mapping = False
@@ -5559,21 +5324,14 @@ try:
                     running = False
                     break
             
-            # Update image cache from background threads
             update_image_cache()
             update_hires_image_cache()
                 
             if mode == "systems":
-                # Get visible systems and add Settings/Add Systems options
                 visible_systems = get_visible_systems()
                 regular_systems = [d['name'] for d in visible_systems]
-                
-                # Always show Utils, Settings, and Credits, with systems if available
                 systems_with_options = regular_systems + ["Utils", "Settings", "Credits"]
-                
-                # Enhanced title with system info if a system was previously selected
                 title = "Console Utils"
-                
                 draw_menu(title, systems_with_options, set())
             elif mode == "games":
                 if show_search_input:
@@ -5639,9 +5397,13 @@ try:
                 if event.type == pygame.QUIT:
                     running = False
                 elif event.type == pygame.MOUSEBUTTONDOWN:
-                    # Handle mouse clicks
+                    # Treat mouse like touchscreen - use same touch logic
                     if event.button == 1:  # Left mouse button
-                        handle_touch_click_event(event.pos)
+                        # Initialize touch tracking (reuse touchscreen variables)
+                        touch_start_pos = event.pos
+                        touch_last_pos = event.pos
+                        touch_start_time = pygame.time.get_ticks()
+                        is_scrolling = False
                 elif event.type == pygame.MOUSEWHEEL:
                     # Handle mouse wheel scrolling
                     handle_scroll_event(event.y)
@@ -5703,11 +5465,70 @@ try:
                         if total_distance > scroll_threshold:
                             is_scrolling = True
                         
-                        # If currently scrolling and there's vertical motion, scroll immediately
-                        if is_scrolling and abs(dy_motion) > 2:  # Lower threshold for ongoing scroll
+                        # Allow scrolling with smaller motion even before full scroll threshold
+                        # This makes scrolling more responsive on touch devices
+                        should_scroll = (is_scrolling and abs(dy_motion) > 1) or \
+                                       (not is_scrolling and abs(dy_motion) > 3 and total_distance > 4)
+                        
+                        if should_scroll:
                             # Use motion delta for responsive scrolling
                             scroll_amount = -dy_motion * scroll_sensitivity
                             handle_scroll_event(scroll_amount)
+                            # Mark as scrolling if we're actually scrolling
+                            if abs(dy_motion) > 3:
+                                is_scrolling = True
+                        
+                        # Update last position for next motion event
+                        touch_last_pos = (x, y)
+                elif event.type == pygame.MOUSEBUTTONUP:
+                    # Treat mouse release like touchscreen release - use same touch logic
+                    if event.button == 1 and touch_start_pos:  # Left mouse button
+                        x, y = event.pos
+                        
+                        # Calculate distance moved and time elapsed
+                        dx = x - touch_start_pos[0]
+                        dy = y - touch_start_pos[1]
+                        distance = (dx * dx + dy * dy) ** 0.5
+                        time_elapsed = pygame.time.get_ticks() - touch_start_time
+                        
+                        # If it was a short click without much movement, treat as click
+                        if distance < scroll_threshold and time_elapsed < tap_time_threshold and not is_scrolling:
+                            handle_touch_click_event(touch_start_pos)
+                        
+                        # Reset touch state
+                        touch_start_pos = None
+                        touch_last_pos = None
+                        is_scrolling = False
+                elif event.type == pygame.MOUSEMOTION:
+                    # Treat mouse movement like touchscreen motion - use same touch logic
+                    if touch_start_pos and touch_last_pos:
+                        x, y = event.pos
+                        
+                        # Calculate total distance from start
+                        dx_total = x - touch_start_pos[0]
+                        dy_total = y - touch_start_pos[1]
+                        total_distance = (dx_total * dx_total + dy_total * dy_total) ** 0.5
+                        
+                        # Calculate motion from last position (for immediate scroll response)
+                        dx_motion = x - touch_last_pos[0]
+                        dy_motion = y - touch_last_pos[1]
+                        
+                        # If moved enough from start, mark as scrolling
+                        if total_distance > scroll_threshold:
+                            is_scrolling = True
+                        
+                        # Allow scrolling with smaller motion even before full scroll threshold
+                        # This makes scrolling more responsive on mouse devices
+                        should_scroll = (is_scrolling and abs(dy_motion) > 1) or \
+                                       (not is_scrolling and abs(dy_motion) > 3 and total_distance > 4)
+                        
+                        if should_scroll:
+                            # Use motion delta for responsive scrolling
+                            scroll_amount = -dy_motion * scroll_sensitivity
+                            handle_scroll_event(scroll_amount)
+                            # Mark as scrolling if we're actually scrolling
+                            if abs(dy_motion) > 3:
+                                is_scrolling = True
                         
                         # Update last position for next motion event
                         touch_last_pos = (x, y)
@@ -6076,17 +5897,10 @@ try:
                                     show_url_input = False
                                     url = url_input_text.strip()
                                     if url:
-                                        if url_input_context == "archive_json":
-                                            settings["archive_json_url"] = url
-                                            save_settings(settings)
-                                            # Download and update JSON
-                                            download_archive_json(url)
-                                        elif url_input_context == "direct_download":
-                                            # Download file directly to work directory
+                                        if url_input_context == "direct_download":
                                             download_direct_file(url)
                                     else:
                                         if url_input_context == "archive_json":
-                                            # Clear the setting if URL is empty
                                             settings["archive_json_url"] = ""
                                             save_settings(settings)
                                 else:

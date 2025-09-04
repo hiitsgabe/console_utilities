@@ -5,10 +5,10 @@ CONDA_ACTIVATE = conda run -n $(CONDA_ENV)
 
 # Default target
 run:
-# 	DEV_MODE=true $(CONDA_ACTIVATE) watchmedo auto-restart --patterns="*.py;download.json" --recursive --signal SIGTERM python src/index.py
-	DEV_MODE=true $(CONDA_ACTIVATE) python src/index.py
-	rm -rf py_downloads 
-	rm -rf roms
+	DEV_MODE=true $(CONDA_ACTIVATE) watchmedo auto-restart --patterns="*.py;download.json" --recursive --signal SIGTERM python src/index.py
+# 	DEV_MODE=true $(CONDA_ACTIVATE) python src/index.py
+# 	rm -rf py_downloads 
+# 	rm -rf roms
 # Setup development environment
 setup:
 	conda env create -f environment.yml
