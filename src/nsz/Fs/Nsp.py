@@ -13,7 +13,7 @@ from nsz.nut import Print
 from nsz.Fs.Pfs0 import Pfs0
 from nsz.Fs.Ticket import Ticket
 from nsz.Fs.Nca import Nca
-import enlighten
+# Progress bar disabled - enlighten dependency removed
 import shutil
 from nsz.nut import Titles
 from nsz.nut.Titles import Title
@@ -382,12 +382,12 @@ class Nsp(Pfs0):
 			Print.info('\t\tRepack %s is already complete!' % self.path)
 			return
 
-		t = enlighten.Counter(total=totalSize, unit='B', desc=os.path.basename(self.path), leave=False)
+		# Progress bar disabled - enlighten dependency removed
 
 		Print.info('\t\tWriting header...')
 		outf = open(self.path, 'wb')
 		outf.write(hd)
-		t.update(len(hd))
+		# Progress update disabled
 
 		done = 0
 		for f_str in files:
@@ -399,8 +399,8 @@ class Nsp(Pfs0):
 						if not buf:
 							break
 						outf.write(buf)
-						t.update(len(buf))
-		t.close()
+						# Progress update disabled
+		# Progress bar cleanup disabled
 
 		Print.info('\t\tRepacked to %s!' % outf.name)
 		outf.close()

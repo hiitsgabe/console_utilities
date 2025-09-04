@@ -59,6 +59,8 @@ prepare-build-zip:
 	cp -r assets/images/background.png build/assets/images/background.png
 	cp -r buildozer.spec build/
 	cp -r main.py build/
+	mkdir -p build/recipes
+	cp -r recipes/* build/recipes
 	cp -r assets/images/logo.png build/icon.png
 	cp -r assets/images/logo_big.png build/presplash.png
 	cd build && zip -r ../build.zip *
@@ -83,8 +85,8 @@ build-android:
 	docker cp rom-build:/dist/. ./dist/android/
 	cd dist/android && zip -r ../android.zip *
 	rm -rf dist/android
-# 	@echo "🚀 Removing Docker Container..."
-# 	docker rm rom-build
+	@echo "🚀 Removing Docker Container..."
+	docker rm rom-build
 	@echo "🎉 APK built successfully!"
 # Format code with black
 format:

@@ -13,6 +13,5 @@ dependencies:
     - watchdog
     - pycryptodome
     - zstandard
-    - enlighten
     - nsz
     - pygame_emojis

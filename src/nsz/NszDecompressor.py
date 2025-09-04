@@ -6,7 +6,7 @@ from zstandard import ZstdDecompressor
 from nsz.Fs import factory, Type, Pfs0, Hfs0, Nca, Xci
 from nsz.PathTools import *
 from nsz import Header, BlockDecompressorReader, FileExistingChecks
-import os, enlighten
+import os
 
 class VerificationException(Exception):
 	pass
@@ -162,8 +162,8 @@ def __decompressNcz(nspf, f, statusReportInfo, pleaseNoPrint):
 	hash = sha256()
 
 	if statusReportInfo == None:
-		BAR_FMT = u'{desc}{desc_pad}{percentage:3.0f}%|{bar}| {count:{len_total}d}/{total:d} {unit} [{elapsed}<{eta}, {rate:.2f}{unit_pad}{unit}/s]'
-		bar = enlighten.Counter(total=nca_size//1048576, desc='Decompress', unit="MiB", color='red', bar_format=BAR_FMT)
+		# Progress bar disabled - enlighten dependency removed
+		bar = None
 	decompressedBytes = len(header)
 	decompressedBytesOld = decompressedBytes
 	if f != None:
@@ -172,8 +172,8 @@ def __decompressNcz(nspf, f, statusReportInfo, pleaseNoPrint):
 		statusReport, id = statusReportInfo
 		statusReport[id] = [len(header), 0, nca_size, currentStep]
 	else:
-		bar.count = decompressedBytes//1048576
-		bar.refresh()
+		# Progress bar disabled
+		pass
 	hash.update(header)
 
 	firstSection = True
@@ -210,12 +210,12 @@ def __decompressNcz(nspf, f, statusReportInfo, pleaseNoPrint):
 				statusReport[id] = [statusReport[id][0]+chunkSz, statusReport[id][1], nca_size, currentStep]
 			elif decompressedBytes - decompressedBytesOld > 52428800: #Refresh every 50 MB
 				decompressedBytesOld = decompressedBytes
-				bar.count = decompressedBytes//1048576
-				bar.refresh()
+				# Progress bar disabled
+				pass
 
 	if statusReportInfo == None:
-		bar.count = decompressedBytes//1048576
-		bar.close()
+		# Progress bar disabled
+		pass
 		#Line break after closing the process bar is required to prevent
 		#the next output from being on the same line as the process bar
 		Print.info("\n")
@@ -249,8 +249,8 @@ def __decompressNsz(filePath, outputDir, fixPadding, write, raiseVerificationExc
 					originalHash = sha256()
 					filesize = os.path.getsize(str(originalFilePath))
 					if statusReportInfo == None:
-						BAR_FMT = u'{desc}{desc_pad}{percentage:3.0f}%|{bar}| {count:{len_total}d}/{total:d} {unit} [{elapsed}<{eta}, {rate:.2f}{unit_pad}{unit}/s]'
-						bar = enlighten.Counter(total=filesize//CHUNK_SZ, desc='Verifying', unit="MiB", color='yellow', bar_format=BAR_FMT)
+						# Progress bar disabled - enlighten dependency removed
+						bar = None
 					blockCount = 0
 					with open(str(originalFilePath), 'rb') as f:
 						while True:
@@ -260,14 +260,15 @@ def __decompressNsz(filePath, outputDir, fixPadding, write, raiseVerificationExc
 								statusReport, id = statusReportInfo
 								statusReport[id] = [blockCount, 0, filesize, 'Verifying']
 							else:
-								bar.count = blockCount
-								bar.refresh()
+								# Progress bar disabled
+								pass
 							if not data:
 								break
 							originalHash.update(data)
 					originalHashHex = originalHash.hexdigest()
 					if statusReportInfo == None:
-						bar.close()
+						# Progress bar disabled
+						pass
 					Print.info("[NSP SHA256] " + originalHashHex)
 					if nsp.getHash() == originalHashHex:
 						Print.info("[VERIFIED]   NSP SHA256")

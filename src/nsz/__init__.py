@@ -15,7 +15,6 @@ from multiprocessing import cpu_count, freeze_support, Process, Manager
 from nsz.FileExistingChecks import CreateTargetDict, AllowedToWriteOutfile, delete_source_file
 from nsz.ParseArguments import *
 from nsz.PathTools import *
-import enlighten
 import time
 import sys
 
@@ -143,7 +142,7 @@ def main():
 		Print.info('                `"\'')
 		Print.info('')
 
-		barManager = enlighten.get_manager()
+		# Progress bars removed - enlighten dependency eliminated
 		poolManager = Manager()
 		statusReport = poolManager.list()
 		readyForWork = Counter(poolManager, 0)
@@ -233,11 +232,8 @@ def main():
 				pool.append(p)
 
 			if machineReadableOutput == False:
-				# Create the progress bar(s).
-				for i in range(parallelTasks):
-					bar = barManager.counter(total=100, desc='Compressing', unit='MiB', color='cyan', bar_format=BAR_FMT)
-					compressedSubBars.append(bar.add_subcounter('green'))
-					bars.append(bar)
+				# Progress bars disabled - enlighten dependency removed
+				pass
 
 			#Ensures that all threads are started and compleaded before being requested to quit
 			while readyForWork.value() < parallelTasks:
@@ -248,16 +244,14 @@ def main():
 					err.append(problems.get())
 				pleaseNoPrint.increment()
 
-				# Show the progress bar only if the output is human readable.
+				# Progress display disabled - enlighten dependency removed
 				if machineReadableOutput == False:
+					# Simple status logging instead of progress bars
 					for i in range(parallelTasks):
 						compressedRead, compressedWritten, total, currentStep = statusReport[i]
-						if bars[i].total != total:
-							bars[i].total = total//1048576
-						bars[i].count = compressedRead//1048576
-						compressedSubBars[i].count = compressedWritten//1048576
-						bars[i].desc = currentStep
-						bars[i].refresh()
+						if total > 0:
+							progress_pct = (compressedRead / total) * 100
+							Print.info(f'Task {i+1}: {currentStep} - {progress_pct:.1f}% ({compressedRead//1048576}/{total//1048576} MiB)')
 
 				pleaseNoPrint.decrement()
 			pleaseKillYourself.increment()
@@ -268,9 +262,8 @@ def main():
 				sleep(0.02)
 
 			if machineReadableOutput == False:
-				for i in range(parallelTasks):
-					bars[i].close(clear=True)
-				barManager.stop()
+				# Progress bars cleanup no longer needed
+				pass
 
 			for filePath in sourceFileToDelete:
 				if argOutFolder:
