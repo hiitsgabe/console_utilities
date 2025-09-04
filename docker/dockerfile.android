@@ -1,5 +1,5 @@
 # Force x86_64 platform for better Android build tools compatibility
-FROM --platform=linux/arm64 ubuntu:22.04
+FROM --platform=linux/amd64 ubuntu:22.04
 
 # Prevent interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
