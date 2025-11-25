@@ -1,3 +1,5 @@
+This project is an exercise to test Vibe Coding's capabilities. (CLAUDE)
+
 # Console Utilities
 
 <div align="center">
