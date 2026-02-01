@@ -53,7 +53,7 @@ class Thumbnail:
         bg_color = self.theme.surface_hover if highlighted else self.theme.surface
         pygame.draw.rect(screen, bg_color, rect, border_radius=border_radius)
 
-        if image:
+        if image and isinstance(image, pygame.Surface):
             # Scale image to fit
             img_size = min(rect.width, rect.height)
             scaled_img = pygame.transform.smoothscale(

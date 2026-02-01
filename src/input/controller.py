@@ -124,7 +124,7 @@ class ControllerHandler:
                 'select': pygame.K_RETURN,
                 'back': pygame.K_ESCAPE,
                 'start': pygame.K_SPACE,
-                'detail': pygame.K_TAB,
+                'detail': pygame.K_d,
                 'search': pygame.K_s,
                 'up': pygame.K_UP,
                 'down': pygame.K_DOWN,
