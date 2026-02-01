@@ -107,6 +107,14 @@ class GameDetailsState:
 
 
 @dataclass
+class LoadingState:
+    """State for loading/download progress."""
+    show: bool = False
+    message: str = ""
+    progress: int = 0
+
+
+@dataclass
 class UIRects:
     """Stores rectangles for clickable UI elements."""
     menu_items: List[pygame.Rect] = field(default_factory=list)
@@ -166,6 +174,7 @@ class AppState:
         self.folder_name_input = FolderNameInputState()
         self.url_input = UrlInputState()
         self.game_details = GameDetailsState()
+        self.loading = LoadingState()
         self.show_search_input: bool = False
         self.show_controller_mapping: bool = False
 

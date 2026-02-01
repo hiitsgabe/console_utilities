@@ -20,3 +20,6 @@ __pycache__/
 src/nsz/*
 *.egg-info
 src/nsz/nut/
+debug.log
+download.json
+.DS_Store  

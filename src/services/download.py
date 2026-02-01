@@ -329,8 +329,9 @@ class DownloadService:
             elif filename.endswith(".nsz"):
                 update_progress(f"Attempting NSZ decompression for {filename}...", 0)
 
+                keys_path = self.settings.get("nsz_keys_path", "")
                 nsz_success = decompress_nsz_file(
-                    file_path, self.work_dir, self.settings, update_progress
+                    file_path, self.work_dir, keys_path, update_progress
                 )
 
                 if nsz_success:

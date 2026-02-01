@@ -79,6 +79,15 @@ class ScreenManager:
         rects = {}
 
         # Check for modals first (they overlay the current screen)
+        # Loading modal has highest priority
+        if state.loading.show:
+            self.loading_modal.render(
+                screen,
+                state.loading.message,
+                state.loading.progress / 100.0 if state.loading.progress else None
+            )
+            return rects
+
         if state.show_search_input:
             modal_rect, content_rect, close_rect, char_rects = self.search_modal.render(
                 screen,
