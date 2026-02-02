@@ -1,13 +1,18 @@
-.PHONY: run watch install dev clean test lint format setup build-android
+.PHONY: run debug watch install dev clean test lint format setup build-android
 
 CONDA_ENV = app_cutil
 CONDA_ACTIVATE = conda run -n $(CONDA_ENV)
 
 # Default target
 run:
-	DEV_MODE=true $(CONDA_ACTIVATE) watchmedo auto-restart --patterns="*.py;download.json" --recursive --signal SIGTERM python src/index.py
+	DEV_MODE=true $(CONDA_ACTIVATE) watchmedo auto-restart --patterns="*.py;download.json" --recursive --signal SIGTERM python src/app.py
+
+# Run without auto-restart to see full error logs
+debug:
+	DEV_MODE=true $(CONDA_ACTIVATE) python src/app.py 2>&1 | tee debug.log
+
 # 	DEV_MODE=true $(CONDA_ACTIVATE) python src/index.py
-# 	rm -rf py_downloads 
+# 	rm -rf py_downloads
 # 	rm -rf roms
 # Setup development environment
 setup:
@@ -104,6 +109,7 @@ test:
 help:
 	@echo "Available targets:"
 	@echo "  run           - Run the console utilities application"
+	@echo "  debug         - Run without auto-restart (shows full error logs)"
 	@echo "  watch         - Run with file watching (auto-restart on changes)"
 	@echo "  setup         - Create conda environment"
 	@echo "  install       - Install in development mode"
