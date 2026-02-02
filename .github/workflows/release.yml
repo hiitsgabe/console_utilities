@@ -110,8 +110,21 @@ jobs:
             Write-Host "⚠️ Bundled data not available, continuing without it"
           }
 
+      - name: Verify spec file exists
+        run: |
+          if (Test-Path "console_utils_win.spec") {
+            Write-Host "✅ Spec file found"
+            Get-Item console_utils_win.spec
+          } else {
+            Write-Host "❌ Spec file not found"
+            Get-ChildItem -Force
+            exit 1
+          }
+
       - name: Build Windows exe
         run: |
+          New-Item -ItemType Directory -Force -Path dist/windows
+          New-Item -ItemType Directory -Force -Path build/windows
           python -m PyInstaller console_utils_win.spec --distpath dist/windows --workpath build/windows --noconfirm
           Compress-Archive -Path "dist/windows/Console Utilities" -DestinationPath dist/windows.zip
 

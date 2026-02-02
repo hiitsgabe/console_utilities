@@ -14,7 +14,6 @@ build.zip
 bkp.py
 ./bkp2.py
 build/
-*.spec
 *.pyc
 __pycache__/
 src/nsz/*
@@ -24,3 +23,4 @@ debug.log
 download.json
 .DS_Store
 assets/bundled_data.json
+.env
