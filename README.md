@@ -54,7 +54,7 @@ conda activate console_utilities
 pip install -e .[dev]
 
 # Run the application
-python src/index.py
+python src/app.py
 ```
 
 ### Console Installation
@@ -138,20 +138,47 @@ Runtime settings are automatically created and stored:
 ## Project Structure
 
 ```
-roms_downloader/
+console_utilities/
 ├── src/
-│   └── index.py                    # Main application
+│   ├── app.py                          # Main application entry point
+│   ├── state.py                        # Centralized state management
+│   ├── constants.py                    # Global constants and configuration
+│   ├── config/                         # Configuration management
+│   │   └── settings.py
+│   ├── services/                       # Business logic layer
+│   │   ├── data_loader.py             # System/game data loading
+│   │   ├── download.py                # Download service with progress tracking
+│   │   ├── file_listing.py            # Remote file listing and parsing
+│   │   └── image_cache.py             # Thumbnail caching
+│   ├── input/                          # Input handling
+│   │   ├── controller.py              # Controller/gamepad input
+│   │   ├── navigation.py              # D-pad navigation with acceleration
+│   │   └── touch.py                   # Touch/mouse input
+│   ├── ui/                             # UI components (Atomic Design)
+│   │   ├── theme.py                   # Design tokens and theming
+│   │   ├── atoms/                     # Basic components
+│   │   ├── molecules/                 # Composite components
+│   │   ├── organisms/                 # Complex UI sections
+│   │   ├── templates/                 # Page layouts
+│   │   └── screens/                   # Complete screens
+│   ├── utils/                          # Utility functions
+│   │   ├── formatting.py
+│   │   ├── logging.py
+│   │   └── nsz.py                     # NSZ decompression wrapper
+│   └── nsz/                            # Embedded NSZ library
 ├── assets/
 │   ├── config/
-│   │   └── download.json          # System configuration
-│   └── images/
-│       └── screenshot.png         # Application screenshot
-├── dist/                          # Built distribution (created by make build)
-├── Makefile                       # Build and development commands
-├── environment.yml                # Conda environment specification
-├── pyproject.toml                 # Python project configuration
-├── CLAUDE.md                      # AI assistant instructions
-└── README.md                      # This documentation
+│   │   └── download.json              # System configuration
+│   ├── docs/                           # Platform-specific documentation
+│   ├── images/                         # Application assets
+│   └── examples/                       # Example configuration files
+├── workdir/                            # Development working directory
+├── dist/                               # Built distributions
+├── Makefile                            # Build and development commands
+├── environment.yml                     # Conda environment specification
+├── pyproject.toml                      # Python project configuration
+├── CLAUDE.md                           # AI assistant instructions
+└── README.md                           # This documentation
 ```
 
 ## Compatibility
