@@ -231,21 +231,13 @@ class ImageCache:
             response.raise_for_status()
 
             image_data = BytesIO(response.content)
-            image = pygame.image.load(image_data)
-            scaled_image = pygame.transform.scale(image, target_size)
+            image = pygame.image.load(image_data).convert_alpha()
+            scaled_image = pygame.transform.smoothscale(image, target_size)
 
             queue.put((cache_key, scaled_image))
 
         except Exception as e:
             log_error(f"Failed to load image from {url}", type(e).__name__, traceback.format_exc())
-
-            # Try placeholder if game name available
-            if game_name:
-                placeholder = self._load_placeholder(game_name, target_size)
-                if placeholder:
-                    queue.put((cache_key, placeholder))
-                    return
-
             queue.put((cache_key, None))
 
     def _load_image_with_fallback(
@@ -266,8 +258,8 @@ class ImageCache:
                 response.raise_for_status()
 
                 image_data = BytesIO(response.content)
-                image = pygame.image.load(image_data)
-                scaled_image = pygame.transform.scale(image, target_size)
+                image = pygame.image.load(image_data).convert_alpha()
+                scaled_image = pygame.transform.smoothscale(image, target_size)
 
                 queue.put((cache_key, scaled_image))
                 return
@@ -275,13 +267,7 @@ class ImageCache:
             except Exception:
                 continue
 
-        # All formats failed - try placeholder
-        if game_name:
-            placeholder = self._load_placeholder(game_name, target_size)
-            if placeholder:
-                queue.put((cache_key, placeholder))
-                return
-
+        # All formats failed
         queue.put((cache_key, None))
 
     def _load_hires_with_fallback(
@@ -330,66 +316,6 @@ class ImageCache:
                 return
 
         self._hires_queue.put((cache_key, None))
-
-    def _load_placeholder(
-        self,
-        game_name: str,
-        target_size: Tuple[int, int]
-    ) -> Optional[pygame.Surface]:
-        """Load placeholder image with game initials."""
-        try:
-            initials = self._get_game_initials(game_name)
-            size = target_size[0]
-            placeholder_url = f"https://placehold.co/{size}x{size}?text={initials}"
-
-            response = requests.get(placeholder_url, timeout=5)
-            response.raise_for_status()
-
-            image_data = BytesIO(response.content)
-            image = pygame.image.load(image_data)
-            return pygame.transform.scale(image, target_size)
-
-        except Exception:
-            return None
-
-    def _get_game_initials(self, game_name: str) -> str:
-        """
-        Get game initials for placeholder image.
-
-        Args:
-            game_name: Full game name
-
-        Returns:
-            2-3 character initials string
-        """
-        # Clean name
-        clean_name = os.path.splitext(game_name)[0]
-        clean_name = clean_name.replace('_', ' ').replace('-', ' ')
-
-        # Remove common suffixes
-        suffixes = ['(USA)', '(Europe)', '(Japan)', '(World)', '(En,', '(U)', '(E)', '(J)']
-        for suffix in suffixes:
-            idx = clean_name.find(suffix)
-            if idx > 0:
-                clean_name = clean_name[:idx].strip()
-
-        # Get initials
-        words = clean_name.split()
-        if not words:
-            return "???"
-
-        initials = ""
-        for word in words:
-            if word and word[0].isalnum():
-                initials += word[0].upper()
-                if len(initials) >= 3:
-                    break
-
-        # Fallback if needed
-        while len(initials) < 3:
-            initials += "X"
-
-        return initials[:3]
 
     def _process_queue(self, queue: Queue, cache: Dict):
         """Process items from queue into cache."""

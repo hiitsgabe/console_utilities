@@ -79,6 +79,8 @@ class FolderBrowserState:
     scroll_offset: int = 0
     item_rects: List[Any] = field(default_factory=list)
     selected_system_to_add: Optional[Dict[str, Any]] = None
+    focus_area: str = "list"  # "list" or "buttons"
+    button_index: int = 0  # 0 = Select, 1 = Cancel
 
 
 @dataclass
@@ -104,6 +106,8 @@ class GameDetailsState:
     """State for game details modal."""
     show: bool = False
     current_game: Optional[Any] = None
+    button_focused: bool = True  # Download button is focused by default
+    loading_size: bool = False  # True while fetching file size
 
 
 @dataclass
@@ -162,6 +166,7 @@ class AppState:
         self.navigation = NavigationState()
         self.navigation_timing = NavigationTiming()
         self.touch = TouchState()
+        self.input_mode: str = "keyboard"  # "touch", "keyboard", or "gamepad"
 
         # ---- Search State ---- #
         self.search = SearchState()

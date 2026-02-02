@@ -53,8 +53,9 @@ class SystemsScreen:
             highlighted=highlighted,
             selected=set(),
             show_back=False,
-            item_height=50,
-            get_label=lambda x: x if isinstance(x, str) else x.get('name', str(x))
+            item_height=40,
+            get_label=lambda x: x if isinstance(x, str) else x.get('name', str(x)),
+            item_spacing=8
         )
 
     def get_selection_type(

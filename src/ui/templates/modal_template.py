@@ -156,43 +156,58 @@ class ModalTemplate:
         """
         from ui.atoms.text import Text
         from ui.atoms.progress import ProgressBar
+        from ui.atoms.spinner import Spinner
 
         text = Text(self.theme)
         progress_bar = ProgressBar(self.theme)
+        spinner = Spinner(self.theme)
 
         width = 350
-        height = 120
+        height = 140
 
         modal_rect, content_rect, _, _ = self.render(
             screen, width, height,
             show_close=False
         )
 
-        # Draw message
-        text.render(
-            screen,
-            message,
-            (content_rect.centerx, content_rect.top + 10),
-            color=self.theme.text_primary,
-            size=self.theme.font_size_md,
-            align="center"
-        )
-
-        # Draw progress bar or spinner
-        bar_rect = pygame.Rect(
-            content_rect.left + 20,
-            content_rect.bottom - 30,
-            content_rect.width - 40,
-            20
-        )
-
         if progress is not None:
+            # Show message at top
+            text.render(
+                screen,
+                message,
+                (content_rect.centerx, content_rect.top + 10),
+                color=self.theme.text_primary,
+                size=self.theme.font_size_md,
+                align="center"
+            )
+
+            # Draw progress bar
+            bar_rect = pygame.Rect(
+                content_rect.left + 20,
+                content_rect.bottom - 30,
+                content_rect.width - 40,
+                20
+            )
             progress_bar.render(screen, bar_rect, progress, show_glow=True)
         else:
-            # Render indeterminate progress
-            import time
-            position = (time.time() % 2) / 2  # 0 to 1 over 2 seconds
-            progress_bar.render_indeterminate(screen, bar_rect, position)
+            # Show spinner in center
+            spinner_y = content_rect.top + 35
+            spinner.render_simple(
+                screen,
+                (content_rect.centerx, spinner_y),
+                size=50,
+                color=self.theme.primary
+            )
+
+            # Show message below spinner
+            text.render(
+                screen,
+                message,
+                (content_rect.centerx, spinner_y + 45),
+                color=self.theme.text_primary,
+                size=self.theme.font_size_md,
+                align="center"
+            )
 
         return modal_rect
 

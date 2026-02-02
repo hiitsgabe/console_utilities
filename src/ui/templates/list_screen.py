@@ -38,7 +38,8 @@ class ListScreenTemplate:
         get_secondary: Optional[Callable[[Any], str]] = None,
         show_checkbox: bool = False,
         divider_indices: Optional[Set[int]] = None,
-        footer_height: int = 0
+        footer_height: int = 0,
+        item_spacing: int = 0
     ) -> Tuple[Optional[pygame.Rect], List[pygame.Rect], int]:
         """
         Render a list screen.
@@ -62,9 +63,6 @@ class ListScreenTemplate:
         Returns:
             Tuple of (back_button_rect, item_rects, scroll_offset)
         """
-        # Draw background
-        screen.fill(self.theme.background)
-
         # Draw header
         header_height = 60
         header_rect, back_button_rect = self.header.render(
@@ -90,7 +88,8 @@ class ListScreenTemplate:
             get_thumbnail=get_thumbnail,
             get_secondary=get_secondary,
             show_checkbox=show_checkbox,
-            divider_indices=divider_indices
+            divider_indices=divider_indices,
+            item_spacing=item_spacing
         )
 
         return back_button_rect, item_rects, scroll_offset

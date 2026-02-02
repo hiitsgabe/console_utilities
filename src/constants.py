@@ -79,7 +79,7 @@ GRAY = TEXT_SECONDARY
 BORDER_RADIUS = 12
 CARD_PADDING = 8
 THUMBNAIL_BORDER_RADIUS = 8
-THUMBNAIL_SIZE = (96, 96)
+THUMBNAIL_SIZE = (192, 192)
 HIRES_IMAGE_SIZE = (400, 400)
 
 # **************************************************************** #

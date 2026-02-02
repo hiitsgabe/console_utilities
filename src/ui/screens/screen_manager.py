@@ -92,7 +92,8 @@ class ScreenManager:
             modal_rect, content_rect, close_rect, char_rects = self.search_modal.render(
                 screen,
                 state.search.input_text,
-                state.search.cursor_position
+                state.search.cursor_position,
+                input_mode=state.input_mode
             )
             rects['modal'] = modal_rect
             rects['close'] = close_rect
@@ -105,7 +106,9 @@ class ScreenManager:
                 state.folder_browser.current_path,
                 state.folder_browser.items,
                 state.folder_browser.highlighted,
-                state.folder_browser.selected_system_to_add.get('type', 'folder') if state.folder_browser.selected_system_to_add else 'folder'
+                state.folder_browser.selected_system_to_add.get('type', 'folder') if state.folder_browser.selected_system_to_add else 'folder',
+                focus_area=state.folder_browser.focus_area,
+                button_index=state.folder_browser.button_index
             )
             rects['modal'] = modal_rect
             rects['item_rects'] = item_rects
@@ -118,7 +121,10 @@ class ScreenManager:
             modal_rect, download_rect, close_rect = self.game_details_modal.render(
                 screen,
                 state.game_details.current_game,
-                hires_image
+                hires_image,
+                button_focused=state.game_details.button_focused,
+                loading_size=state.game_details.loading_size,
+                input_mode=state.input_mode
             )
             rects['modal'] = modal_rect
             rects['download_button'] = download_rect

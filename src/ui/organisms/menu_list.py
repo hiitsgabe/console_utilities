@@ -33,7 +33,8 @@ class MenuList:
         get_thumbnail: Optional[Callable[[Any], pygame.Surface]] = None,
         get_secondary: Optional[Callable[[Any], str]] = None,
         show_checkbox: bool = False,
-        divider_indices: Optional[Set[int]] = None
+        divider_indices: Optional[Set[int]] = None,
+        item_spacing: int = 0
     ) -> Tuple[List[pygame.Rect], int]:
         """
         Render a menu list.
@@ -63,8 +64,9 @@ class MenuList:
         if divider_indices is None:
             divider_indices = set()
 
-        # Calculate visible range
-        visible_count = rect.height // item_height
+        # Calculate visible range (account for spacing)
+        total_item_height = item_height + item_spacing
+        visible_count = rect.height // total_item_height
         scroll_offset = self._calculate_scroll(
             highlighted, len(items), visible_count
         )
@@ -105,7 +107,7 @@ class MenuList:
                 )
 
             item_rects.append(item_rect)
-            y += item_height
+            y += total_item_height
 
         # Draw scroll indicators if needed
         self._draw_scroll_indicators(
