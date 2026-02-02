@@ -9,7 +9,14 @@ import os
 #                       Environment Detection                        #
 # **************************************************************** #
 DEV_MODE = os.getenv('DEV_MODE', 'false').lower() == 'true'
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Detect if running from a zip bundle (e.g., .pygame file)
+_raw_script_dir = os.path.dirname(os.path.abspath(__file__))
+if '.pygame' in _raw_script_dir or '.zip' in _raw_script_dir:
+    # Running from zip - use the directory containing the zip file
+    SCRIPT_DIR = os.path.dirname(_raw_script_dir.split('.pygame')[0].split('.zip')[0] + '.pygame')
+else:
+    SCRIPT_DIR = _raw_script_dir
 
 # **************************************************************** #
 #                       Path Configuration                           #
@@ -79,7 +86,7 @@ GRAY = TEXT_SECONDARY
 BORDER_RADIUS = 12
 CARD_PADDING = 8
 THUMBNAIL_BORDER_RADIUS = 8
-THUMBNAIL_SIZE = (96, 96)
+THUMBNAIL_SIZE = (192, 192)
 HIRES_IMAGE_SIZE = (400, 400)
 
 # **************************************************************** #

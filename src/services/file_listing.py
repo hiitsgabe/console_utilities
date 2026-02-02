@@ -390,3 +390,67 @@ def find_next_letter_index(
                 return i
 
     return current_index
+
+
+def get_file_size(
+    system_data: Dict[str, Any],
+    game: Dict[str, Any]
+) -> Optional[int]:
+    """
+    Get file size for a game via HEAD request.
+
+    Args:
+        system_data: System configuration dictionary
+        game: Game data dictionary
+
+    Returns:
+        File size in bytes or None if unavailable
+    """
+    try:
+        from urllib.parse import urljoin
+
+        # Build download URL
+        filename = game.get('filename', game.get('name', ''))
+        if not filename:
+            return None
+
+        if 'download_url' in system_data:
+            url = game.get('href')
+        elif 'url' in system_data:
+            if 'href' in game:
+                url = urljoin(system_data['url'], game['href'])
+            else:
+                url = urljoin(system_data['url'], filename)
+        else:
+            return None
+
+        if not url:
+            return None
+
+        # Get headers/cookies for auth
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        cookies = {}
+
+        if 'auth' in system_data:
+            auth_config = system_data['auth']
+            if auth_config.get('cookies', False) and 'token' in auth_config:
+                cookie_name = auth_config.get('cookie_name', 'auth_token')
+                cookies[cookie_name] = auth_config['token']
+            elif 'token' in auth_config:
+                headers['Authorization'] = f"Bearer {auth_config['token']}"
+
+        # HEAD request to get Content-Length
+        response = requests.head(url, timeout=5, headers=headers, cookies=cookies, allow_redirects=True)
+
+        if response.status_code == 200:
+            content_length = response.headers.get('content-length')
+            if content_length:
+                return int(content_length)
+
+        return None
+
+    except Exception as e:
+        log_error("Failed to get file size", type(e).__name__, str(e))
+        return None

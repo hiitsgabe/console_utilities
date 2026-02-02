@@ -1,0 +1,248 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # Triggers on version tags like v1.0.0
+  workflow_dispatch:  # Allow manual trigger
+    inputs:
+      version:
+        description: 'Version tag (e.g., v1.0.0)'
+        required: true
+        type: string
+
+jobs:
+  build-pygame-bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zip rsync
+
+      - name: Install Python dependencies for bundling
+        run: pip install requests
+
+      - name: Download bundled data
+        run: |
+          curl -L -o assets/bundled_data.json "https://files.catbox.moe/sro0jy.json"
+          if [ -f assets/bundled_data.json ]; then
+            echo "✅ Bundled data downloaded successfully"
+          else
+            echo "⚠️ Bundled data not available, continuing without it"
+          fi
+
+      - name: Build pygame bundle
+        run: make bundle
+
+      - name: Upload pygame bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: pygame-bundle
+          path: dist/pygame.zip
+          retention-days: 30
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install pyinstaller pygame requests zstandard pycryptodome
+
+      - name: Download bundled data
+        run: |
+          curl -L -o assets/bundled_data.json "https://files.catbox.moe/sro0jy.json"
+          if [ -f assets/bundled_data.json ]; then
+            echo "✅ Bundled data downloaded successfully"
+          else
+            echo "⚠️ Bundled data not available, continuing without it"
+          fi
+
+      - name: Build macOS app
+        run: make bundle-macos
+
+      - name: Upload macOS bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-bundle
+          path: dist/macos.zip
+          retention-days: 30
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install pyinstaller pygame requests zstandard pycryptodome
+
+      - name: Download bundled data
+        run: |
+          Invoke-WebRequest -Uri "https://files.catbox.moe/sro0jy.json" -OutFile "assets/bundled_data.json"
+          if (Test-Path "assets/bundled_data.json") {
+            Write-Host "✅ Bundled data downloaded successfully"
+          } else {
+            Write-Host "⚠️ Bundled data not available, continuing without it"
+          }
+
+      - name: Build Windows exe
+        run: |
+          python -m PyInstaller console_utils_win.spec --distpath dist/windows --workpath build/windows --noconfirm
+          Compress-Archive -Path "dist/windows/Console Utilities" -DestinationPath dist/windows.zip
+
+      - name: Upload Windows bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-bundle
+          path: dist/windows.zip
+          retention-days: 30
+
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download bundled data
+        run: |
+          curl -L -o assets/bundled_data.json "https://files.catbox.moe/sro0jy.json"
+          if [ -f assets/bundled_data.json ]; then
+            echo "✅ Bundled data downloaded successfully"
+          else
+            echo "⚠️ Bundled data not available, continuing without it"
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Android APK via Docker
+        run: |
+          docker build -t rom-builder -f docker/dockerfile.android .
+          docker create --name rom-build rom-builder
+          mkdir -p dist/android
+          docker cp rom-build:/dist/. ./dist/android/
+          docker rm rom-build
+
+      - name: Create Android zip
+        run: |
+          cp assets/docs/android.md dist/android/README.md || true
+          cp assets/examples/archive_example.json dist/android/example.json || true
+          cd dist/android && zip -r ../android.zip *
+
+      - name: Upload Android bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-bundle
+          path: dist/android.zip
+          retention-days: 30
+
+  release:
+    needs: [build-pygame-bundle, build-macos, build-windows, build-android]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download pygame bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: pygame-bundle
+          path: dist/
+
+      - name: Download macOS bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-bundle
+          path: dist/
+
+      - name: Download Windows bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-bundle
+          path: dist/
+
+      - name: Download Android bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: android-bundle
+          path: dist/
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.VERSION }}
+          name: Console Utilities ${{ steps.version.outputs.VERSION }}
+          body: |
+            ## Console Utilities ${{ steps.version.outputs.VERSION }}
+
+            ### Downloads
+
+            | Platform | File | Description |
+            |----------|------|-------------|
+            | 🎮 Pygame | `pygame.zip` | For systems with pygame installed |
+            | 🍎 macOS | `macos.zip` | Standalone .app bundle |
+            | 🪟 Windows | `windows.zip` | Standalone .exe bundle |
+            | 🤖 Android | `android.zip` | APK for Android devices |
+
+            ### Pygame Bundle Installation
+            1. Download `pygame.zip`
+            2. Extract and run `./install_req.sh` to install dependencies
+            3. Run: `python3 console_utils.pygame`
+
+            ### macOS Installation
+            1. Download `macos.zip`
+            2. Extract and drag `Console Utilities.app` to Applications
+            3. Double-click to run
+
+            ### Windows Installation
+            1. Download `windows.zip`
+            2. Extract the folder
+            3. Run `Console Utilities.exe`
+
+            ### Android Installation
+            1. Download `android.zip`
+            2. Extract and install the APK
+            3. Enable "Install from unknown sources" if needed
+
+            ### Requirements (Pygame bundle only)
+            - Python 3.9+
+            - pygame (pre-installed)
+            - zstandard, pycryptodome (installed by install_req.sh)
+          files: |
+            dist/pygame.zip
+            dist/macos.zip
+            dist/windows.zip
+            dist/android.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

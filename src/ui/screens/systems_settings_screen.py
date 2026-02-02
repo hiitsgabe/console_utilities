@@ -70,9 +70,10 @@ class SystemsSettingsScreen:
             highlighted=highlighted,
             selected=set(),
             show_back=True,
-            item_height=50,
+            item_height=40,
             get_label=lambda x: x[0] if isinstance(x, tuple) else x,
-            get_secondary=lambda x: x[1] if isinstance(x, tuple) else None
+            get_secondary=lambda x: x[1] if isinstance(x, tuple) else None,
+            item_spacing=8
         )
 
     def get_selected_system_index(

@@ -24,7 +24,7 @@ from services.data_loader import (
     load_main_systems_data, update_json_file_path,
     get_visible_systems, get_system_index_by_name
 )
-from services.file_listing import list_files, filter_games_by_search, load_folder_contents
+from services.file_listing import list_files, filter_games_by_search, load_folder_contents, get_file_size
 from services.image_cache import ImageCache
 from services.download import DownloadService
 from input.navigation import NavigationHandler
@@ -156,6 +156,34 @@ class ConsoleUtilitiesApp:
 
         return self.image_cache.get_hires_image(game, boxart_url, self.settings)
 
+    def _show_loading(self, message: str = "Loading..."):
+        """Show loading spinner and update display."""
+        self.state.loading.show = True
+        self.state.loading.message = message
+        self.state.loading.progress = 0
+        self._render_frame()
+
+    def _hide_loading(self):
+        """Hide loading spinner."""
+        self.state.loading.show = False
+        self.state.loading.message = ""
+        self.state.loading.progress = 0
+
+    def _render_frame(self):
+        """Render a single frame (used during loading)."""
+        self._draw_background()
+        self.screen_manager.render(
+            self.screen,
+            self.state,
+            self.settings,
+            self.data,
+            get_thumbnail=self._get_thumbnail,
+            get_hires_image=self._get_hires_image
+        )
+        pygame.display.flip()
+        # Process events to prevent freezing
+        pygame.event.pump()
+
     def run(self):
         """Run the main application loop."""
         running = True
@@ -176,13 +204,16 @@ class ConsoleUtilitiesApp:
                     running = False
 
                 elif event.type == pygame.KEYDOWN:
+                    self.state.input_mode = "keyboard"
                     self._handle_key_event(event)
 
                 elif event.type == pygame.JOYBUTTONDOWN:
+                    self.state.input_mode = "gamepad"
                     self._handle_joystick_event(event)
 
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1:
+                        self.state.input_mode = "touch"
                         self.touch.handle_mouse_down(event)
 
                 elif event.type == pygame.MOUSEBUTTONUP:
@@ -223,6 +254,9 @@ class ConsoleUtilitiesApp:
             # Store rects for click handling
             self.state.ui_rects.menu_items = rects.get('item_rects', [])
             self.state.ui_rects.back_button = rects.get('back')
+            self.state.ui_rects.download_button = rects.get('download_button')
+            self.state.ui_rects.close_button = rects.get('close')
+            self.state.ui_rects.modal_char_rects = rects.get('char_rects', [])
 
             pygame.display.flip()
 
@@ -236,16 +270,18 @@ class ConsoleUtilitiesApp:
     def _move_highlight(self, direction: str):
         """Move highlight in the given direction."""
         # Check modals first (they take priority over modes)
+        if self.state.show_search_input:
+            self._navigate_keyboard_modal(
+                direction, self.state.search, char_set="default"
+            )
+            return
+
+        if self.state.game_details.show:
+            # Game details modal has only Download button, always focused
+            return
+
         if self.state.folder_browser.show:
-            max_items = len(self.state.folder_browser.items) or 1
-            if direction in ("up", "left"):
-                self.state.folder_browser.highlighted = (
-                    self.state.folder_browser.highlighted - 1
-                ) % max_items
-            elif direction in ("down", "right"):
-                self.state.folder_browser.highlighted = (
-                    self.state.folder_browser.highlighted + 1
-                ) % max_items
+            self._navigate_folder_browser(direction)
             return
 
         if self.state.url_input.show:
@@ -328,6 +364,23 @@ class ConsoleUtilitiesApp:
 
     def _handle_key_event(self, event: pygame.event.Event):
         """Handle keyboard events."""
+        # Handle keyboard text input for search modal
+        if self.state.show_search_input and self.state.input_mode == "keyboard":
+            if event.key == pygame.K_ESCAPE:
+                self._go_back()
+            elif event.key == pygame.K_RETURN:
+                self._submit_search_keyboard_input()
+            elif event.key == pygame.K_BACKSPACE:
+                # Delete last character
+                if self.state.search.input_text:
+                    self.state.search.input_text = self.state.search.input_text[:-1]
+                    self.state.search.query = self.state.search.input_text
+            elif event.unicode and event.unicode.isprintable():
+                # Add typed character
+                self.state.search.input_text += event.unicode
+                self.state.search.query = self.state.search.input_text
+            return
+
         if event.key == pygame.K_ESCAPE:
             self._go_back()
         elif event.key == pygame.K_RETURN:
@@ -368,6 +421,28 @@ class ConsoleUtilitiesApp:
         """Handle click/tap events."""
         x, y = pos
 
+        # Check modal close button first
+        if self.state.ui_rects.close_button:
+            if self.state.ui_rects.close_button.collidepoint(x, y):
+                self._go_back()
+                return
+
+        # Check modal download button
+        if self.state.ui_rects.download_button:
+            if self.state.ui_rects.download_button.collidepoint(x, y):
+                if self.state.game_details.show:
+                    self._handle_game_details_selection()
+                return
+
+        # Check modal character buttons (search/url input)
+        if self.state.ui_rects.modal_char_rects:
+            for char_rect, char_index, char in self.state.ui_rects.modal_char_rects:
+                if char_rect.collidepoint(x, y):
+                    # Set cursor position and trigger selection
+                    self.state.search.cursor_position = char_index
+                    self._handle_search_input_selection()
+                    return
+
         # Check back button
         if self.state.ui_rects.back_button:
             if self.state.ui_rects.back_button.collidepoint(x, y):
@@ -391,13 +466,21 @@ class ConsoleUtilitiesApp:
     def _go_back(self):
         """Handle back navigation."""
         if self.state.show_search_input:
+            # Reset search state when closing search modal
             self.state.show_search_input = False
+            self.state.search.mode = False
+            self.state.search.query = ""
+            self.state.search.input_text = ""
+            self.state.search.cursor_position = 0
+            self.state.search.filtered_list = []
+            self.state.highlighted = 0
         elif self.state.url_input.show:
             self.state.url_input.show = False
         elif self.state.folder_name_input.show:
             self.state.folder_name_input.show = False
         elif self.state.folder_browser.show:
             self.state.folder_browser.show = False
+            self.state.folder_browser.focus_area = "list"
         elif self.state.game_details.show:
             self.state.game_details.show = False
             self.state.game_details.current_game = None
@@ -407,15 +490,36 @@ class ConsoleUtilitiesApp:
         elif self.state.mode in ("add_systems", "systems_settings"):
             self.state.mode = "settings"
             self.state.highlighted = 0
-        elif self.state.mode in ("games", "settings", "utils", "credits"):
+        elif self.state.mode == "games":
+            # Reset selected games and search when leaving games mode
+            self.state.selected_games.clear()
+            self.state.search.mode = False
+            self.state.search.query = ""
+            self.state.search.input_text = ""
+            self.state.search.cursor_position = 0
+            self.state.search.filtered_list = []
+            self.state.mode = "systems"
+            self.state.highlighted = 0
+        elif self.state.mode in ("settings", "utils", "credits"):
             self.state.mode = "systems"
             self.state.highlighted = 0
 
     def _select_item(self):
         """Handle item selection."""
         # Check modals first (they take priority over modes)
+        if self.state.show_search_input:
+            self._handle_search_input_selection()
+            return
+
+        if self.state.game_details.show:
+            self._handle_game_details_selection()
+            return
+
         if self.state.folder_browser.show:
-            self._handle_folder_browser_selection()
+            if self.state.folder_browser.focus_area == "buttons":
+                self._handle_folder_browser_button_selection()
+            else:
+                self._handle_folder_browser_selection()
             return
 
         if self.state.url_input.show:
@@ -435,12 +539,17 @@ class ConsoleUtilitiesApp:
                 # Select a system
                 system = visible[self.state.highlighted]
                 self.state.selected_system = get_system_index_by_name(self.data, system['name'])
-                self.state.mode = "games"
-                self.state.highlighted = 0
+
+                # Show loading while fetching games
+                self._show_loading(f"Loading {system['name']}...")
                 self.state.game_list = list_files(
                     self.data[self.state.selected_system],
                     self.settings
                 )
+                self._hide_loading()
+
+                self.state.mode = "games"
+                self.state.highlighted = 0
             elif self.state.highlighted == systems_count:
                 self.state.mode = "utils"
                 self.state.highlighted = 0
@@ -516,6 +625,8 @@ class ConsoleUtilitiesApp:
         """Open the folder browser modal."""
         self.state.folder_browser.show = True
         self.state.folder_browser.highlighted = 0
+        self.state.folder_browser.focus_area = "list"
+        self.state.folder_browser.button_index = 0
         self.state.folder_browser.selected_system_to_add = {"type": selection_type}
 
         # Set initial path based on selection type
@@ -561,6 +672,7 @@ class ConsoleUtilitiesApp:
             self.state.folder_browser.current_path = item_path
             self.state.folder_browser.items = load_folder_contents(item_path)
             self.state.folder_browser.highlighted = 0
+            self.state.folder_browser.focus_area = "list"
 
         elif item_type == "create_folder":
             # Show folder name input modal
@@ -573,6 +685,7 @@ class ConsoleUtilitiesApp:
             self.state.folder_browser.current_path = item_path
             self.state.folder_browser.items = load_folder_contents(item_path)
             self.state.folder_browser.highlighted = 0
+            self.state.folder_browser.focus_area = "list"
 
         elif item_type in ("json_file", "keys_file", "file"):
             # Select the file based on selection type
@@ -590,8 +703,10 @@ class ConsoleUtilitiesApp:
             self.settings["archive_json_path"] = path
             save_settings(self.settings)
             # Reload data with new JSON
+            self._show_loading("Loading systems data...")
             update_json_file_path(self.settings)
             self.data = load_main_systems_data(self.settings)
+            self._hide_loading()
         elif selection_type == "nsz_keys":
             self.settings["nsz_keys_path"] = path
             save_settings(self.settings)
@@ -683,6 +798,38 @@ class ConsoleUtilitiesApp:
             if modal_state.cursor_position < total_chars - 1:
                 modal_state.cursor_position += 1
 
+    def _navigate_folder_browser(self, direction: str):
+        """Navigate folder browser modal with list and button support."""
+        fb = self.state.folder_browser
+        max_items = len(fb.items) or 1
+
+        if fb.focus_area == "list":
+            if direction == "up":
+                if fb.highlighted > 0:
+                    fb.highlighted -= 1
+                # else stay at top, don't wrap
+            elif direction == "down":
+                if fb.highlighted < max_items - 1:
+                    fb.highlighted += 1
+                else:
+                    # Move to buttons when at bottom of list
+                    fb.focus_area = "buttons"
+                    fb.button_index = 0
+            elif direction == "left":
+                if fb.highlighted > 0:
+                    fb.highlighted -= 1
+            elif direction == "right":
+                if fb.highlighted < max_items - 1:
+                    fb.highlighted += 1
+        else:  # focus_area == "buttons"
+            if direction == "up":
+                # Move back to list
+                fb.focus_area = "list"
+            elif direction == "left":
+                fb.button_index = 0  # Select button
+            elif direction == "right":
+                fb.button_index = 1  # Cancel button
+
     def _handle_url_input_selection(self):
         """Handle URL input keyboard selection."""
         from ui.screens.modals.url_input_modal import UrlInputModal
@@ -713,6 +860,70 @@ class ConsoleUtilitiesApp:
             self.state.folder_name_input.show = False
             # TODO: Create the folder with the given name
 
+    def _handle_search_input_selection(self):
+        """Handle search input on-screen keyboard selection."""
+        from ui.screens.modals.search_modal import SearchModal
+        modal = SearchModal()
+        new_text, is_done = modal.handle_selection(
+            self.state.search.cursor_position,
+            self.state.search.input_text
+        )
+        self.state.search.input_text = new_text
+        self.state.search.query = new_text
+
+        if is_done:
+            self._apply_search_filter()
+
+    def _submit_search_keyboard_input(self):
+        """Handle search submission from physical keyboard."""
+        self._apply_search_filter()
+
+    def _apply_search_filter(self):
+        """Apply search filter and close search modal."""
+        self.state.show_search_input = False
+        if self.state.search.query:
+            self.state.search.filtered_list = filter_games_by_search(
+                self.state.game_list,
+                self.state.search.query
+            )
+        else:
+            self.state.search.mode = False
+            self.state.search.filtered_list = []
+        self.state.highlighted = 0
+
+    def _handle_game_details_selection(self):
+        """Handle game details modal selection (Download button)."""
+        game = self.state.game_details.current_game
+        if game:
+            # Add game to selection and trigger download
+            game_list = (
+                self.state.search.filtered_list
+                if self.state.search.mode
+                else self.state.game_list
+            )
+            # Find game index in list
+            for i, g in enumerate(game_list):
+                game_name = g.get('filename', g.get('name', '')) if isinstance(g, dict) else g
+                current_name = game.get('filename', game.get('name', ''))
+                if game_name == current_name:
+                    self.state.selected_games.add(i)
+                    break
+
+            # Close modal and start download
+            self.state.game_details.show = False
+            self.state.game_details.current_game = None
+            self._start_download()
+
+    def _handle_folder_browser_button_selection(self):
+        """Handle folder browser button selection (Select/Cancel)."""
+        if self.state.folder_browser.button_index == 0:
+            # Select button - confirm current folder
+            self._handle_folder_browser_confirm()
+        else:
+            # Cancel button - close modal
+            self.state.folder_browser.show = False
+            self.state.folder_browser.focus_area = "list"
+
     def _handle_search_action(self):
         """Handle search key press."""
         # Only show search in games mode
@@ -735,8 +946,29 @@ class ConsoleUtilitiesApp:
                 # Normalize game to dictionary format (games can be strings or dicts)
                 if isinstance(game, str):
                     game = {'name': game, 'filename': game}
+                else:
+                    # Make a copy to avoid modifying the original
+                    game = dict(game)
+
+                # Show modal immediately
                 self.state.game_details.show = True
                 self.state.game_details.current_game = game
+                self.state.game_details.loading_size = False
+
+                # Fetch file size in background if not already present
+                if 'size' not in game and self.state.selected_system >= 0:
+                    self.state.game_details.loading_size = True
+                    system_data = self.data[self.state.selected_system]
+
+                    def fetch_size():
+                        file_size = get_file_size(system_data, game)
+                        if file_size and self.state.game_details.current_game is game:
+                            game['size'] = file_size
+                        self.state.game_details.loading_size = False
+
+                    from threading import Thread
+                    thread = Thread(target=fetch_size, daemon=True)
+                    thread.start()
 
     def _handle_start_action(self):
         """Handle start key press - download selected games or go home."""

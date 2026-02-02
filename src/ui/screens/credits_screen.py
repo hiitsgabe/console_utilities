@@ -38,9 +38,6 @@ class CreditsScreen:
         Returns:
             Back button rect
         """
-        # Draw background
-        screen.fill(self.theme.background)
-
         # Draw header
         header_height = 60
         _, back_button_rect = self.header.render(

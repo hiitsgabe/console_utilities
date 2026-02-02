@@ -42,17 +42,19 @@ RUN apt-get install libffi-dev
 WORKDIR /app
 
 COPY ./main.py ./
-
 COPY ./buildozer.spec ./
 
-COPY ./assets/images/logo.png ./assets/images/background.png
+# Copy assets directory
+COPY ./assets ./assets
 
+# Copy icon and presplash for buildozer
 COPY ./assets/images/logo.png ./icon.png
-
 COPY ./assets/images/logo_big.png ./presplash.png
 
-# COPY ./recipes ./recipes
+# Copy recipes if they exist (for custom python-for-android recipes)
+COPY ./recipes ./recipes
 
+# Copy source code
 COPY ./src ./src
 
 RUN yes | buildozer android debug
