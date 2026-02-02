@@ -9,6 +9,7 @@ from ui.theme import Theme, default_theme
 from ui.templates.list_screen import ListScreenTemplate
 from ui.templates.grid_screen import GridScreenTemplate
 from ui.atoms.text import Text
+from ui.molecules.thumbnail import Thumbnail
 
 
 class GamesScreen:
@@ -24,6 +25,7 @@ class GamesScreen:
         self.list_template = ListScreenTemplate(theme)
         self.grid_template = GridScreenTemplate(theme)
         self.text = Text(theme)
+        self.thumbnail = Thumbnail(theme)
 
     def render(
         self,
@@ -164,15 +166,7 @@ class GamesScreen:
     def _get_placeholder(self, game: Any) -> str:
         """Get placeholder initials for game."""
         label = self._get_game_label(game)
-        if not label:
-            return "?"
-
-        words = label.split()
-        if len(words) >= 2:
-            return (words[0][0] + words[1][0]).upper()
-        elif len(label) >= 2:
-            return label[:2].upper()
-        return label[0].upper() if label else "?"
+        return self.thumbnail.get_placeholder_initials(label)
 
     def _render_status_bar(self, screen: pygame.Surface, selected_count: int):
         """Render status bar showing selected games count and download hint."""

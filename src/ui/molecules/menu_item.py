@@ -1,12 +1,11 @@
 """
-Menu item molecule - Combines surface and text atoms.
+Menu item molecule - Text-based menu items.
 """
 
 import pygame
 from typing import Tuple, Optional, Any
 
 from ui.theme import Theme, Color, default_theme
-from ui.atoms.surface import Surface
 from ui.atoms.text import Text
 
 
@@ -14,13 +13,12 @@ class MenuItem:
     """
     Menu item molecule.
 
-    Combines a surface with text, supporting selection
-    and highlight states, with optional thumbnail.
+    Renders text-based menu items with highlight states
+    and optional thumbnail/checkbox support.
     """
 
     def __init__(self, theme: Theme = default_theme):
         self.theme = theme
-        self.surface = Surface(theme)
         self.text = Text(theme)
 
     def render(
@@ -50,13 +48,6 @@ class MenuItem:
         Returns:
             Item rect
         """
-        # Draw surface
-        self.surface.render(
-            screen, rect,
-            selected=selected,
-            highlighted=highlighted
-        )
-
         # Calculate content areas
         padding = self.theme.padding_sm
         content_left = rect.left + padding
@@ -111,8 +102,8 @@ class MenuItem:
                 thumb_size
             )
 
-            # Scale thumbnail to fit
-            scaled_thumb = pygame.transform.scale(
+            # Scale thumbnail to fit (smoothscale for better quality)
+            scaled_thumb = pygame.transform.smoothscale(
                 thumbnail,
                 (thumb_size, thumb_size)
             )
@@ -138,29 +129,21 @@ class MenuItem:
 
         # Draw main label
         max_text_width = content_right - content_left - padding
+
+        # Determine text color based on state
+        if highlighted:
+            text_color = self.theme.primary  # Blue highlight color
+        else:
+            text_color = self.theme.text_secondary  # Dimmer for non-highlighted
+
         self.text.render(
             screen,
             label,
             (content_left, rect.centery - self.theme.font_size_md // 4),
-            color=self.theme.text_primary if not highlighted else self.theme.text_primary,
+            color=text_color,
             size=self.theme.font_size_md,
             max_width=max_text_width
         )
-
-        # Draw selection indicator on left edge
-        if selected and not show_checkbox:
-            indicator_rect = pygame.Rect(
-                rect.left,
-                rect.top + 4,
-                4,
-                rect.height - 8
-            )
-            pygame.draw.rect(
-                screen,
-                self.theme.primary,
-                indicator_rect,
-                border_radius=2
-            )
 
         return rect
 

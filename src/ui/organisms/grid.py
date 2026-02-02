@@ -107,14 +107,19 @@ class Grid:
                 placeholder = get_placeholder(item)
 
                 # Render thumbnail with label
+                is_selected = idx in selected
                 self.thumbnail.render_with_label(
                     screen, cell_rect,
                     label=label,
                     image=image,
                     placeholder_text=placeholder,
-                    selected=(idx in selected),
+                    selected=is_selected,
                     highlighted=(idx == highlighted)
                 )
+
+                # Draw checkbox overlay if selected
+                if is_selected:
+                    self._draw_checkbox(screen, cell_rect)
 
                 item_rects.append(cell_rect)
                 x += cell_width + padding
@@ -154,6 +159,39 @@ class Grid:
         max_scroll = max(0, min(highlighted_row - context, total_rows - visible_rows))
 
         return max(min_scroll, min(max_scroll, min_scroll))
+
+    def _draw_checkbox(
+        self,
+        screen: pygame.Surface,
+        cell_rect: pygame.Rect
+    ) -> None:
+        """Draw a checkbox overlay on the top-right of the thumbnail."""
+        checkbox_size = 22
+        padding = 4
+
+        checkbox_rect = pygame.Rect(
+            cell_rect.right - checkbox_size - padding,
+            cell_rect.top + padding,
+            checkbox_size,
+            checkbox_size
+        )
+
+        # Checkbox background (filled circle)
+        pygame.draw.circle(
+            screen,
+            self.theme.primary,
+            checkbox_rect.center,
+            checkbox_size // 2
+        )
+
+        # Draw checkmark
+        cx, cy = checkbox_rect.center
+        points = [
+            (cx - 5, cy),
+            (cx - 1, cy + 4),
+            (cx + 5, cy - 4)
+        ]
+        pygame.draw.lines(screen, (255, 255, 255), False, points, 2)
 
     def _draw_scroll_indicators(
         self,

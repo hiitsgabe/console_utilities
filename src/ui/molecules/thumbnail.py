@@ -161,18 +161,46 @@ class Thumbnail:
             max_chars: Maximum initials to return
 
         Returns:
-            Initials string
+            Initials string (only alphanumeric characters)
         """
         if not name:
             return "?"
 
-        words = name.split()
-        if len(words) >= max_chars:
-            return ''.join(w[0].upper() for w in words[:max_chars])
-        elif len(name) >= max_chars:
-            return name[:max_chars].upper()
-        else:
-            return name.upper()
+        # Remove file extension
+        if '.' in name:
+            name = name.rsplit('.', 1)[0]
+
+        # Replace common separators with spaces
+        clean_name = name.replace('_', ' ').replace('-', ' ')
+
+        # Remove region tags and special content in parentheses/brackets
+        import re
+        clean_name = re.sub(r'\([^)]*\)', '', clean_name)
+        clean_name = re.sub(r'\[[^\]]*\]', '', clean_name)
+
+        # Split into words and get initials from alphanumeric words only
+        words = clean_name.split()
+        initials = ""
+
+        for word in words:
+            # Find first alphanumeric character in word (letters and digits only)
+            for char in word:
+                if char.isalnum():
+                    initials += char.upper()
+                    break
+            if len(initials) >= max_chars:
+                break
+
+        # Fallback if no valid initials found
+        if not initials:
+            # Try to get any alphanumeric character from original name
+            for char in name:
+                if char.isalnum():
+                    initials += char.upper()
+                    if len(initials) >= max_chars:
+                        break
+
+        return initials if initials else "?"
 
 
 # Default instance

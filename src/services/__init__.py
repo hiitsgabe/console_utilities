@@ -18,6 +18,7 @@ from .file_listing import (
     filter_games_by_search,
     load_folder_contents,
     find_next_letter_index,
+    get_file_size,
 )
 from .image_cache import (
     ImageCache,
@@ -43,6 +44,7 @@ __all__ = [
     'filter_games_by_search',
     'load_folder_contents',
     'find_next_letter_index',
+    'get_file_size',
     # Image cache
     'ImageCache',
     'image_cache',
