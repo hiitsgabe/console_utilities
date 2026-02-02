@@ -177,6 +177,8 @@ jobs:
   release:
     needs: [build-pygame-bundle, build-macos, build-windows, build-android]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Download pygame bundle
         uses: actions/download-artifact@v4
