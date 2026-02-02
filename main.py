@@ -32,5 +32,5 @@ if __name__ == "__main__":
             pass
     
     # Import and run the main application
-    # Since index.py runs at module level, we just import it
-    import index
+    from app import main
+    main()
