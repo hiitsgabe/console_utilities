@@ -14,3 +14,12 @@ build.zip
 bkp.py
 ./bkp2.py
 build/
+*.spec
+*.pyc
+__pycache__/
+src/nsz/*
+*.egg-info
+src/nsz/nut/
+debug.log
+download.json
+.DS_Store  
