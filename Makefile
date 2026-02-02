@@ -1,4 +1,4 @@
-.PHONY: run debug watch install dev clean test lint format setup build-android bundle
+.PHONY: run debug watch install dev clean test lint format setup build-android bundle bundle-macos bundle-windows
 
 CONDA_ENV = app_cutil
 CONDA_ACTIVATE = conda run -n $(CONDA_ENV)
@@ -98,6 +98,32 @@ bundle:
 	@echo "   📦 Bundled: requests (pure Python)"
 	@echo "   ⚠️  Install native libs: pip install pygame zstandard pycryptodome"
 
+# Build macOS .app bundle (standalone executable)
+bundle-macos:
+	@echo "🍎 Building macOS app bundle..."
+	@rm -rf build/macos dist/macos dist/macos.zip
+	@mkdir -p dist/macos
+	@echo "📦 Running PyInstaller..."
+	@python3 -m PyInstaller console_utils.spec --distpath dist/macos --workpath build/macos --noconfirm
+	@# Create zip with just the .app
+	@cd dist/macos && zip -qr ../macos.zip "Console Utilities.app"
+	@rm -rf build/macos
+	@echo "✅ macOS app created: dist/macos.zip"
+	@echo "   Extract and drag Console Utilities.app to Applications"
+
+# Build Windows .exe bundle (standalone executable)
+bundle-windows:
+	@echo "🪟 Building Windows executable..."
+	@rm -rf build/windows dist/windows dist/windows.zip
+	@mkdir -p dist/windows
+	@echo "📦 Running PyInstaller..."
+	@python -m PyInstaller console_utils_win.spec --distpath dist/windows --workpath build/windows --noconfirm
+	@# Create zip with the exe folder
+	@cd dist/windows && zip -qr ../windows.zip "Console Utilities"
+	@rm -rf build/windows
+	@echo "✅ Windows exe created: dist/windows.zip"
+	@echo "   Extract and run Console Utilities.exe"
+
 prepare-build-zip:
 	mkdir -p build
 	mkdir -p build/assets/images
@@ -161,5 +187,7 @@ help:
 	@echo "  lint          - Lint code with flake8"
 	@echo "  test          - Run tests with pytest"
 	@echo "  bundle        - Create pygame bundle (.pygame file + assets)"
+	@echo "  bundle-macos  - Create macOS .app bundle (standalone)"
+	@echo "  bundle-windows- Create Windows .exe bundle (standalone)"
 	@echo "  build-android - Build Android APK using Docker"
 	@echo "  help          - Show this help message"

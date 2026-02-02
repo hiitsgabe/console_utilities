@@ -22,4 +22,5 @@ src/nsz/*
 src/nsz/nut/
 debug.log
 download.json
-.DS_Store  
+.DS_Store
+assets/bundled_data.json
