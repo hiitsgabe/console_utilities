@@ -5,6 +5,8 @@ on:
     tags:
       - 'v*'  # Triggers on version tags like v1.0.0
   workflow_dispatch:  # Allow manual trigger
+    branches:
+      - main  # Only allow manual trigger from main
     inputs:
       version:
         description: 'Version tag (e.g., v1.0.0)'
