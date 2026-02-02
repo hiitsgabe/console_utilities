@@ -1,4 +1,4 @@
-.PHONY: run debug watch install dev clean test lint format setup build-android bundle bundle-macos bundle-windows
+.PHONY: run debug watch install dev clean test lint format setup build-android bundle bundle-macos bundle-windows release
 
 CONDA_ENV = app_cutil
 CONDA_ACTIVATE = conda run -n $(CONDA_ENV)
@@ -173,6 +173,11 @@ lint:
 test:
 	$(CONDA_ACTIVATE) pytest
 
+# Create release and upload to GitHub
+# Usage: make release VERSION=v1.0.0
+release:
+	@./scripts/local_release.sh $(VERSION)
+
 # Show help
 help:
 	@echo "Available targets:"
@@ -190,4 +195,5 @@ help:
 	@echo "  bundle-macos  - Create macOS .app bundle (standalone)"
 	@echo "  bundle-windows- Create Windows .exe bundle (standalone)"
 	@echo "  build-android - Build Android APK using Docker"
+	@echo "  release       - Create release and upload to GitHub (VERSION=v1.0.0)"
 	@echo "  help          - Show this help message"
