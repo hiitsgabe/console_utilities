@@ -1,4 +1,4 @@
-.PHONY: run debug watch install dev clean test lint format setup build-android
+.PHONY: run debug watch install dev clean test lint format setup build-android bundle
 
 CONDA_ENV = app_cutil
 CONDA_ACTIVATE = conda run -n $(CONDA_ENV)
@@ -32,6 +32,7 @@ clean:
 	rm -rf build/
 	rm -rf dist/
 	rm -rf *.egg-info/
+	rm -rf .bundle_tmp/
 	rm -f error.log
 	rm -f config.json
 	rm -rf py_downloads/
@@ -39,22 +40,63 @@ clean:
 	find . -type d -name __pycache__ -exec rm -rf {} +
 	find . -type f -name "*.pyc" -delete
 
-# Create distribution package for console deployment
-build:
-	mkdir -p dist
-	mkdir -p dist/pygame
-	mkdir -p dist/pygame/assets
-	mkdir -p dist/pygame/assets/images
-	cp src/index.py dist/pygame/console-utilities.pygame
-	sed -i '' 's|from nsz import|import sys, os; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); from nsz import|' dist/pygame/console-utilities.pygame
-	cp -r src/nsz dist/pygame/
-	cp assets/images/background.png dist/pygame/assets/images/background.png
-	cp assets/docs/pygame.md dist/pygame/README.md
-	cp assets/examples/archive_example.json dist/pygame/example.json
-	cd dist/pygame && zip -r ../pygame.zip *
-	rm -rf dist/pygame
-	@echo "Distribution created in dist/ folder"
-	@echo "Copy dist/dw.pygame and dist/download.json to console pygame directory"
+# Create bundled pygame distribution (single .pygame file + assets)
+# Dependencies are bundled by default (except pygame which users already have)
+# Set BUNDLE_DEPS=0 to skip bundling dependencies
+
+bundle:
+	@echo "📦 Creating pygame bundle..."
+	@rm -rf .bundle_tmp dist/pygame
+	@mkdir -p .bundle_tmp/bundle
+	@mkdir -p dist
+	@# Copy all source modules into bundle (excluding __pycache__ and .pyc files)
+	@rsync -a --exclude='__pycache__' --exclude='*.pyc' --exclude='.DS_Store' src/ .bundle_tmp/bundle/
+	@# Bundle pure-Python dependencies only (native libs can't load from zip)
+	@# requests is pure Python, but zstandard/pycryptodome have native code
+	@echo "📥 Bundling pure-Python dependencies (requests)..."
+	@mkdir -p .bundle_tmp/libs_temp
+	@pip3 install --target .bundle_tmp/libs_temp --no-compile \
+		requests 2>/dev/null || \
+	pip install --target .bundle_tmp/libs_temp --no-compile \
+		requests
+	@# Move lib packages to bundle root (flat structure)
+	@find .bundle_tmp/libs_temp -maxdepth 1 -mindepth 1 -exec mv {} .bundle_tmp/bundle/ \;
+	@rm -rf .bundle_tmp/libs_temp
+	@# Clean up unnecessary files
+	@find .bundle_tmp/bundle -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true
+	@find .bundle_tmp/bundle -type d -name '*.dist-info' -exec rm -rf {} + 2>/dev/null || true
+	@find .bundle_tmp/bundle -type d -name '*.egg-info' -exec rm -rf {} + 2>/dev/null || true
+	@find .bundle_tmp/bundle -type f -name '*.pyc' -delete 2>/dev/null || true
+	@# Create __main__.py entry point for the bundle
+	@echo '#!/usr/bin/env python3' > .bundle_tmp/bundle/__main__.py
+	@echo 'from app import main' >> .bundle_tmp/bundle/__main__.py
+	@echo 'if __name__ == "__main__": main()' >> .bundle_tmp/bundle/__main__.py
+	@# Create the .pygame bundle (zip that Python can execute)
+	@cd .bundle_tmp/bundle && zip -qr ../../dist/console_utils.pygame .
+	@# Create pygame distribution folder
+	@mkdir -p dist/pygame
+	@mv dist/console_utils.pygame dist/pygame/
+	@cp -r assets dist/pygame/
+	@cp assets/docs/pygame.md dist/pygame/README.md 2>/dev/null || echo "No pygame docs found"
+	@cp assets/examples/archive_example.json dist/pygame/example.json 2>/dev/null || echo "No example json found"
+	@# Create requirements.txt (native libs that can't be bundled in zip)
+	@echo "# Install these (requests is bundled, native libs are not)" > dist/pygame/requirements.txt
+	@echo "pygame>=2.0.0" >> dist/pygame/requirements.txt
+	@echo "zstandard>=0.21.0" >> dist/pygame/requirements.txt
+	@echo "pycryptodome>=3.10.0" >> dist/pygame/requirements.txt
+	@# Copy install script
+	@cp assets/scripts/install_req.sh dist/pygame/install_req.sh 2>/dev/null || true
+	@chmod +x dist/pygame/install_req.sh 2>/dev/null || true
+	@# Create final zip
+	@cd dist/pygame && zip -qr ../pygame.zip *
+	@rm -rf dist/pygame .bundle_tmp
+	@echo "✅ Bundle created: dist/pygame.zip"
+	@echo "   Contents:"
+	@echo "     - console_utils.pygame"
+	@echo "     - assets/ folder"
+	@echo "     - requirements.txt"
+	@echo "   📦 Bundled: requests (pure Python)"
+	@echo "   ⚠️  Install native libs: pip install pygame zstandard pycryptodome"
 
 prepare-build-zip:
 	mkdir -p build
@@ -118,6 +160,6 @@ help:
 	@echo "  format        - Format code with black"
 	@echo "  lint          - Lint code with flake8"
 	@echo "  test          - Run tests with pytest"
-	@echo "  build         - Create distribution package"
+	@echo "  bundle        - Create pygame bundle (.pygame file + assets)"
 	@echo "  build-android - Build Android APK using Docker"
 	@echo "  help          - Show this help message"

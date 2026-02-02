@@ -1,0 +1,86 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # Triggers on version tags like v1.0.0
+  workflow_dispatch:  # Allow manual trigger
+    inputs:
+      version:
+        description: 'Version tag (e.g., v1.0.0)'
+        required: true
+        type: string
+
+jobs:
+  build-bundle:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zip rsync
+
+      - name: Install Python dependencies for bundling
+        run: |
+          pip install requests
+
+      - name: Build pygame bundle
+        run: make bundle
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.VERSION }}
+          name: Console Utilities ${{ steps.version.outputs.VERSION }}
+          body: |
+            ## Console Utilities ${{ steps.version.outputs.VERSION }}
+
+            ### Installation
+
+            1. Download `pygame.zip`
+            2. Extract to your pygame directory
+            3. Install dependencies: `pip install pygame zstandard pycryptodome`
+            4. Run: `python3 console_utils.pygame`
+
+            ### Contents
+            - `console_utils.pygame` - Main application bundle
+            - `assets/` - Application assets
+            - `requirements.txt` - Required dependencies
+            - `install_req.sh` - Dependency installer script
+
+            ### Requirements
+            - Python 3.9+
+            - pygame
+            - zstandard
+            - pycryptodome
+          files: |
+            dist/pygame.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pygame-bundle
+          path: dist/pygame.zip
+          retention-days: 30
