@@ -15,6 +15,9 @@ from utils.logging import log_error
 # Module-level variable for JSON file path
 _json_file: Optional[str] = None
 
+# Path to bundled JSON file in assets folder
+BUNDLED_JSON_FILE = os.path.join(SCRIPT_DIR, "assets", "bundled_data.json")
+
 
 def get_json_file() -> Optional[str]:
     """Get the current JSON file path."""
@@ -27,9 +30,22 @@ def set_json_file(path: str) -> None:
     _json_file = path
 
 
+def get_bundled_json_path() -> Optional[str]:
+    """
+    Get the path to bundled JSON data if it exists.
+
+    Returns:
+        Path to bundled JSON file or None if not found
+    """
+    if os.path.exists(BUNDLED_JSON_FILE):
+        return BUNDLED_JSON_FILE
+    return None
+
+
 def update_json_file_path(settings: Dict[str, Any]) -> None:
     """
     Update the JSON file path based on settings.
+    Falls back to bundled JSON if no user-specified path.
 
     Args:
         settings: Application settings dictionary
@@ -38,6 +54,9 @@ def update_json_file_path(settings: Dict[str, Any]) -> None:
     archive_path = settings.get("archive_json_path", "")
     if archive_path and os.path.exists(archive_path):
         _json_file = archive_path
+    elif get_bundled_json_path():
+        # Use bundled JSON as fallback
+        _json_file = get_bundled_json_path()
 
 
 def load_main_systems_data(settings: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:

@@ -55,7 +55,8 @@ class AddSystemsScreen:
             highlighted=highlighted,
             selected=set(),
             show_back=True,
-            item_height=50
+            item_height=40,
+            item_spacing=8
         )
 
     def get_selected_system(

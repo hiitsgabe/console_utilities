@@ -33,7 +33,9 @@ class FolderBrowserModal:
         current_path: str,
         items: List[Dict[str, Any]],
         highlighted: int,
-        selection_type: str = "folder"  # "folder", "json", "keys", "nsz"
+        selection_type: str = "folder",  # "folder", "json", "keys", "nsz"
+        focus_area: str = "list",  # "list" or "buttons"
+        button_index: int = 0  # 0 = Select, 1 = Cancel
     ) -> Tuple[pygame.Rect, List[pygame.Rect], Optional[pygame.Rect], Optional[pygame.Rect]]:
         """
         Render the folder browser modal.
@@ -105,7 +107,8 @@ class FolderBrowserModal:
             button_width,
             button_height
         )
-        self.action_button.render_success(screen, select_rect, select_label)
+        select_focused = focus_area == "buttons" and button_index == 0
+        self.action_button.render_success(screen, select_rect, select_label, hover=select_focused)
 
         # Cancel button
         cancel_rect = pygame.Rect(
@@ -114,7 +117,8 @@ class FolderBrowserModal:
             button_width,
             button_height
         )
-        self.action_button.render_secondary(screen, cancel_rect, "Cancel")
+        cancel_focused = focus_area == "buttons" and button_index == 1
+        self.action_button.render_secondary(screen, cancel_rect, "Cancel", hover=cancel_focused)
 
         return modal_rect, item_rects, select_rect, cancel_rect
 

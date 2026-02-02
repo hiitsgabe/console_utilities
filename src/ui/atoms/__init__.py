@@ -8,6 +8,7 @@ from .button import Button
 from .surface import Surface
 from .progress import ProgressBar
 from .divider import Divider
+from .spinner import Spinner
 
 __all__ = [
     'Text',
@@ -15,4 +16,5 @@ __all__ = [
     'Surface',
     'ProgressBar',
     'Divider',
+    'Spinner',
 ]

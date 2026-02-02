@@ -93,11 +93,13 @@ class CharButton:
             display_text = char.upper()
             font_size = self.theme.font_size_md
 
-        # Draw character
+        # Draw character - center both horizontally and vertically
+        text_width, text_height = self.text.measure(display_text, font_size)
+        text_y = rect.centery - text_height // 2
         self.text.render(
             screen,
             display_text,
-            rect.center,
+            (rect.centerx, text_y),
             color=text_color,
             size=font_size,
             align="center"

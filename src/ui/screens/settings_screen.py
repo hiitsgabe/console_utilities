@@ -95,10 +95,11 @@ class SettingsScreen:
             highlighted=highlighted,
             selected=set(),
             show_back=True,
-            item_height=50,
+            item_height=40,
             get_label=lambda x: x[0] if isinstance(x, tuple) else x,
             get_secondary=lambda x: x[1] if isinstance(x, tuple) else None,
-            divider_indices={self.DIVIDER_INDEX}
+            divider_indices={self.DIVIDER_INDEX},
+            item_spacing=8
         )
 
     def _shorten_path(self, path: str, max_length: int = 25) -> str:
