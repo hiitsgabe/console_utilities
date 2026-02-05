@@ -32,7 +32,7 @@ class ModalFrame:
         title: Optional[str] = None,
         show_close: bool = True,
         with_backdrop: bool = True,
-        backdrop_alpha: int = 180
+        backdrop_alpha: int = 180,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect]]:
         """
         Render a modal frame.
@@ -54,10 +54,7 @@ class ModalFrame:
 
         # Draw modal surface
         pygame.draw.rect(
-            screen,
-            self.theme.surface,
-            rect,
-            border_radius=self.theme.radius_lg
+            screen, self.theme.surface, rect, border_radius=self.theme.radius_lg
         )
 
         # Draw shadow
@@ -68,7 +65,7 @@ class ModalFrame:
             shadow_surface,
             (*self.theme.background, 100),
             shadow_surface.get_rect(),
-            border_radius=self.theme.radius_lg
+            border_radius=self.theme.radius_lg,
         )
 
         # Calculate header and content areas
@@ -79,7 +76,7 @@ class ModalFrame:
             rect.left + padding,
             rect.top + header_height + padding,
             rect.width - padding * 2,
-            rect.height - header_height - padding * 2
+            rect.height - header_height - padding * 2,
         )
 
         close_button_rect = None
@@ -87,17 +84,12 @@ class ModalFrame:
         # Draw header if title provided
         if title:
             # Draw header background
-            header_rect = pygame.Rect(
-                rect.left,
-                rect.top,
-                rect.width,
-                header_height
-            )
+            header_rect = pygame.Rect(rect.left, rect.top, rect.width, header_height)
             pygame.draw.rect(
                 screen,
                 self.theme.surface_hover,
                 header_rect,
-                border_radius=self.theme.radius_lg
+                border_radius=self.theme.radius_lg,
             )
             # Fix bottom corners
             pygame.draw.rect(
@@ -107,8 +99,8 @@ class ModalFrame:
                     rect.left,
                     rect.top + header_height - self.theme.radius_lg,
                     rect.width,
-                    self.theme.radius_lg
-                )
+                    self.theme.radius_lg,
+                ),
             )
 
             # Draw title
@@ -117,7 +109,7 @@ class ModalFrame:
                 title,
                 (rect.left + padding, rect.top + header_height // 2 - 4),
                 color=self.theme.text_primary,
-                size=self.theme.font_size_lg
+                size=self.theme.font_size_lg,
             )
 
             # Draw close button
@@ -127,13 +119,10 @@ class ModalFrame:
                     rect.right - padding - close_size,
                     rect.top + (header_height - close_size) // 2,
                     close_size,
-                    close_size
+                    close_size,
                 )
                 self.button.render_icon_button(
-                    screen,
-                    close_button_rect.center,
-                    close_size,
-                    icon_type="close"
+                    screen, close_button_rect.center, close_size, icon_type="close"
                 )
 
         return rect, content_rect, close_button_rect
@@ -144,7 +133,7 @@ class ModalFrame:
         width: int,
         height: int,
         title: Optional[str] = None,
-        show_close: bool = True
+        show_close: bool = True,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect]]:
         """
         Render a centered modal.
@@ -164,7 +153,7 @@ class ModalFrame:
             (screen_rect.width - width) // 2,
             (screen_rect.height - height) // 2,
             width,
-            height
+            height,
         )
 
         return self.render(screen, modal_rect, title, show_close)
@@ -174,7 +163,7 @@ class ModalFrame:
         screen: pygame.Surface,
         margin: int = 40,
         title: Optional[str] = None,
-        show_close: bool = True
+        show_close: bool = True,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect]]:
         """
         Render a nearly fullscreen modal.

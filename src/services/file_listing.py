@@ -13,11 +13,35 @@ from utils.logging import log_error
 from utils.formatting import decode_filename
 
 
+def get_roms_folder_for_system(
+    system_data: Dict[str, Any], settings: Dict[str, Any]
+) -> str:
+    """
+    Get the target ROMs folder for a system.
+
+    Args:
+        system_data: System configuration dictionary
+        settings: Application settings
+
+    Returns:
+        Absolute path to the ROMs folder for this system
+    """
+    system_name = system_data.get("name", "")
+    system_settings = settings.get("system_settings", {})
+    custom_folder = system_settings.get(system_name, {}).get("custom_folder")
+
+    if custom_folder and os.path.exists(custom_folder):
+        return custom_folder
+    else:
+        roms_dir = settings.get("roms_dir", "")
+        return os.path.join(roms_dir, system_data.get("roms_folder", ""))
+
+
 def list_files(
     system_data: Dict[str, Any],
     settings: Dict[str, Any],
     progress_callback: Optional[Callable[[str], None]] = None,
-    page: int = 0
+    page: int = 0,
 ) -> List[Any]:
     """
     List files for a given system.
@@ -33,16 +57,18 @@ def list_files(
     """
     try:
         if progress_callback:
-            progress_callback(f"Loading games for {system_data.get('name', 'Unknown')}...")
+            progress_callback(
+                f"Loading games for {system_data.get('name', 'Unknown')}..."
+            )
 
-        formats = system_data.get('file_format', [])
+        formats = system_data.get("file_format", [])
 
         # Check if this is the JSON API format
-        if 'list_url' in system_data:
+        if "list_url" in system_data:
             return _list_files_json_api(system_data, settings, formats)
 
         # Check if this is HTML directory format
-        elif 'url' in system_data:
+        elif "url" in system_data:
             return _list_files_html(system_data, settings, formats)
 
         return []
@@ -51,7 +77,7 @@ def list_files(
         log_error(
             f"Failed to fetch list for system {system_data.get('name', 'Unknown')}",
             type(e).__name__,
-            traceback.format_exc()
+            traceback.format_exc(),
         )
         return []
 
@@ -67,28 +93,26 @@ def _get_request_headers_cookies(system_data: Dict[str, Any]) -> tuple:
         Tuple of (headers dict, cookies dict)
     """
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
     cookies = {}
 
     # Check if authentication is configured for this system
-    if 'auth' in system_data:
-        auth_config = system_data['auth']
-        if auth_config.get('cookies', False) and 'token' in auth_config:
+    if "auth" in system_data:
+        auth_config = system_data["auth"]
+        if auth_config.get("cookies", False) and "token" in auth_config:
             # Use cookie-based authentication
-            cookie_name = auth_config.get('cookie_name', 'auth_token')
-            cookies[cookie_name] = auth_config['token']
-        elif 'token' in auth_config:
+            cookie_name = auth_config.get("cookie_name", "auth_token")
+            cookies[cookie_name] = auth_config["token"]
+        elif "token" in auth_config:
             # Use header-based authentication (Bearer token)
-            headers['Authorization'] = f"Bearer {auth_config['token']}"
+            headers["Authorization"] = f"Bearer {auth_config['token']}"
 
     return headers, cookies
 
 
 def _list_files_json_api(
-    system_data: Dict[str, Any],
-    settings: Dict[str, Any],
-    formats: List[str]
+    system_data: Dict[str, Any], settings: Dict[str, Any], formats: List[str]
 ) -> List[str]:
     """
     List files from JSON API source.
@@ -101,9 +125,9 @@ def _list_files_json_api(
     Returns:
         List of filenames
     """
-    list_url = system_data['list_url']
-    array_path = system_data.get('list_json_file_location', "files")
-    file_id = system_data.get('list_item_id', "name")
+    list_url = system_data["list_url"]
+    array_path = system_data.get("list_json_file_location", "files")
+    file_id = system_data.get("list_item_id", "name")
 
     headers, cookies = _get_request_headers_cookies(system_data)
 
@@ -114,13 +138,16 @@ def _list_files_json_api(
         files = response[array_path]
         if isinstance(files, list):
             filtered_files = [
-                f[file_id] for f in files
+                f[file_id]
+                for f in files
                 if any(f[file_id].lower().endswith(ext.lower()) for ext in formats)
             ]
 
             # Apply USA filter if enabled
-            if settings.get("usa_only", False) and system_data.get('should_filter_usa', True):
-                usa_regex = system_data.get('usa_regex', '(USA)')
+            if settings.get("usa_only", False) and system_data.get(
+                "should_filter_usa", True
+            ):
+                usa_regex = system_data.get("usa_regex", "(USA)")
                 filtered_files = [f for f in filtered_files if re.search(usa_regex, f)]
 
             return filtered_files
@@ -129,9 +156,7 @@ def _list_files_json_api(
 
 
 def _list_files_html(
-    system_data: Dict[str, Any],
-    settings: Dict[str, Any],
-    formats: List[str]
+    system_data: Dict[str, Any], settings: Dict[str, Any], formats: List[str]
 ) -> List[Dict[str, Any]]:
     """
     List files from HTML directory listing.
@@ -144,8 +169,8 @@ def _list_files_html(
     Returns:
         List of file dictionaries with filename, href, and optional banner_url
     """
-    url = system_data['url']
-    regex_pattern = system_data.get('regex', '<a href="([^"]+)"[^>]*>([^<]+)</a>')
+    url = system_data["url"]
+    regex_pattern = system_data.get("regex", '<a href="([^"]+)"[^>]*>([^<]+)</a>')
 
     headers, cookies = _get_request_headers_cookies(system_data)
 
@@ -155,7 +180,7 @@ def _list_files_html(
 
     files = []
 
-    if 'regex' in system_data:
+    if "regex" in system_data:
         # Use the provided named capture group regex
         matches = re.finditer(regex_pattern, html_content)
 
@@ -166,26 +191,26 @@ def _list_files_html(
                 banner_url = None
 
                 # Try to get values from named groups
-                if 'id' in match.groupdict():
-                    id_value = match.groupdict().get('id')
-                    if 'download_url' in system_data:
-                        download_url = system_data['download_url']
-                        if '<id>' in download_url:
-                            href = download_url.replace('<id>', id_value)
+                if "id" in match.groupdict():
+                    id_value = match.groupdict().get("id")
+                    if "download_url" in system_data:
+                        download_url = system_data["download_url"]
+                        if "<id>" in download_url:
+                            href = download_url.replace("<id>", id_value)
                         else:
                             href = id_value
                     else:
                         href = id_value
-                elif 'href' in match.groupdict():
-                    href = match.groupdict().get('href')
+                elif "href" in match.groupdict():
+                    href = match.groupdict().get("href")
 
-                if 'text' in match.groupdict():
-                    filename = decode_filename(match.groupdict().get('text'))
+                if "text" in match.groupdict():
+                    filename = decode_filename(match.groupdict().get("text"))
                 else:
                     filename = decode_filename(match.group(1))
 
-                if 'banner_url' in match.groupdict():
-                    banner_url = match.groupdict().get('banner_url')
+                if "banner_url" in match.groupdict():
+                    banner_url = match.groupdict().get("banner_url")
 
                 if href and not filename:
                     filename = decode_filename(href)
@@ -196,9 +221,13 @@ def _list_files_html(
 
                 # Filter by file format
                 if any(filename.lower().endswith(ext.lower()) for ext in formats):
-                    files.append({'filename': filename, 'href': href, 'banner_url': banner_url})
-                elif system_data.get('ignore_extension_filtering'):
-                    files.append({'filename': filename, 'href': href, 'banner_url': banner_url})
+                    files.append(
+                        {"filename": filename, "href": href, "banner_url": banner_url}
+                    )
+                elif system_data.get("ignore_extension_filtering"):
+                    files.append(
+                        {"filename": filename, "href": href, "banner_url": banner_url}
+                    )
 
             except Exception:
                 continue
@@ -214,20 +243,17 @@ def _list_files_html(
                 continue
 
             if any(filename.lower().endswith(ext.lower()) for ext in formats):
-                files.append({'filename': filename, 'href': href})
+                files.append({"filename": filename, "href": href})
 
     # Apply USA filter if enabled
-    if settings.get("usa_only", False) and system_data.get('should_filter_usa', True):
-        usa_regex = system_data.get('usa_regex', '(USA)')
-        files = [f for f in files if re.search(usa_regex, f['filename'])]
+    if settings.get("usa_only", False) and system_data.get("should_filter_usa", True):
+        usa_regex = system_data.get("usa_regex", "(USA)")
+        files = [f for f in files if re.search(usa_regex, f["filename"])]
 
-    return sorted(files, key=lambda x: x['filename'])
+    return sorted(files, key=lambda x: x["filename"])
 
 
-def filter_games_by_search(
-    games: List[Any],
-    query: str
-) -> List[Any]:
+def filter_games_by_search(games: List[Any], query: str) -> List[Any]:
     """
     Filter games list by search query.
 
@@ -246,7 +272,7 @@ def filter_games_by_search(
 
     for game in games:
         if isinstance(game, dict):
-            name = game.get('filename', game.get('name', ''))
+            name = game.get("filename", game.get("name", ""))
         else:
             name = str(game)
 
@@ -273,18 +299,14 @@ def load_folder_contents(path: str) -> List[Dict[str, Any]]:
 
         # Add parent directory option unless we're at root
         if path != "/" and path != os.path.dirname(path):
-            items.append({
-                "name": "..",
-                "type": "parent",
-                "path": os.path.dirname(path)
-            })
+            items.append(
+                {"name": "..", "type": "parent", "path": os.path.dirname(path)}
+            )
 
         # Add "Create New Folder" option
-        items.append({
-            "name": "[Create New Folder]",
-            "type": "create_folder",
-            "path": path
-        })
+        items.append(
+            {"name": "[Create New Folder]", "type": "create_folder", "path": path}
+        )
 
         # List directory contents
         try:
@@ -298,39 +320,31 @@ def load_folder_contents(path: str) -> List[Dict[str, Any]]:
 
         for entry in entries:
             # Skip hidden files
-            if entry.startswith('.'):
+            if entry.startswith("."):
                 continue
 
             full_path = os.path.join(path, entry)
 
             if os.path.isdir(full_path):
-                dirs.append({
-                    "name": entry,
-                    "type": "folder",
-                    "path": full_path
-                })
+                dirs.append({"name": entry, "type": "folder", "path": full_path})
             else:
                 # Determine file type
                 ext = os.path.splitext(entry)[1].lower()
 
-                if ext == '.keys':
+                if ext == ".keys":
                     file_type = "keys_file"
-                elif ext == '.json':
+                elif ext == ".json":
                     file_type = "json_file"
-                elif ext == '.nsz':
+                elif ext == ".nsz":
                     file_type = "nsz_file"
                 else:
                     file_type = "file"
 
-                files.append({
-                    "name": entry,
-                    "type": file_type,
-                    "path": full_path
-                })
+                files.append({"name": entry, "type": file_type, "path": full_path})
 
         # Sort and combine
-        dirs.sort(key=lambda x: x['name'].lower())
-        files.sort(key=lambda x: x['name'].lower())
+        dirs.sort(key=lambda x: x["name"].lower())
+        files.sort(key=lambda x: x["name"].lower())
 
         items.extend(dirs)
         items.extend(files)
@@ -338,15 +352,13 @@ def load_folder_contents(path: str) -> List[Dict[str, Any]]:
         return items
 
     except Exception as e:
-        log_error("Failed to load folder contents", type(e).__name__, traceback.format_exc())
+        log_error(
+            "Failed to load folder contents", type(e).__name__, traceback.format_exc()
+        )
         return []
 
 
-def find_next_letter_index(
-    items: List[Any],
-    current_index: int,
-    direction: int
-) -> int:
+def find_next_letter_index(items: List[Any], current_index: int, direction: int) -> int:
     """
     Find the next item that starts with a different letter.
 
@@ -364,10 +376,10 @@ def find_next_letter_index(
     def get_name(item: Any) -> str:
         """Extract display name from item."""
         if isinstance(item, dict):
-            if 'name' in item:
-                return item.get('name', '')
-            elif 'filename' in item:
-                return os.path.splitext(item.get('filename', ''))[0]
+            if "name" in item:
+                return item.get("name", "")
+            elif "filename" in item:
+                return os.path.splitext(item.get("filename", ""))[0]
             else:
                 return str(item)
         return str(item)
@@ -392,10 +404,7 @@ def find_next_letter_index(
     return current_index
 
 
-def get_file_size(
-    system_data: Dict[str, Any],
-    game: Dict[str, Any]
-) -> Optional[int]:
+def get_file_size(system_data: Dict[str, Any], game: Dict[str, Any]) -> Optional[int]:
     """
     Get file size for a game via HEAD request.
 
@@ -410,17 +419,17 @@ def get_file_size(
         from urllib.parse import urljoin
 
         # Build download URL
-        filename = game.get('filename', game.get('name', ''))
+        filename = game.get("filename", game.get("name", ""))
         if not filename:
             return None
 
-        if 'download_url' in system_data:
-            url = game.get('href')
-        elif 'url' in system_data:
-            if 'href' in game:
-                url = urljoin(system_data['url'], game['href'])
+        if "download_url" in system_data:
+            url = game.get("href")
+        elif "url" in system_data:
+            if "href" in game:
+                url = urljoin(system_data["url"], game["href"])
             else:
-                url = urljoin(system_data['url'], filename)
+                url = urljoin(system_data["url"], filename)
         else:
             return None
 
@@ -429,23 +438,25 @@ def get_file_size(
 
         # Get headers/cookies for auth
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         }
         cookies = {}
 
-        if 'auth' in system_data:
-            auth_config = system_data['auth']
-            if auth_config.get('cookies', False) and 'token' in auth_config:
-                cookie_name = auth_config.get('cookie_name', 'auth_token')
-                cookies[cookie_name] = auth_config['token']
-            elif 'token' in auth_config:
-                headers['Authorization'] = f"Bearer {auth_config['token']}"
+        if "auth" in system_data:
+            auth_config = system_data["auth"]
+            if auth_config.get("cookies", False) and "token" in auth_config:
+                cookie_name = auth_config.get("cookie_name", "auth_token")
+                cookies[cookie_name] = auth_config["token"]
+            elif "token" in auth_config:
+                headers["Authorization"] = f"Bearer {auth_config['token']}"
 
         # HEAD request to get Content-Length
-        response = requests.head(url, timeout=5, headers=headers, cookies=cookies, allow_redirects=True)
+        response = requests.head(
+            url, timeout=5, headers=headers, cookies=cookies, allow_redirects=True
+        )
 
         if response.status_code == 200:
-            content_length = response.headers.get('content-length')
+            content_length = response.headers.get("content-length")
             if content_length:
                 return int(content_length)
 

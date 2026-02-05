@@ -11,7 +11,6 @@ from typing import List, Dict, Any, Optional
 from constants import ADDED_SYSTEMS_FILE, SCRIPT_DIR, DEV_MODE
 from utils.logging import log_error
 
-
 # Module-level variable for JSON file path
 _json_file: Optional[str] = None
 
@@ -59,7 +58,9 @@ def update_json_file_path(settings: Dict[str, Any]) -> None:
         _json_file = get_bundled_json_path()
 
 
-def load_main_systems_data(settings: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+def load_main_systems_data(
+    settings: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
     """
     Load main systems data including added systems.
 
@@ -91,7 +92,9 @@ def load_main_systems_data(settings: Optional[Dict[str, Any]] = None) -> List[Di
         return combined_data
 
     except Exception as e:
-        log_error("Failed to load main systems data", type(e).__name__, traceback.format_exc())
+        log_error(
+            "Failed to load main systems data", type(e).__name__, traceback.format_exc()
+        )
         return []
 
 
@@ -104,11 +107,13 @@ def load_added_systems() -> List[Dict[str, Any]]:
     """
     try:
         if os.path.exists(ADDED_SYSTEMS_FILE):
-            with open(ADDED_SYSTEMS_FILE, 'r') as f:
+            with open(ADDED_SYSTEMS_FILE, "r") as f:
                 return json.load(f)
         return []
     except Exception as e:
-        log_error("Failed to load added systems", type(e).__name__, traceback.format_exc())
+        log_error(
+            "Failed to load added systems", type(e).__name__, traceback.format_exc()
+        )
         return []
 
 
@@ -126,11 +131,13 @@ def save_added_systems(added_systems_list: List[Dict[str, Any]]) -> bool:
         # Ensure directory exists
         os.makedirs(os.path.dirname(ADDED_SYSTEMS_FILE), exist_ok=True)
 
-        with open(ADDED_SYSTEMS_FILE, 'w') as f:
+        with open(ADDED_SYSTEMS_FILE, "w") as f:
             json.dump(added_systems_list, f, indent=2)
         return True
     except Exception as e:
-        log_error("Failed to save added systems", type(e).__name__, traceback.format_exc())
+        log_error(
+            "Failed to save added systems", type(e).__name__, traceback.format_exc()
+        )
         return False
 
 
@@ -139,7 +146,7 @@ def add_system_to_added_systems(
     rom_folder: str,
     system_url: str,
     boxarts_url: str = "",
-    file_formats: Optional[List[str]] = None
+    file_formats: Optional[List[str]] = None,
 ) -> bool:
     """
     Add a new system to the added systems list.
@@ -163,7 +170,7 @@ def add_system_to_added_systems(
             "url": system_url,
             "file_format": file_formats or [".zip"],
             "should_unzip": True,
-            "added": True
+            "added": True,
         }
 
         if boxarts_url:
@@ -171,8 +178,7 @@ def add_system_to_added_systems(
 
         # Check if system already exists
         existing_idx = next(
-            (i for i, s in enumerate(added_systems) if s['name'] == system_name),
-            None
+            (i for i, s in enumerate(added_systems) if s["name"] == system_name), None
         )
 
         if existing_idx is not None:
@@ -185,12 +191,16 @@ def add_system_to_added_systems(
         return save_added_systems(added_systems)
 
     except Exception as e:
-        log_error("Failed to add system to added systems", type(e).__name__, traceback.format_exc())
+        log_error(
+            "Failed to add system to added systems",
+            type(e).__name__,
+            traceback.format_exc(),
+        )
         return False
 
 
 def load_available_systems(
-    main_config_url: Optional[str] = None
+    main_config_url: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     Load available systems from remote config.
@@ -219,23 +229,26 @@ def fix_added_systems_roms_folder(roms_dir: str) -> None:
 
         for system in added_systems:
             # Check if roms_folder needs fixing
-            current_folder = system.get('roms_folder', '')
+            current_folder = system.get("roms_folder", "")
             if current_folder and not os.path.isabs(current_folder):
                 # Convert relative path to absolute based on roms_dir
                 new_folder = os.path.join(roms_dir, current_folder)
-                system['roms_folder'] = new_folder
+                system["roms_folder"] = new_folder
                 modified = True
 
         if modified:
             save_added_systems(added_systems)
 
     except Exception as e:
-        log_error("Failed to fix added systems roms_folder", type(e).__name__, traceback.format_exc())
+        log_error(
+            "Failed to fix added systems roms_folder",
+            type(e).__name__,
+            traceback.format_exc(),
+        )
 
 
 def get_visible_systems(
-    data: List[Dict[str, Any]],
-    settings: Dict[str, Any]
+    data: List[Dict[str, Any]], settings: Dict[str, Any]
 ) -> List[Dict[str, Any]]:
     """
     Get list of systems that are not hidden and not list_systems.
@@ -249,9 +262,10 @@ def get_visible_systems(
     """
     system_settings = settings.get("system_settings", {})
     visible_systems = [
-        d for d in data
-        if not d.get('list_systems', False)
-        and not system_settings.get(d['name'], {}).get('hidden', False)
+        d
+        for d in data
+        if not d.get("list_systems", False)
+        and not system_settings.get(d["name"], {}).get("hidden", False)
     ]
     return visible_systems
 
@@ -268,6 +282,6 @@ def get_system_index_by_name(data: List[Dict[str, Any]], system_name: str) -> in
         Index of system or -1 if not found
     """
     try:
-        return next(i for i, d in enumerate(data) if d['name'] == system_name)
+        return next(i for i, d in enumerate(data) if d["name"] == system_name)
     except StopIteration:
         return -1

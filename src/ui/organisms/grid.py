@@ -32,7 +32,7 @@ class Grid:
         cell_size: Optional[Tuple[int, int]] = None,
         get_label: Optional[Callable[[Any], str]] = None,
         get_image: Optional[Callable[[Any], pygame.Surface]] = None,
-        get_placeholder: Optional[Callable[[Any], str]] = None
+        get_placeholder: Optional[Callable[[Any], str]] = None,
     ) -> Tuple[List[pygame.Rect], int]:
         """
         Render a grid of items.
@@ -79,9 +79,7 @@ class Grid:
 
         # Calculate scroll offset
         highlighted_row = highlighted // columns
-        scroll_row = self._calculate_scroll_row(
-            highlighted_row, rows, visible_rows
-        )
+        scroll_row = self._calculate_scroll_row(highlighted_row, rows, visible_rows)
 
         # Render visible cells
         item_rects = []
@@ -109,12 +107,13 @@ class Grid:
                 # Render thumbnail with label
                 is_selected = idx in selected
                 self.thumbnail.render_with_label(
-                    screen, cell_rect,
+                    screen,
+                    cell_rect,
                     label=label,
                     image=image,
                     placeholder_text=placeholder,
                     selected=is_selected,
-                    highlighted=(idx == highlighted)
+                    highlighted=(idx == highlighted),
                 )
 
                 # Draw checkbox overlay if selected
@@ -127,28 +126,22 @@ class Grid:
             y += cell_height + padding
 
         # Draw scroll indicators
-        self._draw_scroll_indicators(
-            screen, rect,
-            scroll_row, rows, visible_rows
-        )
+        self._draw_scroll_indicators(screen, rect, scroll_row, rows, visible_rows)
 
         return item_rects, scroll_row * columns
 
     def _default_get_label(self, item: Any) -> str:
         """Default label extraction."""
         if isinstance(item, dict):
-            name = item.get('name', item.get('filename', str(item)))
+            name = item.get("name", item.get("filename", str(item)))
             # Remove file extension for display
-            if '.' in name:
-                name = name.rsplit('.', 1)[0]
+            if "." in name:
+                name = name.rsplit(".", 1)[0]
             return name
         return str(item)
 
     def _calculate_scroll_row(
-        self,
-        highlighted_row: int,
-        total_rows: int,
-        visible_rows: int
+        self, highlighted_row: int, total_rows: int, visible_rows: int
     ) -> int:
         """Calculate scroll row to keep highlighted row visible."""
         if total_rows <= visible_rows:
@@ -160,11 +153,7 @@ class Grid:
 
         return max(min_scroll, min(max_scroll, min_scroll))
 
-    def _draw_checkbox(
-        self,
-        screen: pygame.Surface,
-        cell_rect: pygame.Rect
-    ) -> None:
+    def _draw_checkbox(self, screen: pygame.Surface, cell_rect: pygame.Rect) -> None:
         """Draw a checkbox overlay on the top-right of the thumbnail."""
         checkbox_size = 22
         padding = 4
@@ -173,24 +162,17 @@ class Grid:
             cell_rect.right - checkbox_size - padding,
             cell_rect.top + padding,
             checkbox_size,
-            checkbox_size
+            checkbox_size,
         )
 
         # Checkbox background (filled circle)
         pygame.draw.circle(
-            screen,
-            self.theme.primary,
-            checkbox_rect.center,
-            checkbox_size // 2
+            screen, self.theme.primary, checkbox_rect.center, checkbox_size // 2
         )
 
         # Draw checkmark
         cx, cy = checkbox_rect.center
-        points = [
-            (cx - 5, cy),
-            (cx - 1, cy + 4),
-            (cx + 5, cy - 4)
-        ]
+        points = [(cx - 5, cy), (cx - 1, cy + 4), (cx + 5, cy - 4)]
         pygame.draw.lines(screen, (255, 255, 255), False, points, 2)
 
     def _draw_scroll_indicators(
@@ -199,7 +181,7 @@ class Grid:
         rect: pygame.Rect,
         scroll_row: int,
         total_rows: int,
-        visible_rows: int
+        visible_rows: int,
     ) -> None:
         """Draw scroll indicators."""
         if total_rows <= visible_rows:
@@ -213,7 +195,7 @@ class Grid:
             points = [
                 (center_x - indicator_size, rect.top + indicator_size),
                 (center_x, rect.top + 2),
-                (center_x + indicator_size, rect.top + indicator_size)
+                (center_x + indicator_size, rect.top + indicator_size),
             ]
             pygame.draw.polygon(screen, self.theme.text_secondary, points)
 
@@ -222,7 +204,7 @@ class Grid:
             points = [
                 (center_x - indicator_size, rect.bottom - indicator_size),
                 (center_x, rect.bottom - 2),
-                (center_x + indicator_size, rect.bottom - indicator_size)
+                (center_x + indicator_size, rect.bottom - indicator_size),
             ]
             pygame.draw.polygon(screen, self.theme.text_secondary, points)
 

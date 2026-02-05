@@ -22,7 +22,7 @@ class NavigationHandler:
     and speeding up over time.
     """
 
-    DIRECTIONS = ('up', 'down', 'left', 'right')
+    DIRECTIONS = ("up", "down", "left", "right")
 
     def __init__(self):
         # Current state of each direction (pressed or not)
@@ -81,18 +81,21 @@ class NavigationHandler:
         if self._joystick.get_numhats() > 0:
             hat = self._joystick.get_hat(0)
             if hat[1] > 0:
-                self._state['up'] = True
+                self._state["up"] = True
             elif hat[1] < 0:
-                self._state['down'] = True
+                self._state["down"] = True
             if hat[0] < 0:
-                self._state['left'] = True
+                self._state["left"] = True
             elif hat[0] > 0:
-                self._state['right'] = True
+                self._state["right"] = True
 
         # Check button-based D-pad
         for direction in self.DIRECTIONS:
             button_info = self._controller_mapping.get(direction)
-            if isinstance(button_info, int) and self._joystick.get_numbuttons() > button_info:
+            if (
+                isinstance(button_info, int)
+                and self._joystick.get_numbuttons() > button_info
+            ):
                 if self._joystick.get_button(button_info):
                     self._state[direction] = True
 
@@ -101,13 +104,13 @@ class NavigationHandler:
         keys = pygame.key.get_pressed()
 
         if keys[pygame.K_UP]:
-            self._state['up'] = True
+            self._state["up"] = True
         if keys[pygame.K_DOWN]:
-            self._state['down'] = True
+            self._state["down"] = True
         if keys[pygame.K_LEFT]:
-            self._state['left'] = True
+            self._state["left"] = True
         if keys[pygame.K_RIGHT]:
-            self._state['right'] = True
+            self._state["right"] = True
 
     def _update_timing(self, current_time: int) -> None:
         """Update timing for navigation acceleration."""
@@ -130,7 +133,9 @@ class NavigationHandler:
 
     def is_held(self, direction: str) -> bool:
         """Check if a direction is being held (for continuous navigation)."""
-        return self._state.get(direction, False) and self._start_time.get(direction, 0) > 0
+        return (
+            self._state.get(direction, False) and self._start_time.get(direction, 0) > 0
+        )
 
     def should_navigate(self, direction: str) -> bool:
         """
@@ -181,17 +186,14 @@ class NavigationHandler:
             Tuple (x, y) for hat coordinates
         """
         mapping = {
-            'up': (0, 1),
-            'down': (0, -1),
-            'left': (-1, 0),
-            'right': (1, 0),
+            "up": (0, 1),
+            "down": (0, -1),
+            "left": (-1, 0),
+            "right": (1, 0),
         }
         return mapping.get(direction, (0, 0))
 
-    def handle_continuous(
-        self,
-        on_navigate: Callable[[str, tuple], None]
-    ) -> None:
+    def handle_continuous(self, on_navigate: Callable[[str, tuple], None]) -> None:
         """
         Handle continuous navigation for all held directions.
 

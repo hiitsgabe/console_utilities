@@ -33,7 +33,7 @@ class ActionButton:
         hover: bool = False,
         pressed: bool = False,
         disabled: bool = False,
-        icon: Optional[str] = None  # "back", "search", "download", "close"
+        icon: Optional[str] = None,  # "back", "search", "download", "close"
     ) -> pygame.Rect:
         """
         Render an action button.
@@ -63,11 +63,12 @@ class ActionButton:
 
         # Draw button
         self.button.render(
-            screen, rect,
+            screen,
+            rect,
             color=color,
             hover=hover and not disabled,
             pressed=pressed and not disabled,
-            shadow=not disabled
+            shadow=not disabled,
         )
 
         # Calculate text position
@@ -92,7 +93,7 @@ class ActionButton:
             (text_x, text_y),
             color=text_color,
             size=self.theme.font_size_md,
-            align="center"
+            align="center",
         )
 
         return rect
@@ -103,7 +104,7 @@ class ActionButton:
         rect: pygame.Rect,
         label: str,
         hover: bool = False,
-        pressed: bool = False
+        pressed: bool = False,
     ) -> pygame.Rect:
         """
         Render a secondary style button.
@@ -119,11 +120,13 @@ class ActionButton:
             Button rect
         """
         return self.render(
-            screen, rect, label,
+            screen,
+            rect,
+            label,
             color=self.theme.surface_hover,
             text_color=self.theme.text_primary,
             hover=hover,
-            pressed=pressed
+            pressed=pressed,
         )
 
     def render_success(
@@ -132,7 +135,7 @@ class ActionButton:
         rect: pygame.Rect,
         label: str,
         hover: bool = False,
-        pressed: bool = False
+        pressed: bool = False,
     ) -> pygame.Rect:
         """
         Render a success style button.
@@ -148,10 +151,7 @@ class ActionButton:
             Button rect
         """
         return self.render(
-            screen, rect, label,
-            color=self.theme.success,
-            hover=hover,
-            pressed=pressed
+            screen, rect, label, color=self.theme.success, hover=hover, pressed=pressed
         )
 
     def render_danger(
@@ -160,7 +160,7 @@ class ActionButton:
         rect: pygame.Rect,
         label: str,
         hover: bool = False,
-        pressed: bool = False
+        pressed: bool = False,
     ) -> pygame.Rect:
         """
         Render a danger/error style button.
@@ -176,10 +176,7 @@ class ActionButton:
             Button rect
         """
         return self.render(
-            screen, rect, label,
-            color=self.theme.error,
-            hover=hover,
-            pressed=pressed
+            screen, rect, label, color=self.theme.error, hover=hover, pressed=pressed
         )
 
     def _draw_icon(
@@ -188,7 +185,7 @@ class ActionButton:
         center: Tuple[int, int],
         size: int,
         color: Color,
-        icon_type: str
+        icon_type: str,
     ) -> None:
         """Draw an icon."""
         cx, cy = center
@@ -198,45 +195,33 @@ class ActionButton:
             points = [
                 (cx + half // 2, cy - half),
                 (cx - half // 2, cy),
-                (cx + half // 2, cy + half)
+                (cx + half // 2, cy + half),
             ]
             pygame.draw.lines(screen, color, False, points, 2)
 
         elif icon_type == "search":
             pygame.draw.circle(screen, color, (cx - 2, cy - 2), half // 2, 2)
-            pygame.draw.line(
-                screen, color,
-                (cx + 2, cy + 2),
-                (cx + half, cy + half),
-                2
-            )
+            pygame.draw.line(screen, color, (cx + 2, cy + 2), (cx + half, cy + half), 2)
 
         elif icon_type == "download":
-            pygame.draw.line(
-                screen, color,
-                (cx, cy - half),
-                (cx, cy + half // 2),
-                2
-            )
-            points = [
-                (cx - half // 2, cy),
-                (cx, cy + half),
-                (cx + half // 2, cy)
-            ]
+            pygame.draw.line(screen, color, (cx, cy - half), (cx, cy + half // 2), 2)
+            points = [(cx - half // 2, cy), (cx, cy + half), (cx + half // 2, cy)]
             pygame.draw.lines(screen, color, False, points, 2)
 
         elif icon_type == "close":
             pygame.draw.line(
-                screen, color,
+                screen,
+                color,
                 (cx - half // 2, cy - half // 2),
                 (cx + half // 2, cy + half // 2),
-                2
+                2,
             )
             pygame.draw.line(
-                screen, color,
+                screen,
+                color,
                 (cx + half // 2, cy - half // 2),
                 (cx - half // 2, cy + half // 2),
-                2
+                2,
             )
 
 

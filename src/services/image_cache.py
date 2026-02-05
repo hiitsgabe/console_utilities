@@ -35,10 +35,7 @@ class ImageCache:
         self._hires_queue: Queue = Queue()
 
     def get_thumbnail(
-        self,
-        game_item: Any,
-        boxart_url: str,
-        settings: Dict[str, Any]
+        self, game_item: Any, boxart_url: str, settings: Dict[str, Any]
     ) -> Optional[pygame.Surface]:
         """
         Get thumbnail for game, loading async if not cached.
@@ -76,11 +73,17 @@ class ImageCache:
         # Start loading if not already in cache
         self._thumbnail_cache[cache_key] = "loading"
 
-        if isinstance(game_item, dict) and game_item.get('banner_url'):
+        if isinstance(game_item, dict) and game_item.get("banner_url"):
             # Direct URL format
             thread = Thread(
                 target=self._load_image_async,
-                args=(image_url, cache_key, game_name, THUMBNAIL_SIZE, self._thumbnail_queue)
+                args=(
+                    image_url,
+                    cache_key,
+                    game_name,
+                    THUMBNAIL_SIZE,
+                    self._thumbnail_queue,
+                ),
             )
         else:
             # Standard format - try multiple extensions
@@ -88,8 +91,15 @@ class ImageCache:
             image_formats = [".png", ".jpg", ".jpeg", ".gif", ".bmp"]
             thread = Thread(
                 target=self._load_image_with_fallback,
-                args=(boxart_url, base_name, image_formats, cache_key, game_name,
-                      THUMBNAIL_SIZE, self._thumbnail_queue)
+                args=(
+                    boxart_url,
+                    base_name,
+                    image_formats,
+                    cache_key,
+                    game_name,
+                    THUMBNAIL_SIZE,
+                    self._thumbnail_queue,
+                ),
             )
 
         thread.daemon = True
@@ -98,10 +108,7 @@ class ImageCache:
         return None  # Not ready yet
 
     def get_hires_image(
-        self,
-        game_item: Any,
-        boxart_url: str,
-        settings: Dict[str, Any]
+        self, game_item: Any, boxart_url: str, settings: Dict[str, Any]
     ) -> Optional[pygame.Surface]:
         """
         Get high-resolution image for game detail modal.
@@ -136,11 +143,17 @@ class ImageCache:
         # Start loading high-res image
         self._hires_cache[cache_key] = "loading"
 
-        if isinstance(game_item, dict) and game_item.get('banner_url'):
+        if isinstance(game_item, dict) and game_item.get("banner_url"):
             # Direct URL format
             thread = Thread(
                 target=self._load_image_async,
-                args=(image_url, cache_key, game_name, HIRES_IMAGE_SIZE, self._hires_queue)
+                args=(
+                    image_url,
+                    cache_key,
+                    game_name,
+                    HIRES_IMAGE_SIZE,
+                    self._hires_queue,
+                ),
             )
         else:
             # Standard format - try different extensions
@@ -148,7 +161,7 @@ class ImageCache:
             image_formats = [".png", ".jpg", ".jpeg", ".gif", ".bmp"]
             thread = Thread(
                 target=self._load_hires_with_fallback,
-                args=(boxart_url, base_name, image_formats, cache_key, game_name)
+                args=(boxart_url, base_name, image_formats, cache_key, game_name),
             )
 
         thread.daemon = True
@@ -178,20 +191,16 @@ class ImageCache:
         if isinstance(game_item, str):
             return game_item
         elif isinstance(game_item, dict):
-            if 'name' in game_item:
-                return game_item.get('name', '')
-            elif 'filename' in game_item:
-                return game_item.get('filename', '')
+            if "name" in game_item:
+                return game_item.get("name", "")
+            elif "filename" in game_item:
+                return game_item.get("filename", "")
             else:
                 return str(game_item)
         return str(game_item)
 
     def _get_cache_key_and_url(
-        self,
-        game_item: Any,
-        game_name: str,
-        boxart_url: str,
-        prefix: str = ""
+        self, game_item: Any, game_name: str, boxart_url: str, prefix: str = ""
     ) -> Tuple[Optional[str], Optional[str]]:
         """
         Generate cache key and image URL for a game item.
@@ -205,8 +214,8 @@ class ImageCache:
         Returns:
             Tuple of (cache_key, image_url), both None if not applicable
         """
-        if isinstance(game_item, dict) and game_item.get('banner_url'):
-            image_url = game_item.get('banner_url') or game_item.get('icon_url')
+        if isinstance(game_item, dict) and game_item.get("banner_url"):
+            image_url = game_item.get("banner_url") or game_item.get("icon_url")
             cache_key = f"{prefix}direct_{image_url}_{game_name}"
             return cache_key, image_url
         elif boxart_url:
@@ -223,7 +232,7 @@ class ImageCache:
         cache_key: str,
         game_name: str,
         target_size: Tuple[int, int],
-        queue: Queue
+        queue: Queue,
     ):
         """Load image in background thread."""
         try:
@@ -237,7 +246,11 @@ class ImageCache:
             queue.put((cache_key, scaled_image))
 
         except Exception as e:
-            log_error(f"Failed to load image from {url}", type(e).__name__, traceback.format_exc())
+            log_error(
+                f"Failed to load image from {url}",
+                type(e).__name__,
+                traceback.format_exc(),
+            )
             queue.put((cache_key, None))
 
     def _load_image_with_fallback(
@@ -248,7 +261,7 @@ class ImageCache:
         cache_key: str,
         game_name: str,
         target_size: Tuple[int, int],
-        queue: Queue
+        queue: Queue,
     ):
         """Try loading image with different format extensions."""
         for fmt in formats:
@@ -276,7 +289,7 @@ class ImageCache:
         base_name: str,
         formats: list,
         cache_key: str,
-        game_name: str
+        game_name: str,
     ):
         """Try loading high-resolution image with different extensions."""
         for fmt in formats:
@@ -296,7 +309,9 @@ class ImageCache:
                     scale_factor = 800 / max_dimension
                     new_width = int(original_size[0] * scale_factor)
                     new_height = int(original_size[1] * scale_factor)
-                    scaled_image = pygame.transform.smoothscale(image, (new_width, new_height))
+                    scaled_image = pygame.transform.smoothscale(
+                        image, (new_width, new_height)
+                    )
                 else:
                     scaled_image = image
 

@@ -34,7 +34,7 @@ class MenuList:
         get_secondary: Optional[Callable[[Any], str]] = None,
         show_checkbox: bool = False,
         divider_indices: Optional[Set[int]] = None,
-        item_spacing: int = 0
+        item_spacing: int = 0,
     ) -> Tuple[List[pygame.Rect], int]:
         """
         Render a menu list.
@@ -67,25 +67,20 @@ class MenuList:
         # Calculate visible range (account for spacing)
         total_item_height = item_height + item_spacing
         visible_count = rect.height // total_item_height
-        scroll_offset = self._calculate_scroll(
-            highlighted, len(items), visible_count
-        )
+        scroll_offset = self._calculate_scroll(highlighted, len(items), visible_count)
 
         # Render visible items
         item_rects = []
         y = rect.top
 
-        for i in range(scroll_offset, min(scroll_offset + visible_count + 1, len(items))):
+        for i in range(
+            scroll_offset, min(scroll_offset + visible_count + 1, len(items))
+        ):
             if y >= rect.bottom:
                 break
 
             item = items[i]
-            item_rect = pygame.Rect(
-                rect.left,
-                y,
-                rect.width,
-                item_height
-            )
+            item_rect = pygame.Rect(rect.left, y, rect.width, item_height)
 
             # Check if this is a divider
             if i in divider_indices:
@@ -98,12 +93,14 @@ class MenuList:
                 secondary = get_secondary(item) if get_secondary else None
 
                 self.menu_item.render(
-                    screen, item_rect, label,
+                    screen,
+                    item_rect,
+                    label,
                     selected=(i in selected),
                     highlighted=(i == highlighted),
                     thumbnail=thumbnail,
                     secondary_text=secondary,
-                    show_checkbox=show_checkbox
+                    show_checkbox=show_checkbox,
                 )
 
             item_rects.append(item_rect)
@@ -111,8 +108,7 @@ class MenuList:
 
         # Draw scroll indicators if needed
         self._draw_scroll_indicators(
-            screen, rect,
-            scroll_offset, len(items), visible_count
+            screen, rect, scroll_offset, len(items), visible_count
         )
 
         return item_rects, scroll_offset
@@ -120,14 +116,11 @@ class MenuList:
     def _default_get_label(self, item: Any) -> str:
         """Default label extraction."""
         if isinstance(item, dict):
-            return item.get('name', item.get('filename', str(item)))
+            return item.get("name", item.get("filename", str(item)))
         return str(item)
 
     def _calculate_scroll(
-        self,
-        highlighted: int,
-        total_items: int,
-        visible_count: int
+        self, highlighted: int, total_items: int, visible_count: int
     ) -> int:
         """Calculate scroll offset to keep highlighted item visible."""
         if total_items <= visible_count:
@@ -146,7 +139,7 @@ class MenuList:
         rect: pygame.Rect,
         scroll_offset: int,
         total_items: int,
-        visible_count: int
+        visible_count: int,
     ) -> None:
         """Draw scroll indicators if list is scrollable."""
         if total_items <= visible_count:
@@ -160,7 +153,7 @@ class MenuList:
             points = [
                 (indicator_x, rect.top + indicator_size),
                 (indicator_x + indicator_size // 2, rect.top + 2),
-                (indicator_x + indicator_size, rect.top + indicator_size)
+                (indicator_x + indicator_size, rect.top + indicator_size),
             ]
             pygame.draw.polygon(screen, self.theme.text_secondary, points)
 
@@ -169,24 +162,18 @@ class MenuList:
             points = [
                 (indicator_x, rect.bottom - indicator_size),
                 (indicator_x + indicator_size // 2, rect.bottom - 2),
-                (indicator_x + indicator_size, rect.bottom - indicator_size)
+                (indicator_x + indicator_size, rect.bottom - indicator_size),
             ]
             pygame.draw.polygon(screen, self.theme.text_secondary, points)
 
         # Draw scrollbar
         scrollbar_height = rect.height * visible_count // total_items
-        scrollbar_y = rect.top + (rect.height - scrollbar_height) * scroll_offset // (total_items - visible_count)
-        scrollbar_rect = pygame.Rect(
-            rect.right - 4,
-            scrollbar_y,
-            3,
-            scrollbar_height
+        scrollbar_y = rect.top + (rect.height - scrollbar_height) * scroll_offset // (
+            total_items - visible_count
         )
+        scrollbar_rect = pygame.Rect(rect.right - 4, scrollbar_y, 3, scrollbar_height)
         pygame.draw.rect(
-            screen,
-            self.theme.surface_hover,
-            scrollbar_rect,
-            border_radius=2
+            screen, self.theme.surface_hover, scrollbar_rect, border_radius=2
         )
 
 

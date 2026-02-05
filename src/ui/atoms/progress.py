@@ -27,7 +27,7 @@ class ProgressBar:
         track_color: Optional[Color] = None,
         fill_color: Optional[Color] = None,
         border_radius: Optional[int] = None,
-        show_glow: bool = False
+        show_glow: bool = False,
     ) -> pygame.Rect:
         """
         Render a progress bar.
@@ -55,22 +55,13 @@ class ProgressBar:
         progress = max(0.0, min(1.0, progress))
 
         # Draw track
-        pygame.draw.rect(
-            screen, track_color, rect,
-            border_radius=border_radius
-        )
+        pygame.draw.rect(screen, track_color, rect, border_radius=border_radius)
 
         # Draw fill
         if progress > 0:
             fill_width = int(rect.width * progress)
-            fill_rect = pygame.Rect(
-                rect.left, rect.top,
-                fill_width, rect.height
-            )
-            pygame.draw.rect(
-                screen, fill_color, fill_rect,
-                border_radius=border_radius
-            )
+            fill_rect = pygame.Rect(rect.left, rect.top, fill_width, rect.height)
+            pygame.draw.rect(screen, fill_color, fill_rect, border_radius=border_radius)
 
             # Draw glow effect
             if show_glow and fill_width > 0:
@@ -78,9 +69,7 @@ class ProgressBar:
                 for i in range(20):
                     alpha = int(40 * (1 - i / 20))
                     pygame.draw.line(
-                        glow_surface,
-                        (*fill_color, alpha),
-                        (i, 0), (i, rect.height)
+                        glow_surface, (*fill_color, alpha), (i, 0), (i, rect.height)
                     )
                 glow_x = min(fill_rect.right - 10, rect.right - 20)
                 screen.blit(glow_surface, (glow_x, rect.top))
@@ -95,7 +84,7 @@ class ProgressBar:
         text: Optional[str] = None,
         text_color: Optional[Color] = None,
         track_color: Optional[Color] = None,
-        fill_color: Optional[Color] = None
+        fill_color: Optional[Color] = None,
     ) -> pygame.Rect:
         """
         Render a progress bar with centered text.
@@ -119,9 +108,7 @@ class ProgressBar:
 
         # Draw progress bar
         self.render(
-            screen, rect, progress,
-            track_color=track_color,
-            fill_color=fill_color
+            screen, rect, progress, track_color=track_color, fill_color=fill_color
         )
 
         # Draw text
@@ -139,7 +126,7 @@ class ProgressBar:
         position: float,  # Animation position 0.0 to 1.0
         track_color: Optional[Color] = None,
         fill_color: Optional[Color] = None,
-        bar_width: float = 0.3  # Width of moving bar as fraction
+        bar_width: float = 0.3,  # Width of moving bar as fraction
     ) -> pygame.Rect:
         """
         Render an indeterminate (loading) progress bar.
@@ -163,10 +150,7 @@ class ProgressBar:
         border_radius = self.theme.radius_sm
 
         # Draw track
-        pygame.draw.rect(
-            screen, track_color, rect,
-            border_radius=border_radius
-        )
+        pygame.draw.rect(screen, track_color, rect, border_radius=border_radius)
 
         # Calculate bar position
         total_travel = rect.width * (1 + bar_width)
@@ -179,13 +163,9 @@ class ProgressBar:
 
         if fill_right > fill_left:
             fill_rect = pygame.Rect(
-                fill_left, rect.top,
-                fill_right - fill_left, rect.height
+                fill_left, rect.top, fill_right - fill_left, rect.height
             )
-            pygame.draw.rect(
-                screen, fill_color, fill_rect,
-                border_radius=border_radius
-            )
+            pygame.draw.rect(screen, fill_color, fill_rect, border_radius=border_radius)
 
         return rect
 

@@ -29,7 +29,7 @@ class Button:
         border_color: Optional[Color] = None,
         border_width: int = 0,
         hover: bool = False,
-        pressed: bool = False
+        pressed: bool = False,
     ) -> pygame.Rect:
         """
         Render a button shape.
@@ -65,14 +65,13 @@ class Button:
             shadow_rect.y += 2
             # Create a surface with alpha for shadow
             shadow_surface = pygame.Surface(
-                (shadow_rect.width, shadow_rect.height),
-                pygame.SRCALPHA
+                (shadow_rect.width, shadow_rect.height), pygame.SRCALPHA
             )
             pygame.draw.rect(
                 shadow_surface,
                 self.theme.shadow,
                 shadow_surface.get_rect(),
-                border_radius=border_radius
+                border_radius=border_radius,
             )
             screen.blit(shadow_surface, shadow_rect.topleft)
 
@@ -82,9 +81,11 @@ class Button:
         # Draw border
         if border_color and border_width > 0:
             pygame.draw.rect(
-                screen, border_color, rect,
+                screen,
+                border_color,
+                rect,
                 width=border_width,
-                border_radius=border_radius
+                border_radius=border_radius,
             )
 
         return rect
@@ -97,7 +98,7 @@ class Button:
         color: Optional[Color] = None,
         icon_color: Optional[Color] = None,
         icon_type: str = "close",  # "close", "back", "search", "download"
-        hover: bool = False
+        hover: bool = False,
     ) -> pygame.Rect:
         """
         Render a circular icon button.
@@ -139,7 +140,7 @@ class Button:
         center: Tuple[int, int],
         radius: int,
         color: Color,
-        icon_type: str
+        icon_type: str,
     ) -> None:
         """Draw an icon inside a button."""
         cx, cy = center
@@ -148,16 +149,18 @@ class Button:
         if icon_type == "close":
             # X icon
             pygame.draw.line(
-                screen, color,
+                screen,
+                color,
                 (cx - icon_size, cy - icon_size),
                 (cx + icon_size, cy + icon_size),
-                2
+                2,
             )
             pygame.draw.line(
-                screen, color,
+                screen,
+                color,
                 (cx + icon_size, cy - icon_size),
                 (cx - icon_size, cy + icon_size),
-                2
+                2,
             )
 
         elif icon_type == "back":
@@ -165,53 +168,46 @@ class Button:
             points = [
                 (cx + icon_size // 2, cy - icon_size),
                 (cx - icon_size // 2, cy),
-                (cx + icon_size // 2, cy + icon_size)
+                (cx + icon_size // 2, cy + icon_size),
             ]
             pygame.draw.lines(screen, color, False, points, 2)
 
         elif icon_type == "search":
             # Magnifying glass icon
             pygame.draw.circle(
-                screen, color,
+                screen,
+                color,
                 (cx - icon_size // 4, cy - icon_size // 4),
                 icon_size // 2,
-                2
+                2,
             )
             pygame.draw.line(
-                screen, color,
+                screen,
+                color,
                 (cx + icon_size // 4, cy + icon_size // 4),
                 (cx + icon_size, cy + icon_size),
-                2
+                2,
             )
 
         elif icon_type == "download":
             # Arrow down icon
             pygame.draw.line(
-                screen, color,
-                (cx, cy - icon_size),
-                (cx, cy + icon_size // 2),
-                2
+                screen, color, (cx, cy - icon_size), (cx, cy + icon_size // 2), 2
             )
             points = [
                 (cx - icon_size // 2, cy),
                 (cx, cy + icon_size),
-                (cx + icon_size // 2, cy)
+                (cx + icon_size // 2, cy),
             ]
             pygame.draw.lines(screen, color, False, points, 2)
 
     def _lighten(self, color: Color, amount: float) -> Color:
         """Lighten a color by a percentage."""
-        return tuple(
-            min(255, int(c + (255 - c) * amount))
-            for c in color
-        )
+        return tuple(min(255, int(c + (255 - c) * amount)) for c in color)
 
     def _darken(self, color: Color, amount: float) -> Color:
         """Darken a color by a percentage."""
-        return tuple(
-            max(0, int(c * (1 - amount)))
-            for c in color
-        )
+        return tuple(max(0, int(c * (1 - amount))) for c in color)
 
 
 # Default instance

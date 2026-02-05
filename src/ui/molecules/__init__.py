@@ -10,9 +10,9 @@ from .char_button import CharButton
 from .download_progress import DownloadProgress
 
 __all__ = [
-    'MenuItem',
-    'Thumbnail',
-    'ActionButton',
-    'CharButton',
-    'DownloadProgress',
+    "MenuItem",
+    "Thumbnail",
+    "ActionButton",
+    "CharButton",
+    "DownloadProgress",
 ]

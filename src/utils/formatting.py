@@ -17,7 +17,7 @@ def format_size(size_bytes: float) -> str:
     Returns:
         Formatted string with appropriate unit (B, KB, MB, GB, TB)
     """
-    for unit in ['B', 'KB', 'MB', 'GB']:
+    for unit in ["B", "KB", "MB", "GB"]:
         if size_bytes < 1024:
             return f"{size_bytes:.1f} {unit}"
         size_bytes /= 1024
@@ -49,8 +49,8 @@ def decode_filename(raw_filename: str) -> str:
         # Handle any remaining character encoding issues
         # Try to encode as latin1 and decode as utf-8 if needed
         try:
-            if html_decoded.encode('latin1').decode('utf-8') != html_decoded:
-                html_decoded = html_decoded.encode('latin1').decode('utf-8')
+            if html_decoded.encode("latin1").decode("utf-8") != html_decoded:
+                html_decoded = html_decoded.encode("latin1").decode("utf-8")
         except (UnicodeEncodeError, UnicodeDecodeError):
             pass  # Keep original if encoding conversion fails
 
@@ -75,7 +75,7 @@ def truncate_text(text: str, max_length: int, suffix: str = "...") -> str:
     """
     if len(text) <= max_length:
         return text
-    return text[:max_length - len(suffix)] + suffix
+    return text[: max_length - len(suffix)] + suffix
 
 
 def sanitize_filename(filename: str) -> str:
@@ -93,9 +93,9 @@ def sanitize_filename(filename: str) -> str:
 
     result = filename
     for char in invalid_chars:
-        result = result.replace(char, '_')
+        result = result.replace(char, "_")
 
     # Remove leading/trailing spaces and dots
-    result = result.strip(' .')
+    result = result.strip(" .")
 
     return result

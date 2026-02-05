@@ -17,14 +17,23 @@ class ControllerHandler:
 
     # Essential buttons that must be mapped
     ESSENTIAL_BUTTONS = [
-        'select', 'back', 'start', 'detail',
-        'search', 'up', 'down', 'left', 'right'
+        "select",
+        "back",
+        "start",
+        "detail",
+        "search",
+        "up",
+        "down",
+        "left",
+        "right",
     ]
 
     # Optional buttons
     OPTIONAL_BUTTONS = [
-        'left_shoulder', 'right_shoulder',
-        'left_trigger', 'right_trigger'
+        "left_shoulder",
+        "right_shoulder",
+        "left_trigger",
+        "right_trigger",
     ]
 
     def __init__(self, mapping: Optional[Dict[str, Any]] = None):
@@ -79,24 +88,17 @@ class ControllerHandler:
             True if mapping is incomplete, False otherwise
         """
         # Touchscreen mode doesn't need button mapping
-        if self._mapping.get('touchscreen_mode'):
+        if self._mapping.get("touchscreen_mode"):
             return False
 
         # Check if all essential buttons are mapped
-        return not all(
-            button in self._mapping
-            for button in self.ESSENTIAL_BUTTONS
-        )
+        return not all(button in self._mapping for button in self.ESSENTIAL_BUTTONS)
 
     def is_touchscreen_mode(self) -> bool:
         """Check if running in touchscreen-only mode."""
-        return self._mapping.get('touchscreen_mode', False)
+        return self._mapping.get("touchscreen_mode", False)
 
-    def input_matches_action(
-        self,
-        event: pygame.event.Event,
-        action: str
-    ) -> bool:
+    def input_matches_action(self, event: pygame.event.Event, action: str) -> bool:
         """
         Check if a pygame event matches a mapped action.
 
@@ -119,8 +121,11 @@ class ControllerHandler:
 
         # Check D-pad/hat events
         elif event.type == pygame.JOYHATMOTION:
-            if ((isinstance(button_info, (tuple, list))) and
-                    len(button_info) >= 3 and button_info[0] == "hat"):
+            if (
+                (isinstance(button_info, (tuple, list)))
+                and len(button_info) >= 3
+                and button_info[0] == "hat"
+            ):
                 _, expected_x, expected_y = button_info[0:3]
                 return event.value == (expected_x, expected_y)
 
@@ -128,17 +133,17 @@ class ControllerHandler:
         elif event.type == pygame.KEYDOWN:
             # Map actions to default keyboard keys
             keyboard_map = {
-                'select': pygame.K_RETURN,
-                'back': pygame.K_ESCAPE,
-                'start': pygame.K_SPACE,
-                'detail': pygame.K_d,
-                'search': pygame.K_s,
-                'up': pygame.K_UP,
-                'down': pygame.K_DOWN,
-                'left': pygame.K_LEFT,
-                'right': pygame.K_RIGHT,
-                'left_shoulder': pygame.K_q,
-                'right_shoulder': pygame.K_e,
+                "select": pygame.K_RETURN,
+                "back": pygame.K_ESCAPE,
+                "start": pygame.K_SPACE,
+                "detail": pygame.K_d,
+                "search": pygame.K_s,
+                "up": pygame.K_UP,
+                "down": pygame.K_DOWN,
+                "left": pygame.K_LEFT,
+                "right": pygame.K_RIGHT,
+                "left_shoulder": pygame.K_q,
+                "right_shoulder": pygame.K_e,
             }
 
             default_key = keyboard_map.get(action)
@@ -158,26 +163,23 @@ class ControllerHandler:
             Human-readable button name
         """
         button_names = {
-            'select': 'A/Confirm',
-            'back': 'B/Back',
-            'start': 'Start',
-            'detail': 'Y/Detail',
-            'search': 'X/Search',
-            'up': 'D-pad Up',
-            'down': 'D-pad Down',
-            'left': 'D-pad Left',
-            'right': 'D-pad Right',
-            'left_shoulder': 'L1/LB',
-            'right_shoulder': 'R1/RB',
-            'left_trigger': 'L2/LT',
-            'right_trigger': 'R2/RT',
+            "select": "A/Confirm",
+            "back": "B/Back",
+            "start": "Start",
+            "detail": "Y/Detail",
+            "search": "X/Search",
+            "up": "D-pad Up",
+            "down": "D-pad Down",
+            "left": "D-pad Left",
+            "right": "D-pad Right",
+            "left_shoulder": "L1/LB",
+            "right_shoulder": "R1/RB",
+            "left_trigger": "L2/LT",
+            "right_trigger": "R2/RT",
         }
-        return button_names.get(action, action.replace('_', ' ').title())
+        return button_names.get(action, action.replace("_", " ").title())
 
-    def get_action_for_event(
-        self,
-        event: pygame.event.Event
-    ) -> Optional[str]:
+    def get_action_for_event(self, event: pygame.event.Event) -> Optional[str]:
         """
         Get the action name for a pygame event.
 
@@ -192,11 +194,7 @@ class ControllerHandler:
                 return action
         return None
 
-    def collect_mapping_step(
-        self,
-        event: pygame.event.Event,
-        action: str
-    ) -> bool:
+    def collect_mapping_step(self, event: pygame.event.Event, action: str) -> bool:
         """
         Process an event during mapping collection.
 
@@ -236,8 +234,7 @@ class ControllerHandler:
             List of unmapped action names
         """
         return [
-            action for action in self.ESSENTIAL_BUTTONS
-            if action not in self._mapping
+            action for action in self.ESSENTIAL_BUTTONS if action not in self._mapping
         ]
 
     def clear_mapping(self) -> None:

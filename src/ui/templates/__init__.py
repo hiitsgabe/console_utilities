@@ -8,7 +8,7 @@ from .grid_screen import GridScreenTemplate
 from .modal_template import ModalTemplate
 
 __all__ = [
-    'ListScreenTemplate',
-    'GridScreenTemplate',
-    'ModalTemplate',
+    "ListScreenTemplate",
+    "GridScreenTemplate",
+    "ModalTemplate",
 ]

@@ -22,10 +22,7 @@ class LoadingModal:
         self.modal_template = ModalTemplate(theme)
 
     def render(
-        self,
-        screen: pygame.Surface,
-        message: str,
-        progress: Optional[float] = None
+        self, screen: pygame.Surface, message: str, progress: Optional[float] = None
     ) -> pygame.Rect:
         """
         Render a loading modal.
@@ -47,7 +44,7 @@ class LoadingModal:
         progress: float,
         downloaded: int = 0,
         total_size: int = 0,
-        speed: float = 0
+        speed: float = 0,
     ) -> pygame.Rect:
         """
         Render a download progress modal.
@@ -75,19 +72,18 @@ class LoadingModal:
 
         # Render modal frame
         modal_rect, content_rect, _ = modal_frame.render_centered(
-            screen, width, height,
-            title="Downloading",
-            show_close=False
+            screen, width, height, title="Downloading", show_close=False
         )
 
         # Render progress
         download_progress.render(
-            screen, content_rect,
+            screen,
+            content_rect,
             progress=progress,
             label=filename,
             downloaded=downloaded,
             total_size=total_size,
-            speed=speed
+            speed=speed,
         )
 
         return modal_rect

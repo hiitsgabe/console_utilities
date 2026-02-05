@@ -21,6 +21,9 @@ from .modals.loading_modal import LoadingModal
 from .modals.error_modal import ErrorModal
 from .modals.url_input_modal import UrlInputModal
 from .modals.folder_name_modal import FolderNameModal
+from .modals.confirm_modal import ConfirmModal
+from .downloads_screen import DownloadsScreen
+from ui.molecules.download_status_bar import DownloadStatusBar
 
 
 class ScreenManager:
@@ -43,6 +46,7 @@ class ScreenManager:
         self.add_systems_screen = AddSystemsScreen(theme)
         self.systems_settings_screen = SystemsSettingsScreen(theme)
         self.system_settings_screen = SystemSettingsScreen(theme)
+        self.downloads_screen = DownloadsScreen(theme)
 
         # Initialize modals
         self.search_modal = SearchModal(theme)
@@ -52,6 +56,10 @@ class ScreenManager:
         self.error_modal = ErrorModal(theme)
         self.url_input_modal = UrlInputModal(theme)
         self.folder_name_modal = FolderNameModal(theme)
+        self.confirm_modal = ConfirmModal(theme)
+
+        # Initialize status bar
+        self.download_status_bar = DownloadStatusBar(theme)
 
     def render(
         self,
@@ -60,7 +68,7 @@ class ScreenManager:
         settings: Dict[str, Any],
         data: List[Dict[str, Any]],
         get_thumbnail=None,
-        get_hires_image=None
+        get_hires_image=None,
     ) -> Dict[str, Any]:
         """
         Render the appropriate screen based on state.
@@ -84,8 +92,23 @@ class ScreenManager:
             self.loading_modal.render(
                 screen,
                 state.loading.message,
-                state.loading.progress / 100.0 if state.loading.progress else None
+                state.loading.progress / 100.0 if state.loading.progress else None,
             )
+            return rects
+
+        if state.confirm_modal.show:
+            modal_rect, ok_rect, cancel_rect, close_rect = self.confirm_modal.render(
+                screen,
+                state.confirm_modal.title,
+                state.confirm_modal.message_lines,
+                state.confirm_modal.ok_label,
+                state.confirm_modal.cancel_label,
+                state.confirm_modal.button_index,
+            )
+            rects["modal"] = modal_rect
+            rects["confirm_ok"] = ok_rect
+            rects["confirm_cancel"] = cancel_rect
+            rects["close"] = close_rect
             return rects
 
         if state.show_search_input:
@@ -93,65 +116,84 @@ class ScreenManager:
                 screen,
                 state.search.input_text,
                 state.search.cursor_position,
-                input_mode=state.input_mode
+                input_mode=state.input_mode,
             )
-            rects['modal'] = modal_rect
-            rects['close'] = close_rect
-            rects['char_rects'] = char_rects
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["char_rects"] = char_rects
             return rects
 
         if state.folder_browser.show:
-            modal_rect, item_rects, select_rect, cancel_rect = self.folder_browser_modal.render(
-                screen,
-                state.folder_browser.current_path,
-                state.folder_browser.items,
-                state.folder_browser.highlighted,
-                state.folder_browser.selected_system_to_add.get('type', 'folder') if state.folder_browser.selected_system_to_add else 'folder',
-                focus_area=state.folder_browser.focus_area,
-                button_index=state.folder_browser.button_index
+            modal_rect, item_rects, select_rect, cancel_rect, close_rect = (
+                self.folder_browser_modal.render(
+                    screen,
+                    state.folder_browser.current_path,
+                    state.folder_browser.items,
+                    state.folder_browser.highlighted,
+                    (
+                        state.folder_browser.selected_system_to_add.get(
+                            "type", "folder"
+                        )
+                        if state.folder_browser.selected_system_to_add
+                        else "folder"
+                    ),
+                    focus_area=state.folder_browser.focus_area,
+                    button_index=state.folder_browser.button_index,
+                )
             )
-            rects['modal'] = modal_rect
-            rects['item_rects'] = item_rects
-            rects['select_button'] = select_rect
-            rects['cancel_button'] = cancel_rect
+            rects["modal"] = modal_rect
+            rects["item_rects"] = item_rects
+            rects["select_button"] = select_rect
+            rects["cancel_button"] = cancel_rect
+            rects["close"] = close_rect
             return rects
 
         if state.game_details.show and state.game_details.current_game:
-            hires_image = get_hires_image(state.game_details.current_game) if get_hires_image else None
+            hires_image = (
+                get_hires_image(state.game_details.current_game)
+                if get_hires_image
+                else None
+            )
             modal_rect, download_rect, close_rect = self.game_details_modal.render(
                 screen,
                 state.game_details.current_game,
                 hires_image,
                 button_focused=state.game_details.button_focused,
                 loading_size=state.game_details.loading_size,
-                input_mode=state.input_mode
+                input_mode=state.input_mode,
             )
-            rects['modal'] = modal_rect
-            rects['download_button'] = download_rect
-            rects['close'] = close_rect
+            rects["modal"] = modal_rect
+            rects["download_button"] = download_rect
+            rects["close"] = close_rect
             return rects
 
         if state.url_input.show:
-            modal_rect, content_rect, close_rect, char_rects = self.url_input_modal.render(
-                screen,
-                state.url_input.input_text,
-                state.url_input.cursor_position,
-                state.url_input.context
+            modal_rect, content_rect, close_rect, char_rects = (
+                self.url_input_modal.render(
+                    screen,
+                    state.url_input.input_text,
+                    state.url_input.cursor_position,
+                    state.url_input.context,
+                    input_mode=state.input_mode,
+                )
             )
-            rects['modal'] = modal_rect
-            rects['close'] = close_rect
-            rects['char_rects'] = char_rects
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["char_rects"] = char_rects
             return rects
 
         if state.folder_name_input.show:
-            modal_rect, content_rect, close_rect, char_rects = self.folder_name_modal.render(
-                screen,
-                state.folder_name_input.input_text,
-                state.folder_name_input.cursor_position
+            modal_rect, content_rect, close_rect, char_rects = (
+                self.folder_name_modal.render(
+                    screen,
+                    state.folder_name_input.input_text,
+                    state.folder_name_input.cursor_position,
+                    input_mode=state.input_mode,
+                )
             )
-            rects['modal'] = modal_rect
-            rects['close'] = close_rect
-            rects['char_rects'] = char_rects
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["char_rects"] = char_rects
             return rects
 
         # Render main screens based on mode
@@ -160,104 +202,134 @@ class ScreenManager:
             back_rect, item_rects, scroll_offset = self.systems_screen.render(
                 screen, visible_systems, state.highlighted
             )
-            rects['back'] = back_rect
-            rects['item_rects'] = item_rects
-            rects['scroll_offset'] = scroll_offset
+            rects["back"] = back_rect
+            rects["item_rects"] = item_rects
+            rects["scroll_offset"] = scroll_offset
 
         elif state.mode == "games":
-            current_system = data[state.selected_system] if state.selected_system < len(data) else {}
-            system_name = current_system.get('name', 'Unknown')
-            game_list = state.search.filtered_list if state.search.mode else state.game_list
-
-            back_rect, item_rects, scroll_offset = self.games_screen.render(
-                screen,
-                system_name,
-                game_list,
-                state.highlighted,
-                state.selected_games,
-                view_type=settings.get('view_type', 'grid'),
-                search_query=state.search.query if state.search.mode else "",
-                get_thumbnail=get_thumbnail
+            current_system = (
+                data[state.selected_system] if state.selected_system < len(data) else {}
             )
-            rects['back'] = back_rect
-            rects['item_rects'] = item_rects
-            rects['scroll_offset'] = scroll_offset
+            system_name = current_system.get("name", "Unknown")
+            game_list = (
+                state.search.filtered_list if state.search.mode else state.game_list
+            )
+
+            back_rect, item_rects, scroll_offset, download_btn, download_all_btn = (
+                self.games_screen.render(
+                    screen,
+                    system_name,
+                    game_list,
+                    state.highlighted,
+                    state.selected_games,
+                    view_type=settings.get("view_type", "grid"),
+                    search_query=state.search.query if state.search.mode else "",
+                    get_thumbnail=get_thumbnail,
+                    input_mode=state.input_mode,
+                    show_download_all=settings.get("show_download_all", False),
+                )
+            )
+            rects["back"] = back_rect
+            rects["item_rects"] = item_rects
+            rects["scroll_offset"] = scroll_offset
+            if download_btn:
+                rects["download_button"] = download_btn
+            if download_all_btn:
+                rects["download_all_button"] = download_all_btn
 
         elif state.mode == "settings":
             back_rect, item_rects, scroll_offset = self.settings_screen.render(
                 screen, state.highlighted, settings
             )
-            rects['back'] = back_rect
-            rects['item_rects'] = item_rects
-            rects['scroll_offset'] = scroll_offset
+            rects["back"] = back_rect
+            rects["item_rects"] = item_rects
+            rects["scroll_offset"] = scroll_offset
 
         elif state.mode == "utils":
             back_rect, item_rects, scroll_offset = self.utils_screen.render(
                 screen, state.highlighted
             )
-            rects['back'] = back_rect
-            rects['item_rects'] = item_rects
-            rects['scroll_offset'] = scroll_offset
+            rects["back"] = back_rect
+            rects["item_rects"] = item_rects
+            rects["scroll_offset"] = scroll_offset
 
         elif state.mode == "credits":
-            back_rect = self.credits_screen.render(screen)
-            rects['back'] = back_rect
+            back_rect = self.credits_screen.render(screen, input_mode=state.input_mode)
+            rects["back"] = back_rect
 
         elif state.mode == "add_systems":
             back_rect, item_rects, scroll_offset = self.add_systems_screen.render(
                 screen, state.add_systems_highlighted, state.available_systems
             )
-            rects['back'] = back_rect
-            rects['item_rects'] = item_rects
-            rects['scroll_offset'] = scroll_offset
+            rects["back"] = back_rect
+            rects["item_rects"] = item_rects
+            rects["scroll_offset"] = scroll_offset
 
         elif state.mode == "systems_settings":
             hidden_systems = self._get_hidden_system_names(data, settings)
             back_rect, item_rects, scroll_offset = self.systems_settings_screen.render(
                 screen, state.systems_settings_highlighted, data, hidden_systems
             )
-            rects['back'] = back_rect
-            rects['item_rects'] = item_rects
-            rects['scroll_offset'] = scroll_offset
+            rects["back"] = back_rect
+            rects["item_rects"] = item_rects
+            rects["scroll_offset"] = scroll_offset
 
         elif state.mode == "system_settings":
-            if state.selected_system_for_settings is not None and state.selected_system_for_settings < len(data):
+            if (
+                state.selected_system_for_settings is not None
+                and state.selected_system_for_settings < len(data)
+            ):
                 system = data[state.selected_system_for_settings]
-                system_name = system.get('name', '')
+                system_name = system.get("name", "")
                 system_settings = settings.get("system_settings", {})
-                is_hidden = system_settings.get(system_name, {}).get('hidden', False)
-                back_rect, item_rects, scroll_offset = self.system_settings_screen.render(
-                    screen, state.system_settings_highlighted, system, is_hidden
+                is_hidden = system_settings.get(system_name, {}).get("hidden", False)
+                back_rect, item_rects, scroll_offset = (
+                    self.system_settings_screen.render(
+                        screen, state.system_settings_highlighted, system, is_hidden
+                    )
                 )
-                rects['back'] = back_rect
-                rects['item_rects'] = item_rects
-                rects['scroll_offset'] = scroll_offset
+                rects["back"] = back_rect
+                rects["item_rects"] = item_rects
+                rects["scroll_offset"] = scroll_offset
+
+        elif state.mode == "downloads":
+            back_rect, item_rects, scroll_offset = self.downloads_screen.render(
+                screen,
+                state.download_queue,
+                get_thumbnail=get_thumbnail,
+                input_mode=state.input_mode,
+            )
+            rects["back"] = back_rect
+            rects["item_rects"] = item_rects
+            rects["scroll_offset"] = scroll_offset
+
+        # Render download status bar on non-download screens when queue is active
+        if state.mode != "downloads":
+            self.download_status_bar.render(screen, state.download_queue)
 
         return rects
 
     def _get_visible_systems(
-        self,
-        data: List[Dict[str, Any]],
-        settings: Dict[str, Any]
+        self, data: List[Dict[str, Any]], settings: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
         """Get visible systems (not hidden, not list_systems)."""
         system_settings = settings.get("system_settings", {})
         return [
-            d for d in data
-            if not d.get('list_systems', False)
-            and not system_settings.get(d['name'], {}).get('hidden', False)
+            d
+            for d in data
+            if not d.get("list_systems", False)
+            and not system_settings.get(d["name"], {}).get("hidden", False)
         ]
 
     def _get_hidden_system_names(
-        self,
-        data: List[Dict[str, Any]],
-        settings: Dict[str, Any]
+        self, data: List[Dict[str, Any]], settings: Dict[str, Any]
     ) -> set:
         """Get set of hidden system names."""
         system_settings = settings.get("system_settings", {})
         return {
-            name for name, sys_settings in system_settings.items()
-            if sys_settings.get('hidden', False)
+            name
+            for name, sys_settings in system_settings.items()
+            if sys_settings.get("hidden", False)
         }
 
 

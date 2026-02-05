@@ -25,7 +25,7 @@ class AddSystemsScreen:
         self,
         screen: pygame.Surface,
         highlighted: int,
-        available_systems: List[Dict[str, Any]]
+        available_systems: List[Dict[str, Any]],
     ) -> Tuple[Optional[pygame.Rect], List[pygame.Rect], int]:
         """
         Render the add systems screen.
@@ -56,13 +56,11 @@ class AddSystemsScreen:
             selected=set(),
             show_back=True,
             item_height=40,
-            item_spacing=8
+            item_spacing=8,
         )
 
     def get_selected_system(
-        self,
-        index: int,
-        available_systems: List[Dict[str, Any]]
+        self, index: int, available_systems: List[Dict[str, Any]]
     ) -> Optional[Dict[str, Any]]:
         """
         Get the system config at the given index.

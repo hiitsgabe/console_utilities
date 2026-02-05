@@ -27,7 +27,7 @@ class Spinner:
         size: int = 40,
         color: Optional[Color] = None,
         thickness: int = 4,
-        speed: float = 1.0
+        speed: float = 1.0,
     ) -> None:
         """
         Render an animated spinner.
@@ -61,13 +61,19 @@ class Spinner:
             opacity = int(255 * (1 - i / num_segments))
 
             # Create color with opacity
-            segment_color = (*color[:3], opacity) if len(color) == 4 else (*color, opacity)
+            segment_color = (
+                (*color[:3], opacity) if len(color) == 4 else (*color, opacity)
+            )
 
             # Draw arc segment
             self._draw_arc(
-                screen, (cx, cy), radius,
-                segment_angle, segment_angle + arc_length,
-                segment_color, thickness
+                screen,
+                (cx, cy),
+                radius,
+                segment_angle,
+                segment_angle + arc_length,
+                segment_color,
+                thickness,
             )
 
     def _draw_arc(
@@ -78,7 +84,7 @@ class Spinner:
         start_angle: float,
         end_angle: float,
         color: Tuple[int, int, int, int],
-        thickness: int
+        thickness: int,
     ) -> None:
         """Draw an arc segment."""
         cx, cy = center
@@ -93,7 +99,10 @@ class Spinner:
 
         if len(points) >= 2:
             # Create a surface with alpha for the arc
-            arc_surface = pygame.Surface((radius * 2 + thickness * 2, radius * 2 + thickness * 2), pygame.SRCALPHA)
+            arc_surface = pygame.Surface(
+                (radius * 2 + thickness * 2, radius * 2 + thickness * 2),
+                pygame.SRCALPHA,
+            )
             offset = radius + thickness
 
             # Adjust points to arc surface coordinates
@@ -109,7 +118,7 @@ class Spinner:
         screen: pygame.Surface,
         center: Tuple[int, int],
         size: int = 40,
-        color: Optional[Color] = None
+        color: Optional[Color] = None,
     ) -> None:
         """
         Render a simple rotating spinner (no alpha blending).

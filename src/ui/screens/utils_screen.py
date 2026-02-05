@@ -17,19 +17,14 @@ class UtilsScreen:
     and NSZ conversion.
     """
 
-    UTILS_ITEMS = [
-        "Download from URL",
-        "NSZ to NSP Converter"
-    ]
+    UTILS_ITEMS = ["Download from URL", "NSZ to NSP Converter"]
 
     def __init__(self, theme: Theme = default_theme):
         self.theme = theme
         self.template = ListScreenTemplate(theme)
 
     def render(
-        self,
-        screen: pygame.Surface,
-        highlighted: int
+        self, screen: pygame.Surface, highlighted: int
     ) -> Tuple[Optional[pygame.Rect], List[pygame.Rect], int]:
         """
         Render the utils screen.
@@ -49,7 +44,7 @@ class UtilsScreen:
             selected=set(),
             show_back=True,
             item_height=40,
-            item_spacing=8
+            item_spacing=8,
         )
 
     def get_util_action(self, index: int) -> str:
@@ -62,10 +57,7 @@ class UtilsScreen:
         Returns:
             Action string
         """
-        actions = {
-            0: "download_url",
-            1: "nsz_converter"
-        }
+        actions = {0: "download_url", 1: "nsz_converter"}
         return actions.get(index, "unknown")
 
 

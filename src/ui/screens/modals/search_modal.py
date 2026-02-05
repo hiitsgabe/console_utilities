@@ -9,6 +9,7 @@ from ui.theme import Theme, default_theme
 from ui.organisms.modal_frame import ModalFrame
 from ui.organisms.char_keyboard import CharKeyboard
 from ui.atoms.text import Text
+from utils.button_hints import get_search_hints, get_button_hint
 
 
 class SearchModal:
@@ -31,7 +32,7 @@ class SearchModal:
         screen: pygame.Surface,
         search_text: str,
         cursor_position: int,
-        input_mode: str = "keyboard"
+        input_mode: str = "keyboard",
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """
         Render the search modal.
@@ -55,9 +56,7 @@ class SearchModal:
         )
 
     def _render_keyboard_mode(
-        self,
-        screen: pygame.Surface,
-        search_text: str
+        self, screen: pygame.Surface, search_text: str
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """Render modal for keyboard input (no on-screen keyboard)."""
         width = min(500, screen.get_width() - 40)
@@ -65,9 +64,7 @@ class SearchModal:
 
         # No close button for keyboard mode
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height,
-            title="Search Games",
-            show_close=False
+            screen, width, height, title="Search Games", show_close=False
         )
 
         padding = self.theme.padding_sm
@@ -79,33 +76,41 @@ class SearchModal:
             content_rect.left + padding,
             y,
             content_rect.width - padding * 2,
-            field_height
+            field_height,
         )
 
         pygame.draw.rect(
             screen,
             self.theme.surface_hover,
             field_rect,
-            border_radius=self.theme.radius_sm
+            border_radius=self.theme.radius_sm,
         )
 
         # Draw text
         display_text = search_text if search_text else "Type to search..."
-        text_color = self.theme.text_primary if search_text else self.theme.text_disabled
+        text_color = (
+            self.theme.text_primary if search_text else self.theme.text_disabled
+        )
         self.text.render(
             screen,
             display_text,
-            (field_rect.left + padding, field_rect.centery - self.theme.font_size_md // 2),
+            (
+                field_rect.left + padding,
+                field_rect.centery - self.theme.font_size_md // 2,
+            ),
             color=text_color,
             size=self.theme.font_size_md,
-            max_width=field_rect.width - padding * 2
+            max_width=field_rect.width - padding * 2,
         )
 
         # Draw blinking cursor
         if search_text:
-            cursor_x = field_rect.left + padding + self.text.measure(
-                search_text, self.theme.font_size_md
-            )[0] + 2
+            cursor_x = (
+                field_rect.left
+                + padding
+                + self.text.measure(search_text, self.theme.font_size_md)[0]
+                + 2
+            )
         else:
             cursor_x = field_rect.left + padding
 
@@ -114,20 +119,20 @@ class SearchModal:
             self.theme.primary,
             (cursor_x, field_rect.top + 8),
             (cursor_x, field_rect.bottom - 8),
-            2
+            2,
         )
 
         y = field_rect.bottom + padding
 
         # Draw hints
-        hints = "Enter: Search    Esc: Cancel    Backspace: Delete"
+        hints = get_search_hints("keyboard")
         self.text.render(
             screen,
             hints,
             (content_rect.centerx, y),
             color=self.theme.text_secondary,
             size=self.theme.font_size_sm,
-            align="center"
+            align="center",
         )
 
         return modal_rect, content_rect, None, []
@@ -137,47 +142,48 @@ class SearchModal:
         screen: pygame.Surface,
         search_text: str,
         cursor_position: int,
-        input_mode: str
+        input_mode: str,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """Render modal with on-screen keyboard for gamepad/touch."""
         width = min(600, screen.get_width() - 40)
         height = 350
 
         # Show close button only for touch mode
-        show_close = (input_mode == "touch")
+        show_close = input_mode == "touch"
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height,
-            title="Search Games",
-            show_close=show_close
+            screen, width, height, title="Search Games", show_close=show_close
         )
 
         # Render character keyboard
         char_rects, input_rect = self.char_keyboard.render(
-            screen, content_rect,
+            screen,
+            content_rect,
             current_text=search_text,
             selected_index=cursor_position,
             chars_per_row=13,
-            show_input_field=True
+            show_input_field=True,
         )
 
         # Show gamepad hints at bottom if in gamepad mode
         if input_mode == "gamepad":
-            hints = "A: Select    B: Back"
+            hints = (
+                get_button_hint("select", "Select", input_mode)
+                + " | "
+                + get_button_hint("back", "Back", input_mode)
+            )
             self.text.render(
                 screen,
                 hints,
                 (content_rect.centerx, content_rect.bottom - self.theme.padding_sm),
                 color=self.theme.text_secondary,
                 size=self.theme.font_size_sm,
-                align="center"
+                align="center",
             )
 
         return modal_rect, content_rect, close_rect, char_rects
 
     def handle_selection(
-        self,
-        cursor_position: int,
-        current_text: str
+        self, cursor_position: int, current_text: str
     ) -> Tuple[str, bool]:
         """
         Handle character selection.
@@ -189,9 +195,7 @@ class SearchModal:
         Returns:
             Tuple of (new_text, is_done)
         """
-        return self.char_keyboard.handle_selection(
-            cursor_position, current_text
-        )
+        return self.char_keyboard.handle_selection(cursor_position, current_text)
 
 
 # Default instance

@@ -31,7 +31,7 @@ class DownloadProgress:
         label: str,
         downloaded: int = 0,
         total_size: int = 0,
-        speed: float = 0  # bytes per second
+        speed: float = 0,  # bytes per second
     ) -> pygame.Rect:
         """
         Render download progress with stats.
@@ -62,23 +62,13 @@ class DownloadProgress:
             label,
             (rect.left, label_y),
             color=self.theme.text_primary,
-            size=self.theme.font_size_md
+            size=self.theme.font_size_md,
         )
 
         # Draw progress bar
         progress_y = label_y + label_height + padding
-        progress_rect = pygame.Rect(
-            rect.left,
-            progress_y,
-            rect.width,
-            progress_height
-        )
-        self.progress_bar.render(
-            screen,
-            progress_rect,
-            progress,
-            show_glow=True
-        )
+        progress_rect = pygame.Rect(rect.left, progress_y, rect.width, progress_height)
+        self.progress_bar.render(screen, progress_rect, progress, show_glow=True)
 
         # Draw percentage in center of progress bar
         percent_text = f"{int(progress * 100)}%"
@@ -88,7 +78,7 @@ class DownloadProgress:
             progress_rect.center,
             color=self.theme.text_primary,
             size=self.theme.font_size_sm,
-            align="center"
+            align="center",
         )
 
         # Draw stats below progress bar
@@ -101,7 +91,7 @@ class DownloadProgress:
             size_text,
             (rect.left, stats_y),
             color=self.theme.text_secondary,
-            size=self.theme.font_size_sm
+            size=self.theme.font_size_sm,
         )
 
         # Speed (right)
@@ -113,17 +103,13 @@ class DownloadProgress:
                 (rect.right, stats_y),
                 color=self.theme.text_secondary,
                 size=self.theme.font_size_sm,
-                align="right"
+                align="right",
             )
 
         return rect
 
     def render_compact(
-        self,
-        screen: pygame.Surface,
-        rect: pygame.Rect,
-        progress: float,
-        label: str
+        self, screen: pygame.Surface, rect: pygame.Rect, progress: float, label: str
     ) -> pygame.Rect:
         """
         Render compact progress (just bar and label).
@@ -145,7 +131,7 @@ class DownloadProgress:
             (rect.left, rect.centery - self.theme.font_size_sm // 4),
             color=self.theme.text_primary,
             size=self.theme.font_size_sm,
-            max_width=label_width
+            max_width=label_width,
         )
 
         # Draw progress bar on right
@@ -153,17 +139,15 @@ class DownloadProgress:
             rect.left + label_width + self.theme.padding_sm,
             rect.centery - 10,
             rect.width - label_width - self.theme.padding_sm,
-            20
+            20,
         )
-        self.progress_bar.render_with_text(
-            screen, bar_rect, progress
-        )
+        self.progress_bar.render_with_text(screen, bar_rect, progress)
 
         return rect
 
     def _format_size(self, size_bytes: int) -> str:
         """Format bytes to human readable."""
-        for unit in ['B', 'KB', 'MB', 'GB']:
+        for unit in ["B", "KB", "MB", "GB"]:
             if size_bytes < 1024:
                 return f"{size_bytes:.1f} {unit}"
             size_bytes /= 1024

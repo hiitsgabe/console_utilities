@@ -10,9 +10,9 @@ from .modal_frame import ModalFrame
 from .char_keyboard import CharKeyboard
 
 __all__ = [
-    'Header',
-    'MenuList',
-    'Grid',
-    'ModalFrame',
-    'CharKeyboard',
+    "Header",
+    "MenuList",
+    "Grid",
+    "ModalFrame",
+    "CharKeyboard",
 ]

@@ -25,7 +25,7 @@ class Divider:
         x_start: int,
         x_end: int,
         color: Optional[Color] = None,
-        thickness: int = 1
+        thickness: int = 1,
     ) -> pygame.Rect:
         """
         Render a horizontal divider.
@@ -55,7 +55,7 @@ class Divider:
         y_start: int,
         y_end: int,
         color: Optional[Color] = None,
-        thickness: int = 1
+        thickness: int = 1,
     ) -> pygame.Rect:
         """
         Render a vertical divider.
@@ -86,7 +86,7 @@ class Divider:
         x_end: int,
         label: str,
         color: Optional[Color] = None,
-        text_color: Optional[Color] = None
+        text_color: Optional[Color] = None,
     ) -> pygame.Rect:
         """
         Render a horizontal divider with a label in the middle.
@@ -110,30 +110,21 @@ class Divider:
 
         font = pygame.font.Font(None, self.theme.font_size_sm)
         text_surface = font.render(label, True, text_color)
-        text_rect = text_surface.get_rect(
-            centery=y,
-            centerx=(x_start + x_end) // 2
-        )
+        text_rect = text_surface.get_rect(centery=y, centerx=(x_start + x_end) // 2)
 
         # Draw lines on either side of label
         gap = 8
         if text_rect.left > x_start + gap:
-            self.render_horizontal(
-                screen, y,
-                x_start, text_rect.left - gap,
-                color
-            )
+            self.render_horizontal(screen, y, x_start, text_rect.left - gap, color)
         if text_rect.right < x_end - gap:
-            self.render_horizontal(
-                screen, y,
-                text_rect.right + gap, x_end,
-                color
-            )
+            self.render_horizontal(screen, y, text_rect.right + gap, x_end, color)
 
         # Draw label
         screen.blit(text_surface, text_rect)
 
-        return pygame.Rect(x_start, y - text_rect.height // 2, x_end - x_start, text_rect.height)
+        return pygame.Rect(
+            x_start, y - text_rect.height // 2, x_end - x_start, text_rect.height
+        )
 
 
 # Default instance

@@ -10,6 +10,8 @@ from ui.organisms.modal_frame import ModalFrame
 from ui.molecules.thumbnail import Thumbnail
 from ui.molecules.action_button import ActionButton
 from ui.atoms.text import Text
+from utils.button_hints import get_game_details_hints
+from services.installed_checker import installed_checker
 
 
 class GameDetailsModal:
@@ -41,7 +43,7 @@ class GameDetailsModal:
         hires_image: Optional[pygame.Surface] = None,
         button_focused: bool = True,
         loading_size: bool = False,
-        input_mode: str = "keyboard"
+        input_mode: str = "keyboard",
     ) -> Tuple[pygame.Rect, Optional[pygame.Rect], Optional[pygame.Rect]]:
         """
         Render the game details modal.
@@ -64,11 +66,9 @@ class GameDetailsModal:
         height = min(screen_height - 60, 600)
 
         # Render modal frame - only show close button in touch mode
-        show_close = (input_mode == "touch")
+        show_close = input_mode == "touch"
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height,
-            title="Game Details",
-            show_close=show_close
+            screen, width, height, title="Game Details", show_close=show_close
         )
 
         # Vertical layout - centered
@@ -84,44 +84,37 @@ class GameDetailsModal:
             color=self.theme.text_primary,
             size=self.theme.font_size_lg,
             max_width=content_rect.width - self.theme.padding_md * 2,
-            align="center"
+            align="center",
         )
         y += self.theme.font_size_lg + self.theme.padding_sm
 
         # Calculate space for image - use as much as possible
         # Reserve space for: filename, size, button, padding
         reserved_height = (
-            self.theme.font_size_sm * 2 +  # filename + size
-            self.theme.padding_sm * 3 +     # padding between elements
-            50 +                             # button height
-            self.theme.padding_md            # bottom padding
+            self.theme.font_size_sm * 2  # filename + size
+            + self.theme.padding_sm * 3  # padding between elements
+            + 50  # button height
+            + self.theme.padding_md  # bottom padding
         )
 
         available_for_image = content_rect.bottom - y - reserved_height
         image_size = min(
             available_for_image,
             content_rect.width - self.theme.padding_md * 2,
-            350  # max size
+            350,  # max size
         )
         image_size = max(image_size, 100)  # min size
 
         # Thumbnail image (centered, large)
-        image_rect = pygame.Rect(
-            center_x - image_size // 2,
-            y,
-            image_size,
-            image_size
-        )
+        image_rect = pygame.Rect(center_x - image_size // 2, y, image_size, image_size)
         placeholder = self.thumbnail.get_placeholder_initials(game_name)
         self.thumbnail.render(
-            screen, image_rect,
-            image=hires_image,
-            placeholder_text=placeholder
+            screen, image_rect, image=hires_image, placeholder_text=placeholder
         )
         y += image_size + self.theme.padding_sm
 
         # Complete filename (centered)
-        filename = game.get('filename', game.get('name', ''))
+        filename = game.get("filename", game.get("name", ""))
         if filename:
             self.text.render(
                 screen,
@@ -130,7 +123,7 @@ class GameDetailsModal:
                 color=self.theme.text_secondary,
                 size=self.theme.font_size_sm,
                 max_width=content_rect.width - self.theme.padding_sm * 2,
-                align="center"
+                align="center",
             )
             y += self.theme.font_size_sm + self.theme.padding_sm
 
@@ -142,7 +135,7 @@ class GameDetailsModal:
                 (center_x, y),
                 color=self.theme.text_disabled,
                 size=self.theme.font_size_sm,
-                align="center"
+                align="center",
             )
         else:
             size_str = self._get_size_string(game)
@@ -153,8 +146,20 @@ class GameDetailsModal:
                     (center_x, y),
                     color=self.theme.text_secondary,
                     size=self.theme.font_size_sm,
-                    align="center"
+                    align="center",
                 )
+        y += self.theme.font_size_sm + self.theme.padding_sm
+
+        # Installed status indicator (lazy check)
+        if installed_checker.is_installed(game):
+            self.text.render(
+                screen,
+                "Already Installed",
+                (center_x, y),
+                color=self.theme.success,
+                size=self.theme.font_size_sm,
+                align="center",
+            )
 
         # Bottom section - show button for touch, hints for keyboard/gamepad
         download_rect = None
@@ -167,19 +172,14 @@ class GameDetailsModal:
                 center_x - button_width // 2,
                 content_rect.bottom - button_height - self.theme.padding_sm,
                 button_width,
-                button_height
+                button_height,
             )
             self.action_button.render(
-                screen, download_rect,
-                "Download",
-                hover=button_focused
+                screen, download_rect, "Download", hover=button_focused
             )
         else:
             # Show hints for keyboard/gamepad
-            if input_mode == "gamepad":
-                hints = "A: Download    B: Back"
-            else:  # keyboard
-                hints = "Enter: Download    Esc: Back"
+            hints = get_game_details_hints(input_mode)
 
             self.text.render(
                 screen,
@@ -187,24 +187,24 @@ class GameDetailsModal:
                 (center_x, content_rect.bottom - self.theme.padding_md),
                 color=self.theme.text_secondary,
                 size=self.theme.font_size_sm,
-                align="center"
+                align="center",
             )
 
         return modal_rect, download_rect, close_rect
 
     def _get_game_name(self, game: Dict[str, Any]) -> str:
         """Extract display name from game."""
-        name = game.get('filename', game.get('name', 'Unknown Game'))
+        name = game.get("filename", game.get("name", "Unknown Game"))
 
         # Remove file extension
-        if '.' in name:
-            name = name.rsplit('.', 1)[0]
+        if "." in name:
+            name = name.rsplit(".", 1)[0]
 
         return name
 
     def _get_size_string(self, game: Dict[str, Any]) -> str:
         """Get formatted size string from game data."""
-        size = game.get('size') or game.get('filesize') or game.get('file_size')
+        size = game.get("size") or game.get("filesize") or game.get("file_size")
 
         if not size:
             return ""
@@ -218,9 +218,11 @@ class GameDetailsModal:
 
     def _format_bytes(self, size: int) -> str:
         """Format bytes to human readable string."""
-        for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+        for unit in ["B", "KB", "MB", "GB", "TB"]:
             if size < 1024.0:
-                return f"{size:.1f} {unit}" if size != int(size) else f"{int(size)} {unit}"
+                return (
+                    f"{size:.1f} {unit}" if size != int(size) else f"{int(size)} {unit}"
+                )
             size /= 1024.0
         return f"{size:.1f} PB"
 

@@ -27,7 +27,7 @@ class CharButton:
         char: str,
         selected: bool = False,
         highlighted: bool = False,
-        special: bool = False  # For DEL, CLEAR, DONE buttons
+        special: bool = False,  # For DEL, CLEAR, DONE buttons
     ) -> pygame.Rect:
         """
         Render a character button.
@@ -67,10 +67,7 @@ class CharButton:
                 text_color = self.theme.background
 
         # Draw background
-        pygame.draw.rect(
-            screen, bg_color, rect,
-            border_radius=self.theme.radius_sm
-        )
+        pygame.draw.rect(screen, bg_color, rect, border_radius=self.theme.radius_sm)
 
         # Draw border if selected
         if selected:
@@ -79,7 +76,7 @@ class CharButton:
                 self.theme.primary_light,
                 rect,
                 width=2,
-                border_radius=self.theme.radius_sm
+                border_radius=self.theme.radius_sm,
             )
 
         # Determine display text and font size
@@ -102,7 +99,7 @@ class CharButton:
             (rect.centerx, text_y),
             color=text_color,
             size=font_size,
-            align="center"
+            align="center",
         )
 
         return rect
@@ -115,7 +112,7 @@ class CharButton:
         button_size: int,
         spacing: int,
         selected_index: int,
-        start_index: int = 0
+        start_index: int = 0,
     ) -> list:
         """
         Render a row of character buttons.
@@ -142,9 +139,11 @@ class CharButton:
             special = len(char) > 1 or char == " "
 
             self.render(
-                screen, rect, char,
+                screen,
+                rect,
+                char,
                 selected=(char_index == selected_index),
-                special=special
+                special=special,
             )
 
             rects.append((rect, char_index, char))

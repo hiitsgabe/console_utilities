@@ -5,4 +5,4 @@ Follows Atomic Design methodology: atoms -> molecules -> organisms -> templates 
 
 from .theme import Theme
 
-__all__ = ['Theme']
+__all__ = ["Theme"]

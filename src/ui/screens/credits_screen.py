@@ -8,6 +8,7 @@ from typing import Tuple, Optional
 from ui.theme import Theme, default_theme
 from ui.atoms.text import Text
 from ui.organisms.header import Header
+from utils.button_hints import get_button_hint
 
 
 class CreditsScreen:
@@ -26,7 +27,8 @@ class CreditsScreen:
     def render(
         self,
         screen: pygame.Surface,
-        version: str = "1.0.0"
+        version: str = "1.0.0",
+        input_mode: str = "keyboard",
     ) -> Optional[pygame.Rect]:
         """
         Render the credits screen.
@@ -41,9 +43,7 @@ class CreditsScreen:
         # Draw header
         header_height = 60
         _, back_button_rect = self.header.render(
-            screen,
-            title="Credits",
-            show_back=True
+            screen, title="Credits", show_back=True
         )
 
         # Content area
@@ -57,7 +57,7 @@ class CreditsScreen:
             "Console Utilities",
             (content_x, content_y),
             color=self.theme.primary,
-            size=self.theme.font_size_xl
+            size=self.theme.font_size_xl,
         )
         content_y += self.theme.font_size_xl + self.theme.padding_sm
 
@@ -67,7 +67,7 @@ class CreditsScreen:
             f"Version {version}",
             (content_x, content_y),
             color=self.theme.text_secondary,
-            size=self.theme.font_size_md
+            size=self.theme.font_size_md,
         )
         content_y += self.theme.font_size_md + self.theme.padding_lg
 
@@ -87,7 +87,7 @@ class CreditsScreen:
                     (content_x, content_y),
                     color=self.theme.text_primary,
                     size=self.theme.font_size_sm,
-                    max_width=content_width
+                    max_width=content_width,
                 )
             content_y += self.theme.font_size_sm + 4
 
@@ -99,7 +99,7 @@ class CreditsScreen:
             "LEGAL DISCLAIMER",
             (content_x, content_y),
             color=self.theme.warning,
-            size=self.theme.font_size_md
+            size=self.theme.font_size_md,
         )
         content_y += self.theme.font_size_md + self.theme.padding_sm
 
@@ -119,19 +119,20 @@ class CreditsScreen:
                     (content_x, content_y),
                     color=self.theme.text_secondary,
                     size=self.theme.font_size_sm,
-                    max_width=content_width
+                    max_width=content_width,
                 )
             content_y += self.theme.font_size_sm + 4
 
         # Bottom text
         bottom_y = screen.get_height() - self.theme.padding_lg - self.theme.font_size_sm
+        back_hint = get_button_hint("back", "Back", input_mode)
         self.text.render(
             screen,
-            "Press B to go back",
+            back_hint,
             (screen.get_width() // 2, bottom_y),
             color=self.theme.text_disabled,
             size=self.theme.font_size_sm,
-            align="center"
+            align="center",
         )
 
         return back_button_rect

@@ -26,7 +26,7 @@ class SystemsSettingsScreen:
         screen: pygame.Surface,
         highlighted: int,
         systems: List[Dict[str, Any]],
-        hidden_systems: Set[str] = None
+        hidden_systems: Set[str] = None,
     ) -> Tuple[Optional[pygame.Rect], List[pygame.Rect], int]:
         """
         Render the systems settings screen.
@@ -73,13 +73,11 @@ class SystemsSettingsScreen:
             item_height=40,
             get_label=lambda x: x[0] if isinstance(x, tuple) else x,
             get_secondary=lambda x: x[1] if isinstance(x, tuple) else None,
-            item_spacing=8
+            item_spacing=8,
         )
 
     def get_selected_system_index(
-        self,
-        highlighted: int,
-        systems: List[Dict[str, Any]]
+        self, highlighted: int, systems: List[Dict[str, Any]]
     ) -> Optional[int]:
         """
         Get the system index at the highlighted position.

@@ -35,8 +35,14 @@ class FolderBrowserModal:
         highlighted: int,
         selection_type: str = "folder",  # "folder", "json", "keys", "nsz"
         focus_area: str = "list",  # "list" or "buttons"
-        button_index: int = 0  # 0 = Select, 1 = Cancel
-    ) -> Tuple[pygame.Rect, List[pygame.Rect], Optional[pygame.Rect], Optional[pygame.Rect]]:
+        button_index: int = 0,  # 0 = Select, 1 = Cancel
+    ) -> Tuple[
+        pygame.Rect,
+        List[pygame.Rect],
+        Optional[pygame.Rect],
+        Optional[pygame.Rect],
+        Optional[pygame.Rect],
+    ]:
         """
         Render the folder browser modal.
 
@@ -48,7 +54,7 @@ class FolderBrowserModal:
             selection_type: What type of selection is expected
 
         Returns:
-            Tuple of (modal_rect, item_rects, select_button_rect, cancel_button_rect)
+            Tuple of (modal_rect, item_rects, select_button_rect, cancel_button_rect, close_rect)
         """
         # Calculate modal size (nearly fullscreen)
         margin = 30
@@ -59,9 +65,10 @@ class FolderBrowserModal:
 
         # Render modal frame
         _, content_rect, close_rect = self.modal_frame.render(
-            screen, modal_rect,
+            screen,
+            modal_rect,
             title="Select " + selection_type.replace("_", " ").title(),
-            show_close=True
+            show_close=True,
         )
 
         # Draw current path
@@ -72,7 +79,7 @@ class FolderBrowserModal:
             (content_rect.left, path_y),
             color=self.theme.text_secondary,
             size=self.theme.font_size_sm,
-            max_width=content_rect.width
+            max_width=content_rect.width,
         )
 
         # List area (below path, above buttons)
@@ -81,16 +88,22 @@ class FolderBrowserModal:
             content_rect.left,
             path_y + self.theme.font_size_sm + self.theme.padding_sm,
             content_rect.width,
-            content_rect.height - self.theme.font_size_sm - self.theme.padding_sm - button_area_height
+            content_rect.height
+            - self.theme.font_size_sm
+            - self.theme.padding_sm
+            - button_area_height,
         )
 
         # Render folder list
         item_rects, _ = self.menu_list.render(
-            screen, list_rect,
-            items, highlighted, set(),
+            screen,
+            list_rect,
+            items,
+            highlighted,
+            set(),
             item_height=45,
             get_label=self._get_item_label,
-            get_secondary=self._get_item_type_label
+            get_secondary=self._get_item_type_label,
         )
 
         # Draw action buttons
@@ -105,66 +118,70 @@ class FolderBrowserModal:
             content_rect.centerx - button_width - button_spacing // 2,
             button_y,
             button_width,
-            button_height
+            button_height,
         )
         select_focused = focus_area == "buttons" and button_index == 0
-        self.action_button.render_success(screen, select_rect, select_label, hover=select_focused)
+        self.action_button.render_success(
+            screen, select_rect, select_label, hover=select_focused
+        )
 
         # Cancel button
         cancel_rect = pygame.Rect(
             content_rect.centerx + button_spacing // 2,
             button_y,
             button_width,
-            button_height
+            button_height,
         )
         cancel_focused = focus_area == "buttons" and button_index == 1
-        self.action_button.render_secondary(screen, cancel_rect, "Cancel", hover=cancel_focused)
+        self.action_button.render_secondary(
+            screen, cancel_rect, "Cancel", hover=cancel_focused
+        )
 
-        return modal_rect, item_rects, select_rect, cancel_rect
+        return modal_rect, item_rects, select_rect, cancel_rect, close_rect
 
     def _get_item_label(self, item: Dict[str, Any]) -> str:
         """Get display label for item."""
-        name = item.get('name', '')
-        item_type = item.get('type', '')
+        name = item.get("name", "")
+        item_type = item.get("type", "")
 
         # Add icon prefix based on type
-        if item_type == 'parent':
+        if item_type == "parent":
             return ".. (Parent Directory)"
-        elif item_type == 'create_folder':
+        elif item_type == "create_folder":
             return "+ Create New Folder"
-        elif item_type == 'folder':
+        elif item_type == "folder":
             return f"[DIR] {name}"
         else:
             return name
 
     def _get_item_type_label(self, item: Dict[str, Any]) -> str:
         """Get type label for item."""
-        item_type = item.get('type', '')
+        item_type = item.get("type", "")
         type_labels = {
-            'folder': 'Folder',
-            'parent': '',
-            'create_folder': '',
-            'keys_file': '.keys',
-            'json_file': '.json',
-            'nsz_file': '.nsz',
-            'file': 'File'
+            "folder": "Folder",
+            "parent": "",
+            "create_folder": "",
+            "keys_file": ".keys",
+            "json_file": ".json",
+            "nsz_file": ".nsz",
+            "file": "File",
         }
-        return type_labels.get(item_type, '')
+        return type_labels.get(item_type, "")
 
     def _get_select_label(self, selection_type: str) -> str:
         """Get select button label based on selection type."""
         labels = {
-            'folder': 'Select',
-            'work_dir': 'Select',
-            'roms_dir': 'Select',
-            'json': 'Select JSON',
-            'keys': 'Select Keys',
-            'nsz': 'Convert',
-            'archive_json': 'Select JSON',
-            'nsz_keys': 'Select Keys',
-            'system_folder': 'Select'
+            "folder": "Select",
+            "work_dir": "Select",
+            "roms_dir": "Select",
+            "json": "Select JSON",
+            "keys": "Select Keys",
+            "nsz": "Convert",
+            "archive_json": "Select JSON",
+            "nsz_keys": "Select Keys",
+            "system_folder": "Select",
         }
-        return labels.get(selection_type, 'Select')
+        return labels.get(selection_type, "Select")
 
 
 # Default instance

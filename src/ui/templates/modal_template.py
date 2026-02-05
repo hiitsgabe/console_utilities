@@ -30,7 +30,7 @@ class ModalTemplate:
         height: int,
         title: Optional[str] = None,
         show_close: bool = True,
-        buttons: Optional[List[Tuple[str, str]]] = None  # [(label, style), ...]
+        buttons: Optional[List[Tuple[str, str]]] = None,  # [(label, style), ...]
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[pygame.Rect]]:
         """
         Render a modal dialog.
@@ -67,7 +67,9 @@ class ModalTemplate:
         button_rects = []
         if buttons:
             button_width = 100
-            total_buttons_width = len(buttons) * button_width + (len(buttons) - 1) * self.theme.padding_sm
+            total_buttons_width = (
+                len(buttons) * button_width + (len(buttons) - 1) * self.theme.padding_sm
+            )
             start_x = modal_rect.centerx - total_buttons_width // 2
             button_y = modal_rect.bottom - button_area_height + self.theme.padding_md
 
@@ -76,7 +78,7 @@ class ModalTemplate:
                     start_x + i * (button_width + self.theme.padding_sm),
                     button_y,
                     button_width,
-                    button_height
+                    button_height,
                 )
 
                 # Choose style
@@ -98,7 +100,7 @@ class ModalTemplate:
         screen: pygame.Surface,
         title: str,
         message: str,
-        buttons: Optional[List[Tuple[str, str]]] = None
+        buttons: Optional[List[Tuple[str, str]]] = None,
     ) -> Tuple[pygame.Rect, Optional[pygame.Rect], List[pygame.Rect]]:
         """
         Render a simple message modal.
@@ -113,6 +115,7 @@ class ModalTemplate:
             Tuple of (modal_rect, close_button_rect, button_rects)
         """
         from ui.atoms.text import Text
+
         text = Text(self.theme)
 
         # Calculate size based on message
@@ -120,9 +123,7 @@ class ModalTemplate:
         height = 200
 
         modal_rect, content_rect, close_rect, button_rects = self.render(
-            screen, width, height, title,
-            show_close=(buttons is None),
-            buttons=buttons
+            screen, width, height, title, show_close=(buttons is None), buttons=buttons
         )
 
         # Draw message
@@ -132,16 +133,13 @@ class ModalTemplate:
             (content_rect.left, content_rect.top),
             color=self.theme.text_primary,
             size=self.theme.font_size_md,
-            max_width=content_rect.width
+            max_width=content_rect.width,
         )
 
         return modal_rect, close_rect, button_rects
 
     def render_loading(
-        self,
-        screen: pygame.Surface,
-        message: str,
-        progress: Optional[float] = None
+        self, screen: pygame.Surface, message: str, progress: Optional[float] = None
     ) -> pygame.Rect:
         """
         Render a loading modal.
@@ -166,8 +164,7 @@ class ModalTemplate:
         height = 140
 
         modal_rect, content_rect, _, _ = self.render(
-            screen, width, height,
-            show_close=False
+            screen, width, height, show_close=False
         )
 
         if progress is not None:
@@ -178,7 +175,7 @@ class ModalTemplate:
                 (content_rect.centerx, content_rect.top + 10),
                 color=self.theme.text_primary,
                 size=self.theme.font_size_md,
-                align="center"
+                align="center",
             )
 
             # Draw progress bar
@@ -186,7 +183,7 @@ class ModalTemplate:
                 content_rect.left + 20,
                 content_rect.bottom - 30,
                 content_rect.width - 40,
-                20
+                20,
             )
             progress_bar.render(screen, bar_rect, progress, show_glow=True)
         else:
@@ -196,7 +193,7 @@ class ModalTemplate:
                 screen,
                 (content_rect.centerx, spinner_y),
                 size=50,
-                color=self.theme.primary
+                color=self.theme.primary,
             )
 
             # Show message below spinner
@@ -206,7 +203,7 @@ class ModalTemplate:
                 (content_rect.centerx, spinner_y + 45),
                 color=self.theme.text_primary,
                 size=self.theme.font_size_md,
-                align="center"
+                align="center",
             )
 
         return modal_rect
@@ -216,7 +213,7 @@ class ModalTemplate:
         screen: pygame.Surface,
         title: str,
         error_lines: List[str],
-        buttons: Optional[List[Tuple[str, str]]] = None
+        buttons: Optional[List[Tuple[str, str]]] = None,
     ) -> Tuple[pygame.Rect, Optional[pygame.Rect], List[pygame.Rect]]:
         """
         Render an error modal.
@@ -231,6 +228,7 @@ class ModalTemplate:
             Tuple of (modal_rect, close_button_rect, button_rects)
         """
         from ui.atoms.text import Text
+
         text = Text(self.theme)
 
         # Calculate size based on error lines
@@ -241,9 +239,7 @@ class ModalTemplate:
             buttons = [("OK", "primary")]
 
         modal_rect, content_rect, close_rect, button_rects = self.render(
-            screen, width, height, title,
-            show_close=False,
-            buttons=buttons
+            screen, width, height, title, show_close=False, buttons=buttons
         )
 
         # Draw error icon
@@ -252,7 +248,7 @@ class ModalTemplate:
             screen,
             self.theme.error,
             (content_rect.left + icon_size, content_rect.top + icon_size),
-            icon_size // 2
+            icon_size // 2,
         )
 
         # Draw error lines
@@ -264,7 +260,7 @@ class ModalTemplate:
                 (content_rect.left + icon_size * 2, y),
                 color=self.theme.text_primary,
                 size=self.theme.font_size_sm,
-                max_width=content_rect.width - icon_size * 2
+                max_width=content_rect.width - icon_size * 2,
             )
             y += 25
 

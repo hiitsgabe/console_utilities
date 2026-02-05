@@ -35,7 +35,7 @@ class Text:
         size: Optional[int] = None,
         max_width: Optional[int] = None,
         align: str = "left",  # "left", "center", "right"
-        antialias: bool = True
+        antialias: bool = True,
     ) -> pygame.Rect:
         """
         Render text to the screen.
@@ -90,7 +90,7 @@ class Text:
         size: Optional[int] = None,
         max_width: Optional[int] = None,
         line_spacing: int = 4,
-        align: str = "left"
+        align: str = "left",
     ) -> pygame.Rect:
         """
         Render multiline text.
@@ -114,27 +114,27 @@ class Text:
             size = self.theme.font_size_md
 
         font = self.get_font(size)
-        lines = text.split('\n')
+        lines = text.split("\n")
 
         x, y = position
         total_rect = pygame.Rect(x, y, 0, 0)
 
         for line in lines:
             rect = self.render(
-                screen, line, (x, y),
-                color=color, size=size,
-                max_width=max_width, align=align
+                screen,
+                line,
+                (x, y),
+                color=color,
+                size=size,
+                max_width=max_width,
+                align=align,
             )
             y += rect.height + line_spacing
             total_rect = total_rect.union(rect)
 
         return total_rect
 
-    def measure(
-        self,
-        text: str,
-        size: Optional[int] = None
-    ) -> Tuple[int, int]:
+    def measure(self, text: str, size: Optional[int] = None) -> Tuple[int, int]:
         """
         Measure text dimensions without rendering.
 
@@ -151,12 +151,88 @@ class Text:
         font = self.get_font(size)
         return font.size(text)
 
-    def _truncate(
+    def render_rainbow(
         self,
+        screen: pygame.Surface,
         text: str,
-        font: pygame.font.Font,
-        max_width: int,
-        suffix: str = "..."
+        position: Tuple[int, int],
+        size: Optional[int] = None,
+        align: str = "center",
+        antialias: bool = True,
+    ) -> pygame.Rect:
+        """
+        Render text with rainbow colors (each character a different color).
+
+        Args:
+            screen: Surface to render to
+            text: Text to render
+            position: (x, y) position
+            size: Font size (default: font_size_md)
+            align: Text alignment ("left", "center", "right")
+            antialias: Use antialiasing
+
+        Returns:
+            Rect of rendered text
+        """
+        if size is None:
+            size = self.theme.font_size_md
+
+        # Rainbow colors
+        rainbow_colors = [
+            (255, 0, 0),      # Red
+            (255, 127, 0),    # Orange
+            (255, 255, 0),    # Yellow
+            (0, 255, 0),      # Green
+            (0, 0, 255),      # Blue
+            (75, 0, 130),     # Indigo
+            (148, 0, 211),    # Violet
+        ]
+
+        font = self.get_font(size)
+
+        # Calculate total width for alignment
+        total_width, total_height = font.size(text)
+
+        # Determine starting x position based on alignment
+        x, y = position
+        if align == "center":
+            x = x - total_width // 2
+        elif align == "right":
+            x = x - total_width
+
+        # Render each character with a different color
+        current_x = x
+        first_rect = None
+        last_rect = None
+
+        for i, char in enumerate(text):
+            if char == " ":
+                # Just advance position for spaces
+                char_width = font.size(" ")[0]
+                current_x += char_width
+                continue
+
+            color = rainbow_colors[i % len(rainbow_colors)]
+            char_surface = font.render(char, antialias, color)
+            char_rect = char_surface.get_rect(topleft=(current_x, y))
+            screen.blit(char_surface, char_rect)
+
+            if first_rect is None:
+                first_rect = char_rect
+            last_rect = char_rect
+
+            current_x += char_rect.width
+
+        # Return bounding rect
+        if first_rect and last_rect:
+            return pygame.Rect(
+                first_rect.left, first_rect.top,
+                last_rect.right - first_rect.left, total_height
+            )
+        return pygame.Rect(x, y, total_width, total_height)
+
+    def _truncate(
+        self, text: str, font: pygame.font.Font, max_width: int, suffix: str = "..."
     ) -> str:
         """
         Truncate text to fit within max_width.

@@ -36,7 +36,7 @@ class GridScreenTemplate:
         get_label: Optional[Callable[[Any], str]] = None,
         get_image: Optional[Callable[[Any], pygame.Surface]] = None,
         get_placeholder: Optional[Callable[[Any], str]] = None,
-        footer_height: int = 0
+        footer_height: int = 0,
     ) -> Tuple[Optional[pygame.Rect], List[pygame.Rect], int]:
         """
         Render a grid screen.
@@ -61,9 +61,7 @@ class GridScreenTemplate:
         # Draw header
         header_height = 60
         header_rect, back_button_rect = self.header.render(
-            screen, title,
-            show_back=show_back,
-            subtitle=subtitle
+            screen, title, show_back=show_back, subtitle=subtitle
         )
 
         # Calculate content area
@@ -71,17 +69,23 @@ class GridScreenTemplate:
             self.theme.padding_sm,
             header_height + self.theme.padding_sm,
             screen.get_width() - self.theme.padding_sm * 2,
-            screen.get_height() - header_height - self.theme.padding_sm * 2 - footer_height
+            screen.get_height()
+            - header_height
+            - self.theme.padding_sm * 2
+            - footer_height,
         )
 
         # Draw grid
         item_rects, scroll_offset = self.grid.render(
-            screen, content_rect,
-            items, highlighted, selected,
+            screen,
+            content_rect,
+            items,
+            highlighted,
+            selected,
             columns=columns,
             get_label=get_label,
             get_image=get_image,
-            get_placeholder=get_placeholder
+            get_placeholder=get_placeholder,
         )
 
         return back_button_rect, item_rects, scroll_offset
@@ -95,7 +99,7 @@ class GridScreenTemplate:
         selected: Set[int],
         button_labels: List[str],
         show_back: bool = True,
-        **kwargs
+        **kwargs,
     ) -> Tuple[Optional[pygame.Rect], List[pygame.Rect], int, List[pygame.Rect]]:
         """
         Render a grid screen with bottom action buttons.
@@ -114,6 +118,7 @@ class GridScreenTemplate:
             Tuple of (back_button_rect, item_rects, scroll_offset, button_rects)
         """
         from ui.molecules.action_button import ActionButton
+
         action_button = ActionButton(self.theme)
 
         # Calculate footer height for buttons
@@ -121,10 +126,14 @@ class GridScreenTemplate:
 
         # Render main grid
         back_rect, item_rects, scroll_offset = self.render(
-            screen, title, items, highlighted, selected,
+            screen,
+            title,
+            items,
+            highlighted,
+            selected,
             show_back=show_back,
             footer_height=footer_height,
-            **kwargs
+            **kwargs,
         )
 
         # Render bottom buttons
@@ -132,16 +141,23 @@ class GridScreenTemplate:
         if button_labels:
             button_width = 120
             button_height = 40
-            total_width = len(button_labels) * button_width + (len(button_labels) - 1) * self.theme.padding_sm
+            total_width = (
+                len(button_labels) * button_width
+                + (len(button_labels) - 1) * self.theme.padding_sm
+            )
             start_x = (screen.get_width() - total_width) // 2
-            button_y = screen.get_height() - footer_height + (footer_height - button_height) // 2
+            button_y = (
+                screen.get_height()
+                - footer_height
+                + (footer_height - button_height) // 2
+            )
 
             for i, label in enumerate(button_labels):
                 button_rect = pygame.Rect(
                     start_x + i * (button_width + self.theme.padding_sm),
                     button_y,
                     button_width,
-                    button_height
+                    button_height,
                 )
                 action_button.render(screen, button_rect, label)
                 button_rects.append(button_rect)
