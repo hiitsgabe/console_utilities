@@ -441,6 +441,7 @@ class DownloadService:
         last_downloaded = 0
 
         file_path = os.path.join(self.work_dir, filename)
+        os.makedirs(self.work_dir, exist_ok=True)
 
         with open(file_path, 'wb') as f:
             for chunk in response.iter_content(1024):
