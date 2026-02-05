@@ -30,7 +30,9 @@ class Header:
         show_back: bool = False,
         subtitle: Optional[str] = None,
         right_text: Optional[str] = None,
-        height: int = 60
+        height: int = 60,
+        rainbow_title: bool = False,
+        center_title: bool = False,
     ) -> Tuple[pygame.Rect, Optional[pygame.Rect]]:
         """
         Render a header.
@@ -42,6 +44,8 @@ class Header:
             subtitle: Optional subtitle
             right_text: Optional right-aligned text
             height: Header height
+            rainbow_title: Render title with rainbow colors
+            center_title: Center the title horizontally
 
         Returns:
             Tuple of (header_rect, back_button_rect or None)
@@ -57,7 +61,7 @@ class Header:
             screen,
             self.theme.surface_hover,
             (0, height - 1),
-            (screen_width, height - 1)
+            (screen_width, height - 1),
         )
 
         back_button_rect = None
@@ -67,16 +71,10 @@ class Header:
         if show_back:
             back_size = 36
             back_button_rect = pygame.Rect(
-                self.theme.padding_sm,
-                (height - back_size) // 2,
-                back_size,
-                back_size
+                self.theme.padding_sm, (height - back_size) // 2, back_size, back_size
             )
             self.button.render_icon_button(
-                screen,
-                back_button_rect.center,
-                back_size,
-                icon_type="back"
+                screen, back_button_rect.center, back_size, icon_type="back"
             )
             content_left = back_button_rect.right + self.theme.padding_sm
 
@@ -85,13 +83,31 @@ class Header:
         if subtitle:
             title_y = height // 3 - self.theme.font_size_lg // 4
 
-        self.text.render(
-            screen,
-            title,
-            (content_left, title_y),
-            color=self.theme.text_primary,
-            size=self.theme.font_size_lg
-        )
+        # Determine title position and alignment
+        if center_title:
+            title_x = screen_width // 2
+            title_align = "center"
+        else:
+            title_x = content_left
+            title_align = "left"
+
+        if rainbow_title:
+            self.text.render_rainbow(
+                screen,
+                title,
+                (title_x, title_y),
+                size=self.theme.font_size_lg,
+                align=title_align,
+            )
+        else:
+            self.text.render(
+                screen,
+                title,
+                (title_x, title_y),
+                color=self.theme.text_primary,
+                size=self.theme.font_size_lg,
+                align=title_align,
+            )
 
         # Draw subtitle if provided
         if subtitle:
@@ -101,7 +117,7 @@ class Header:
                 subtitle,
                 (content_left, subtitle_y),
                 color=self.theme.text_secondary,
-                size=self.theme.font_size_sm
+                size=self.theme.font_size_sm,
             )
 
         # Draw right text if provided
@@ -112,15 +128,13 @@ class Header:
                 (screen_width - self.theme.padding_md, height // 2),
                 color=self.theme.text_secondary,
                 size=self.theme.font_size_sm,
-                align="right"
+                align="right",
             )
 
         return header_rect, back_button_rect
 
     def get_content_area(
-        self,
-        screen: pygame.Surface,
-        header_height: int = 60
+        self, screen: pygame.Surface, header_height: int = 60
     ) -> pygame.Rect:
         """
         Get the content area below the header.
@@ -133,10 +147,7 @@ class Header:
             Content area rect
         """
         return pygame.Rect(
-            0,
-            header_height,
-            screen.get_width(),
-            screen.get_height() - header_height
+            0, header_height, screen.get_width(), screen.get_height() - header_height
         )
 
 

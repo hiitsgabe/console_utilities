@@ -29,7 +29,8 @@ class SettingsScreen:
         "--- VIEW OPTIONS ---",  # Divider
         "Enable Box-art Display",
         "View Type",
-        "USA Games Only"
+        "USA Games Only",
+        "Show Download All Button",
     ]
 
     DIVIDER_INDEX = 7
@@ -39,10 +40,7 @@ class SettingsScreen:
         self.template = ListScreenTemplate(theme)
 
     def render(
-        self,
-        screen: pygame.Surface,
-        highlighted: int,
-        settings: Dict[str, Any]
+        self, screen: pygame.Surface, highlighted: int, settings: Dict[str, Any]
     ) -> Tuple[Optional[pygame.Rect], List[pygame.Rect], int]:
         """
         Render the settings screen.
@@ -68,6 +66,9 @@ class SettingsScreen:
                 items.append((item, value))
             elif item == "USA Games Only":
                 value = "ON" if settings.get("usa_only", False) else "OFF"
+                items.append((item, value))
+            elif item == "Show Download All Button":
+                value = "ON" if settings.get("show_download_all", False) else "OFF"
                 items.append((item, value))
             elif item == "Work Directory":
                 path = settings.get("work_dir", "")
@@ -99,7 +100,7 @@ class SettingsScreen:
             get_label=lambda x: x[0] if isinstance(x, tuple) else x,
             get_secondary=lambda x: x[1] if isinstance(x, tuple) else None,
             divider_indices={self.DIVIDER_INDEX},
-            item_spacing=8
+            item_spacing=8,
         )
 
     def _shorten_path(self, path: str, max_length: int = 25) -> str:
@@ -118,7 +119,7 @@ class SettingsScreen:
             else:
                 break
 
-        return "..." + result if result else "..." + path[-max_length+3:]
+        return "..." + result if result else "..." + path[-max_length + 3 :]
 
     def get_setting_action(self, index: int) -> str:
         """
@@ -145,7 +146,8 @@ class SettingsScreen:
                 "Systems Settings": "systems_settings",
                 "Enable Box-art Display": "toggle_boxart",
                 "View Type": "toggle_view_type",
-                "USA Games Only": "toggle_usa_only"
+                "USA Games Only": "toggle_usa_only",
+                "Show Download All Button": "toggle_download_all",
             }
             return actions.get(item, "unknown")
 

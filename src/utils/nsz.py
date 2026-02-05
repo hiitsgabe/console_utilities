@@ -16,6 +16,7 @@ try:
     if nsz_path not in sys.path:
         sys.path.insert(0, nsz_path)
     from nsz import decompress as _nsz_decompress
+
     NSZ_AVAILABLE = True
 except (ImportError, AttributeError, FileNotFoundError, ModuleNotFoundError) as e:
     NSZ_AVAILABLE = False
@@ -31,7 +32,7 @@ def decompress_nsz_file(
     nsz_file_path: str,
     output_dir: str,
     keys_path: str,
-    progress_callback: Optional[Callable[[str, int], None]] = None
+    progress_callback: Optional[Callable[[str, int], None]] = None,
 ) -> bool:
     """
     Unified NSZ decompression method.
@@ -65,6 +66,7 @@ def decompress_nsz_file(
     if local_nsz_decompress is None:
         try:
             from nsz import decompress as local_nsz_decompress
+
             log_error("IMPORTED NSZ AGAIN")
         except (ImportError, AttributeError) as e:
             log_error(f"NSZ IMPORT ERROR: {str(e)}")
@@ -86,11 +88,7 @@ def decompress_nsz_file(
 
             log_error(f"Attempting NSZ decompression of {filename} ({file_size} bytes)")
             local_nsz_decompress(
-                Path(nsz_file_path),
-                Path(output_dir),
-                True,
-                None,
-                keys_path=keys_path
+                Path(nsz_file_path), Path(output_dir), True, None, keys_path=keys_path
             )
             nsz_success = True
             update_progress("NSZ library decompression successful", 80)

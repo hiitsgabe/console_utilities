@@ -39,7 +39,9 @@ class ListScreenTemplate:
         show_checkbox: bool = False,
         divider_indices: Optional[Set[int]] = None,
         footer_height: int = 0,
-        item_spacing: int = 0
+        item_spacing: int = 0,
+        rainbow_title: bool = False,
+        center_title: bool = False,
     ) -> Tuple[Optional[pygame.Rect], List[pygame.Rect], int]:
         """
         Render a list screen.
@@ -59,6 +61,8 @@ class ListScreenTemplate:
             show_checkbox: Show checkboxes
             divider_indices: Divider indices
             footer_height: Reserved footer space
+            rainbow_title: Render title with rainbow colors
+            center_title: Center the title horizontally
 
         Returns:
             Tuple of (back_button_rect, item_rects, scroll_offset)
@@ -66,9 +70,12 @@ class ListScreenTemplate:
         # Draw header
         header_height = 60
         header_rect, back_button_rect = self.header.render(
-            screen, title,
+            screen,
+            title,
             show_back=show_back,
-            subtitle=subtitle
+            subtitle=subtitle,
+            rainbow_title=rainbow_title,
+            center_title=center_title,
         )
 
         # Calculate content area
@@ -76,20 +83,26 @@ class ListScreenTemplate:
             self.theme.padding_sm,
             header_height + self.theme.padding_sm,
             screen.get_width() - self.theme.padding_sm * 2,
-            screen.get_height() - header_height - self.theme.padding_sm * 2 - footer_height
+            screen.get_height()
+            - header_height
+            - self.theme.padding_sm * 2
+            - footer_height,
         )
 
         # Draw menu list
         item_rects, scroll_offset = self.menu_list.render(
-            screen, content_rect,
-            items, highlighted, selected,
+            screen,
+            content_rect,
+            items,
+            highlighted,
+            selected,
             item_height=item_height,
             get_label=get_label,
             get_thumbnail=get_thumbnail,
             get_secondary=get_secondary,
             show_checkbox=show_checkbox,
             divider_indices=divider_indices,
-            item_spacing=item_spacing
+            item_spacing=item_spacing,
         )
 
         return back_button_rect, item_rects, scroll_offset
@@ -103,7 +116,7 @@ class ListScreenTemplate:
         selected: Set[int],
         button_labels: List[str],
         show_back: bool = True,
-        **kwargs
+        **kwargs,
     ) -> Tuple[Optional[pygame.Rect], List[pygame.Rect], int, List[pygame.Rect]]:
         """
         Render a list screen with bottom action buttons.
@@ -122,6 +135,7 @@ class ListScreenTemplate:
             Tuple of (back_button_rect, item_rects, scroll_offset, button_rects)
         """
         from ui.molecules.action_button import ActionButton
+
         action_button = ActionButton(self.theme)
 
         # Calculate footer height for buttons
@@ -129,10 +143,14 @@ class ListScreenTemplate:
 
         # Render main list
         back_rect, item_rects, scroll_offset = self.render(
-            screen, title, items, highlighted, selected,
+            screen,
+            title,
+            items,
+            highlighted,
+            selected,
             show_back=show_back,
             footer_height=footer_height,
-            **kwargs
+            **kwargs,
         )
 
         # Render bottom buttons
@@ -140,16 +158,23 @@ class ListScreenTemplate:
         if button_labels:
             button_width = 120
             button_height = 40
-            total_width = len(button_labels) * button_width + (len(button_labels) - 1) * self.theme.padding_sm
+            total_width = (
+                len(button_labels) * button_width
+                + (len(button_labels) - 1) * self.theme.padding_sm
+            )
             start_x = (screen.get_width() - total_width) // 2
-            button_y = screen.get_height() - footer_height + (footer_height - button_height) // 2
+            button_y = (
+                screen.get_height()
+                - footer_height
+                + (footer_height - button_height) // 2
+            )
 
             for i, label in enumerate(button_labels):
                 button_rect = pygame.Rect(
                     start_x + i * (button_width + self.theme.padding_sm),
                     button_y,
                     button_width,
-                    button_height
+                    button_height,
                 )
                 action_button.render(screen, button_rect, label)
                 button_rects.append(button_rect)

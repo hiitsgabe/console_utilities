@@ -29,7 +29,7 @@ class Thumbnail:
         placeholder_text: str = "?",
         selected: bool = False,
         highlighted: bool = False,
-        border_radius: Optional[int] = None
+        border_radius: Optional[int] = None,
     ) -> pygame.Rect:
         """
         Render a thumbnail.
@@ -56,10 +56,7 @@ class Thumbnail:
         if image and isinstance(image, pygame.Surface):
             # Scale image to fit
             img_size = min(rect.width, rect.height)
-            scaled_img = pygame.transform.smoothscale(
-                image,
-                (img_size, img_size)
-            )
+            scaled_img = pygame.transform.smoothscale(image, (img_size, img_size))
 
             # Center image in rect
             img_rect = scaled_img.get_rect(center=rect.center)
@@ -72,17 +69,13 @@ class Thumbnail:
                 rect.center,
                 color=self.theme.text_disabled,
                 size=self.theme.font_size_lg,
-                align="center"
+                align="center",
             )
 
         # Draw selection/highlight border
         if selected:
             pygame.draw.rect(
-                screen,
-                self.theme.primary,
-                rect,
-                width=3,
-                border_radius=border_radius
+                screen, self.theme.primary, rect, width=3, border_radius=border_radius
             )
         elif highlighted:
             pygame.draw.rect(
@@ -90,7 +83,7 @@ class Thumbnail:
                 self.theme.primary_light,
                 rect,
                 width=2,
-                border_radius=border_radius
+                border_radius=border_radius,
             )
 
         return rect
@@ -103,7 +96,7 @@ class Thumbnail:
         image: Optional[pygame.Surface] = None,
         placeholder_text: str = "?",
         selected: bool = False,
-        highlighted: bool = False
+        highlighted: bool = False,
     ) -> pygame.Rect:
         """
         Render a thumbnail with a label below.
@@ -123,19 +116,17 @@ class Thumbnail:
         # Calculate thumbnail and label areas
         label_height = self.theme.font_size_sm + self.theme.padding_xs
         thumb_rect = pygame.Rect(
-            rect.left,
-            rect.top,
-            rect.width,
-            rect.height - label_height
+            rect.left, rect.top, rect.width, rect.height - label_height
         )
 
         # Render thumbnail
         self.render(
-            screen, thumb_rect,
+            screen,
+            thumb_rect,
             image=image,
             placeholder_text=placeholder_text,
             selected=selected,
-            highlighted=highlighted
+            highlighted=highlighted,
         )
 
         # Render label
@@ -147,7 +138,7 @@ class Thumbnail:
             color=self.theme.text_primary if selected else self.theme.text_secondary,
             size=self.theme.font_size_sm,
             max_width=rect.width,
-            align="center"
+            align="center",
         )
 
         return rect
@@ -167,16 +158,17 @@ class Thumbnail:
             return "?"
 
         # Remove file extension
-        if '.' in name:
-            name = name.rsplit('.', 1)[0]
+        if "." in name:
+            name = name.rsplit(".", 1)[0]
 
         # Replace common separators with spaces
-        clean_name = name.replace('_', ' ').replace('-', ' ')
+        clean_name = name.replace("_", " ").replace("-", " ")
 
         # Remove region tags and special content in parentheses/brackets
         import re
-        clean_name = re.sub(r'\([^)]*\)', '', clean_name)
-        clean_name = re.sub(r'\[[^\]]*\]', '', clean_name)
+
+        clean_name = re.sub(r"\([^)]*\)", "", clean_name)
+        clean_name = re.sub(r"\[[^\]]*\]", "", clean_name)
 
         # Split into words and get initials from alphanumeric words only
         words = clean_name.split()

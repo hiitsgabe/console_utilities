@@ -30,7 +30,7 @@ class MenuItem:
         highlighted: bool = False,
         thumbnail: Optional[pygame.Surface] = None,
         secondary_text: Optional[str] = None,
-        show_checkbox: bool = False
+        show_checkbox: bool = False,
     ) -> pygame.Rect:
         """
         Render a menu item.
@@ -60,15 +60,12 @@ class MenuItem:
                 content_left,
                 rect.centery - checkbox_size // 2,
                 checkbox_size,
-                checkbox_size
+                checkbox_size,
             )
 
             # Checkbox background
             pygame.draw.rect(
-                screen,
-                self.theme.surface_hover,
-                checkbox_rect,
-                border_radius=4
+                screen, self.theme.surface_hover, checkbox_rect, border_radius=4
             )
 
             # Checkbox border
@@ -77,7 +74,7 @@ class MenuItem:
                 self.theme.text_secondary if not selected else self.theme.primary,
                 checkbox_rect,
                 width=2,
-                border_radius=4
+                border_radius=4,
             )
 
             # Checkmark if selected
@@ -86,7 +83,7 @@ class MenuItem:
                 points = [
                     (checkbox_rect.left + 4, checkbox_rect.centery),
                     (checkbox_rect.centerx - 2, checkbox_rect.bottom - 5),
-                    (checkbox_rect.right - 4, checkbox_rect.top + 5)
+                    (checkbox_rect.right - 4, checkbox_rect.top + 5),
                 ]
                 pygame.draw.lines(screen, self.theme.primary, False, points, 2)
 
@@ -96,16 +93,12 @@ class MenuItem:
         if thumbnail:
             thumb_size = min(rect.height - padding * 2, 48)
             thumb_rect = pygame.Rect(
-                content_left,
-                rect.centery - thumb_size // 2,
-                thumb_size,
-                thumb_size
+                content_left, rect.centery - thumb_size // 2, thumb_size, thumb_size
             )
 
             # Scale thumbnail to fit (smoothscale for better quality)
             scaled_thumb = pygame.transform.smoothscale(
-                thumbnail,
-                (thumb_size, thumb_size)
+                thumbnail, (thumb_size, thumb_size)
             )
             screen.blit(scaled_thumb, thumb_rect)
 
@@ -114,8 +107,7 @@ class MenuItem:
         # Draw secondary text if provided (right side)
         if secondary_text:
             secondary_width, _ = self.text.measure(
-                secondary_text,
-                size=self.theme.font_size_sm
+                secondary_text, size=self.theme.font_size_sm
             )
             self.text.render(
                 screen,
@@ -123,7 +115,7 @@ class MenuItem:
                 (content_right, rect.centery),
                 color=self.theme.text_secondary,
                 size=self.theme.font_size_sm,
-                align="right"
+                align="right",
             )
             content_right -= secondary_width + padding
 
@@ -142,16 +134,13 @@ class MenuItem:
             (content_left, rect.centery - self.theme.font_size_md // 4),
             color=text_color,
             size=self.theme.font_size_md,
-            max_width=max_text_width
+            max_width=max_text_width,
         )
 
         return rect
 
     def render_divider(
-        self,
-        screen: pygame.Surface,
-        rect: pygame.Rect,
-        label: str
+        self, screen: pygame.Surface, rect: pygame.Rect, label: str
     ) -> pygame.Rect:
         """
         Render a divider/section header item.
@@ -171,7 +160,7 @@ class MenuItem:
             (rect.centerx, rect.centery - self.theme.font_size_sm // 4),
             color=self.theme.text_disabled,
             size=self.theme.font_size_sm,
-            align="center"
+            align="center",
         )
 
         # Draw lines on either side
@@ -188,7 +177,7 @@ class MenuItem:
                 screen,
                 self.theme.text_disabled,
                 (rect.left + 20, line_y),
-                (line_left_end, line_y)
+                (line_left_end, line_y),
             )
 
         if line_right_start < rect.right - 20:
@@ -196,7 +185,7 @@ class MenuItem:
                 screen,
                 self.theme.text_disabled,
                 (line_right_start, line_y),
-                (rect.right - 20, line_y)
+                (rect.right - 20, line_y),
             )
 
         return rect

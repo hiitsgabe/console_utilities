@@ -36,7 +36,7 @@ def update_log_file_path(work_dir: str) -> None:
 def log_error(
     error_msg: str,
     error_type: Optional[str] = None,
-    traceback_str: Optional[str] = None
+    traceback_str: Optional[str] = None,
 ) -> None:
     """
     Log an error message to the log file.
@@ -80,7 +80,9 @@ def init_log_file() -> bool:
         os.makedirs(log_dir, exist_ok=True)
 
         with open(_log_file, "w") as f:
-            f.write(f"Error Log - Started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(
+                f"Error Log - Started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+            )
             f.write(f"Python version: {sys.version}\n")
             f.write(f"Platform: {sys.platform}\n")
             f.write("-" * 80 + "\n")

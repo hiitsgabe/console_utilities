@@ -25,7 +25,7 @@ class ErrorModal:
         screen: pygame.Surface,
         title: str,
         error_lines: List[str],
-        show_ok_button: bool = True
+        show_ok_button: bool = True,
     ) -> Tuple[pygame.Rect, Optional[pygame.Rect], List[pygame.Rect]]:
         """
         Render an error modal.
@@ -40,15 +40,9 @@ class ErrorModal:
             Tuple of (modal_rect, close_button_rect, button_rects)
         """
         buttons = [("OK", "primary")] if show_ok_button else None
-        return self.modal_template.render_error(
-            screen, title, error_lines, buttons
-        )
+        return self.modal_template.render_error(screen, title, error_lines, buttons)
 
-    def render_simple(
-        self,
-        screen: pygame.Surface,
-        message: str
-    ) -> pygame.Rect:
+    def render_simple(self, screen: pygame.Surface, message: str) -> pygame.Rect:
         """
         Render a simple error message.
 
@@ -60,10 +54,7 @@ class ErrorModal:
             Modal rect
         """
         modal_rect, _, _ = self.modal_template.render_error(
-            screen,
-            "Error",
-            [message],
-            [("OK", "primary")]
+            screen, "Error", [message], [("OK", "primary")]
         )
         return modal_rect
 

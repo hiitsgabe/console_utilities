@@ -11,11 +11,11 @@ from .url_input_modal import UrlInputModal
 from .folder_name_modal import FolderNameModal
 
 __all__ = [
-    'SearchModal',
-    'FolderBrowserModal',
-    'GameDetailsModal',
-    'LoadingModal',
-    'ErrorModal',
-    'UrlInputModal',
-    'FolderNameModal',
+    "SearchModal",
+    "FolderBrowserModal",
+    "GameDetailsModal",
+    "LoadingModal",
+    "ErrorModal",
+    "UrlInputModal",
+    "FolderNameModal",
 ]

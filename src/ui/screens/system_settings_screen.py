@@ -18,10 +18,7 @@ class SystemSettingsScreen:
     - Set custom folder
     """
 
-    SETTINGS_ITEMS = [
-        "Hide System",
-        "Set Custom Folder"
-    ]
+    SETTINGS_ITEMS = ["Hide System", "Set Custom Folder"]
 
     def __init__(self, theme: Theme = default_theme):
         self.theme = theme
@@ -32,7 +29,7 @@ class SystemSettingsScreen:
         screen: pygame.Surface,
         highlighted: int,
         system: Dict[str, Any],
-        is_hidden: bool = False
+        is_hidden: bool = False,
     ) -> Tuple[Optional[pygame.Rect], List[pygame.Rect], int]:
         """
         Render the system settings screen.
@@ -56,7 +53,9 @@ class SystemSettingsScreen:
                 value = "ON" if is_hidden else "OFF"
                 items.append((item, value))
             elif item == "Set Custom Folder":
-                value = self._shorten_path(custom_folder) if custom_folder else "Default"
+                value = (
+                    self._shorten_path(custom_folder) if custom_folder else "Default"
+                )
                 items.append((item, value))
 
         return self.template.render(
@@ -69,7 +68,7 @@ class SystemSettingsScreen:
             item_height=40,
             get_label=lambda x: x[0] if isinstance(x, tuple) else x,
             get_secondary=lambda x: x[1] if isinstance(x, tuple) else None,
-            item_spacing=8
+            item_spacing=8,
         )
 
     def _shorten_path(self, path: str, max_length: int = 25) -> str:
@@ -88,7 +87,7 @@ class SystemSettingsScreen:
             else:
                 break
 
-        return "..." + result if result else "..." + path[-max_length+3:]
+        return "..." + result if result else "..." + path[-max_length + 3 :]
 
     def get_setting_action(self, index: int) -> str:
         """
@@ -104,7 +103,7 @@ class SystemSettingsScreen:
             item = self.SETTINGS_ITEMS[index]
             actions = {
                 "Hide System": "toggle_hide_system",
-                "Set Custom Folder": "set_custom_folder"
+                "Set Custom Folder": "set_custom_folder",
             }
             return actions.get(item, "unknown")
 

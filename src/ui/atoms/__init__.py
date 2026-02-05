@@ -11,10 +11,10 @@ from .divider import Divider
 from .spinner import Spinner
 
 __all__ = [
-    'Text',
-    'Button',
-    'Surface',
-    'ProgressBar',
-    'Divider',
-    'Spinner',
+    "Text",
+    "Button",
+    "Surface",
+    "ProgressBar",
+    "Divider",
+    "Spinner",
 ]

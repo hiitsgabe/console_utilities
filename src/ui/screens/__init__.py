@@ -14,13 +14,13 @@ from .system_settings_screen import SystemSettingsScreen
 from .screen_manager import ScreenManager
 
 __all__ = [
-    'SystemsScreen',
-    'GamesScreen',
-    'SettingsScreen',
-    'UtilsScreen',
-    'CreditsScreen',
-    'AddSystemsScreen',
-    'SystemsSettingsScreen',
-    'SystemSettingsScreen',
-    'ScreenManager',
+    "SystemsScreen",
+    "GamesScreen",
+    "SettingsScreen",
+    "UtilsScreen",
+    "CreditsScreen",
+    "AddSystemsScreen",
+    "SystemsSettingsScreen",
+    "SystemSettingsScreen",
+    "ScreenManager",
 ]

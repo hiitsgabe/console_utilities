@@ -8,7 +8,7 @@ from .controller import ControllerHandler
 from .touch import TouchHandler
 
 __all__ = [
-    'NavigationHandler',
-    'ControllerHandler',
-    'TouchHandler',
+    "NavigationHandler",
+    "ControllerHandler",
+    "TouchHandler",
 ]

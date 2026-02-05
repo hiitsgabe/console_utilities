@@ -15,9 +15,11 @@ from constants import CONFIG_FILE, SCRIPT_DIR, DEV_MODE
 @dataclass
 class Settings:
     """Application settings with default values."""
+
     enable_boxart: bool = True
     view_type: str = "grid"  # "grid" or "list"
     usa_only: bool = False
+    show_download_all: bool = False  # Show "Download All" button in game lists
     work_dir: str = ""
     roms_dir: str = ""
     nsz_keys_path: str = ""
@@ -38,7 +40,7 @@ class Settings:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'Settings':
+    def from_dict(cls, data: Dict[str, Any]) -> "Settings":
         """Create Settings from dictionary."""
         # Filter out unknown keys
         valid_keys = {f.name for f in cls.__dataclass_fields__.values()}
@@ -82,7 +84,7 @@ def load_settings() -> Dict[str, Any]:
 
     try:
         if os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, 'r') as f:
+            with open(CONFIG_FILE, "r") as f:
                 loaded_settings = json.load(f)
                 # Merge with defaults to handle new settings
                 default_settings.update(loaded_settings)
@@ -91,7 +93,12 @@ def load_settings() -> Dict[str, Any]:
             save_settings(default_settings)
     except Exception as e:
         from utils.logging import log_error
-        log_error("Failed to load settings, using defaults", type(e).__name__, traceback.format_exc())
+
+        log_error(
+            "Failed to load settings, using defaults",
+            type(e).__name__,
+            traceback.format_exc(),
+        )
 
     return default_settings
 
@@ -112,11 +119,12 @@ def save_settings(settings_to_save: Dict[str, Any]) -> bool:
         if config_dir:
             os.makedirs(config_dir, exist_ok=True)
 
-        with open(CONFIG_FILE, 'w') as f:
+        with open(CONFIG_FILE, "w") as f:
             json.dump(settings_to_save, f, indent=2)
         return True
     except Exception as e:
         from utils.logging import log_error
+
         log_error("Failed to save settings", type(e).__name__, traceback.format_exc())
         return False
 
@@ -144,7 +152,7 @@ def load_controller_mapping() -> bool:
 
     try:
         if os.path.exists(mapping_file):
-            with open(mapping_file, 'r') as f:
+            with open(mapping_file, "r") as f:
                 _controller_mapping = json.load(f)
                 print("Controller mapping loaded from file")
                 return True
@@ -154,7 +162,12 @@ def load_controller_mapping() -> bool:
             return False
     except Exception as e:
         from utils.logging import log_error
-        log_error("Failed to load controller mapping", type(e).__name__, traceback.format_exc())
+
+        log_error(
+            "Failed to load controller mapping",
+            type(e).__name__,
+            traceback.format_exc(),
+        )
         _controller_mapping = {}
         return False
 
@@ -178,13 +191,18 @@ def save_controller_mapping(mapping: Optional[Dict[str, Any]] = None) -> bool:
 
     try:
         os.makedirs(os.path.dirname(mapping_file), exist_ok=True)
-        with open(mapping_file, 'w') as f:
+        with open(mapping_file, "w") as f:
             json.dump(_controller_mapping, f, indent=2)
         print("Controller mapping saved")
         return True
     except Exception as e:
         from utils.logging import log_error
-        log_error("Failed to save controller mapping", type(e).__name__, traceback.format_exc())
+
+        log_error(
+            "Failed to save controller mapping",
+            type(e).__name__,
+            traceback.format_exc(),
+        )
         return False
 
 
@@ -200,15 +218,27 @@ def needs_controller_mapping() -> bool:
             return False
 
         essential_buttons = [
-            "select", "back", "start", "detail",
-            "search", "up", "down", "left", "right"
+            "select",
+            "back",
+            "start",
+            "detail",
+            "search",
+            "up",
+            "down",
+            "left",
+            "right",
         ]
         return not _controller_mapping or not all(
             button in _controller_mapping for button in essential_buttons
         )
     except Exception as e:
         from utils.logging import log_error
-        log_error("Failed to check controller mapping", type(e).__name__, traceback.format_exc())
+
+        log_error(
+            "Failed to check controller mapping",
+            type(e).__name__,
+            traceback.format_exc(),
+        )
         return True
 
 

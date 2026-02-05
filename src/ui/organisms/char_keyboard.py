@@ -40,7 +40,7 @@ class CharKeyboard:
         selected_index: int,
         chars_per_row: int = 13,
         char_set: str = "default",  # "default" or "url"
-        show_input_field: bool = True
+        show_input_field: bool = True,
     ) -> Tuple[List[Tuple[pygame.Rect, int, str]], pygame.Rect]:
         """
         Render a character keyboard.
@@ -67,10 +67,7 @@ class CharKeyboard:
         input_field_rect = pygame.Rect(0, 0, 0, 0)
 
         # Calculate button size
-        button_size = min(
-            (rect.width - padding * 2) // chars_per_row - padding,
-            40
-        )
+        button_size = min((rect.width - padding * 2) // chars_per_row - padding, 40)
 
         # Calculate total keyboard width
         keyboard_width = chars_per_row * (button_size + padding) - padding
@@ -82,44 +79,44 @@ class CharKeyboard:
         # Draw input field if enabled
         if show_input_field:
             field_height = 40
-            input_field_rect = pygame.Rect(
-                start_x,
-                y,
-                keyboard_width,
-                field_height
-            )
+            input_field_rect = pygame.Rect(start_x, y, keyboard_width, field_height)
 
             # Draw field background
             pygame.draw.rect(
                 screen,
                 self.theme.surface_hover,
                 input_field_rect,
-                border_radius=self.theme.radius_sm
+                border_radius=self.theme.radius_sm,
             )
 
             # Draw text
             display_text = current_text if current_text else "Type here..."
-            text_color = self.theme.text_primary if current_text else self.theme.text_disabled
+            text_color = (
+                self.theme.text_primary if current_text else self.theme.text_disabled
+            )
             self.text.render(
                 screen,
                 display_text,
                 (input_field_rect.left + padding, input_field_rect.centery - 4),
                 color=text_color,
                 size=self.theme.font_size_md,
-                max_width=input_field_rect.width - padding * 2
+                max_width=input_field_rect.width - padding * 2,
             )
 
             # Draw cursor
             if current_text:
-                cursor_x = input_field_rect.left + padding + self.text.measure(
-                    current_text, self.theme.font_size_md
-                )[0] + 2
+                cursor_x = (
+                    input_field_rect.left
+                    + padding
+                    + self.text.measure(current_text, self.theme.font_size_md)[0]
+                    + 2
+                )
                 pygame.draw.line(
                     screen,
                     self.theme.primary,
                     (cursor_x, input_field_rect.top + 8),
                     (cursor_x, input_field_rect.bottom - 8),
-                    2
+                    2,
                 )
 
             y = input_field_rect.bottom + padding * 2
@@ -141,9 +138,7 @@ class CharKeyboard:
             special = len(char) > 1 or char == " "
 
             self.char_button.render(
-                screen, char_rect, char,
-                selected=(i == selected_index),
-                special=special
+                screen, char_rect, char, selected=(i == selected_index), special=special
             )
 
             char_rects.append((char_rect, i, char))
@@ -151,11 +146,7 @@ class CharKeyboard:
 
         return char_rects, input_field_rect
 
-    def get_char_at_index(
-        self,
-        index: int,
-        char_set: str = "default"
-    ) -> str:
+    def get_char_at_index(self, index: int, char_set: str = "default") -> str:
         """
         Get character at given index.
 
@@ -190,10 +181,7 @@ class CharKeyboard:
         return len(self.CHARS_ALPHA) + len(self.CHARS_NUMERIC) + len(self.CHARS_SPECIAL)
 
     def handle_selection(
-        self,
-        index: int,
-        current_text: str,
-        char_set: str = "default"
+        self, index: int, current_text: str, char_set: str = "default"
     ) -> Tuple[str, bool]:
         """
         Handle character selection.

@@ -11,23 +11,42 @@ import sys
 from typing import Optional, Dict, Any
 
 from constants import (
-    FPS, SCREEN_WIDTH, SCREEN_HEIGHT, FONT_SIZE,
-    BACKGROUND, SCRIPT_DIR,
-    TEXT_PRIMARY, TEXT_SECONDARY, SUCCESS, PRIMARY
+    FPS,
+    SCREEN_WIDTH,
+    SCREEN_HEIGHT,
+    FONT_SIZE,
+    BACKGROUND,
+    SCRIPT_DIR,
+    TEXT_PRIMARY,
+    TEXT_SECONDARY,
+    SUCCESS,
+    PRIMARY,
 )
 from state import AppState
 from config.settings import (
-    load_settings, save_settings,
-    load_controller_mapping, save_controller_mapping,
-    needs_controller_mapping, get_controller_mapping
+    load_settings,
+    save_settings,
+    load_controller_mapping,
+    save_controller_mapping,
+    needs_controller_mapping,
+    get_controller_mapping,
 )
 from services.data_loader import (
-    load_main_systems_data, update_json_file_path,
-    get_visible_systems, get_system_index_by_name
+    load_main_systems_data,
+    update_json_file_path,
+    get_visible_systems,
+    get_system_index_by_name,
 )
-from services.file_listing import list_files, filter_games_by_search, load_folder_contents, get_file_size
+from services.file_listing import (
+    list_files,
+    filter_games_by_search,
+    load_folder_contents,
+    get_file_size,
+    get_roms_folder_for_system,
+)
+from services.installed_checker import installed_checker
 from services.image_cache import ImageCache
-from services.download import DownloadService
+from services.download_manager import DownloadManager
 from input.navigation import NavigationHandler
 from input.controller import ControllerHandler
 from input.touch import TouchHandler
@@ -98,6 +117,11 @@ class ConsoleUtilitiesApp:
         # Initialize image cache service
         self.image_cache = ImageCache()
 
+        # Initialize download manager
+        self.download_manager = DownloadManager(
+            self.settings, self.state.download_queue
+        )
+
         # Load background image
         self.background_image = self._load_background_image()
 
@@ -158,11 +182,15 @@ class ConsoleUtilitiesApp:
             self.screen.blit(title_surf, (20, 20))
 
             button_key, button_desc = essential_buttons[current_index]
-            instruction_surf = self.font.render(f"Press the {button_desc}", True, TEXT_PRIMARY)
+            instruction_surf = self.font.render(
+                f"Press the {button_desc}", True, TEXT_PRIMARY
+            )
             self.screen.blit(instruction_surf, (20, 80))
 
             progress_surf = self.font.render(
-                f"Button {current_index + 1} of {len(essential_buttons)}", True, TEXT_SECONDARY
+                f"Button {current_index + 1} of {len(essential_buttons)}",
+                True,
+                TEXT_SECONDARY,
             )
             self.screen.blit(progress_surf, (20, 120))
 
@@ -235,8 +263,7 @@ class ConsoleUtilitiesApp:
         """Draw the background."""
         if self.background_image:
             scaled_bg = pygame.transform.scale(
-                self.background_image,
-                self.screen.get_size()
+                self.background_image, self.screen.get_size()
             )
             self.screen.blit(scaled_bg, (0, 0))
 
@@ -250,21 +277,25 @@ class ConsoleUtilitiesApp:
 
     def _get_thumbnail(self, game: Any) -> Optional[pygame.Surface]:
         """Get thumbnail for a game."""
-        if self.state.selected_system < 0 or self.state.selected_system >= len(self.data):
+        if self.state.selected_system < 0 or self.state.selected_system >= len(
+            self.data
+        ):
             return None
 
         system_data = self.data[self.state.selected_system]
-        boxart_url = system_data.get('boxarts', '')
+        boxart_url = system_data.get("boxarts", "")
 
         return self.image_cache.get_thumbnail(game, boxart_url, self.settings)
 
     def _get_hires_image(self, game: Any) -> Optional[pygame.Surface]:
         """Get hi-res image for a game."""
-        if self.state.selected_system < 0 or self.state.selected_system >= len(self.data):
+        if self.state.selected_system < 0 or self.state.selected_system >= len(
+            self.data
+        ):
             return None
 
         system_data = self.data[self.state.selected_system]
-        boxart_url = system_data.get('boxarts', '')
+        boxart_url = system_data.get("boxarts", "")
 
         return self.image_cache.get_hires_image(game, boxart_url, self.settings)
 
@@ -290,7 +321,7 @@ class ConsoleUtilitiesApp:
             self.settings,
             self.data,
             get_thumbnail=self._get_thumbnail,
-            get_hires_image=self._get_hires_image
+            get_hires_image=self._get_hires_image,
         )
         pygame.display.flip()
         # Process events to prevent freezing
@@ -323,11 +354,18 @@ class ConsoleUtilitiesApp:
                     running = False
 
                 elif event.type == pygame.KEYDOWN:
-                    log_error(f"KEYDOWN: key={event.key}, unicode='{event.unicode}', joystick={'connected' if self.joystick else 'none'}")
+                    log_error(
+                        f"KEYDOWN: key={event.key}, unicode='{event.unicode}', joystick={'connected' if self.joystick else 'none'}"
+                    )
                     # Skip keyboard navigation keys if joystick is connected (prevents double input)
                     if self.joystick is not None and event.key in (
-                        pygame.K_UP, pygame.K_DOWN, pygame.K_LEFT, pygame.K_RIGHT,
-                        pygame.K_RETURN, pygame.K_ESCAPE, pygame.K_SPACE
+                        pygame.K_UP,
+                        pygame.K_DOWN,
+                        pygame.K_LEFT,
+                        pygame.K_RIGHT,
+                        pygame.K_RETURN,
+                        pygame.K_ESCAPE,
+                        pygame.K_SPACE,
                     ):
                         continue
                     self.state.input_mode = "keyboard"
@@ -350,22 +388,13 @@ class ConsoleUtilitiesApp:
 
                 elif event.type == pygame.MOUSEBUTTONUP:
                     if event.button == 1:
-                        self.touch.handle_mouse_up(
-                            event,
-                            on_click=self._handle_click
-                        )
+                        self.touch.handle_mouse_up(event, on_click=self._handle_click)
 
                 elif event.type == pygame.MOUSEWHEEL:
-                    self.touch.handle_mouse_wheel(
-                        event,
-                        on_scroll=self._handle_scroll
-                    )
+                    self.touch.handle_mouse_wheel(event, on_scroll=self._handle_scroll)
 
                 elif event.type == pygame.MOUSEMOTION:
-                    self.touch.handle_mouse_motion(
-                        event,
-                        on_scroll=self._handle_scroll
-                    )
+                    self.touch.handle_mouse_motion(event, on_scroll=self._handle_scroll)
 
             # Update image cache (process loaded images from background threads)
             self.image_cache.update()
@@ -380,15 +409,20 @@ class ConsoleUtilitiesApp:
                 self.settings,
                 self.data,
                 get_thumbnail=self._get_thumbnail,
-                get_hires_image=self._get_hires_image
+                get_hires_image=self._get_hires_image,
             )
 
             # Store rects for click handling
-            self.state.ui_rects.menu_items = rects.get('item_rects', [])
-            self.state.ui_rects.back_button = rects.get('back')
-            self.state.ui_rects.download_button = rects.get('download_button')
-            self.state.ui_rects.close_button = rects.get('close')
-            self.state.ui_rects.modal_char_rects = rects.get('char_rects', [])
+            self.state.ui_rects.menu_items = rects.get("item_rects", [])
+            self.state.ui_rects.back_button = rects.get("back")
+            self.state.ui_rects.download_button = rects.get("download_button")
+            self.state.ui_rects.close_button = rects.get("close")
+            self.state.ui_rects.modal_char_rects = rects.get("char_rects", [])
+            self.state.ui_rects.scroll_offset = rects.get("scroll_offset", 0)
+            self.state.ui_rects.folder_select_button = rects.get("select_button")
+            self.state.ui_rects.folder_cancel_button = rects.get("cancel_button")
+            self.state.ui_rects.confirm_ok_button = rects.get("confirm_ok")
+            self.state.ui_rects.confirm_cancel_button = rects.get("confirm_cancel")
 
             pygame.display.flip()
 
@@ -428,6 +462,14 @@ class ConsoleUtilitiesApp:
             )
             return
 
+        if self.state.confirm_modal.show:
+            # Navigate between OK and Cancel buttons
+            if direction in ("left", "right"):
+                self.state.confirm_modal.button_index = (
+                    1 - self.state.confirm_modal.button_index
+                )
+            return
+
         # Mode-based navigation
         if self.state.mode == "systems":
             visible = get_visible_systems(self.data, self.settings)
@@ -439,8 +481,14 @@ class ConsoleUtilitiesApp:
                 self.state.highlighted = (self.state.highlighted + 1) % max_items
 
         elif self.state.mode == "games":
-            game_list = self.state.search.filtered_list if self.state.search.mode else self.state.game_list
-            max_items = len(game_list)
+            game_list = (
+                self.state.search.filtered_list
+                if self.state.search.mode
+                else self.state.game_list
+            )
+            # Add 1 for "Download All" button if enabled
+            extra_items = 1 if self.settings.get("show_download_all", False) else 0
+            max_items = len(game_list) + extra_items
 
             if self.settings.get("view_type") == "grid":
                 cols = 4
@@ -450,7 +498,11 @@ class ConsoleUtilitiesApp:
                     self.state.highlighted += cols
                 elif direction == "left" and self.state.highlighted % cols > 0:
                     self.state.highlighted -= 1
-                elif direction == "right" and self.state.highlighted % cols < cols - 1 and self.state.highlighted < max_items - 1:
+                elif (
+                    direction == "right"
+                    and self.state.highlighted % cols < cols - 1
+                    and self.state.highlighted < max_items - 1
+                ):
                     self.state.highlighted += 1
             else:
                 if direction in ("up", "left"):
@@ -472,16 +524,24 @@ class ConsoleUtilitiesApp:
         elif self.state.mode == "add_systems":
             max_items = len(self.state.available_systems) or 1
             if direction in ("up", "left"):
-                self.state.add_systems_highlighted = (self.state.add_systems_highlighted - 1) % max_items
+                self.state.add_systems_highlighted = (
+                    self.state.add_systems_highlighted - 1
+                ) % max_items
             elif direction in ("down", "right"):
-                self.state.add_systems_highlighted = (self.state.add_systems_highlighted + 1) % max_items
+                self.state.add_systems_highlighted = (
+                    self.state.add_systems_highlighted + 1
+                ) % max_items
 
         elif self.state.mode == "systems_settings":
             max_items = len(self.data) or 1
             if direction in ("up", "left"):
-                self.state.systems_settings_highlighted = (self.state.systems_settings_highlighted - 1) % max_items
+                self.state.systems_settings_highlighted = (
+                    self.state.systems_settings_highlighted - 1
+                ) % max_items
             elif direction in ("down", "right"):
-                self.state.systems_settings_highlighted = (self.state.systems_settings_highlighted + 1) % max_items
+                self.state.systems_settings_highlighted = (
+                    self.state.systems_settings_highlighted + 1
+                ) % max_items
 
         elif self.state.mode == "system_settings":
             max_items = 2  # Hide System, Set Custom Folder
@@ -492,6 +552,17 @@ class ConsoleUtilitiesApp:
             elif direction in ("down", "right"):
                 self.state.system_settings_highlighted = (
                     self.state.system_settings_highlighted + 1
+                ) % max_items
+
+        elif self.state.mode == "downloads":
+            max_items = len(self.state.download_queue.items) or 1
+            if direction in ("up", "left"):
+                self.state.download_queue.highlighted = (
+                    self.state.download_queue.highlighted - 1
+                ) % max_items
+            elif direction in ("down", "right"):
+                self.state.download_queue.highlighted = (
+                    self.state.download_queue.highlighted + 1
                 ) % max_items
 
     def _handle_key_event(self, event: pygame.event.Event):
@@ -559,11 +630,44 @@ class ConsoleUtilitiesApp:
                 self._go_back()
                 return
 
-        # Check modal download button
+        # Check confirm modal buttons
+        if self.state.confirm_modal.show:
+            if self.state.ui_rects.confirm_ok_button:
+                if self.state.ui_rects.confirm_ok_button.collidepoint(x, y):
+                    self._handle_confirm_modal_ok()
+                    return
+            if self.state.ui_rects.confirm_cancel_button:
+                if self.state.ui_rects.confirm_cancel_button.collidepoint(x, y):
+                    self._handle_confirm_modal_cancel()
+                    return
+            return
+
+        # Check folder browser buttons
+        if self.state.folder_browser.show:
+            if self.state.ui_rects.folder_select_button:
+                if self.state.ui_rects.folder_select_button.collidepoint(x, y):
+                    self._handle_folder_browser_confirm()
+                    return
+            if self.state.ui_rects.folder_cancel_button:
+                if self.state.ui_rects.folder_cancel_button.collidepoint(x, y):
+                    self.state.folder_browser.show = False
+                    self.state.folder_browser.focus_area = "list"
+                    return
+            # Check folder browser items
+            for i, rect in enumerate(self.state.ui_rects.menu_items):
+                if rect.collidepoint(x, y):
+                    self.state.folder_browser.highlighted = i
+                    self._handle_folder_browser_selection()
+                    return
+            return
+
+        # Check download button (modal or games screen)
         if self.state.ui_rects.download_button:
             if self.state.ui_rects.download_button.collidepoint(x, y):
                 if self.state.game_details.show:
                     self._handle_game_details_selection()
+                elif self.state.mode == "games" and self.state.selected_games:
+                    self._start_download()
                 return
 
         # Check modal character buttons (search/url input)
@@ -581,19 +685,25 @@ class ConsoleUtilitiesApp:
                 self._go_back()
                 return
 
-        # Check menu items
+        # Check menu items (account for scroll offset)
         for i, rect in enumerate(self.state.ui_rects.menu_items):
             if rect.collidepoint(x, y):
-                self.state.highlighted = i
+                # Add scroll offset to get actual item index
+                actual_index = i + self.state.ui_rects.scroll_offset
+                self.state.highlighted = actual_index
                 self._select_item()
                 return
 
     def _handle_scroll(self, amount: float):
-        """Handle scroll events."""
-        if amount > 0:
-            self._move_highlight("up")
-        elif amount < 0:
-            self._move_highlight("down")
+        """Handle scroll events. Amount is in items (can be multiple)."""
+        # Handle multiple items at once for smoother scrolling
+        steps = int(abs(amount))
+        if steps == 0:
+            steps = 1 if amount != 0 else 0
+
+        direction = "up" if amount > 0 else "down"
+        for _ in range(steps):
+            self._move_highlight(direction)
 
     def _go_back(self):
         """Handle back navigation."""
@@ -606,6 +716,8 @@ class ConsoleUtilitiesApp:
             self.state.search.cursor_position = 0
             self.state.search.filtered_list = []
             self.state.highlighted = 0
+        elif self.state.confirm_modal.show:
+            self._handle_confirm_modal_cancel()
         elif self.state.url_input.show:
             self.state.url_input.show = False
         elif self.state.folder_name_input.show:
@@ -632,6 +744,13 @@ class ConsoleUtilitiesApp:
             self.state.search.filtered_list = []
             self.state.mode = "systems"
             self.state.highlighted = 0
+        elif self.state.mode == "downloads":
+            # Go back to games if we came from there, otherwise systems
+            if self.state.selected_system >= 0 and self.state.game_list:
+                self.state.mode = "games"
+            else:
+                self.state.mode = "systems"
+            self.state.highlighted = 0
         elif self.state.mode in ("settings", "utils", "credits"):
             self.state.mode = "systems"
             self.state.highlighted = 0
@@ -639,6 +758,13 @@ class ConsoleUtilitiesApp:
     def _select_item(self):
         """Handle item selection."""
         # Check modals first (they take priority over modes)
+        if self.state.confirm_modal.show:
+            if self.state.confirm_modal.button_index == 0:
+                self._handle_confirm_modal_ok()
+            else:
+                self._handle_confirm_modal_cancel()
+            return
+
         if self.state.show_search_input:
             self._handle_search_input_selection()
             return
@@ -670,14 +796,18 @@ class ConsoleUtilitiesApp:
             if self.state.highlighted < systems_count:
                 # Select a system
                 system = visible[self.state.highlighted]
-                self.state.selected_system = get_system_index_by_name(self.data, system['name'])
+                self.state.selected_system = get_system_index_by_name(
+                    self.data, system["name"]
+                )
 
                 # Show loading while fetching games
                 self._show_loading(f"Loading {system['name']}...")
-                self.state.game_list = list_files(
-                    self.data[self.state.selected_system],
-                    self.settings
-                )
+                system_data = self.data[self.state.selected_system]
+                self.state.game_list = list_files(system_data, self.settings)
+
+                # Set up installed checker for lazy evaluation
+                roms_folder = get_roms_folder_for_system(system_data, self.settings)
+                installed_checker.set_roms_folder(roms_folder)
                 self._hide_loading()
 
                 self.state.mode = "games"
@@ -692,11 +822,22 @@ class ConsoleUtilitiesApp:
                 self.state.mode = "credits"
 
         elif self.state.mode == "games":
-            # Toggle game selection
-            if self.state.highlighted in self.state.selected_games:
-                self.state.selected_games.remove(self.state.highlighted)
+            game_list = (
+                self.state.search.filtered_list
+                if self.state.search.mode
+                else self.state.game_list
+            )
+            # Check if "Download All" button is selected
+            if self.settings.get(
+                "show_download_all", False
+            ) and self.state.highlighted >= len(game_list):
+                self._show_download_all_confirm()
             else:
-                self.state.selected_games.add(self.state.highlighted)
+                # Toggle game selection
+                if self.state.highlighted in self.state.selected_games:
+                    self.state.selected_games.remove(self.state.highlighted)
+                else:
+                    self.state.selected_games.add(self.state.highlighted)
 
         elif self.state.mode == "settings":
             self._handle_settings_selection()
@@ -713,17 +854,189 @@ class ConsoleUtilitiesApp:
         elif self.state.mode == "system_settings":
             self._handle_system_settings_selection()
 
+        elif self.state.mode == "downloads":
+            self._handle_downloads_selection()
+
+    def _handle_downloads_selection(self):
+        """Handle downloads screen selection (remove waiting item)."""
+        queue = self.state.download_queue
+        if queue.items and 0 <= queue.highlighted < len(queue.items):
+            item = queue.items[queue.highlighted]
+            if item.status == "waiting":
+                self.download_manager.remove_from_queue(queue.highlighted)
+
+    def _show_download_all_confirm(self):
+        """Show confirmation modal for downloading all games."""
+        game_list = (
+            self.state.search.filtered_list
+            if self.state.search.mode
+            else self.state.game_list
+        )
+
+        if not game_list:
+            return
+
+        num_games = len(game_list)
+
+        # Show modal immediately with loading state
+        self.state.confirm_modal.show = True
+        self.state.confirm_modal.title = "Download All Games"
+        self.state.confirm_modal.message_lines = [
+            f"Download all {num_games} games?",
+            "",
+            f"Calculating size... (0 of {num_games})",
+            "",
+            "This may take a while.",
+        ]
+        self.state.confirm_modal.ok_label = "Download"
+        self.state.confirm_modal.cancel_label = "Cancel"
+        self.state.confirm_modal.button_index = 0
+        self.state.confirm_modal.context = "download_all"
+        self.state.confirm_modal.data = list(game_list)  # Copy the list
+        self.state.confirm_modal.loading = True
+        self.state.confirm_modal.loading_current = 0
+        self.state.confirm_modal.loading_total = num_games
+        self.state.confirm_modal.total_size = 0
+
+        # Calculate total size in background with parallel requests
+        system_data = self.data[self.state.selected_system]
+        games_to_check = list(game_list)
+
+        def calculate_total_size():
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            import threading
+
+            total = 0
+            completed_count = 0
+            total_lock = threading.Lock()
+
+            def fetch_game_size(game):
+                """Fetch size for a single game."""
+                if not self.state.confirm_modal.show:
+                    return 0
+
+                if isinstance(game, dict):
+                    # Check if size is already known
+                    size = (
+                        game.get("size")
+                        or game.get("filesize")
+                        or game.get("file_size")
+                    )
+                    if isinstance(size, (int, float)):
+                        return size
+                    else:
+                        # Fetch size via HEAD request
+                        fetched_size = get_file_size(system_data, game)
+                        if fetched_size:
+                            game["size"] = fetched_size  # Cache it
+                            return fetched_size
+                return 0
+
+            # Use 5 workers - reasonable for RG35xxsp limited resources
+            max_workers = 5
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {
+                    executor.submit(fetch_game_size, game): game
+                    for game in games_to_check
+                }
+
+                for future in as_completed(futures):
+                    if not self.state.confirm_modal.show:
+                        executor.shutdown(wait=False, cancel_futures=True)
+                        return
+
+                    size = future.result()
+                    with total_lock:
+                        total += size
+                        completed_count += 1
+
+                        # Update progress
+                        self.state.confirm_modal.loading_current = completed_count
+                        self.state.confirm_modal.message_lines = [
+                            f"Download all {num_games} games?",
+                            "",
+                            f"Calculating size... ({completed_count} of {num_games})",
+                            "",
+                            "This may take a while.",
+                        ]
+
+            # Update modal if still showing
+            if self.state.confirm_modal.show:
+                self.state.confirm_modal.total_size = total
+                self.state.confirm_modal.loading = False
+                size_str = self._format_bytes(total) if total > 0 else "Unknown"
+                self.state.confirm_modal.message_lines = [
+                    f"Download all {num_games} games?",
+                    "",
+                    f"Total size: {size_str}",
+                    "",
+                    "This may take a while.",
+                ]
+
+        from threading import Thread
+
+        thread = Thread(target=calculate_total_size, daemon=True)
+        thread.start()
+
+    def _handle_confirm_modal_ok(self):
+        """Handle confirm modal OK button."""
+        context = self.state.confirm_modal.context
+        data = self.state.confirm_modal.data
+
+        if context == "download_all" and data:
+            # Add all games to download queue
+            system_data = self.data[self.state.selected_system]
+            system_name = system_data.get("name", "Unknown")
+            self.download_manager.add_to_queue(data, system_data, system_name)
+
+            # Navigate to downloads screen
+            self.state.mode = "downloads"
+            self.state.download_queue.highlighted = 0
+
+        # Close the modal
+        self._handle_confirm_modal_cancel()
+
+    def _handle_confirm_modal_cancel(self):
+        """Handle confirm modal Cancel button."""
+        self.state.confirm_modal.show = False
+        self.state.confirm_modal.title = ""
+        self.state.confirm_modal.message_lines = []
+        self.state.confirm_modal.context = ""
+        self.state.confirm_modal.data = None
+        self.state.confirm_modal.button_index = 0
+        self.state.confirm_modal.loading = False
+        self.state.confirm_modal.loading_current = 0
+        self.state.confirm_modal.loading_total = 0
+        self.state.confirm_modal.total_size = 0
+
+    def _format_bytes(self, size: int) -> str:
+        """Format bytes to human readable string."""
+        for unit in ["B", "KB", "MB", "GB", "TB"]:
+            if size < 1024.0:
+                return (
+                    f"{size:.1f} {unit}" if size != int(size) else f"{int(size)} {unit}"
+                )
+            size /= 1024.0
+        return f"{size:.1f} PB"
+
     def _handle_settings_selection(self):
         """Handle settings item selection."""
         from ui.screens.settings_screen import SettingsScreen
-        action = SettingsScreen.SETTINGS_ITEMS[self.state.highlighted] if self.state.highlighted < len(SettingsScreen.SETTINGS_ITEMS) else None
+
+        action = (
+            SettingsScreen.SETTINGS_ITEMS[self.state.highlighted]
+            if self.state.highlighted < len(SettingsScreen.SETTINGS_ITEMS)
+            else None
+        )
 
         if action == "Select Archive Json":
             self._open_folder_browser("archive_json")
         elif action == "NSZ Keys":
             self._open_folder_browser("nsz_keys")
         elif action == "Enable Box-art Display":
-            self.settings["enable_boxart"] = not self.settings.get("enable_boxart", True)
+            self.settings["enable_boxart"] = not self.settings.get(
+                "enable_boxart", True
+            )
             save_settings(self.settings)
         elif action == "View Type":
             current = self.settings.get("view_type", "grid")
@@ -731,6 +1044,11 @@ class ConsoleUtilitiesApp:
             save_settings(self.settings)
         elif action == "USA Games Only":
             self.settings["usa_only"] = not self.settings.get("usa_only", False)
+            save_settings(self.settings)
+        elif action == "Show Download All Button":
+            self.settings["show_download_all"] = not self.settings.get(
+                "show_download_all", False
+            )
             save_settings(self.settings)
         elif action == "Work Directory":
             self._open_folder_browser("work_dir")
@@ -879,26 +1197,31 @@ class ConsoleUtilitiesApp:
     def _handle_systems_settings_selection(self):
         """Handle systems settings item selection."""
         if self.state.systems_settings_highlighted < len(self.data):
-            self.state.selected_system_for_settings = self.state.systems_settings_highlighted
+            self.state.selected_system_for_settings = (
+                self.state.systems_settings_highlighted
+            )
             self.state.mode = "system_settings"
             self.state.system_settings_highlighted = 0
 
     def _handle_system_settings_selection(self):
         """Handle individual system settings selection."""
         from ui.screens.system_settings_screen import SystemSettingsScreen
-        action = SystemSettingsScreen().get_setting_action(self.state.system_settings_highlighted)
+
+        action = SystemSettingsScreen().get_setting_action(
+            self.state.system_settings_highlighted
+        )
 
         if self.state.selected_system_for_settings is None:
             return
 
         system = self.data[self.state.selected_system_for_settings]
-        system_name = system.get('name', '')
+        system_name = system.get("name", "")
 
         if action == "toggle_hide_system":
             # Toggle hidden state
             system_settings = self.settings.setdefault("system_settings", {})
             sys_settings = system_settings.setdefault(system_name, {})
-            sys_settings['hidden'] = not sys_settings.get('hidden', False)
+            sys_settings["hidden"] = not sys_settings.get("hidden", False)
             save_settings(self.settings)
 
         elif action == "set_custom_folder":
@@ -906,13 +1229,11 @@ class ConsoleUtilitiesApp:
             self._open_folder_browser("custom_folder")
 
     def _navigate_keyboard_modal(
-        self,
-        direction: str,
-        modal_state,
-        char_set: str = "default"
+        self, direction: str, modal_state, char_set: str = "default"
     ):
         """Navigate keyboard modal."""
         from ui.organisms.char_keyboard import CharKeyboard
+
         keyboard = CharKeyboard()
         total_chars = keyboard.get_total_chars(char_set)
         chars_per_row = 13
@@ -965,10 +1286,10 @@ class ConsoleUtilitiesApp:
     def _handle_url_input_selection(self):
         """Handle URL input keyboard selection."""
         from ui.screens.modals.url_input_modal import UrlInputModal
+
         modal = UrlInputModal()
         new_text, is_done = modal.handle_selection(
-            self.state.url_input.cursor_position,
-            self.state.url_input.input_text
+            self.state.url_input.cursor_position, self.state.url_input.input_text
         )
         self.state.url_input.input_text = new_text
 
@@ -980,10 +1301,11 @@ class ConsoleUtilitiesApp:
     def _handle_folder_name_input_selection(self):
         """Handle folder name input keyboard selection."""
         from ui.screens.modals.folder_name_modal import FolderNameModal
+
         modal = FolderNameModal()
         new_text, is_done = modal.handle_selection(
             self.state.folder_name_input.cursor_position,
-            self.state.folder_name_input.input_text
+            self.state.folder_name_input.input_text,
         )
         self.state.folder_name_input.input_text = new_text
 
@@ -995,10 +1317,10 @@ class ConsoleUtilitiesApp:
     def _handle_search_input_selection(self):
         """Handle search input on-screen keyboard selection."""
         from ui.screens.modals.search_modal import SearchModal
+
         modal = SearchModal()
         new_text, is_done = modal.handle_selection(
-            self.state.search.cursor_position,
-            self.state.search.input_text
+            self.state.search.cursor_position, self.state.search.input_text
         )
         self.state.search.input_text = new_text
         self.state.search.query = new_text
@@ -1015,8 +1337,7 @@ class ConsoleUtilitiesApp:
         self.state.show_search_input = False
         if self.state.search.query:
             self.state.search.filtered_list = filter_games_by_search(
-                self.state.game_list,
-                self.state.search.query
+                self.state.game_list, self.state.search.query
             )
         else:
             self.state.search.mode = False
@@ -1035,8 +1356,10 @@ class ConsoleUtilitiesApp:
             )
             # Find game index in list
             for i, g in enumerate(game_list):
-                game_name = g.get('filename', g.get('name', '')) if isinstance(g, dict) else g
-                current_name = game.get('filename', game.get('name', ''))
+                game_name = (
+                    g.get("filename", g.get("name", "")) if isinstance(g, dict) else g
+                )
+                current_name = game.get("filename", game.get("name", ""))
                 if game_name == current_name:
                     self.state.selected_games.add(i)
                     break
@@ -1077,7 +1400,7 @@ class ConsoleUtilitiesApp:
                 game = game_list[self.state.highlighted]
                 # Normalize game to dictionary format (games can be strings or dicts)
                 if isinstance(game, str):
-                    game = {'name': game, 'filename': game}
+                    game = {"name": game, "filename": game}
                 else:
                     # Make a copy to avoid modifying the original
                     game = dict(game)
@@ -1088,17 +1411,18 @@ class ConsoleUtilitiesApp:
                 self.state.game_details.loading_size = False
 
                 # Fetch file size in background if not already present
-                if 'size' not in game and self.state.selected_system >= 0:
+                if "size" not in game and self.state.selected_system >= 0:
                     self.state.game_details.loading_size = True
                     system_data = self.data[self.state.selected_system]
 
                     def fetch_size():
                         file_size = get_file_size(system_data, game)
                         if file_size and self.state.game_details.current_game is game:
-                            game['size'] = file_size
+                            game["size"] = file_size
                         self.state.game_details.loading_size = False
 
                     from threading import Thread
+
                     thread = Thread(target=fetch_size, daemon=True)
                     thread.start()
 
@@ -1122,76 +1446,32 @@ class ConsoleUtilitiesApp:
         self.state.highlighted = 0
 
     def _start_download(self):
-        """Start downloading selected games."""
+        """Start downloading selected games by adding to background queue."""
         if not self.state.selected_games or self.state.selected_system < 0:
             return
 
         system_data = self.data[self.state.selected_system]
-        game_list = self.state.game_list
+        game_list = (
+            self.state.search.filtered_list
+            if self.state.search.mode
+            else self.state.game_list
+        )
+        system_name = system_data.get("name", "Unknown")
 
-        # Create download service
-        download_service = DownloadService(self.settings)
+        # Get selected games
+        selected_games = [game_list[i] for i in self.state.selected_games]
 
-        # Show loading state
-        self.state.loading.show = True
-        self.state.loading.message = "Starting download..."
+        # Add to download queue (non-blocking)
+        self.download_manager.add_to_queue(selected_games, system_data, system_name)
 
-        def progress_callback(message: str, percent: int, downloaded: int, total: int, speed: float):
-            self.state.loading.message = message
-            self.state.loading.progress = percent
+        # Clear selection
+        self.state.selected_games.clear()
 
-            # Process pygame events to prevent queue buildup and check for cancel
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    download_service.cancel()
-                elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                    download_service.cancel()
-                elif event.type == pygame.JOYBUTTONDOWN:
-                    action = self.controller.get_action_for_event(event)
-                    if action == "back":
-                        download_service.cancel()
-
-            # Update the display to show progress
-            self._draw_background()
-            self.screen_manager.render(
-                self.screen,
-                self.state,
-                self.settings,
-                self.data,
-                get_thumbnail=self._get_thumbnail,
-                get_hires_image=self._get_hires_image
-            )
-            pygame.display.flip()
-
-        def message_callback(message: str):
-            self.state.loading.message = message
-
-        # Run download (blocking but with UI updates via progress_callback)
-        try:
-            success = download_service.download_files(
-                system_data=system_data,
-                all_systems_data=self.data,
-                game_list=game_list,
-                selected_indices=self.state.selected_games,
-                progress_callback=progress_callback,
-                message_callback=message_callback
-            )
-
-            if success:
-                self.state.loading.message = "Download complete!"
-            else:
-                self.state.loading.message = "Download cancelled or failed"
-
-        except Exception as e:
-            log_error(f"Download error: {e}")
-            self.state.loading.message = f"Error: {e}"
-
-        finally:
-            # Clear selection and go back to systems
-            self.state.selected_games.clear()
-            self.state.loading.show = False
-            self.state.mode = "systems"
-            self.state.highlighted = 0
+        # Navigate to downloads screen
+        self.state.mode = "downloads"
+        self.state.download_queue.highlighted = max(
+            0, len(self.state.download_queue.items) - len(selected_games)
+        )
 
 
 def main():
@@ -1201,6 +1481,7 @@ def main():
         app.run()
     except Exception as e:
         import traceback
+
         log_error(f"Application error: {e}", type(e).__name__, traceback.format_exc())
         raise
 

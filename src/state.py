@@ -11,6 +11,7 @@ import pygame
 @dataclass
 class NavigationState:
     """State for navigation input handling."""
+
     up: bool = False
     down: bool = False
     left: bool = False
@@ -27,20 +28,22 @@ class NavigationState:
 @dataclass
 class NavigationTiming:
     """Timing data for navigation repeat acceleration."""
-    start_time: Dict[str, int] = field(default_factory=lambda: {
-        'up': 0, 'down': 0, 'left': 0, 'right': 0
-    })
-    last_repeat: Dict[str, int] = field(default_factory=lambda: {
-        'up': 0, 'down': 0, 'left': 0, 'right': 0
-    })
-    velocity: Dict[str, int] = field(default_factory=lambda: {
-        'up': 0, 'down': 0, 'left': 0, 'right': 0
-    })
+
+    start_time: Dict[str, int] = field(
+        default_factory=lambda: {"up": 0, "down": 0, "left": 0, "right": 0}
+    )
+    last_repeat: Dict[str, int] = field(
+        default_factory=lambda: {"up": 0, "down": 0, "left": 0, "right": 0}
+    )
+    velocity: Dict[str, int] = field(
+        default_factory=lambda: {"up": 0, "down": 0, "left": 0, "right": 0}
+    )
 
 
 @dataclass
 class TouchState:
     """State for touch/mouse input handling."""
+
     start_pos: Optional[Tuple[int, int]] = None
     last_pos: Optional[Tuple[int, int]] = None
     start_time: int = 0
@@ -53,6 +56,7 @@ class TouchState:
 @dataclass
 class SearchState:
     """State for search functionality."""
+
     mode: bool = False
     query: str = ""
     input_text: str = ""
@@ -64,6 +68,7 @@ class SearchState:
 @dataclass
 class CharSelectorState:
     """State for character selector UI."""
+
     active: bool = False
     x: int = 0
     y: int = 0
@@ -72,6 +77,7 @@ class CharSelectorState:
 @dataclass
 class FolderBrowserState:
     """State for folder browser modal."""
+
     show: bool = False
     current_path: str = ""
     items: List[Dict[str, Any]] = field(default_factory=list)
@@ -86,6 +92,7 @@ class FolderBrowserState:
 @dataclass
 class FolderNameInputState:
     """State for folder name input modal."""
+
     show: bool = False
     input_text: str = ""
     cursor_position: int = 0
@@ -95,6 +102,7 @@ class FolderNameInputState:
 @dataclass
 class UrlInputState:
     """State for URL input modal."""
+
     show: bool = False
     input_text: str = ""
     cursor_position: int = 0
@@ -104,6 +112,7 @@ class UrlInputState:
 @dataclass
 class GameDetailsState:
     """State for game details modal."""
+
     show: bool = False
     current_game: Optional[Any] = None
     button_focused: bool = True  # Download button is focused by default
@@ -113,14 +122,62 @@ class GameDetailsState:
 @dataclass
 class LoadingState:
     """State for loading/download progress."""
+
     show: bool = False
     message: str = ""
     progress: int = 0
 
 
 @dataclass
+class DownloadQueueItem:
+    """State for a single download queue item."""
+
+    game: Any  # Game dict/object
+    system_data: Dict[str, Any]  # System config (for URL, auth, formats, etc.)
+    system_name: str  # Display name
+    status: str = (
+        "waiting"  # "waiting" | "downloading" | "extracting" | "moving" | "completed" | "failed" | "cancelled"
+    )
+    progress: float = 0.0  # 0.0 to 1.0
+    downloaded: int = 0
+    total_size: int = 0
+    speed: float = 0.0
+    error: str = ""
+
+
+@dataclass
+class DownloadQueueState:
+    """State for download queue."""
+
+    items: List[DownloadQueueItem] = field(default_factory=list)
+    active: bool = False  # True when download thread is running
+    highlighted: int = 0  # Currently highlighted item in downloads screen
+
+
+@dataclass
+class ConfirmModalState:
+    """State for confirmation modal."""
+
+    show: bool = False
+    title: str = ""
+    message_lines: List[str] = field(default_factory=list)
+    ok_label: str = "OK"
+    cancel_label: str = "Cancel"
+    button_index: int = 0  # 0 = OK, 1 = Cancel
+    context: str = (
+        ""  # Context for what action to take on confirm (e.g., "download_all")
+    )
+    data: Any = None  # Additional data needed for the action
+    loading: bool = False  # True while loading data (e.g., calculating sizes)
+    loading_current: int = 0  # Current item being processed
+    loading_total: int = 0  # Total items to process
+    total_size: int = 0  # Calculated total size in bytes
+
+
+@dataclass
 class UIRects:
     """Stores rectangles for clickable UI elements."""
+
     menu_items: List[pygame.Rect] = field(default_factory=list)
     back_button: Optional[pygame.Rect] = None
     search_button: Optional[pygame.Rect] = None
@@ -128,8 +185,11 @@ class UIRects:
     close_button: Optional[pygame.Rect] = None
     folder_select_button: Optional[pygame.Rect] = None
     folder_cancel_button: Optional[pygame.Rect] = None
+    confirm_ok_button: Optional[pygame.Rect] = None
+    confirm_cancel_button: Optional[pygame.Rect] = None
     modal_char_rects: List[Any] = field(default_factory=list)
     modal_back_button: Optional[pygame.Rect] = None
+    scroll_offset: int = 0  # Current scroll offset for item index calculation
 
 
 class AppState:
@@ -147,7 +207,9 @@ class AppState:
         self.game_list: List[Any] = []
 
         # ---- Navigation State ---- #
-        self.mode: str = "systems"  # systems, games, settings, utils, credits, add_systems, systems_settings, system_settings
+        self.mode: str = (
+            "systems"  # systems, games, settings, utils, credits, add_systems, systems_settings, system_settings
+        )
         self.highlighted: int = 0
         self.selected_system: int = 0
         self.selected_games: Set[int] = set()
@@ -180,8 +242,12 @@ class AppState:
         self.url_input = UrlInputState()
         self.game_details = GameDetailsState()
         self.loading = LoadingState()
+        self.confirm_modal = ConfirmModalState()
         self.show_search_input: bool = False
         self.show_controller_mapping: bool = False
+
+        # ---- Download Queue ---- #
+        self.download_queue = DownloadQueueState()
 
         # ---- UI Rectangles ---- #
         self.ui_rects = UIRects()
@@ -239,24 +305,24 @@ def create_legacy_globals(state: AppState) -> Dict[str, Any]:
     Useful during migration period.
     """
     return {
-        'data': state.data,
-        'mode': state.mode,
-        'highlighted': state.highlighted,
-        'selected_system': state.selected_system,
-        'selected_games': state.selected_games,
-        'game_list': state.game_list,
-        'available_systems': state.available_systems,
-        'current_page': state.current_page,
-        'total_pages': state.total_pages,
-        'search_mode': state.search.mode,
-        'search_query': state.search.query,
-        'filtered_game_list': state.search.filtered_list,
-        'show_folder_browser': state.folder_browser.show,
-        'folder_browser_current_path': state.folder_browser.current_path,
-        'folder_browser_items': state.folder_browser.items,
-        'folder_browser_highlighted': state.folder_browser.highlighted,
-        'show_game_details': state.game_details.show,
-        'current_game_detail': state.game_details.current_game,
-        'show_search_input': state.show_search_input,
-        'char_selector_mode': state.char_selector.active,
+        "data": state.data,
+        "mode": state.mode,
+        "highlighted": state.highlighted,
+        "selected_system": state.selected_system,
+        "selected_games": state.selected_games,
+        "game_list": state.game_list,
+        "available_systems": state.available_systems,
+        "current_page": state.current_page,
+        "total_pages": state.total_pages,
+        "search_mode": state.search.mode,
+        "search_query": state.search.query,
+        "filtered_game_list": state.search.filtered_list,
+        "show_folder_browser": state.folder_browser.show,
+        "folder_browser_current_path": state.folder_browser.current_path,
+        "folder_browser_items": state.folder_browser.items,
+        "folder_browser_highlighted": state.folder_browser.highlighted,
+        "show_game_details": state.game_details.show,
+        "current_game_detail": state.game_details.current_game,
+        "show_search_input": state.show_search_input,
+        "char_selector_mode": state.char_selector.active,
     }

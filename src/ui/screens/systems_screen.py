@@ -26,7 +26,7 @@ class SystemsScreen:
         screen: pygame.Surface,
         systems: List[Dict[str, Any]],
         highlighted: int,
-        extra_items: List[str] = None
+        extra_items: List[str] = None,
     ) -> Tuple[Optional[pygame.Rect], List[pygame.Rect], int]:
         """
         Render the systems screen.
@@ -44,7 +44,7 @@ class SystemsScreen:
             extra_items = ["Utils", "Settings", "Credits"]
 
         # Build items list: systems + extra items
-        items = [s['name'] for s in systems] + extra_items
+        items = [s["name"] for s in systems] + extra_items
 
         return self.template.render(
             screen,
@@ -54,15 +54,13 @@ class SystemsScreen:
             selected=set(),
             show_back=False,
             item_height=40,
-            get_label=lambda x: x if isinstance(x, str) else x.get('name', str(x)),
-            item_spacing=8
+            get_label=lambda x: x if isinstance(x, str) else x.get("name", str(x)),
+            item_spacing=8,
+            rainbow_title=True,
+            center_title=True,
         )
 
-    def get_selection_type(
-        self,
-        index: int,
-        systems_count: int
-    ) -> Tuple[str, int]:
+    def get_selection_type(self, index: int, systems_count: int) -> Tuple[str, int]:
         """
         Determine what type of item was selected.
 
