@@ -12,7 +12,8 @@ from typing import Optional, Dict, Any
 
 from constants import (
     FPS, SCREEN_WIDTH, SCREEN_HEIGHT, FONT_SIZE,
-    BACKGROUND, SCRIPT_DIR
+    BACKGROUND, SCRIPT_DIR,
+    TEXT_PRIMARY, TEXT_SECONDARY, SUCCESS, PRIMARY
 )
 from state import AppState
 from config.settings import (
@@ -119,6 +120,117 @@ class ConsoleUtilitiesApp:
 
         return None
 
+    def _collect_controller_mapping(self) -> bool:
+        """
+        Collect controller button mapping from user input.
+        Runs a blocking loop showing which button to press next.
+
+        Returns:
+            True if mapping completed, False if cancelled.
+        """
+        from config.settings import save_controller_mapping
+
+        essential_buttons = [
+            ("up", "D-pad UP"),
+            ("down", "D-pad DOWN"),
+            ("left", "D-pad LEFT"),
+            ("right", "D-pad RIGHT"),
+            ("select", "SELECT/CONFIRM button (A)"),
+            ("back", "BACK/CANCEL button (B)"),
+            ("start", "START/MENU button"),
+            ("detail", "DETAIL button (Y)"),
+            ("search", "SEARCH button (X)"),
+            ("left_shoulder", "Left Shoulder (L)"),
+            ("right_shoulder", "Right Shoulder (R)"),
+        ]
+
+        mapping = {}
+        current_index = 0
+        last_input_time = 0
+
+        while current_index < len(essential_buttons):
+            current_time = pygame.time.get_ticks()
+
+            # Draw
+            self._draw_background()
+
+            title_surf = self.font.render("Controller Setup", True, TEXT_PRIMARY)
+            self.screen.blit(title_surf, (20, 20))
+
+            button_key, button_desc = essential_buttons[current_index]
+            instruction_surf = self.font.render(f"Press the {button_desc}", True, TEXT_PRIMARY)
+            self.screen.blit(instruction_surf, (20, 80))
+
+            progress_surf = self.font.render(
+                f"Button {current_index + 1} of {len(essential_buttons)}", True, TEXT_SECONDARY
+            )
+            self.screen.blit(progress_surf, (20, 120))
+
+            # Show already mapped buttons
+            y_offset = 160
+            for i, (mapped_key, _) in enumerate(essential_buttons[:current_index]):
+                val = mapping.get(mapped_key, "?")
+                mapped_surf = self.font.render(f"{mapped_key}: {val}", True, SUCCESS)
+                self.screen.blit(mapped_surf, (20, y_offset + i * 25))
+
+            pygame.display.flip()
+
+            # Handle events
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    return False
+
+                elif event.type == pygame.KEYDOWN:
+                    log_error(f"MAPPING KEYDOWN: key={event.key}")
+                    if event.key == pygame.K_ESCAPE:
+                        return False
+
+                elif event.type == pygame.JOYBUTTONDOWN:
+                    log_error(f"MAPPING JOYBUTTONDOWN: button={event.button}")
+                    if current_time - last_input_time > 300:
+                        mapping[button_key] = event.button
+                        current_index += 1
+                        last_input_time = current_time
+
+                elif event.type == pygame.JOYHATMOTION:
+                    log_error(f"MAPPING JOYHATMOTION: value={event.value}")
+                    if current_time - last_input_time > 300:
+                        hat_x, hat_y = event.value
+                        if button_key == "up" and hat_y == 1:
+                            mapping[button_key] = ("hat", 0, 1)
+                            current_index += 1
+                            last_input_time = current_time
+                        elif button_key == "down" and hat_y == -1:
+                            mapping[button_key] = ("hat", 0, -1)
+                            current_index += 1
+                            last_input_time = current_time
+                        elif button_key == "left" and hat_x == -1:
+                            mapping[button_key] = ("hat", -1, 0)
+                            current_index += 1
+                            last_input_time = current_time
+                        elif button_key == "right" and hat_x == 1:
+                            mapping[button_key] = ("hat", 1, 0)
+                            current_index += 1
+                            last_input_time = current_time
+
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    # Touchscreen mode: skip mapping
+                    mapping = {"touchscreen_mode": True}
+                    save_controller_mapping(mapping)
+                    return True
+
+            pygame.time.wait(16)
+
+        # Save completed mapping
+        save_controller_mapping(mapping)
+
+        # Update handlers with new mapping
+        self.controller_mapping = mapping
+        self.controller.set_mapping(mapping)
+        self.navigation.set_controller_mapping(mapping)
+
+        return True
+
     def _draw_background(self):
         """Draw the background."""
         if self.background_image:
@@ -188,6 +300,13 @@ class ConsoleUtilitiesApp:
         """Run the main application loop."""
         running = True
 
+        # Force controller mapping on first run (or if mapping is incomplete)
+        if self.needs_mapping and self.joystick is not None:
+            if not self._collect_controller_mapping():
+                pygame.quit()
+                return
+            self.needs_mapping = False
+
         while running:
             self.clock.tick(FPS)
 
@@ -204,10 +323,23 @@ class ConsoleUtilitiesApp:
                     running = False
 
                 elif event.type == pygame.KEYDOWN:
+                    log_error(f"KEYDOWN: key={event.key}, unicode='{event.unicode}', joystick={'connected' if self.joystick else 'none'}")
+                    # Skip keyboard navigation keys if joystick is connected (prevents double input)
+                    if self.joystick is not None and event.key in (
+                        pygame.K_UP, pygame.K_DOWN, pygame.K_LEFT, pygame.K_RIGHT,
+                        pygame.K_RETURN, pygame.K_ESCAPE, pygame.K_SPACE
+                    ):
+                        continue
                     self.state.input_mode = "keyboard"
                     self._handle_key_event(event)
 
                 elif event.type == pygame.JOYBUTTONDOWN:
+                    log_error(f"JOYBUTTONDOWN: button={event.button}, joy={event.joy}")
+                    self.state.input_mode = "gamepad"
+                    self._handle_joystick_event(event)
+
+                elif event.type == pygame.JOYHATMOTION:
+                    log_error(f"JOYHATMOTION: value={event.value}, joy={event.joy}")
                     self.state.input_mode = "gamepad"
                     self._handle_joystick_event(event)
 

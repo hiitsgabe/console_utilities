@@ -117,6 +117,13 @@ class ControllerHandler:
             if isinstance(button_info, int):
                 return event.button == button_info
 
+        # Check D-pad/hat events
+        elif event.type == pygame.JOYHATMOTION:
+            if ((isinstance(button_info, (tuple, list))) and
+                    len(button_info) >= 3 and button_info[0] == "hat"):
+                _, expected_x, expected_y = button_info[0:3]
+                return event.value == (expected_x, expected_y)
+
         # Check keyboard events
         elif event.type == pygame.KEYDOWN:
             # Map actions to default keyboard keys
@@ -203,6 +210,21 @@ class ControllerHandler:
         if event.type == pygame.JOYBUTTONDOWN:
             self._mapping[action] = event.button
             return True
+
+        if event.type == pygame.JOYHATMOTION:
+            hat_x, hat_y = event.value
+            if action == "up" and hat_y == 1:
+                self._mapping[action] = ("hat", 0, 1)
+                return True
+            elif action == "down" and hat_y == -1:
+                self._mapping[action] = ("hat", 0, -1)
+                return True
+            elif action == "left" and hat_x == -1:
+                self._mapping[action] = ("hat", -1, 0)
+                return True
+            elif action == "right" and hat_x == 1:
+                self._mapping[action] = ("hat", 1, 0)
+                return True
 
         return False
 
