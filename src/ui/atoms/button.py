@@ -57,7 +57,7 @@ class Button:
         if pressed:
             color = self._darken(color, 0.2)
         elif hover:
-            color = self._lighten(color, 0.1)
+            color = self._lighten(color, 0.2)
 
         # Draw shadow
         if shadow and not pressed:
@@ -78,8 +78,17 @@ class Button:
         # Draw button
         pygame.draw.rect(screen, color, rect, border_radius=border_radius)
 
-        # Draw border
-        if border_color and border_width > 0:
+        # Draw focus border when hovering (makes selection more visible)
+        if hover:
+            # Draw a white border to indicate focus
+            pygame.draw.rect(
+                screen,
+                self.theme.text_primary,
+                rect,
+                width=3,
+                border_radius=border_radius,
+            )
+        elif border_color and border_width > 0:
             pygame.draw.rect(
                 screen,
                 border_color,

@@ -147,6 +147,9 @@ def add_system_to_added_systems(
     system_url: str,
     boxarts_url: str = "",
     file_formats: Optional[List[str]] = None,
+    should_unzip: bool = True,
+    extract_contents: bool = True,
+    auth: Optional[Dict[str, Any]] = None,
 ) -> bool:
     """
     Add a new system to the added systems list.
@@ -157,6 +160,9 @@ def add_system_to_added_systems(
         system_url: URL for file listing
         boxarts_url: Optional boxart URL base
         file_formats: Optional list of file formats
+        should_unzip: Whether to auto-extract ZIP files
+        extract_contents: Whether to extract only contents (True) or keep folder structure (False)
+        auth: Optional authentication config (e.g., {"type": "ia_s3", "access_key": ..., "secret_key": ...})
 
     Returns:
         True if successful, False otherwise
@@ -169,12 +175,16 @@ def add_system_to_added_systems(
             "roms_folder": rom_folder,
             "url": system_url,
             "file_format": file_formats or [".zip"],
-            "should_unzip": True,
+            "should_unzip": should_unzip,
+            "extract_contents": extract_contents,
             "added": True,
         }
 
         if boxarts_url:
             new_system["boxarts"] = boxarts_url
+
+        if auth:
+            new_system["auth"] = auth
 
         # Check if system already exists
         existing_idx = next(
@@ -253,6 +263,8 @@ def get_visible_systems(
     """
     Get list of systems that are not hidden and not list_systems.
 
+    Also filters out NSZ systems if NSZ is disabled.
+
     Args:
         data: Full list of system data
         settings: Application settings
@@ -261,11 +273,21 @@ def get_visible_systems(
         Filtered list of visible systems
     """
     system_settings = settings.get("system_settings", {})
+    nsz_enabled = settings.get("nsz_enabled", False)
+
+    def is_nsz_system(system: Dict[str, Any]) -> bool:
+        """Check if system uses NSZ file format."""
+        file_format = system.get("file_format", [])
+        if isinstance(file_format, list):
+            return any(".nsz" in fmt.lower() for fmt in file_format)
+        return ".nsz" in str(file_format).lower()
+
     visible_systems = [
         d
         for d in data
         if not d.get("list_systems", False)
         and not system_settings.get(d["name"], {}).get("hidden", False)
+        and (nsz_enabled or not is_nsz_system(d))
     ]
     return visible_systems
 

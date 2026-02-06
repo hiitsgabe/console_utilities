@@ -4,6 +4,7 @@ Manages background download queue with threading support.
 """
 
 import os
+import shutil
 import threading
 import time
 import traceback
@@ -276,20 +277,78 @@ class DownloadManager:
         headers = {}
         cookies = {}
         system_data = item.system_data
+        is_ia_auth = False
 
         if "auth" in system_data:
             auth_config = system_data["auth"]
-            if auth_config.get("cookies", False) and "token" in auth_config:
+            if auth_config.get("type") == "ia_s3":
+                # Internet Archive S3 authentication (only if both keys are set)
+                access_key = auth_config.get("access_key") or None
+                secret_key = auth_config.get("secret_key") or None
+                if access_key and secret_key:
+                    headers["authorization"] = f"LOW {access_key}:{secret_key}"
+                    is_ia_auth = True
+            elif auth_config.get("cookies", False) and "token" in auth_config:
                 cookie_name = auth_config.get("cookie_name", "auth_token")
                 cookies[cookie_name] = auth_config["token"]
             elif "token" in auth_config:
                 headers["Authorization"] = f"Bearer {auth_config['token']}"
 
         try:
-            response = requests.get(
-                url, stream=True, timeout=30, headers=headers, cookies=cookies
-            )
-            response.raise_for_status()
+            # Build headers for the request
+            request_headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "*/*",
+                "Accept-Language": "en-US,en;q=0.9",
+            }
+
+            # For Internet Archive URLs, handle auth properly
+            if "archive.org" in url:
+                if is_ia_auth:
+                    # With auth: manually follow redirects to preserve auth header
+                    # (similar to curl's --location-trusted flag)
+                    request_headers["authorization"] = headers.get("authorization", "")
+
+                    current_url = url
+                    for _ in range(5):  # Max 5 redirects
+                        resp = requests.get(
+                            current_url,
+                            stream=True,
+                            timeout=30,
+                            headers=request_headers,
+                            cookies=cookies,
+                            allow_redirects=False,
+                        )
+                        if resp.status_code in (301, 302, 303, 307, 308):
+                            current_url = resp.headers.get("Location", current_url)
+                            continue
+                        else:
+                            resp.raise_for_status()
+                            response = resp
+                            break
+                    else:
+                        raise requests.exceptions.TooManyRedirects("Too many redirects")
+                else:
+                    # Without auth: standard request for public items
+                    response = requests.get(
+                        url,
+                        stream=True,
+                        timeout=30,
+                        headers=request_headers,
+                        cookies=cookies,
+                    )
+                    response.raise_for_status()
+            else:
+                # For non-IA URLs, use standard request handling
+                request_headers.update(headers)
+                response = requests.get(
+                    url,
+                    stream=True,
+                    timeout=30,
+                    headers=request_headers,
+                    cookies=cookies,
+                )
+                response.raise_for_status()
 
             item.total_size = int(response.headers.get("content-length", 0))
             item.downloaded = 0
@@ -326,8 +385,13 @@ class DownloadManager:
 
         except requests.exceptions.RequestException as e:
             log_error(f"Download request failed: {e}")
+            log_error(f"Failed URL: {url}")
             item.status = "failed"
-            item.error = f"Network error: {str(e)[:50]}"
+            # Include more details in error message
+            if hasattr(e, "response") and e.response is not None:
+                item.error = f"HTTP {e.response.status_code}: {str(e)[:40]}"
+            else:
+                item.error = f"Network error: {str(e)[:50]}"
             return None
 
     def _process_downloaded_file(
@@ -348,6 +412,8 @@ class DownloadManager:
                 "should_unzip", False
             ):
                 item.status = "extracting"
+                extract_contents = item.system_data.get("extract_contents", True)
+
                 with ZipFile(file_path, "r") as zip_ref:
                     total_files = len(zip_ref.namelist())
                     for i, file_info in enumerate(zip_ref.infolist()):
@@ -357,6 +423,47 @@ class DownloadManager:
                         item.progress = (i + 1) / total_files
 
                 os.remove(file_path)
+
+                # Handle extract mode
+                if not extract_contents:
+                    # Keep folder structure - move extracted folders and matching files
+                    item.status = "moving"
+                    item.progress = 0.0
+                    extracted_items = [
+                        f for f in os.listdir(self.work_dir) if not f.startswith(".")
+                    ]
+                    # Filter: keep directories and files matching formats
+                    items_to_move = []
+                    for f in extracted_items:
+                        src_path = os.path.join(self.work_dir, f)
+                        if os.path.isdir(src_path):
+                            items_to_move.append(f)
+                        elif any(f.lower().endswith(ext.lower()) for ext in formats):
+                            items_to_move.append(f)
+
+                    for i, extracted_item in enumerate(items_to_move):
+                        if self._cancel_current:
+                            return False
+                        src_path = os.path.join(self.work_dir, extracted_item)
+                        dst_path = os.path.join(roms_folder, extracted_item)
+                        # Use shutil.move for both files and directories
+                        if os.path.exists(dst_path):
+                            if os.path.isdir(dst_path):
+                                shutil.rmtree(dst_path)
+                            else:
+                                os.remove(dst_path)
+                        shutil.move(src_path, dst_path)
+                        item.progress = (i + 1) / max(len(items_to_move), 1)
+
+                    # Clean up remaining files in work directory
+                    for f in os.listdir(self.work_dir):
+                        file_to_remove = os.path.join(self.work_dir, f)
+                        if os.path.isfile(file_to_remove):
+                            try:
+                                os.remove(file_to_remove)
+                            except Exception:
+                                pass
+                    return True
 
             # Handle NSZ decompression
             elif filename.endswith(".nsz"):
@@ -391,7 +498,7 @@ class DownloadManager:
             files_to_move = [
                 f
                 for f in os.listdir(self.work_dir)
-                if any(f.endswith(ext) for ext in formats)
+                if any(f.lower().endswith(ext.lower()) for ext in formats)
             ]
 
             for i, f in enumerate(files_to_move):
@@ -451,4 +558,8 @@ class DownloadManager:
         if custom_folder and os.path.exists(custom_folder):
             return custom_folder
         else:
-            return os.path.join(self.roms_dir, system_data.get("roms_folder", ""))
+            roms_folder = system_data.get("roms_folder", "")
+            # If roms_folder is an absolute path (e.g., from IA collection), use it directly
+            if roms_folder and os.path.isabs(roms_folder):
+                return roms_folder
+            return os.path.join(self.roms_dir, roms_folder)

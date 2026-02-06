@@ -105,9 +105,11 @@ bundle-macos:
 	@mkdir -p dist/macos
 	@echo "📦 Running PyInstaller..."
 	@python3 -m PyInstaller console_utils.spec --distpath dist/macos --workpath build/macos --noconfirm
-	@# Create zip with just the .app
-	@cd dist/macos && zip -qr ../macos.zip "Console Utilities.app"
-	@rm -rf build/macos
+	@# Copy macOS-specific docs
+	@cp assets/docs/macos.md dist/macos/README.md 2>/dev/null || echo "No macOS docs found"
+	@# Create zip with the .app and README
+	@cd dist/macos && zip -qr ../macos.zip "Console Utilities.app" README.md
+	@rm -rf build/macos dist/macos
 	@echo "✅ macOS app created: dist/macos.zip"
 	@echo "   Extract and drag Console Utilities.app to Applications"
 
@@ -118,9 +120,11 @@ bundle-windows:
 	@mkdir -p dist/windows
 	@echo "📦 Running PyInstaller..."
 	@python -m PyInstaller console_utils_win.spec --distpath dist/windows --workpath build/windows --noconfirm
-	@# Create zip with the exe folder
-	@cd dist/windows && zip -qr ../windows.zip "Console Utilities"
-	@rm -rf build/windows
+	@# Copy Windows-specific docs
+	@cp assets/docs/windows.md dist/windows/README.md 2>/dev/null || echo "No Windows docs found"
+	@# Create zip with the exe folder and README
+	@cd dist/windows && zip -qr ../windows.zip "Console Utilities" README.md
+	@rm -rf build/windows dist/windows
 	@echo "✅ Windows exe created: dist/windows.zip"
 	@echo "   Extract and run Console Utilities.exe"
 

@@ -22,6 +22,9 @@ from .modals.error_modal import ErrorModal
 from .modals.url_input_modal import UrlInputModal
 from .modals.folder_name_modal import FolderNameModal
 from .modals.confirm_modal import ConfirmModal
+from .modals.ia_login_modal import IALoginModal
+from .modals.ia_download_modal import IADownloadModal
+from .modals.ia_collection_modal import IACollectionModal
 from .downloads_screen import DownloadsScreen
 from ui.molecules.download_status_bar import DownloadStatusBar
 
@@ -57,6 +60,9 @@ class ScreenManager:
         self.url_input_modal = UrlInputModal(theme)
         self.folder_name_modal = FolderNameModal(theme)
         self.confirm_modal = ConfirmModal(theme)
+        self.ia_login_modal = IALoginModal(theme)
+        self.ia_download_modal = IADownloadModal(theme)
+        self.ia_collection_modal = IACollectionModal(theme)
 
         # Initialize status bar
         self.download_status_bar = DownloadStatusBar(theme)
@@ -196,6 +202,76 @@ class ScreenManager:
             rects["char_rects"] = char_rects
             return rects
 
+        # Internet Archive modals
+        if state.ia_login.show:
+            modal_rect, content_rect, close_rect, char_rects = (
+                self.ia_login_modal.render(
+                    screen,
+                    state.ia_login.step,
+                    state.ia_login.email,
+                    state.ia_login.password,
+                    state.ia_login.cursor_position,
+                    state.ia_login.error_message,
+                    input_mode=state.input_mode,
+                )
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["char_rects"] = char_rects
+            return rects
+
+        if state.ia_download_wizard.show:
+            modal_rect, content_rect, close_rect, char_rects, item_rects = (
+                self.ia_download_modal.render(
+                    screen,
+                    state.ia_download_wizard.step,
+                    state.ia_download_wizard.url,
+                    state.ia_download_wizard.item_id,
+                    state.ia_download_wizard.files_list,
+                    state.ia_download_wizard.selected_file_index,
+                    state.ia_download_wizard.output_folder,
+                    state.ia_download_wizard.folder_items,
+                    state.ia_download_wizard.folder_highlighted,
+                    state.ia_download_wizard.should_extract,
+                    state.ia_download_wizard.cursor_position,
+                    state.ia_download_wizard.error_message,
+                    input_mode=state.input_mode,
+                )
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["char_rects"] = char_rects
+            rects["item_rects"] = item_rects
+            return rects
+
+        if state.ia_collection_wizard.show:
+            modal_rect, content_rect, close_rect, char_rects, item_rects = (
+                self.ia_collection_modal.render(
+                    screen,
+                    state.ia_collection_wizard.step,
+                    state.ia_collection_wizard.url,
+                    state.ia_collection_wizard.item_id,
+                    state.ia_collection_wizard.collection_name,
+                    state.ia_collection_wizard.folder_name,
+                    state.ia_collection_wizard.available_formats,
+                    state.ia_collection_wizard.selected_formats,
+                    state.ia_collection_wizard.format_highlighted,
+                    state.ia_collection_wizard.should_unzip,
+                    state.ia_collection_wizard.cursor_position,
+                    state.ia_collection_wizard.error_message,
+                    input_mode=state.input_mode,
+                    adding_custom_format=state.ia_collection_wizard.adding_custom_format,
+                    custom_format_input=state.ia_collection_wizard.custom_format_input,
+                    extract_contents=state.ia_collection_wizard.extract_contents,
+                    options_highlighted=state.ia_collection_wizard.options_highlighted,
+                )
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["char_rects"] = char_rects
+            rects["item_rects"] = item_rects
+            return rects
+
         # Render main screens based on mode
         if state.mode == "systems":
             visible_systems = self._get_visible_systems(data, settings)
@@ -247,7 +323,7 @@ class ScreenManager:
 
         elif state.mode == "utils":
             back_rect, item_rects, scroll_offset = self.utils_screen.render(
-                screen, state.highlighted
+                screen, state.highlighted, settings
             )
             rects["back"] = back_rect
             rects["item_rects"] = item_rects

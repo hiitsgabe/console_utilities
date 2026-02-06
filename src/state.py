@@ -175,6 +175,64 @@ class ConfirmModalState:
 
 
 @dataclass
+class IALoginState:
+    """State for Internet Archive login modal."""
+
+    show: bool = False
+    step: str = "email"  # "email", "password", "testing", "complete", "error"
+    email: str = ""
+    password: str = ""
+    cursor_position: int = 0
+    error_message: str = ""
+
+
+@dataclass
+class IADownloadWizardState:
+    """State for Internet Archive download wizard modal."""
+
+    show: bool = False
+    step: str = (
+        "url"  # "url", "validating", "file_select", "folder", "options", "downloading"
+    )
+    url: str = ""
+    item_id: str = ""
+    filename: str = ""
+    output_folder: str = ""
+    should_extract: bool = True
+    cursor_position: int = 0
+    error_message: str = ""
+    files_list: List[Dict[str, Any]] = field(default_factory=list)
+    selected_file_index: int = 0
+    folder_items: List[Dict[str, Any]] = field(default_factory=list)
+    folder_highlighted: int = 0
+
+
+@dataclass
+class IACollectionWizardState:
+    """State for Internet Archive collection wizard modal."""
+
+    show: bool = False
+    step: str = (
+        "url"  # "url", "validating", "name", "folder", "formats", "options", "confirm"
+    )
+    url: str = ""
+    item_id: str = ""
+    collection_name: str = ""
+    folder_name: str = ""
+    file_formats: List[str] = field(default_factory=lambda: [".zip"])
+    should_unzip: bool = True
+    extract_contents: bool = True  # True = extract contents only, False = keep folder
+    cursor_position: int = 0
+    error_message: str = ""
+    available_formats: List[str] = field(default_factory=list)
+    selected_formats: Set[int] = field(default_factory=set)
+    format_highlighted: int = 0
+    custom_format_input: str = ""  # For typing custom format
+    adding_custom_format: bool = False  # True when in custom format input mode
+    options_highlighted: int = 0  # For options step (0=unzip toggle, 1=extract mode)
+
+
+@dataclass
 class UIRects:
     """Stores rectangles for clickable UI elements."""
 
@@ -249,6 +307,11 @@ class AppState:
         # ---- Download Queue ---- #
         self.download_queue = DownloadQueueState()
 
+        # ---- Internet Archive ---- #
+        self.ia_login = IALoginState()
+        self.ia_download_wizard = IADownloadWizardState()
+        self.ia_collection_wizard = IACollectionWizardState()
+
         # ---- UI Rectangles ---- #
         self.ui_rects = UIRects()
 
@@ -289,6 +352,9 @@ class AppState:
         self.game_details.show = False
         self.show_search_input = False
         self.char_selector.active = False
+        self.ia_login.show = False
+        self.ia_download_wizard.show = False
+        self.ia_collection_wizard.show = False
 
     def get_current_game_list(self) -> List[Any]:
         """Get the current game list (filtered or full)."""

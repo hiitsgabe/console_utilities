@@ -23,8 +23,8 @@ class CharKeyboard:
     CHARS_NUMERIC = list("0123456789")
     CHARS_SPECIAL = [" ", "DEL", "CLEAR", "DONE"]
 
-    # URL-friendly characters
-    CHARS_URL = list("abcdefghijklmnopqrstuvwxyz0123456789.:/-_")
+    # URL-friendly characters (includes @ for emails and - for URLs)
+    CHARS_URL = list("abcdefghijklmnopqrstuvwxyz0123456789.:/-_@")
     CHARS_URL_SPECIAL = [" ", "DEL", "CLEAR", "DONE"]
 
     def __init__(self, theme: Theme = default_theme):

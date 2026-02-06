@@ -78,10 +78,10 @@ class ConfirmModal:
             y += line_height
 
         # Draw action buttons
-        button_y = content_rect.bottom - 50
-        button_width = 100
-        button_height = 40
-        button_spacing = self.theme.padding_md
+        button_y = content_rect.bottom - 55
+        button_width = 120
+        button_height = 44
+        button_spacing = self.theme.padding_lg
 
         # OK button
         ok_rect = pygame.Rect(

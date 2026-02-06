@@ -45,9 +45,7 @@ class InstalledChecker:
             if os.path.exists(roms_folder):
                 files = os.listdir(roms_folder)
                 # Store base filenames (without extension) for comparison
-                self._existing_files = [
-                    self._get_base_filename(f) for f in files
-                ]
+                self._existing_files = [self._get_base_filename(f) for f in files]
         except Exception as e:
             log_error(
                 "Failed to list roms folder for install check",
