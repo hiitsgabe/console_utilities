@@ -36,6 +36,19 @@ class UtilsScreen:
         "Extract ZIP File",
     ]
 
+    # Scraper section items
+    SCRAPER_SECTION_ITEMS = [
+        "--- SCRAPER ---",  # Divider
+        "Scrape Game Images",
+        "Batch Scrape Folder",
+    ]
+
+    # File management section items
+    FILE_MANAGEMENT_SECTION_ITEMS = [
+        "--- FILE MANAGEMENT ---",  # Divider
+        "Dedupe Games",
+    ]
+
     # NSZ section items (only shown when NSZ is enabled)
     NSZ_SECTION_ITEMS = [
         "--- NSZ ---",  # Divider
@@ -71,6 +84,14 @@ class UtilsScreen:
         # Add extraction section
         divider_indices.add(len(items))
         items.extend(self.EXTRACTION_SECTION_ITEMS)
+
+        # Add scraper section
+        divider_indices.add(len(items))
+        items.extend(self.SCRAPER_SECTION_ITEMS)
+
+        # Add file management section
+        divider_indices.add(len(items))
+        items.extend(self.FILE_MANAGEMENT_SECTION_ITEMS)
 
         # Add NSZ section if enabled
         if settings.get("nsz_enabled", False):
@@ -129,6 +150,9 @@ class UtilsScreen:
                 "Download from Internet Archive": "ia_download",
                 "Add Internet Archive Collection": "ia_add_collection",
                 "Extract ZIP File": "extract_zip",
+                "Scrape Game Images": "scrape_images",
+                "Batch Scrape Folder": "batch_scrape",
+                "Dedupe Games": "dedupe_games",
                 "NSZ to NSP Converter": "nsz_converter",
             }
             return actions.get(item, "unknown")

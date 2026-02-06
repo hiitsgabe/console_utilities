@@ -1,0 +1,367 @@
+"""
+Game scraper service - Orchestrates game artwork scraping.
+
+Handles searching for games, downloading images, and organizing
+files according to the selected frontend's requirements.
+"""
+
+import os
+import re
+import traceback
+import requests
+from typing import List, Tuple, Dict, Any, Optional
+
+from .scraper_providers import get_provider, BaseProvider, GameSearchResult, GameImage
+
+
+class ScraperService:
+    """
+    Main scraper orchestration service.
+
+    Coordinates between scraper providers, downloads images,
+    and organizes them according to frontend requirements.
+    """
+
+    # Image type mapping from provider types to frontend folder names
+    IMAGE_TYPE_MAP = {
+        # Provider type: {frontend: folder_name}
+        "box-2D": {
+            "emulationstation_base": "images",
+            "esde_android": "covers",
+            "retroarch": "Named_Boxarts",
+            "pegasus": "boxFront",
+        },
+        "box-3D": {
+            "emulationstation_base": "images",
+            "esde_android": "3dboxes",
+            "retroarch": "Named_Boxarts",
+            "pegasus": "boxFront",
+        },
+        "boxart": {
+            "emulationstation_base": "images",
+            "esde_android": "covers",
+            "retroarch": "Named_Boxarts",
+            "pegasus": "boxFront",
+        },
+        "ss": {
+            "emulationstation_base": "screenshots",
+            "esde_android": "screenshots",
+            "retroarch": "Named_Snaps",
+            "pegasus": "screenshot",
+        },
+        "screenshot": {
+            "emulationstation_base": "screenshots",
+            "esde_android": "screenshots",
+            "retroarch": "Named_Snaps",
+            "pegasus": "screenshot",
+        },
+        "sstitle": {
+            "emulationstation_base": "titlescreens",
+            "esde_android": "titlescreens",
+            "retroarch": "Named_Titles",
+            "pegasus": "titlescreen",
+        },
+        "wheel": {
+            "emulationstation_base": "wheels",
+            "esde_android": "marquees",
+            "retroarch": None,  # Not supported
+            "pegasus": "logo",
+        },
+        "clearlogo": {
+            "emulationstation_base": "wheels",
+            "esde_android": "marquees",
+            "retroarch": None,
+            "pegasus": "logo",
+        },
+        "marquee": {
+            "emulationstation_base": "marquees",
+            "esde_android": "marquees",
+            "retroarch": None,
+            "pegasus": "marquee",
+        },
+        "fanart": {
+            "emulationstation_base": "fanart",
+            "esde_android": "fanart",
+            "retroarch": None,
+            "pegasus": "background",
+        },
+        "banner": {
+            "emulationstation_base": "banners",
+            "esde_android": "banners",
+            "retroarch": None,
+            "pegasus": "banner",
+        },
+    }
+
+    def __init__(self, settings: Dict[str, Any]):
+        """
+        Initialize scraper service.
+
+        Args:
+            settings: Application settings dictionary
+        """
+        self.settings = settings
+        self._provider: Optional[BaseProvider] = None
+
+    @property
+    def provider(self) -> BaseProvider:
+        """Get the current scraper provider."""
+        if self._provider is None:
+            provider_name = self.settings.get("scraper_provider", "screenscraper")
+            self._provider = get_provider(provider_name, self.settings)
+        return self._provider
+
+    def reset_provider(self):
+        """Reset provider to force re-creation with new settings."""
+        self._provider = None
+
+    def extract_game_name(self, rom_path: str) -> str:
+        """
+        Extract a clean game name from a ROM filename.
+
+        Removes region tags, version info, and other common suffixes.
+
+        Args:
+            rom_path: Path to ROM file
+
+        Returns:
+            Cleaned game name for searching
+        """
+        # Get filename without path and extension
+        filename = os.path.basename(rom_path)
+        name, _ = os.path.splitext(filename)
+
+        # Remove common patterns
+        patterns = [
+            r"\s*\([^)]*\)",  # (USA), (Europe), etc.
+            r"\s*\[[^\]]*\]",  # [!], [b1], etc.
+            r"\s*v\d+(\.\d+)*",  # v1.0, v2.1, etc.
+            r"\s*Rev\s*\d+",  # Rev 1, Rev A
+            r"\s*\(Rev\s*[^)]*\)",  # (Rev A)
+            r"\s*-\s*Disc\s*\d+",  # - Disc 1
+            r"\s*,\s*The$",  # ", The" at end
+        ]
+
+        for pattern in patterns:
+            name = re.sub(pattern, "", name, flags=re.IGNORECASE)
+
+        # Handle "Name, The" -> "The Name"
+        if ", The" in name:
+            name = "The " + name.replace(", The", "")
+
+        # Clean up whitespace
+        name = " ".join(name.split())
+
+        return name.strip()
+
+    def search_game(self, name: str) -> Tuple[bool, List[GameSearchResult], str]:
+        """
+        Search for a game by name.
+
+        Args:
+            name: Game name to search for
+
+        Returns:
+            Tuple of (success, list of results, error message)
+        """
+        if not self.provider.is_configured():
+            return False, [], f"{self.provider.name} credentials not configured"
+
+        return self.provider.search_game(name)
+
+    def get_game_images(self, game_id: str) -> Tuple[bool, List[GameImage], str]:
+        """
+        Get available images for a game.
+
+        Args:
+            game_id: Provider-specific game identifier
+
+        Returns:
+            Tuple of (success, list of images, error message)
+        """
+        return self.provider.get_game_images(game_id)
+
+    def get_output_path(
+        self, rom_path: str, image_type: str, image_format: str = "png"
+    ) -> Optional[str]:
+        """
+        Get the output path for an image based on frontend configuration.
+
+        Args:
+            rom_path: Path to the ROM file
+            image_type: Type of image (box-2D, screenshot, etc.)
+            image_format: Image format extension (png, jpg)
+
+        Returns:
+            Full output path for the image, or None if type not supported
+        """
+        frontend = self.settings.get("scraper_frontend", "emulationstation_base")
+
+        # Get folder name for this image type and frontend
+        type_map = self.IMAGE_TYPE_MAP.get(image_type, {})
+        folder_name = type_map.get(frontend)
+        if folder_name is None:
+            return None
+
+        rom_dir = os.path.dirname(rom_path)
+        rom_name = os.path.splitext(os.path.basename(rom_path))[0]
+
+        if frontend == "emulationstation_base":
+            # ./media/<type>/<romname>.png
+            media_dir = os.path.join(rom_dir, "media", folder_name)
+            return os.path.join(media_dir, f"{rom_name}.{image_format}")
+
+        elif frontend == "esde_android":
+            # Use configured paths or default
+            media_base = self.settings.get("esde_media_path", "")
+            if not media_base:
+                return None
+
+            # Get platform from rom directory name
+            platform = os.path.basename(rom_dir)
+            media_dir = os.path.join(media_base, platform, folder_name)
+            return os.path.join(media_dir, f"{rom_name}.{image_format}")
+
+        elif frontend == "retroarch":
+            # RetroArch uses Named_* folders in thumbnails directory
+            thumbnails_base = self.settings.get("retroarch_thumbnails_path", "")
+            if not thumbnails_base:
+                return None
+
+            # Get platform from rom directory name
+            platform = os.path.basename(rom_dir)
+            # RetroArch uses playlist name as folder
+            media_dir = os.path.join(thumbnails_base, platform, folder_name)
+            # RetroArch requires specific naming with underscores
+            safe_name = rom_name.replace("&", "_").replace("/", "_")
+            return os.path.join(media_dir, f"{safe_name}.{image_format}")
+
+        elif frontend == "pegasus":
+            # Pegasus: ./media/<gamename>/<type>.png
+            media_dir = os.path.join(rom_dir, "media", rom_name)
+            return os.path.join(media_dir, f"{folder_name}.{image_format}")
+
+        return None
+
+    def download_image(
+        self, image: GameImage, output_path: str, progress_callback=None
+    ) -> Tuple[bool, str]:
+        """
+        Download an image to the specified path.
+
+        Args:
+            image: GameImage object with URL
+            output_path: Where to save the image
+            progress_callback: Optional callback(downloaded, total)
+
+        Returns:
+            Tuple of (success, error message)
+        """
+        try:
+            # Create directory if needed
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+            # Download the image
+            response = requests.get(image.url, stream=True, timeout=60)
+            if response.status_code != 200:
+                return False, f"Download failed: {response.status_code}"
+
+            total_size = int(response.headers.get("content-length", 0))
+            downloaded = 0
+
+            with open(output_path, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if progress_callback and total_size:
+                        progress_callback(downloaded, total_size)
+
+            return True, ""
+
+        except requests.Timeout:
+            return False, "Download timed out"
+        except requests.RequestException as e:
+            return False, f"Network error: {str(e)}"
+        except OSError as e:
+            return False, f"File error: {str(e)}"
+        except Exception as e:
+            traceback.print_exc()
+            return False, f"Error: {str(e)}"
+
+    def download_images(
+        self,
+        images: List[GameImage],
+        rom_path: str,
+        progress_callback=None,
+    ) -> Tuple[bool, List[str], str]:
+        """
+        Download multiple images for a ROM.
+
+        Args:
+            images: List of GameImage objects to download
+            rom_path: Path to the ROM file
+            progress_callback: Optional callback(current_index, total, current_name)
+
+        Returns:
+            Tuple of (success, list of downloaded paths, error message)
+        """
+        downloaded_paths = []
+        total = len(images)
+
+        for i, image in enumerate(images):
+            if progress_callback:
+                progress_callback(i, total, image.type)
+
+            # Get output path
+            image_format = image.format if image.format else "png"
+            output_path = self.get_output_path(rom_path, image.type, image_format)
+
+            if output_path is None:
+                continue  # Skip unsupported image types for this frontend
+
+            # Download
+            success, error = self.download_image(image, output_path)
+            if success:
+                downloaded_paths.append(output_path)
+            else:
+                # Continue with other images even if one fails
+                print(f"Failed to download {image.type}: {error}")
+
+        if progress_callback:
+            progress_callback(total, total, "")
+
+        return True, downloaded_paths, ""
+
+    def get_platform_from_rom_path(self, rom_path: str) -> str:
+        """
+        Extract platform/system name from ROM path.
+
+        Args:
+            rom_path: Path to ROM file
+
+        Returns:
+            Platform name (directory name)
+        """
+        return os.path.basename(os.path.dirname(rom_path))
+
+
+# Singleton instance
+_scraper_service: Optional[ScraperService] = None
+
+
+def get_scraper_service(settings: Dict[str, Any]) -> ScraperService:
+    """
+    Get or create the scraper service instance.
+
+    Args:
+        settings: Application settings
+
+    Returns:
+        ScraperService instance
+    """
+    global _scraper_service
+    if _scraper_service is None:
+        _scraper_service = ScraperService(settings)
+    else:
+        _scraper_service.settings = settings
+    return _scraper_service
