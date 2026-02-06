@@ -339,14 +339,14 @@ class DownloadManager:
                     )
                     response.raise_for_status()
             else:
-                # For non-IA URLs, use standard request handling
-                request_headers.update(headers)
+                # For non-IA URLs, use simple request handling (no extra headers)
                 response = requests.get(
                     url,
                     stream=True,
                     timeout=30,
-                    headers=request_headers,
+                    headers=headers,
                     cookies=cookies,
+                    allow_redirects=True,
                 )
                 response.raise_for_status()
 

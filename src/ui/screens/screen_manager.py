@@ -25,6 +25,9 @@ from .modals.confirm_modal import ConfirmModal
 from .modals.ia_login_modal import IALoginModal
 from .modals.ia_download_modal import IADownloadModal
 from .modals.ia_collection_modal import IACollectionModal
+from .modals.scraper_wizard_modal import ScraperWizardModal
+from .modals.scraper_login_modal import ScraperLoginModal
+from .modals.dedupe_wizard_modal import DedupeWizardModal
 from .downloads_screen import DownloadsScreen
 from ui.molecules.download_status_bar import DownloadStatusBar
 
@@ -63,6 +66,9 @@ class ScreenManager:
         self.ia_login_modal = IALoginModal(theme)
         self.ia_download_modal = IADownloadModal(theme)
         self.ia_collection_modal = IACollectionModal(theme)
+        self.scraper_login_modal = ScraperLoginModal(theme)
+        self.scraper_wizard_modal = ScraperWizardModal(theme)
+        self.dedupe_wizard_modal = DedupeWizardModal(theme)
 
         # Initialize status bar
         self.download_status_bar = DownloadStatusBar(theme)
@@ -272,6 +278,84 @@ class ScreenManager:
             rects["item_rects"] = item_rects
             return rects
 
+        if state.scraper_login.show:
+            modal_rect, content_rect, close_rect, char_rects = (
+                self.scraper_login_modal.render(
+                    screen,
+                    state.scraper_login.provider,
+                    state.scraper_login.step,
+                    state.scraper_login.username,
+                    state.scraper_login.password,
+                    state.scraper_login.api_key,
+                    state.scraper_login.cursor_position,
+                    state.scraper_login.error_message,
+                    input_mode=state.input_mode,
+                )
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["char_rects"] = char_rects
+            return rects
+
+        if state.scraper_wizard.show:
+            modal_rect, content_rect, close_rect, item_rects = (
+                self.scraper_wizard_modal.render(
+                    screen,
+                    state.scraper_wizard.step,
+                    state.scraper_wizard.folder_items,
+                    state.scraper_wizard.folder_highlighted,
+                    state.scraper_wizard.folder_current_path,
+                    state.scraper_wizard.selected_rom_path,
+                    state.scraper_wizard.selected_rom_name,
+                    state.scraper_wizard.search_results,
+                    state.scraper_wizard.selected_game_index,
+                    state.scraper_wizard.available_images,
+                    state.scraper_wizard.selected_images,
+                    state.scraper_wizard.image_highlighted,
+                    state.scraper_wizard.download_progress,
+                    state.scraper_wizard.current_download,
+                    state.scraper_wizard.error_message,
+                    input_mode=state.input_mode,
+                    batch_mode=state.scraper_wizard.batch_mode,
+                    batch_roms=state.scraper_wizard.batch_roms,
+                    batch_current_index=state.scraper_wizard.batch_current_index,
+                    batch_auto_select=state.scraper_wizard.batch_auto_select,
+                    batch_default_images=state.scraper_wizard.batch_default_images,
+                )
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["item_rects"] = item_rects
+            return rects
+
+        if state.dedupe_wizard.show:
+            modal_rect, content_rect, close_rect, item_rects = (
+                self.dedupe_wizard_modal.render(
+                    screen,
+                    state.dedupe_wizard.step,
+                    state.dedupe_wizard.mode,
+                    state.dedupe_wizard.folder_path,
+                    state.dedupe_wizard.folder_items,
+                    state.dedupe_wizard.folder_highlighted,
+                    state.dedupe_wizard.duplicate_groups,
+                    state.dedupe_wizard.current_group_index,
+                    state.dedupe_wizard.selected_to_keep,
+                    state.dedupe_wizard.scan_progress,
+                    state.dedupe_wizard.process_progress,
+                    state.dedupe_wizard.files_scanned,
+                    state.dedupe_wizard.total_files,
+                    state.dedupe_wizard.files_removed,
+                    state.dedupe_wizard.space_freed,
+                    state.dedupe_wizard.error_message,
+                    mode_highlighted=state.dedupe_wizard.mode_highlighted,
+                    input_mode=state.input_mode,
+                )
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["item_rects"] = item_rects
+            return rects
+
         # Render main screens based on mode
         if state.mode == "systems":
             visible_systems = self._get_visible_systems(data, settings)
@@ -388,14 +472,11 @@ class ScreenManager:
     def _get_visible_systems(
         self, data: List[Dict[str, Any]], settings: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
-        """Get visible systems (not hidden, not list_systems)."""
-        system_settings = settings.get("system_settings", {})
-        return [
-            d
-            for d in data
-            if not d.get("list_systems", False)
-            and not system_settings.get(d["name"], {}).get("hidden", False)
-        ]
+        """Get visible systems (not hidden, not list_systems, respects NSZ setting)."""
+        from services.data_loader import get_visible_systems
+
+        # Use the same function as navigation to ensure consistency
+        return get_visible_systems(data, settings)
 
     def _get_hidden_system_names(
         self, data: List[Dict[str, Any]], settings: Dict[str, Any]

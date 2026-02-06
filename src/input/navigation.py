@@ -65,9 +65,10 @@ class NavigationHandler:
         # Check joystick state if available
         if self._joystick and self._joystick.get_init():
             self._update_from_joystick()
-
-        # Check keyboard state as fallback
-        self._update_from_keyboard()
+        else:
+            # Only check keyboard if no joystick is connected
+            # This prevents double input on consoles that map D-pad to keyboard keys
+            self._update_from_keyboard()
 
         # Update timing for newly pressed/released directions
         self._update_timing(current_time)

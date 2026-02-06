@@ -54,6 +54,18 @@ class SettingsScreen:
         "Internet Archive Login",  # Only shown when IA is enabled
     ]
 
+    # Scraper section
+    SCRAPER_SECTION = [
+        "--- SCRAPER ---",
+        "Scraper Frontend",
+        "Scraper Provider",
+        "ScreenScraper Login",  # Only shown when provider = screenscraper
+        "TheGamesDB API Key",  # Only shown when provider = thegamesdb
+        "ES-DE Media Path",  # Only shown when frontend = esde_android
+        "ES-DE Gamelists Path",  # Only shown when frontend = esde_android
+        "RetroArch Thumbnails",  # Only shown when frontend = retroarch
+    ]
+
     # NSZ section (last)
     NSZ_SECTION = [
         "--- NSZ ---",
@@ -104,6 +116,25 @@ class SettingsScreen:
         # Only show login if IA is enabled
         if ia_enabled:
             items.append(self.IA_SECTION[2])  # Login
+
+        # Add Scraper section
+        scraper_frontend = settings.get("scraper_frontend", "emulationstation_base")
+        scraper_provider = settings.get("scraper_provider", "screenscraper")
+        divider_indices.add(len(items))
+        items.append(self.SCRAPER_SECTION[0])  # Divider
+        items.append(self.SCRAPER_SECTION[1])  # Frontend
+        items.append(self.SCRAPER_SECTION[2])  # Provider
+        # Show provider-specific settings
+        if scraper_provider == "screenscraper":
+            items.append(self.SCRAPER_SECTION[3])  # ScreenScraper Login
+        elif scraper_provider == "thegamesdb":
+            items.append(self.SCRAPER_SECTION[4])  # TheGamesDB API Key
+        # Show frontend-specific paths
+        if scraper_frontend == "esde_android":
+            items.append(self.SCRAPER_SECTION[5])  # ES-DE Media Path
+            items.append(self.SCRAPER_SECTION[6])  # ES-DE Gamelists Path
+        elif scraper_frontend == "retroarch":
+            items.append(self.SCRAPER_SECTION[7])  # RetroArch Thumbnails
 
         # Add NSZ section (last)
         nsz_enabled = settings.get("nsz_enabled", False)
@@ -183,6 +214,48 @@ class SettingsScreen:
             elif item == "Enable NSZ":
                 value = "ON" if settings.get("nsz_enabled", False) else "OFF"
                 items.append((item, value))
+            elif item == "Scraper Frontend":
+                frontend = settings.get("scraper_frontend", "emulationstation_base")
+                frontend_labels = {
+                    "emulationstation_base": "ES Base",
+                    "esde_android": "ES-DE Android",
+                    "retroarch": "RetroArch",
+                    "pegasus": "Pegasus",
+                }
+                items.append((item, frontend_labels.get(frontend, frontend)))
+            elif item == "Scraper Provider":
+                provider = settings.get("scraper_provider", "screenscraper")
+                provider_labels = {
+                    "screenscraper": "ScreenScraper",
+                    "thegamesdb": "TheGamesDB",
+                }
+                items.append((item, provider_labels.get(provider, provider)))
+            elif item == "ScreenScraper Login":
+                username = settings.get("screenscraper_username", "")
+                if username:
+                    if len(username) > 15:
+                        value = username[:12] + "..."
+                    else:
+                        value = username
+                else:
+                    value = "Not logged in"
+                items.append((item, value))
+            elif item == "TheGamesDB API Key":
+                api_key = settings.get("thegamesdb_api_key", "")
+                value = "Set" if api_key else "Not Set"
+                items.append((item, value))
+            elif item == "ES-DE Media Path":
+                path = settings.get("esde_media_path", "")
+                value = self._shorten_path(path) if path else "Not Set"
+                items.append((item, value))
+            elif item == "ES-DE Gamelists Path":
+                path = settings.get("esde_gamelists_path", "")
+                value = self._shorten_path(path) if path else "Not Set"
+                items.append((item, value))
+            elif item == "RetroArch Thumbnails":
+                path = settings.get("retroarch_thumbnails_path", "")
+                value = self._shorten_path(path) if path else "Not Set"
+                items.append((item, value))
             else:
                 items.append((item, ""))
 
@@ -252,6 +325,13 @@ class SettingsScreen:
                 "USA Games Only": "toggle_usa_only",
                 "Show Download All Button": "toggle_download_all",
                 "Enable NSZ": "toggle_nsz_enabled",
+                "Scraper Frontend": "toggle_scraper_frontend",
+                "Scraper Provider": "toggle_scraper_provider",
+                "ScreenScraper Login": "screenscraper_login",
+                "TheGamesDB API Key": "thegamesdb_api_key",
+                "ES-DE Media Path": "select_esde_media_path",
+                "ES-DE Gamelists Path": "select_esde_gamelists_path",
+                "RetroArch Thumbnails": "select_retroarch_thumbnails",
             }
             return actions.get(item, "unknown")
 

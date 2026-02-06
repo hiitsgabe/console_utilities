@@ -128,10 +128,18 @@ class MenuList:
 
         # Keep highlighted item in view with some context
         context = 2
-        min_scroll = max(0, highlighted - visible_count + context + 1)
-        max_scroll = max(0, min(highlighted - context, total_items - visible_count))
 
-        return max(min_scroll, min(max_scroll, min_scroll))
+        # Minimum scroll needed to show highlighted item at bottom with context
+        min_scroll = max(0, highlighted - visible_count + context + 1)
+
+        # Maximum scroll allowed (can't scroll past end of list)
+        max_scroll_limit = total_items - visible_count
+
+        # Also consider scrolling to show context above the highlighted item
+        ideal_scroll = max(0, highlighted - context)
+
+        # Clamp to valid range: show highlighted item but don't scroll past end
+        return max(0, min(max(min_scroll, ideal_scroll), max_scroll_limit))
 
     def _draw_scroll_indicators(
         self,

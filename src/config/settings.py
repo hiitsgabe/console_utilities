@@ -32,6 +32,18 @@ class Settings:
     ia_email: str = ""
     ia_access_key: str = ""  # S3 access key from IA
     ia_secret_key: str = ""  # S3 secret key (base64 encoded for minimal obfuscation)
+    # Scraper settings
+    scraper_frontend: str = (
+        "emulationstation_base"  # emulationstation_base, esde_android, retroarch, pegasus
+    )
+    scraper_provider: str = "screenscraper"  # screenscraper, thegamesdb
+    screenscraper_username: str = ""
+    screenscraper_password: str = ""  # base64 encoded
+    thegamesdb_api_key: str = ""
+    # Frontend-specific paths
+    esde_media_path: str = ""
+    esde_gamelists_path: str = ""
+    retroarch_thumbnails_path: str = ""
 
     def __post_init__(self):
         """Set default paths if not specified."""

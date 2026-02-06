@@ -399,16 +399,10 @@ class ConsoleUtilitiesApp:
                     log_error(
                         f"KEYDOWN: key={event.key}, unicode='{event.unicode}', joystick={'connected' if self.joystick else 'none'}"
                     )
-                    # Skip keyboard navigation keys if joystick is connected (prevents double input)
-                    if self.joystick is not None and event.key in (
-                        pygame.K_UP,
-                        pygame.K_DOWN,
-                        pygame.K_LEFT,
-                        pygame.K_RIGHT,
-                        pygame.K_RETURN,
-                        pygame.K_ESCAPE,
-                        pygame.K_SPACE,
-                    ):
+                    # Skip ALL keyboard events if joystick is connected
+                    # Some consoles/controllers generate keyboard events alongside joystick events
+                    # which causes double input. Joystick takes priority.
+                    if self.joystick is not None:
                         continue
                     self.state.input_mode = "keyboard"
                     self._handle_key_event(event)
@@ -556,6 +550,23 @@ class ConsoleUtilitiesApp:
                 self._navigate_ia_options_select(direction)
             return
 
+        if self.state.scraper_login.show:
+            step = self.state.scraper_login.step
+            if step in ("username", "password", "api_key"):
+                char_set = "url" if step == "api_key" else "default"
+                self._navigate_keyboard_modal(
+                    direction, self.state.scraper_login, char_set=char_set
+                )
+            return
+
+        if self.state.scraper_wizard.show:
+            self._navigate_scraper_wizard(direction)
+            return
+
+        if self.state.dedupe_wizard.show:
+            self._navigate_dedupe_wizard(direction)
+            return
+
         # Mode-based navigation
         if self.state.mode == "systems":
             visible = get_visible_systems(self.data, self.settings)
@@ -692,6 +703,36 @@ class ConsoleUtilitiesApp:
                         self.state.ia_login.email += event.unicode
                     elif step == "password":
                         self.state.ia_login.password += event.unicode
+                return
+
+        # Handle keyboard text input for scraper login modal
+        if self.state.scraper_login.show and self.state.input_mode == "keyboard":
+            step = self.state.scraper_login.step
+            if step in ("username", "password", "api_key"):
+                if event.key == pygame.K_ESCAPE:
+                    self._go_back()
+                elif event.key == pygame.K_RETURN:
+                    self._handle_scraper_login_selection()
+                elif event.key == pygame.K_BACKSPACE:
+                    if step == "username" and self.state.scraper_login.username:
+                        self.state.scraper_login.username = (
+                            self.state.scraper_login.username[:-1]
+                        )
+                    elif step == "password" and self.state.scraper_login.password:
+                        self.state.scraper_login.password = (
+                            self.state.scraper_login.password[:-1]
+                        )
+                    elif step == "api_key" and self.state.scraper_login.api_key:
+                        self.state.scraper_login.api_key = (
+                            self.state.scraper_login.api_key[:-1]
+                        )
+                elif event.unicode and event.unicode.isprintable():
+                    if step == "username":
+                        self.state.scraper_login.username += event.unicode
+                    elif step == "password":
+                        self.state.scraper_login.password += event.unicode
+                    elif step == "api_key":
+                        self.state.scraper_login.api_key += event.unicode
                 return
 
         # Handle keyboard text input for IA download wizard
@@ -958,6 +999,12 @@ class ConsoleUtilitiesApp:
                 self.state.ia_collection_wizard.cursor_position = 0
             else:
                 self._close_ia_collection_wizard()
+        elif self.state.scraper_login.show:
+            self._close_scraper_login()
+        elif self.state.scraper_wizard.show:
+            self._close_scraper_wizard()
+        elif self.state.dedupe_wizard.show:
+            self._close_dedupe_wizard()
         elif self.state.game_details.show:
             self.state.game_details.show = False
             self.state.game_details.current_game = None
@@ -1032,6 +1079,18 @@ class ConsoleUtilitiesApp:
 
         if self.state.ia_collection_wizard.show:
             self._handle_ia_collection_wizard_selection()
+            return
+
+        if self.state.scraper_login.show:
+            self._handle_scraper_login_selection()
+            return
+
+        if self.state.scraper_wizard.show:
+            self._handle_scraper_wizard_selection()
+            return
+
+        if self.state.dedupe_wizard.show:
+            self._handle_dedupe_wizard_selection()
             return
 
         # Mode-based selection
@@ -1229,6 +1288,33 @@ class ConsoleUtilitiesApp:
         elif action == "toggle_nsz_enabled":
             self.settings["nsz_enabled"] = not self.settings.get("nsz_enabled", False)
             save_settings(self.settings)
+        elif action == "toggle_scraper_frontend":
+            frontends = [
+                "emulationstation_base",
+                "esde_android",
+                "retroarch",
+                "pegasus",
+            ]
+            current = self.settings.get("scraper_frontend", "emulationstation_base")
+            idx = frontends.index(current) if current in frontends else 0
+            self.settings["scraper_frontend"] = frontends[(idx + 1) % len(frontends)]
+            save_settings(self.settings)
+        elif action == "toggle_scraper_provider":
+            providers = ["screenscraper", "thegamesdb"]
+            current = self.settings.get("scraper_provider", "screenscraper")
+            idx = providers.index(current) if current in providers else 0
+            self.settings["scraper_provider"] = providers[(idx + 1) % len(providers)]
+            save_settings(self.settings)
+        elif action == "screenscraper_login":
+            self._show_screenscraper_login()
+        elif action == "thegamesdb_api_key":
+            self._show_thegamesdb_api_key_input()
+        elif action == "select_esde_media_path":
+            self._open_folder_browser("esde_media_path")
+        elif action == "select_esde_gamelists_path":
+            self._open_folder_browser("esde_gamelists_path")
+        elif action == "select_retroarch_thumbnails":
+            self._open_folder_browser("retroarch_thumbnails")
 
     def _handle_utils_selection(self):
         """Handle utils item selection."""
@@ -1250,6 +1336,22 @@ class ConsoleUtilitiesApp:
             self._open_folder_browser("extract_zip")
         elif action == "nsz_converter":
             self._open_folder_browser("nsz_converter")
+        elif action == "scrape_images":
+            self._show_scraper_wizard(batch_mode=False)
+        elif action == "batch_scrape":
+            self._show_scraper_wizard(batch_mode=True)
+        elif action == "dedupe_games":
+            self._show_dedupe_wizard()
+
+    def _show_dedupe_wizard(self):
+        """Show the dedupe games wizard."""
+        from state import DedupeWizardState
+
+        # Reset wizard state
+        self.state.dedupe_wizard = DedupeWizardState()
+        self.state.dedupe_wizard.show = True
+        self.state.dedupe_wizard.step = "mode_select"
+        self.state.dedupe_wizard.mode_highlighted = 0
 
     def _open_folder_browser(self, selection_type: str):
         """Open the folder browser modal."""
@@ -1270,6 +1372,19 @@ class ConsoleUtilitiesApp:
         elif selection_type == "nsz_keys":
             current = self.settings.get("nsz_keys_path", "")
             path = os.path.dirname(current) if current else os.path.expanduser("~")
+        elif selection_type == "esde_media_path":
+            current = self.settings.get("esde_media_path", "")
+            path = current if current else os.path.expanduser("~")
+        elif selection_type == "esde_gamelists_path":
+            current = self.settings.get("esde_gamelists_path", "")
+            path = current if current else os.path.expanduser("~")
+        elif selection_type == "retroarch_thumbnails":
+            current = self.settings.get("retroarch_thumbnails_path", "")
+            path = current if current else os.path.expanduser("~")
+        elif selection_type == "scraper_rom_select":
+            path = self.settings.get("roms_dir", os.path.expanduser("~"))
+        elif selection_type == "dedupe_folder":
+            path = self.settings.get("roms_dir", os.path.expanduser("~"))
         else:
             path = os.path.expanduser("~")
 
@@ -1367,6 +1482,15 @@ class ConsoleUtilitiesApp:
             self._extract_zip_file(path)
             # Don't close modal yet, extraction will handle it
             return
+        elif selection_type == "esde_media_path":
+            self.settings["esde_media_path"] = path
+            save_settings(self.settings)
+        elif selection_type == "esde_gamelists_path":
+            self.settings["esde_gamelists_path"] = path
+            save_settings(self.settings)
+        elif selection_type == "retroarch_thumbnails":
+            self.settings["retroarch_thumbnails_path"] = path
+            save_settings(self.settings)
 
         # Close the modal
         self.state.folder_browser.show = False
@@ -1379,13 +1503,25 @@ class ConsoleUtilitiesApp:
         current_path = self.state.folder_browser.current_path
 
         # For folder selection types, select the current directory
-        if selection_type in ("work_dir", "roms_dir", "custom_folder"):
+        if selection_type in (
+            "work_dir",
+            "roms_dir",
+            "custom_folder",
+            "esde_media_path",
+            "esde_gamelists_path",
+            "retroarch_thumbnails",
+        ):
             self._complete_folder_browser_selection(current_path, selection_type)
         elif selection_type == "ia_collection_folder":
             # Set the folder path for IA collection and continue wizard
             self.state.ia_collection_wizard.folder_name = current_path
             self.state.folder_browser.show = False
             self.state.ia_collection_wizard.step = "formats"
+        elif selection_type == "dedupe_folder":
+            # Set the folder path for dedupe and start scanning
+            self.state.dedupe_wizard.folder_path = current_path
+            self.state.folder_browser.show = False
+            self._start_dedupe_scan()
         else:
             # For file selection, user needs to select a file
             pass
@@ -1716,6 +1852,26 @@ class ConsoleUtilitiesApp:
                 self.state.ia_collection_wizard.step = "confirm"
                 return
 
+        # Handle scraper wizard - start button triggers download on image_select step
+        if self.state.scraper_wizard.show:
+            step = self.state.scraper_wizard.step
+            if step == "image_select":
+                self._start_scraper_download()
+                return
+            elif step == "folder_select":
+                # Select current folder for batch mode
+                self._select_batch_folder()
+                return
+            elif step == "rom_list":
+                # Continue to batch options
+                self.state.scraper_wizard.step = "batch_options"
+                self.state.scraper_wizard.image_highlighted = 0
+                return
+            elif step == "batch_options":
+                # Start batch processing
+                self._start_batch_scrape()
+                return
+
         # Close any open modals
         self.state.show_search_input = False
         self.state.url_input.show = False
@@ -1726,6 +1882,9 @@ class ConsoleUtilitiesApp:
         self.state.ia_login.show = False
         self.state.ia_download_wizard.show = False
         self.state.ia_collection_wizard.show = False
+        self.state.scraper_login.show = False
+        self.state.scraper_wizard.show = False
+        self.state.dedupe_wizard.show = False
 
         # Go to systems (home) screen
         self.state.mode = "systems"
@@ -2330,6 +2489,895 @@ class ConsoleUtilitiesApp:
         else:
             wizard.step = "error"
             wizard.error_message = "Failed to save collection"
+
+    # ---- Scraper Wizard Handlers ---- #
+
+    def _show_scraper_wizard(self, batch_mode: bool = False):
+        """Show the game image scraper wizard modal."""
+        wizard = self.state.scraper_wizard
+        wizard.show = True
+        wizard.batch_mode = batch_mode
+        wizard.step = "folder_select" if batch_mode else "rom_select"
+        wizard.folder_current_path = self.settings.get(
+            "roms_dir", os.path.expanduser("~")
+        )
+        wizard.folder_items = load_folder_contents(wizard.folder_current_path)
+        wizard.folder_highlighted = 0
+        wizard.selected_rom_path = ""
+        wizard.selected_rom_name = ""
+        wizard.search_results = []
+        wizard.selected_game_index = 0
+        wizard.available_images = []
+        wizard.selected_images = set()
+        wizard.image_highlighted = 0
+        wizard.download_progress = 0.0
+        wizard.current_download = ""
+        wizard.error_message = ""
+        wizard.batch_roms = []
+        wizard.batch_current_index = 0
+        wizard.batch_auto_select = True
+        wizard.batch_default_images = ["box-2D", "boxart"]
+
+    def _close_scraper_wizard(self):
+        """Close the scraper wizard modal."""
+        wizard = self.state.scraper_wizard
+        wizard.show = False
+        wizard.step = "rom_select"
+        wizard.folder_items = []
+        wizard.search_results = []
+        wizard.available_images = []
+        wizard.selected_images = set()
+        wizard.batch_roms = []
+
+    def _navigate_scraper_wizard(self, direction: str):
+        """Handle navigation in scraper wizard."""
+        wizard = self.state.scraper_wizard
+        step = wizard.step
+
+        if step in ("rom_select", "folder_select"):
+            max_items = len(wizard.folder_items) or 1
+            if direction in ("up", "left"):
+                wizard.folder_highlighted = max(0, wizard.folder_highlighted - 1)
+            elif direction in ("down", "right"):
+                wizard.folder_highlighted = min(
+                    max_items - 1, wizard.folder_highlighted + 1
+                )
+
+        elif step == "game_select":
+            max_items = len(wizard.search_results) or 1
+            if direction in ("up", "left"):
+                wizard.selected_game_index = max(0, wizard.selected_game_index - 1)
+            elif direction in ("down", "right"):
+                wizard.selected_game_index = min(
+                    max_items - 1, wizard.selected_game_index + 1
+                )
+
+        elif step == "image_select":
+            max_items = len(wizard.available_images) or 1
+            if direction in ("up", "left"):
+                wizard.image_highlighted = max(0, wizard.image_highlighted - 1)
+            elif direction in ("down", "right"):
+                wizard.image_highlighted = min(
+                    max_items - 1, wizard.image_highlighted + 1
+                )
+
+        elif step == "rom_list":
+            max_items = len(wizard.batch_roms) or 1
+            if direction in ("up", "left"):
+                wizard.batch_current_index = max(0, wizard.batch_current_index - 1)
+            elif direction in ("down", "right"):
+                wizard.batch_current_index = min(
+                    max_items - 1, wizard.batch_current_index + 1
+                )
+
+        elif step == "batch_options":
+            # Auto-select + 5 image types = 6 items
+            max_items = 6
+            if direction in ("up", "left"):
+                wizard.image_highlighted = max(0, wizard.image_highlighted - 1)
+            elif direction in ("down", "right"):
+                wizard.image_highlighted = min(
+                    max_items - 1, wizard.image_highlighted + 1
+                )
+
+    def _handle_scraper_wizard_selection(self):
+        """Handle selection in scraper wizard."""
+        wizard = self.state.scraper_wizard
+        step = wizard.step
+
+        if step == "rom_select":
+            self._handle_scraper_rom_selection()
+
+        elif step == "folder_select":
+            self._handle_scraper_folder_selection()
+
+        elif step == "game_select":
+            if wizard.search_results:
+                self._fetch_scraper_images()
+
+        elif step == "image_select":
+            # Toggle image selection
+            if wizard.image_highlighted in wizard.selected_images:
+                wizard.selected_images.discard(wizard.image_highlighted)
+            else:
+                wizard.selected_images.add(wizard.image_highlighted)
+
+        elif step == "rom_list":
+            # Toggle ROM skip status
+            if wizard.batch_current_index < len(wizard.batch_roms):
+                rom = wizard.batch_roms[wizard.batch_current_index]
+                if rom.get("status") == "skipped":
+                    rom["status"] = "pending"
+                else:
+                    rom["status"] = "skipped"
+
+        elif step == "batch_options":
+            self._handle_batch_options_selection()
+
+        elif step in ("complete", "batch_complete"):
+            self._close_scraper_wizard()
+
+        elif step == "error":
+            # Go back to rom_select to retry
+            wizard.step = "folder_select" if wizard.batch_mode else "rom_select"
+            wizard.error_message = ""
+
+    def _handle_scraper_rom_selection(self):
+        """Handle ROM file selection in scraper wizard."""
+        wizard = self.state.scraper_wizard
+        items = wizard.folder_items
+        highlighted = wizard.folder_highlighted
+
+        if highlighted >= len(items):
+            return
+
+        item = items[highlighted]
+        item_type = item.get("type", "")
+        item_path = item.get("path", "")
+
+        if item_type == "parent":
+            wizard.folder_current_path = item_path
+            wizard.folder_items = load_folder_contents(item_path)
+            wizard.folder_highlighted = 0
+
+        elif item_type == "folder":
+            wizard.folder_current_path = item_path
+            wizard.folder_items = load_folder_contents(item_path)
+            wizard.folder_highlighted = 0
+
+        elif item_type == "file":
+            # ROM file selected, start searching
+            wizard.selected_rom_path = item_path
+            wizard.selected_rom_name = item.get("name", os.path.basename(item_path))
+            self._search_scraper_game()
+
+    def _handle_scraper_folder_selection(self):
+        """Handle folder selection in batch mode."""
+        wizard = self.state.scraper_wizard
+        items = wizard.folder_items
+        highlighted = wizard.folder_highlighted
+
+        if highlighted >= len(items):
+            return
+
+        item = items[highlighted]
+        item_type = item.get("type", "")
+        item_path = item.get("path", "")
+
+        if item_type == "parent":
+            wizard.folder_current_path = item_path
+            wizard.folder_items = load_folder_contents(item_path)
+            wizard.folder_highlighted = 0
+
+        elif item_type == "folder":
+            wizard.folder_current_path = item_path
+            wizard.folder_items = load_folder_contents(item_path)
+            wizard.folder_highlighted = 0
+
+    def _select_batch_folder(self):
+        """Select current folder for batch scraping."""
+        wizard = self.state.scraper_wizard
+
+        # Scan folder for ROM files
+        rom_extensions = {
+            ".nes",
+            ".sfc",
+            ".smc",
+            ".gba",
+            ".gbc",
+            ".gb",
+            ".n64",
+            ".z64",
+            ".nds",
+            ".3ds",
+            ".iso",
+            ".bin",
+            ".cue",
+            ".chd",
+            ".pbp",
+            ".zip",
+            ".7z",
+            ".rar",
+            ".nsz",
+            ".nsp",
+            ".xci",
+        }
+
+        roms = []
+        try:
+            for item in os.listdir(wizard.folder_current_path):
+                item_path = os.path.join(wizard.folder_current_path, item)
+                if os.path.isfile(item_path):
+                    ext = os.path.splitext(item)[1].lower()
+                    if ext in rom_extensions:
+                        roms.append(
+                            {
+                                "name": item,
+                                "path": item_path,
+                                "status": "pending",
+                            }
+                        )
+        except Exception:
+            pass
+
+        if not roms:
+            wizard.error_message = "No ROM files found in folder"
+            wizard.step = "error"
+            return
+
+        wizard.batch_roms = roms
+        wizard.batch_current_index = 0
+        wizard.step = "rom_list"
+
+    def _handle_batch_options_selection(self):
+        """Handle selection in batch options step."""
+        wizard = self.state.scraper_wizard
+        highlighted = wizard.image_highlighted
+
+        if highlighted == 0:
+            # Toggle auto-select
+            wizard.batch_auto_select = not wizard.batch_auto_select
+        else:
+            # Toggle image type
+            all_types = ["box-2D", "boxart", "screenshot", "wheel", "fanart"]
+            img_type = all_types[highlighted - 1]
+            if img_type in wizard.batch_default_images:
+                wizard.batch_default_images.remove(img_type)
+            else:
+                wizard.batch_default_images.append(img_type)
+
+    def _search_scraper_game(self):
+        """Search for game info using scraper provider."""
+        wizard = self.state.scraper_wizard
+        wizard.step = "searching"
+
+        from services.scraper_service import get_scraper_service
+
+        service = get_scraper_service(self.settings)
+
+        # Extract clean game name from ROM filename
+        game_name = service.extract_game_name(wizard.selected_rom_path)
+        wizard.selected_rom_name = game_name
+
+        def search():
+            success, results, error = service.search_game(game_name)
+
+            if not success:
+                wizard.step = "error"
+                wizard.error_message = error or "Search failed"
+                return
+
+            if not results:
+                wizard.step = "error"
+                wizard.error_message = f"No results for: {game_name}"
+                return
+
+            # Convert results to dict format for display
+            wizard.search_results = [
+                {
+                    "id": r.id,
+                    "name": r.name,
+                    "platform": r.platform,
+                    "release_date": r.release_date,
+                    "description": r.description,
+                }
+                for r in results
+            ]
+            wizard.selected_game_index = 0
+            wizard.step = "game_select"
+
+        from threading import Thread
+
+        thread = Thread(target=search, daemon=True)
+        thread.start()
+
+    def _fetch_scraper_images(self):
+        """Fetch available images for selected game."""
+        wizard = self.state.scraper_wizard
+        wizard.step = "searching"
+
+        if not wizard.search_results or wizard.selected_game_index >= len(
+            wizard.search_results
+        ):
+            return
+
+        game = wizard.search_results[wizard.selected_game_index]
+        game_id = game.get("id", "")
+
+        from services.scraper_service import get_scraper_service
+
+        service = get_scraper_service(self.settings)
+
+        def fetch():
+            success, images, error = service.get_game_images(game_id)
+
+            if not success:
+                wizard.step = "error"
+                wizard.error_message = error or "Failed to fetch images"
+                return
+
+            if not images:
+                wizard.step = "error"
+                wizard.error_message = "No images available"
+                return
+
+            # Convert images to dict format for display
+            wizard.available_images = [
+                {
+                    "type": img.type,
+                    "url": img.url,
+                    "region": img.region,
+                    "label": service.provider.get_image_type_label(img.type),
+                }
+                for img in images
+            ]
+            # Pre-select all images
+            wizard.selected_images = set(range(len(wizard.available_images)))
+            wizard.image_highlighted = 0
+            wizard.step = "image_select"
+
+        from threading import Thread
+
+        thread = Thread(target=fetch, daemon=True)
+        thread.start()
+
+    def _start_scraper_download(self):
+        """Start downloading selected images."""
+        wizard = self.state.scraper_wizard
+
+        if not wizard.selected_images or not wizard.available_images:
+            return
+
+        wizard.step = "downloading"
+        wizard.download_progress = 0.0
+
+        # Get selected images
+        selected = [
+            wizard.available_images[i]
+            for i in sorted(wizard.selected_images)
+            if i < len(wizard.available_images)
+        ]
+
+        # Get game info for metadata
+        game_info = {}
+        if wizard.search_results and wizard.selected_game_index < len(
+            wizard.search_results
+        ):
+            game_info = wizard.search_results[wizard.selected_game_index]
+
+        from services.scraper_service import get_scraper_service
+        from services.scraper_providers.base_provider import GameImage
+        from services.metadata_writer import get_metadata_writer
+
+        service = get_scraper_service(self.settings)
+
+        def download():
+            # Convert dict images back to GameImage objects
+            images = [
+                GameImage(
+                    type=img["type"],
+                    url=img["url"],
+                    region=img.get("region", ""),
+                )
+                for img in selected
+            ]
+
+            def progress_callback(current, total, current_name):
+                wizard.download_progress = current / total if total > 0 else 0
+                wizard.current_download = current_name
+
+            success, paths, error = service.download_images(
+                images, wizard.selected_rom_path, progress_callback
+            )
+
+            if not success:
+                wizard.step = "error"
+                wizard.error_message = error or "Download failed"
+                return
+
+            # Update metadata
+            wizard.step = "updating_metadata"
+            writer = get_metadata_writer(self.settings)
+            writer.update_metadata(wizard.selected_rom_path, game_info, paths)
+
+            wizard.step = "complete"
+
+        from threading import Thread
+
+        thread = Thread(target=download, daemon=True)
+        thread.start()
+
+    def _start_batch_scrape(self):
+        """Start batch scraping process."""
+        wizard = self.state.scraper_wizard
+        wizard.step = "batch_processing"
+        wizard.batch_current_index = 0
+
+        from services.scraper_service import get_scraper_service
+        from services.metadata_writer import get_metadata_writer
+
+        service = get_scraper_service(self.settings)
+
+        def process_batch():
+            for i, rom in enumerate(wizard.batch_roms):
+                if rom.get("status") == "skipped":
+                    continue
+
+                wizard.batch_current_index = i
+                rom["status"] = "searching"
+                wizard.current_download = f"Searching: {rom['name']}"
+
+                # Extract game name and search
+                game_name = service.extract_game_name(rom["path"])
+                success, results, error = service.search_game(game_name)
+
+                if not success or not results:
+                    rom["status"] = "error"
+                    rom["error"] = error or "No results"
+                    continue
+
+                # Auto-select first result
+                game = results[0]
+                game_info = {
+                    "id": game.id,
+                    "name": game.name,
+                    "platform": game.platform,
+                    "release_date": game.release_date,
+                    "description": game.description,
+                }
+
+                # Get images
+                wizard.current_download = f"Fetching images: {rom['name']}"
+                success, images, error = service.get_game_images(game.id)
+
+                if not success or not images:
+                    rom["status"] = "error"
+                    rom["error"] = error or "No images"
+                    continue
+
+                # Filter to default image types
+                filtered_images = [
+                    img for img in images if img.type in wizard.batch_default_images
+                ]
+
+                if not filtered_images:
+                    # Fallback to all images if no matches
+                    filtered_images = images[:2]
+
+                # Download images
+                wizard.current_download = f"Downloading: {rom['name']}"
+
+                def progress_callback(current, total, current_name):
+                    pass  # Could update per-ROM progress
+
+                success, paths, error = service.download_images(
+                    filtered_images, rom["path"], progress_callback
+                )
+
+                if not success:
+                    rom["status"] = "error"
+                    rom["error"] = error or "Download failed"
+                    continue
+
+                # Update metadata
+                writer = get_metadata_writer(self.settings)
+                writer.update_metadata(rom["path"], game_info, paths)
+
+                rom["status"] = "done"
+
+            wizard.step = "batch_complete"
+
+        from threading import Thread
+
+        thread = Thread(target=process_batch, daemon=True)
+        thread.start()
+
+    def _show_screenscraper_login(self):
+        """Show ScreenScraper login modal."""
+        self.state.scraper_login.show = True
+        self.state.scraper_login.provider = "screenscraper"
+        self.state.scraper_login.step = "username"
+        self.state.scraper_login.username = self.settings.get(
+            "screenscraper_username", ""
+        )
+        self.state.scraper_login.password = ""
+        self.state.scraper_login.cursor_position = 0
+        self.state.scraper_login.error_message = ""
+
+    def _show_thegamesdb_api_key_input(self):
+        """Show TheGamesDB API key input modal."""
+        self.state.scraper_login.show = True
+        self.state.scraper_login.provider = "thegamesdb"
+        self.state.scraper_login.step = "api_key"
+        self.state.scraper_login.api_key = self.settings.get("thegamesdb_api_key", "")
+        self.state.scraper_login.cursor_position = 0
+        self.state.scraper_login.error_message = ""
+
+    def _close_scraper_login(self):
+        """Close the scraper login modal."""
+        self.state.scraper_login.show = False
+        self.state.scraper_login.step = "username"
+        self.state.scraper_login.username = ""
+        self.state.scraper_login.password = ""
+        self.state.scraper_login.api_key = ""
+        self.state.scraper_login.cursor_position = 0
+        self.state.scraper_login.error_message = ""
+
+    def _handle_scraper_login_selection(self):
+        """Handle selection in scraper login modal."""
+        login = self.state.scraper_login
+        step = login.step
+        provider = login.provider
+
+        if provider == "screenscraper":
+            if step == "username":
+                if self.state.input_mode == "keyboard":
+                    # Keyboard mode - Enter pressed, move to password
+                    if login.username:
+                        login.step = "password"
+                        login.cursor_position = 0
+                else:
+                    # Gamepad/touch mode - handle on-screen keyboard
+                    from ui.screens.modals.scraper_login_modal import ScraperLoginModal
+
+                    modal = ScraperLoginModal()
+                    new_text, is_done = modal.handle_selection(
+                        provider, step, login.cursor_position, login.username
+                    )
+                    login.username = new_text
+                    if is_done and new_text:
+                        login.step = "password"
+                        login.cursor_position = 0
+
+            elif step == "password":
+                if self.state.input_mode == "keyboard":
+                    # Keyboard mode - Enter pressed, test credentials
+                    if login.password:
+                        self._test_screenscraper_credentials()
+                else:
+                    from ui.screens.modals.scraper_login_modal import ScraperLoginModal
+
+                    modal = ScraperLoginModal()
+                    new_text, is_done = modal.handle_selection(
+                        provider, step, login.cursor_position, login.password
+                    )
+                    login.password = new_text
+                    if is_done and new_text:
+                        self._test_screenscraper_credentials()
+
+            elif step == "complete":
+                self._close_scraper_login()
+
+            elif step == "error":
+                # Go back to username step to retry
+                login.step = "username"
+                login.password = ""
+                login.cursor_position = 0
+                login.error_message = ""
+
+        elif provider == "thegamesdb":
+            if step == "api_key":
+                if self.state.input_mode == "keyboard":
+                    if login.api_key:
+                        self._test_thegamesdb_credentials()
+                else:
+                    from ui.screens.modals.scraper_login_modal import ScraperLoginModal
+
+                    modal = ScraperLoginModal()
+                    new_text, is_done = modal.handle_selection(
+                        provider, step, login.cursor_position, login.api_key
+                    )
+                    login.api_key = new_text
+                    if is_done and new_text:
+                        self._test_thegamesdb_credentials()
+
+            elif step == "complete":
+                self._close_scraper_login()
+
+            elif step == "error":
+                login.step = "api_key"
+                login.cursor_position = 0
+                login.error_message = ""
+
+    def _test_screenscraper_credentials(self):
+        """Test ScreenScraper credentials in background thread."""
+        import base64
+
+        login = self.state.scraper_login
+        login.step = "testing"
+
+        username = login.username
+        password = login.password
+
+        def test_credentials():
+            from services.scraper_providers.screenscraper import ScreenScraperProvider
+
+            # Try to search for a known game to test credentials
+            provider = ScreenScraperProvider(
+                username=username,
+                password=base64.b64encode(password.encode()).decode(),
+            )
+
+            success, results, error = provider.search_game("Mario")
+
+            if success:
+                # Save credentials
+                self.settings["screenscraper_username"] = username
+                self.settings["screenscraper_password"] = base64.b64encode(
+                    password.encode()
+                ).decode()
+                save_settings(self.settings)
+                login.step = "complete"
+            else:
+                login.step = "error"
+                login.error_message = error or "Invalid credentials"
+
+        from threading import Thread
+
+        thread = Thread(target=test_credentials, daemon=True)
+        thread.start()
+
+    def _test_thegamesdb_credentials(self):
+        """Test TheGamesDB API key in background thread."""
+        login = self.state.scraper_login
+        login.step = "testing"
+
+        api_key = login.api_key
+
+        def test_credentials():
+            from services.scraper_providers.thegamesdb import TheGamesDBProvider
+
+            provider = TheGamesDBProvider(api_key=api_key)
+
+            success, results, error = provider.search_game("Mario")
+
+            if success:
+                # Save API key
+                self.settings["thegamesdb_api_key"] = api_key
+                save_settings(self.settings)
+                login.step = "complete"
+            else:
+                login.step = "error"
+                login.error_message = error or "Invalid API key"
+
+        from threading import Thread
+
+        thread = Thread(target=test_credentials, daemon=True)
+        thread.start()
+
+    # ========== Dedupe Wizard Methods ========== #
+
+    def _close_dedupe_wizard(self):
+        """Close the dedupe wizard modal."""
+        from state import DedupeWizardState
+
+        self.state.dedupe_wizard = DedupeWizardState()
+
+    def _navigate_dedupe_wizard(self, direction: str):
+        """Handle navigation in dedupe wizard."""
+        wizard = self.state.dedupe_wizard
+        step = wizard.step
+
+        if step == "mode_select":
+            # Two modes: safe (0) and manual (1)
+            if direction in ("up", "left"):
+                wizard.mode_highlighted = max(0, wizard.mode_highlighted - 1)
+            elif direction in ("down", "right"):
+                wizard.mode_highlighted = min(1, wizard.mode_highlighted + 1)
+
+        elif step == "review":
+            if wizard.mode == "safe":
+                # In safe mode, left/right navigates between groups
+                max_groups = len(wizard.duplicate_groups) or 1
+                if direction == "left":
+                    wizard.current_group_index = max(0, wizard.current_group_index - 1)
+                elif direction == "right":
+                    wizard.current_group_index = min(
+                        max_groups - 1, wizard.current_group_index + 1
+                    )
+            else:
+                # In manual mode, up/down selects which file to keep
+                if wizard.duplicate_groups:
+                    current_group = wizard.duplicate_groups[wizard.current_group_index]
+                    max_items = len(current_group) or 1
+                    max_groups = len(wizard.duplicate_groups) or 1
+
+                    if direction in ("up",):
+                        wizard.selected_to_keep = max(0, wizard.selected_to_keep - 1)
+                    elif direction in ("down",):
+                        wizard.selected_to_keep = min(
+                            max_items - 1, wizard.selected_to_keep + 1
+                        )
+                    elif direction == "left":
+                        wizard.current_group_index = max(
+                            0, wizard.current_group_index - 1
+                        )
+                        wizard.selected_to_keep = 0
+                    elif direction == "right":
+                        wizard.current_group_index = min(
+                            max_groups - 1, wizard.current_group_index + 1
+                        )
+                        wizard.selected_to_keep = 0
+
+    def _handle_dedupe_wizard_selection(self):
+        """Handle selection in dedupe wizard."""
+        wizard = self.state.dedupe_wizard
+        step = wizard.step
+
+        if step == "mode_select":
+            # Set mode based on selection
+            wizard.mode = "safe" if wizard.mode_highlighted == 0 else "manual"
+            # Open folder browser to select folder to scan
+            self._open_folder_browser("dedupe_folder")
+
+        elif step == "review":
+            if wizard.mode == "safe":
+                # Process all duplicates automatically
+                self._process_dedupe_safe()
+            else:
+                # Confirm current selection and move to next group or process
+                self._confirm_dedupe_manual_selection()
+
+        elif step in ("complete", "no_duplicates", "error"):
+            self._close_dedupe_wizard()
+
+    def _start_dedupe_scan(self):
+        """Start scanning for duplicates (called when Start button pressed)."""
+        wizard = self.state.dedupe_wizard
+        wizard.step = "scanning"
+        wizard.scan_progress = 0.0
+        wizard.files_scanned = 0
+        wizard.total_files = 0
+
+        folder_path = wizard.folder_path
+        mode = wizard.mode
+
+        from threading import Thread
+        from services.dedupe_service import (
+            scan_folder_for_games,
+            find_duplicates_safe,
+            find_duplicates_manual,
+        )
+
+        def scan():
+            def progress_callback(current, total):
+                wizard.files_scanned = current
+                wizard.total_files = total
+                wizard.scan_progress = current / total if total > 0 else 0
+
+            try:
+                games = scan_folder_for_games(folder_path, progress_callback)
+
+                if mode == "safe":
+                    duplicates = find_duplicates_safe(games)
+                else:
+                    duplicates = find_duplicates_manual(games)
+
+                wizard.duplicate_groups = duplicates
+                wizard.current_group_index = 0
+                wizard.selected_to_keep = 0
+
+                if duplicates:
+                    wizard.step = "review"
+                else:
+                    wizard.step = "no_duplicates"
+
+            except Exception as e:
+                wizard.step = "error"
+                wizard.error_message = str(e)
+
+        thread = Thread(target=scan, daemon=True)
+        thread.start()
+
+    def _process_dedupe_safe(self):
+        """Process all duplicates in safe mode (keep largest, remove rest)."""
+        wizard = self.state.dedupe_wizard
+        wizard.step = "processing"
+        wizard.process_progress = 0.0
+
+        # Collect all files to delete (all except first in each group)
+        files_to_delete = []
+        for group in wizard.duplicate_groups:
+            # First file is largest (kept), rest are deleted
+            for file_info in group[1:]:
+                files_to_delete.append(file_info["path"])
+
+        from threading import Thread
+        from services.dedupe_service import delete_files
+
+        def process():
+            def progress_callback(current, total, bytes_freed):
+                wizard.process_progress = current / total if total > 0 else 0
+                wizard.space_freed = bytes_freed
+
+            files_deleted, bytes_freed = delete_files(
+                files_to_delete, progress_callback
+            )
+            wizard.files_removed = files_deleted
+            wizard.space_freed = bytes_freed
+            wizard.step = "complete"
+
+        thread = Thread(target=process, daemon=True)
+        thread.start()
+
+    def _confirm_dedupe_manual_selection(self):
+        """Confirm manual selection and move to next group or process."""
+        wizard = self.state.dedupe_wizard
+
+        if not wizard.duplicate_groups:
+            return
+
+        current_group = wizard.duplicate_groups[wizard.current_group_index]
+
+        # Record which file to keep and which to remove
+        keep_file = current_group[wizard.selected_to_keep]
+        remove_files = [
+            f for i, f in enumerate(current_group) if i != wizard.selected_to_keep
+        ]
+
+        wizard.confirmed_groups.append(
+            {
+                "keep": keep_file["path"],
+                "remove": [f["path"] for f in remove_files],
+            }
+        )
+
+        # Move to next group or start processing
+        if wizard.current_group_index < len(wizard.duplicate_groups) - 1:
+            wizard.current_group_index += 1
+            wizard.selected_to_keep = 0
+        else:
+            # All groups confirmed, start processing
+            self._process_dedupe_manual()
+
+    def _process_dedupe_manual(self):
+        """Process confirmed manual selections."""
+        wizard = self.state.dedupe_wizard
+        wizard.step = "processing"
+        wizard.process_progress = 0.0
+
+        # Collect all files to delete from confirmed groups
+        files_to_delete = []
+        for group in wizard.confirmed_groups:
+            files_to_delete.extend(group["remove"])
+
+        from threading import Thread
+        from services.dedupe_service import delete_files
+
+        def process():
+            def progress_callback(current, total, bytes_freed):
+                wizard.process_progress = current / total if total > 0 else 0
+                wizard.space_freed = bytes_freed
+
+            files_deleted, bytes_freed = delete_files(
+                files_to_delete, progress_callback
+            )
+            wizard.files_removed = files_deleted
+            wizard.space_freed = bytes_freed
+            wizard.step = "complete"
+
+        thread = Thread(target=process, daemon=True)
+        thread.start()
 
 
 def main():

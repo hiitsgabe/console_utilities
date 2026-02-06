@@ -233,6 +233,85 @@ class IACollectionWizardState:
 
 
 @dataclass
+class ScraperLoginState:
+    """State for scraper login modal (ScreenScraper/TheGamesDB)."""
+
+    show: bool = False
+    provider: str = "screenscraper"  # screenscraper or thegamesdb
+    step: str = "username"  # username, password, api_key, testing, complete, error
+    username: str = ""
+    password: str = ""
+    api_key: str = ""
+    cursor_position: int = 0
+    error_message: str = ""
+
+
+@dataclass
+class ScraperWizardState:
+    """State for game image scraper wizard modal."""
+
+    show: bool = False
+    step: str = (
+        "rom_select"  # rom_select, searching, game_select, image_select, downloading, updating_metadata, complete, error
+    )
+    # Single ROM mode
+    selected_rom_path: str = ""
+    selected_rom_name: str = ""
+    folder_items: List[Dict[str, Any]] = field(default_factory=list)
+    folder_highlighted: int = 0
+    folder_current_path: str = ""
+    search_results: List[Dict[str, Any]] = field(default_factory=list)
+    selected_game_index: int = 0
+    available_images: List[Dict[str, Any]] = field(default_factory=list)
+    selected_images: Set[int] = field(default_factory=set)
+    image_highlighted: int = 0
+    download_progress: float = 0.0
+    current_download: str = ""
+    error_message: str = ""
+    # Batch mode
+    batch_mode: bool = False
+    batch_roms: List[Dict[str, Any]] = field(default_factory=list)
+    batch_current_index: int = 0
+    batch_auto_select: bool = True
+    batch_default_images: List[str] = field(
+        default_factory=lambda: ["box-2D", "boxart"]
+    )
+
+
+@dataclass
+class DedupeWizardState:
+    """State for dedupe games wizard modal."""
+
+    show: bool = False
+    step: str = (
+        "mode_select"  # mode_select, folder_select, scanning, review, processing, complete, error
+    )
+    mode: str = "safe"  # "safe" (automatic) or "manual" (90% fuzzy match)
+    folder_path: str = ""
+    folder_items: List[Dict[str, Any]] = field(default_factory=list)
+    folder_highlighted: int = 0
+    # Duplicates: list of groups, each group is a list of files that are duplicates
+    duplicate_groups: List[List[Dict[str, Any]]] = field(default_factory=list)
+    # For review step
+    current_group_index: int = 0
+    selected_to_keep: int = 0  # Index within current group to keep
+    # For manual mode - confirmed decisions
+    confirmed_groups: List[Dict[str, Any]] = field(
+        default_factory=list
+    )  # {keep: path, remove: [paths]}
+    # Progress
+    scan_progress: float = 0.0
+    process_progress: float = 0.0
+    files_scanned: int = 0
+    total_files: int = 0
+    files_removed: int = 0
+    space_freed: int = 0  # bytes
+    error_message: str = ""
+    # Mode selection
+    mode_highlighted: int = 0  # 0 = Safe, 1 = Manual
+
+
+@dataclass
 class UIRects:
     """Stores rectangles for clickable UI elements."""
 
@@ -312,6 +391,13 @@ class AppState:
         self.ia_download_wizard = IADownloadWizardState()
         self.ia_collection_wizard = IACollectionWizardState()
 
+        # ---- Scraper ---- #
+        self.scraper_login = ScraperLoginState()
+        self.scraper_wizard = ScraperWizardState()
+
+        # ---- Dedupe ---- #
+        self.dedupe_wizard = DedupeWizardState()
+
         # ---- UI Rectangles ---- #
         self.ui_rects = UIRects()
 
@@ -355,6 +441,9 @@ class AppState:
         self.ia_login.show = False
         self.ia_download_wizard.show = False
         self.ia_collection_wizard.show = False
+        self.scraper_login.show = False
+        self.scraper_wizard.show = False
+        self.dedupe_wizard.show = False
 
     def get_current_game_list(self) -> List[Any]:
         """Get the current game list (filtered or full)."""
