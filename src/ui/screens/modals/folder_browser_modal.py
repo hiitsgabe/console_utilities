@@ -107,10 +107,10 @@ class FolderBrowserModal:
         )
 
         # Draw action buttons
-        button_y = content_rect.bottom - 45
-        button_width = 120
-        button_height = 40
-        button_spacing = self.theme.padding_md
+        button_y = content_rect.bottom - 50
+        button_width = 140
+        button_height = 44
+        button_spacing = self.theme.padding_lg
 
         # Select button
         select_label = self._get_select_label(selection_type)
@@ -164,6 +164,7 @@ class FolderBrowserModal:
             "keys_file": ".keys",
             "json_file": ".json",
             "nsz_file": ".nsz",
+            "zip_file": ".zip",
             "file": "File",
         }
         return type_labels.get(item_type, "")
@@ -180,6 +181,7 @@ class FolderBrowserModal:
             "archive_json": "Select JSON",
             "nsz_keys": "Select Keys",
             "system_folder": "Select",
+            "extract_zip": "Extract",
         }
         return labels.get(selection_type, "Select")
 

@@ -33,8 +33,83 @@ def get_roms_folder_for_system(
     if custom_folder and os.path.exists(custom_folder):
         return custom_folder
     else:
+        roms_folder = system_data.get("roms_folder", "")
+        # If roms_folder is an absolute path (e.g., from IA collection), use it directly
+        if roms_folder and os.path.isabs(roms_folder):
+            return roms_folder
         roms_dir = settings.get("roms_dir", "")
-        return os.path.join(roms_dir, system_data.get("roms_folder", ""))
+        return os.path.join(roms_dir, roms_folder)
+
+
+def _is_archive_org_url(url: str) -> bool:
+    """Check if URL is an archive.org download URL."""
+    return "archive.org/download/" in url
+
+
+def _extract_ia_item_id(url: str) -> Optional[str]:
+    """Extract item ID from archive.org URL."""
+    # URL format: https://archive.org/download/ITEM_ID/...
+    match = re.search(r"archive\.org/download/([^/]+)", url)
+    return match.group(1) if match else None
+
+
+def _list_files_archive_org(
+    system_data: Dict[str, Any], formats: List[str]
+) -> List[Dict[str, Any]]:
+    """
+    List files from Internet Archive using metadata API.
+
+    Args:
+        system_data: System configuration
+        formats: Allowed file formats
+
+    Returns:
+        List of file dictionaries
+    """
+    from services.internet_archive import list_ia_files, get_ia_download_url
+
+    url = system_data["url"]
+    item_id = _extract_ia_item_id(url)
+
+    if not item_id:
+        return []
+
+    # Get auth credentials if available (only pass if both are set)
+    access_key = None
+    secret_key = None
+    if "auth" in system_data:
+        auth_config = system_data["auth"]
+        if auth_config.get("type") == "ia_s3":
+            access_key = auth_config.get("access_key") or None
+            secret_key = auth_config.get("secret_key") or None
+
+    # Only pass credentials if both are set
+    success, files, error = list_ia_files(
+        item_id,
+        access_key if access_key and secret_key else None,
+        secret_key if access_key and secret_key else None,
+        formats if formats else None,
+    )
+
+    if not success:
+        log_error(f"IA file listing failed: {error}", "IAListError", "")
+        return []
+
+    # Convert to the format expected by the rest of the app
+    result = []
+    for f in files:
+        filename = f["name"]
+        # Build the download URL (properly URL-encoded)
+        href = get_ia_download_url(item_id, filename)
+        result.append(
+            {
+                "filename": filename,
+                "href": href,
+                "size": f.get("size", 0),
+            }
+        )
+
+    return result
 
 
 def list_files(
@@ -66,6 +141,10 @@ def list_files(
         # Check if this is the JSON API format
         if "list_url" in system_data:
             return _list_files_json_api(system_data, settings, formats)
+
+        # Check if this is an archive.org URL - use metadata API
+        elif "url" in system_data and _is_archive_org_url(system_data["url"]):
+            return _list_files_archive_org(system_data, formats)
 
         # Check if this is HTML directory format
         elif "url" in system_data:
@@ -100,7 +179,13 @@ def _get_request_headers_cookies(system_data: Dict[str, Any]) -> tuple:
     # Check if authentication is configured for this system
     if "auth" in system_data:
         auth_config = system_data["auth"]
-        if auth_config.get("cookies", False) and "token" in auth_config:
+        if auth_config.get("type") == "ia_s3":
+            # Internet Archive S3 authentication (only if both keys are set)
+            access_key = auth_config.get("access_key") or None
+            secret_key = auth_config.get("secret_key") or None
+            if access_key and secret_key:
+                headers["authorization"] = f"LOW {access_key}:{secret_key}"
+        elif auth_config.get("cookies", False) and "token" in auth_config:
             # Use cookie-based authentication
             cookie_name = auth_config.get("cookie_name", "auth_token")
             cookies[cookie_name] = auth_config["token"]
@@ -337,6 +422,8 @@ def load_folder_contents(path: str) -> List[Dict[str, Any]]:
                     file_type = "json_file"
                 elif ext == ".nsz":
                     file_type = "nsz_file"
+                elif ext == ".zip":
+                    file_type = "zip_file"
                 else:
                     file_type = "file"
 

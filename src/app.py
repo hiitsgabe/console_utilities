@@ -36,6 +36,15 @@ from services.data_loader import (
     update_json_file_path,
     get_visible_systems,
     get_system_index_by_name,
+    add_system_to_added_systems,
+)
+from services.internet_archive import (
+    get_ia_s3_credentials,
+    validate_ia_url,
+    list_ia_files,
+    get_ia_download_url,
+    get_available_formats,
+    encode_password,
 )
 from services.file_listing import (
     list_files,
@@ -312,6 +321,39 @@ class ConsoleUtilitiesApp:
         self.state.loading.message = ""
         self.state.loading.progress = 0
 
+    def _extract_zip_file(self, zip_path: str):
+        """Extract a ZIP file to the same folder."""
+        import threading
+        from zipfile import ZipFile
+
+        output_folder = os.path.dirname(zip_path)
+        zip_name = os.path.basename(zip_path)
+
+        self.state.folder_browser.show = False
+        self._show_loading(f"Extracting {zip_name}...")
+
+        def extract():
+            try:
+                with ZipFile(zip_path, "r") as zip_ref:
+                    total_files = len(zip_ref.namelist())
+                    for i, file_info in enumerate(zip_ref.infolist()):
+                        zip_ref.extract(file_info, output_folder)
+                        progress = int((i + 1) / total_files * 100)
+                        self.state.loading.progress = progress
+                        self.state.loading.message = (
+                            f"Extracting {zip_name}... {progress}%"
+                        )
+
+                self._hide_loading()
+            except Exception as e:
+                from utils.logging import log_error
+
+                log_error(f"Failed to extract ZIP: {e}")
+                self._hide_loading()
+
+        thread = threading.Thread(target=extract, daemon=True)
+        thread.start()
+
     def _render_frame(self):
         """Render a single frame (used during loading)."""
         self._draw_background()
@@ -470,6 +512,50 @@ class ConsoleUtilitiesApp:
                 )
             return
 
+        # Internet Archive modals navigation
+        if self.state.ia_login.show:
+            step = self.state.ia_login.step
+            if step in ("email", "password"):
+                char_set = "url" if step == "email" else "default"
+                self._navigate_keyboard_modal(
+                    direction, self.state.ia_login, char_set=char_set
+                )
+            return
+
+        if self.state.ia_download_wizard.show:
+            step = self.state.ia_download_wizard.step
+            if step == "url":
+                self._navigate_keyboard_modal(
+                    direction, self.state.ia_download_wizard, char_set="url"
+                )
+            elif step == "file_select":
+                self._navigate_ia_file_select(direction)
+            elif step == "folder":
+                self._navigate_ia_folder_select(direction)
+            return
+
+        if self.state.ia_collection_wizard.show:
+            step = self.state.ia_collection_wizard.step
+            if step == "url":
+                self._navigate_keyboard_modal(
+                    direction, self.state.ia_collection_wizard, char_set="url"
+                )
+            elif step == "name":
+                self._navigate_keyboard_modal(
+                    direction, self.state.ia_collection_wizard, char_set="default"
+                )
+            # Note: "folder" step uses folder browser modal, navigation handled there
+            elif step == "formats":
+                if self.state.ia_collection_wizard.adding_custom_format:
+                    self._navigate_keyboard_modal(
+                        direction, self.state.ia_collection_wizard, char_set="default"
+                    )
+                else:
+                    self._navigate_ia_format_select(direction)
+            elif step == "options":
+                self._navigate_ia_options_select(direction)
+            return
+
         # Mode-based navigation
         if self.state.mode == "systems":
             visible = get_visible_systems(self.data, self.settings)
@@ -512,9 +598,13 @@ class ConsoleUtilitiesApp:
 
         elif self.state.mode in ("settings", "utils"):
             if self.state.mode == "settings":
-                max_items = 11  # Number of settings items
+                from ui.screens.settings_screen import settings_screen
+
+                max_items = settings_screen.get_max_items(self.settings)
             else:
-                max_items = 2
+                from ui.screens.utils_screen import utils_screen
+
+                max_items = utils_screen.get_max_items(self.settings)
 
             if direction in ("up", "left"):
                 self.state.highlighted = (self.state.highlighted - 1) % max_items
@@ -583,6 +673,85 @@ class ConsoleUtilitiesApp:
                 self.state.search.input_text += event.unicode
                 self.state.search.query = self.state.search.input_text
             return
+
+        # Handle keyboard text input for IA login modal
+        if self.state.ia_login.show and self.state.input_mode == "keyboard":
+            step = self.state.ia_login.step
+            if step in ("email", "password"):
+                if event.key == pygame.K_ESCAPE:
+                    self._go_back()
+                elif event.key == pygame.K_RETURN:
+                    self._handle_ia_login_selection()
+                elif event.key == pygame.K_BACKSPACE:
+                    if step == "email" and self.state.ia_login.email:
+                        self.state.ia_login.email = self.state.ia_login.email[:-1]
+                    elif step == "password" and self.state.ia_login.password:
+                        self.state.ia_login.password = self.state.ia_login.password[:-1]
+                elif event.unicode and event.unicode.isprintable():
+                    if step == "email":
+                        self.state.ia_login.email += event.unicode
+                    elif step == "password":
+                        self.state.ia_login.password += event.unicode
+                return
+
+        # Handle keyboard text input for IA download wizard
+        if self.state.ia_download_wizard.show and self.state.input_mode == "keyboard":
+            step = self.state.ia_download_wizard.step
+            if step == "url":
+                if event.key == pygame.K_ESCAPE:
+                    self._go_back()
+                elif event.key == pygame.K_RETURN:
+                    self._handle_ia_download_wizard_selection()
+                elif event.key == pygame.K_BACKSPACE:
+                    if self.state.ia_download_wizard.url:
+                        self.state.ia_download_wizard.url = (
+                            self.state.ia_download_wizard.url[:-1]
+                        )
+                elif event.unicode and event.unicode.isprintable():
+                    self.state.ia_download_wizard.url += event.unicode
+                return
+
+        # Handle keyboard text input for IA collection wizard
+        # Skip if folder browser is open (it handles its own input)
+        if (
+            self.state.ia_collection_wizard.show
+            and self.state.input_mode == "keyboard"
+            and not self.state.folder_browser.show
+        ):
+            step = self.state.ia_collection_wizard.step
+            wizard = self.state.ia_collection_wizard
+
+            # Handle custom format input mode
+            if step == "formats" and wizard.adding_custom_format:
+                if event.key == pygame.K_ESCAPE:
+                    wizard.adding_custom_format = False
+                    wizard.custom_format_input = ""
+                elif event.key == pygame.K_RETURN:
+                    self._handle_ia_collection_wizard_selection()
+                elif event.key == pygame.K_BACKSPACE:
+                    if wizard.custom_format_input:
+                        wizard.custom_format_input = wizard.custom_format_input[:-1]
+                elif event.unicode and event.unicode.isprintable():
+                    wizard.custom_format_input += event.unicode
+                return
+
+            # Handle URL and name text input steps
+            if step in ("url", "name"):
+                if event.key == pygame.K_ESCAPE:
+                    self._go_back()
+                elif event.key == pygame.K_RETURN:
+                    self._handle_ia_collection_wizard_selection()
+                elif event.key == pygame.K_BACKSPACE:
+                    if step == "url" and wizard.url:
+                        wizard.url = wizard.url[:-1]
+                    elif step == "name" and wizard.collection_name:
+                        wizard.collection_name = wizard.collection_name[:-1]
+                elif event.unicode and event.unicode.isprintable():
+                    if step == "url":
+                        wizard.url += event.unicode
+                    elif step == "name":
+                        wizard.collection_name += event.unicode
+                return
 
         if event.key == pygame.K_ESCAPE:
             self._go_back()
@@ -661,6 +830,34 @@ class ConsoleUtilitiesApp:
                     return
             return
 
+        # Check IA download wizard list items (for steps with lists)
+        if self.state.ia_download_wizard.show:
+            step = self.state.ia_download_wizard.step
+            if step in ("file_select", "folder"):
+                for i, rect in enumerate(self.state.ui_rects.menu_items):
+                    if rect.collidepoint(x, y):
+                        if step == "file_select":
+                            self.state.ia_download_wizard.selected_file_index = i
+                            self._handle_ia_download_wizard_selection()
+                        elif step == "folder":
+                            self.state.ia_download_wizard.folder_highlighted = i
+                            self._handle_ia_download_folder_selection()
+                        return
+                # Only return if in list mode - fall through to char_rect check otherwise
+                return
+
+        # Check IA collection wizard list items (format selection)
+        if self.state.ia_collection_wizard.show:
+            step = self.state.ia_collection_wizard.step
+            if step == "formats":
+                for i, rect in enumerate(self.state.ui_rects.menu_items):
+                    if rect.collidepoint(x, y):
+                        self.state.ia_collection_wizard.format_highlighted = i
+                        self._handle_ia_collection_wizard_selection()
+                        return
+                # Only return if in formats mode - fall through to char_rect check otherwise
+                return
+
         # Check download button (modal or games screen)
         if self.state.ui_rects.download_button:
             if self.state.ui_rects.download_button.collidepoint(x, y):
@@ -670,13 +867,29 @@ class ConsoleUtilitiesApp:
                     self._start_download()
                 return
 
-        # Check modal character buttons (search/url input)
+        # Check modal character buttons (search/url input/IA modals)
         if self.state.ui_rects.modal_char_rects:
             for char_rect, char_index, char in self.state.ui_rects.modal_char_rects:
                 if char_rect.collidepoint(x, y):
-                    # Set cursor position and trigger selection
-                    self.state.search.cursor_position = char_index
-                    self._handle_search_input_selection()
+                    # Set cursor position and trigger selection based on active modal
+                    if self.state.show_search_input:
+                        self.state.search.cursor_position = char_index
+                        self._handle_search_input_selection()
+                    elif self.state.url_input.show:
+                        self.state.url_input.cursor_position = char_index
+                        self._handle_url_input_selection()
+                    elif self.state.folder_name_input.show:
+                        self.state.folder_name_input.cursor_position = char_index
+                        self._handle_folder_name_input_selection()
+                    elif self.state.ia_login.show:
+                        self.state.ia_login.cursor_position = char_index
+                        self._handle_ia_login_selection()
+                    elif self.state.ia_download_wizard.show:
+                        self.state.ia_download_wizard.cursor_position = char_index
+                        self._handle_ia_download_wizard_selection()
+                    elif self.state.ia_collection_wizard.show:
+                        self.state.ia_collection_wizard.cursor_position = char_index
+                        self._handle_ia_collection_wizard_selection()
                     return
 
         # Check back button
@@ -723,8 +936,28 @@ class ConsoleUtilitiesApp:
         elif self.state.folder_name_input.show:
             self.state.folder_name_input.show = False
         elif self.state.folder_browser.show:
+            # Check if folder browser was opened for IA collection
+            selection_type = self.state.folder_browser.selected_system_to_add.get(
+                "type", "folder"
+            )
             self.state.folder_browser.show = False
             self.state.folder_browser.focus_area = "list"
+            if selection_type == "ia_collection_folder":
+                # Go back to name step in IA collection wizard
+                self.state.ia_collection_wizard.step = "name"
+                self.state.ia_collection_wizard.cursor_position = 0
+        elif self.state.ia_login.show:
+            self._close_ia_login()
+        elif self.state.ia_download_wizard.show:
+            self._close_ia_download_wizard()
+        elif self.state.ia_collection_wizard.show:
+            # Check if we're in custom format input mode
+            if self.state.ia_collection_wizard.adding_custom_format:
+                self.state.ia_collection_wizard.adding_custom_format = False
+                self.state.ia_collection_wizard.custom_format_input = ""
+                self.state.ia_collection_wizard.cursor_position = 0
+            else:
+                self._close_ia_collection_wizard()
         elif self.state.game_details.show:
             self.state.game_details.show = False
             self.state.game_details.current_game = None
@@ -786,6 +1019,19 @@ class ConsoleUtilitiesApp:
 
         if self.state.folder_name_input.show:
             self._handle_folder_name_input_selection()
+            return
+
+        # Internet Archive modal selection
+        if self.state.ia_login.show:
+            self._handle_ia_login_selection()
+            return
+
+        if self.state.ia_download_wizard.show:
+            self._handle_ia_download_wizard_selection()
+            return
+
+        if self.state.ia_collection_wizard.show:
+            self._handle_ia_collection_wizard_selection()
             return
 
         # Mode-based selection
@@ -878,13 +1124,11 @@ class ConsoleUtilitiesApp:
 
         num_games = len(game_list)
 
-        # Show modal immediately with loading state
+        # Show simple confirmation modal
         self.state.confirm_modal.show = True
         self.state.confirm_modal.title = "Download All Games"
         self.state.confirm_modal.message_lines = [
             f"Download all {num_games} games?",
-            "",
-            f"Calculating size... (0 of {num_games})",
             "",
             "This may take a while.",
         ]
@@ -893,90 +1137,7 @@ class ConsoleUtilitiesApp:
         self.state.confirm_modal.button_index = 0
         self.state.confirm_modal.context = "download_all"
         self.state.confirm_modal.data = list(game_list)  # Copy the list
-        self.state.confirm_modal.loading = True
-        self.state.confirm_modal.loading_current = 0
-        self.state.confirm_modal.loading_total = num_games
-        self.state.confirm_modal.total_size = 0
-
-        # Calculate total size in background with parallel requests
-        system_data = self.data[self.state.selected_system]
-        games_to_check = list(game_list)
-
-        def calculate_total_size():
-            from concurrent.futures import ThreadPoolExecutor, as_completed
-            import threading
-
-            total = 0
-            completed_count = 0
-            total_lock = threading.Lock()
-
-            def fetch_game_size(game):
-                """Fetch size for a single game."""
-                if not self.state.confirm_modal.show:
-                    return 0
-
-                if isinstance(game, dict):
-                    # Check if size is already known
-                    size = (
-                        game.get("size")
-                        or game.get("filesize")
-                        or game.get("file_size")
-                    )
-                    if isinstance(size, (int, float)):
-                        return size
-                    else:
-                        # Fetch size via HEAD request
-                        fetched_size = get_file_size(system_data, game)
-                        if fetched_size:
-                            game["size"] = fetched_size  # Cache it
-                            return fetched_size
-                return 0
-
-            # Use 5 workers - reasonable for RG35xxsp limited resources
-            max_workers = 5
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = {
-                    executor.submit(fetch_game_size, game): game
-                    for game in games_to_check
-                }
-
-                for future in as_completed(futures):
-                    if not self.state.confirm_modal.show:
-                        executor.shutdown(wait=False, cancel_futures=True)
-                        return
-
-                    size = future.result()
-                    with total_lock:
-                        total += size
-                        completed_count += 1
-
-                        # Update progress
-                        self.state.confirm_modal.loading_current = completed_count
-                        self.state.confirm_modal.message_lines = [
-                            f"Download all {num_games} games?",
-                            "",
-                            f"Calculating size... ({completed_count} of {num_games})",
-                            "",
-                            "This may take a while.",
-                        ]
-
-            # Update modal if still showing
-            if self.state.confirm_modal.show:
-                self.state.confirm_modal.total_size = total
-                self.state.confirm_modal.loading = False
-                size_str = self._format_bytes(total) if total > 0 else "Unknown"
-                self.state.confirm_modal.message_lines = [
-                    f"Download all {num_games} games?",
-                    "",
-                    f"Total size: {size_str}",
-                    "",
-                    "This may take a while.",
-                ]
-
-        from threading import Thread
-
-        thread = Thread(target=calculate_total_size, daemon=True)
-        thread.start()
+        self.state.confirm_modal.loading = False
 
     def _handle_confirm_modal_ok(self):
         """Handle confirm modal OK button."""
@@ -1021,54 +1182,73 @@ class ConsoleUtilitiesApp:
 
     def _handle_settings_selection(self):
         """Handle settings item selection."""
-        from ui.screens.settings_screen import SettingsScreen
+        from ui.screens.settings_screen import settings_screen
 
-        action = (
-            SettingsScreen.SETTINGS_ITEMS[self.state.highlighted]
-            if self.state.highlighted < len(SettingsScreen.SETTINGS_ITEMS)
-            else None
+        action = settings_screen.get_setting_action(
+            self.state.highlighted, self.settings
         )
 
-        if action == "Select Archive Json":
+        if action == "select_archive_json":
             self._open_folder_browser("archive_json")
-        elif action == "NSZ Keys":
+        elif action == "select_nsz_keys":
             self._open_folder_browser("nsz_keys")
-        elif action == "Enable Box-art Display":
+        elif action == "toggle_boxart":
             self.settings["enable_boxart"] = not self.settings.get(
                 "enable_boxart", True
             )
             save_settings(self.settings)
-        elif action == "View Type":
+        elif action == "toggle_view_type":
             current = self.settings.get("view_type", "grid")
             self.settings["view_type"] = "list" if current == "grid" else "grid"
             save_settings(self.settings)
-        elif action == "USA Games Only":
+        elif action == "toggle_usa_only":
             self.settings["usa_only"] = not self.settings.get("usa_only", False)
             save_settings(self.settings)
-        elif action == "Show Download All Button":
+        elif action == "toggle_download_all":
             self.settings["show_download_all"] = not self.settings.get(
                 "show_download_all", False
             )
             save_settings(self.settings)
-        elif action == "Work Directory":
+        elif action == "select_work_dir":
             self._open_folder_browser("work_dir")
-        elif action == "ROMs Directory":
+        elif action == "select_roms_dir":
             self._open_folder_browser("roms_dir")
-        elif action == "Add Systems":
+        elif action == "add_systems":
             self.state.mode = "add_systems"
             self.state.add_systems_highlighted = 0
-        elif action == "Systems Settings":
+        elif action == "systems_settings":
             self.state.mode = "systems_settings"
             self.state.systems_settings_highlighted = 0
+        elif action == "remap_controller":
+            self._start_controller_mapping()
+        elif action == "toggle_ia_enabled":
+            self.settings["ia_enabled"] = not self.settings.get("ia_enabled", False)
+            save_settings(self.settings)
+        elif action == "ia_login":
+            self._show_ia_login()
+        elif action == "toggle_nsz_enabled":
+            self.settings["nsz_enabled"] = not self.settings.get("nsz_enabled", False)
+            save_settings(self.settings)
 
     def _handle_utils_selection(self):
         """Handle utils item selection."""
-        if self.state.highlighted == 0:
-            # Download from URL
+        from ui.screens.utils_screen import utils_screen
+
+        action = utils_screen.get_util_action(self.state.highlighted, self.settings)
+
+        if action == "divider":
+            # Skip divider items
+            return
+        elif action == "download_url":
             self.state.url_input.show = True
             self.state.url_input.context = "direct_download"
-        elif self.state.highlighted == 1:
-            # NSZ converter
+        elif action == "ia_download":
+            self._show_ia_download_wizard()
+        elif action == "ia_add_collection":
+            self._show_ia_collection_wizard()
+        elif action == "extract_zip":
+            self._open_folder_browser("extract_zip")
+        elif action == "nsz_converter":
             self._open_folder_browser("nsz_converter")
 
     def _open_folder_browser(self, selection_type: str):
@@ -1093,6 +1273,28 @@ class ConsoleUtilitiesApp:
         else:
             path = os.path.expanduser("~")
 
+        if os.path.exists(path):
+            self.state.folder_browser.current_path = path
+        else:
+            self.state.folder_browser.current_path = os.path.expanduser("~")
+
+        self.state.folder_browser.items = load_folder_contents(
+            self.state.folder_browser.current_path
+        )
+
+    def _open_ia_collection_folder_browser(self):
+        """Open folder browser for IA collection ROM folder selection."""
+        self.state.ia_collection_wizard.step = "folder"
+        self.state.folder_browser.show = True
+        self.state.folder_browser.highlighted = 0
+        self.state.folder_browser.focus_area = "list"
+        self.state.folder_browser.button_index = 0
+        self.state.folder_browser.selected_system_to_add = {
+            "type": "ia_collection_folder"
+        }
+
+        # Start from roms directory
+        path = self.settings.get("roms_dir", os.path.expanduser("~"))
         if os.path.exists(path):
             self.state.folder_browser.current_path = path
         else:
@@ -1137,7 +1339,7 @@ class ConsoleUtilitiesApp:
             self.state.folder_browser.highlighted = 0
             self.state.folder_browser.focus_area = "list"
 
-        elif item_type in ("json_file", "keys_file", "file"):
+        elif item_type in ("json_file", "keys_file", "zip_file", "file"):
             # Select the file based on selection type
             self._complete_folder_browser_selection(item_path, selection_type)
 
@@ -1160,6 +1362,11 @@ class ConsoleUtilitiesApp:
         elif selection_type == "nsz_keys":
             self.settings["nsz_keys_path"] = path
             save_settings(self.settings)
+        elif selection_type == "extract_zip":
+            # Extract ZIP file to same folder
+            self._extract_zip_file(path)
+            # Don't close modal yet, extraction will handle it
+            return
 
         # Close the modal
         self.state.folder_browser.show = False
@@ -1174,6 +1381,11 @@ class ConsoleUtilitiesApp:
         # For folder selection types, select the current directory
         if selection_type in ("work_dir", "roms_dir", "custom_folder"):
             self._complete_folder_browser_selection(current_path, selection_type)
+        elif selection_type == "ia_collection_folder":
+            # Set the folder path for IA collection and continue wizard
+            self.state.ia_collection_wizard.folder_name = current_path
+            self.state.folder_browser.show = False
+            self.state.ia_collection_wizard.step = "formats"
         else:
             # For file selection, user needs to select a file
             pass
@@ -1282,6 +1494,56 @@ class ConsoleUtilitiesApp:
                 fb.button_index = 0  # Select button
             elif direction == "right":
                 fb.button_index = 1  # Cancel button
+
+    def _navigate_ia_file_select(self, direction: str):
+        """Navigate IA download wizard file selection."""
+        wizard = self.state.ia_download_wizard
+        max_items = len(wizard.files_list) or 1
+
+        if direction in ("up", "left"):
+            if wizard.selected_file_index > 0:
+                wizard.selected_file_index -= 1
+        elif direction in ("down", "right"):
+            if wizard.selected_file_index < max_items - 1:
+                wizard.selected_file_index += 1
+
+    def _navigate_ia_folder_select(self, direction: str):
+        """Navigate IA download wizard folder selection."""
+        wizard = self.state.ia_download_wizard
+        max_items = len(wizard.folder_items) or 1
+
+        if direction in ("up", "left"):
+            if wizard.folder_highlighted > 0:
+                wizard.folder_highlighted -= 1
+        elif direction in ("down", "right"):
+            if wizard.folder_highlighted < max_items - 1:
+                wizard.folder_highlighted += 1
+
+    def _navigate_ia_format_select(self, direction: str):
+        """Navigate IA collection wizard format selection."""
+        wizard = self.state.ia_collection_wizard
+        # +1 for "Add custom format..." option at the end
+        max_items = (len(wizard.available_formats) + 1) or 1
+
+        if direction in ("up", "left"):
+            if wizard.format_highlighted > 0:
+                wizard.format_highlighted -= 1
+        elif direction in ("down", "right"):
+            if wizard.format_highlighted < max_items - 1:
+                wizard.format_highlighted += 1
+
+    def _navigate_ia_options_select(self, direction: str):
+        """Navigate IA collection wizard options selection."""
+        wizard = self.state.ia_collection_wizard
+        # If unzip is enabled, we have 2 options, otherwise just 1
+        max_items = 2 if wizard.should_unzip else 1
+
+        if direction in ("up", "left"):
+            if wizard.options_highlighted > 0:
+                wizard.options_highlighted -= 1
+        elif direction in ("down", "right"):
+            if wizard.options_highlighted < max_items - 1:
+                wizard.options_highlighted += 1
 
     def _handle_url_input_selection(self):
         """Handle URL input keyboard selection."""
@@ -1433,6 +1695,27 @@ class ConsoleUtilitiesApp:
             self._start_download()
             return
 
+        # Handle IA download wizard - start button triggers download on options step
+        if self.state.ia_download_wizard.show:
+            step = self.state.ia_download_wizard.step
+            if step == "options":
+                self._start_ia_download()
+                return
+            elif step == "folder":
+                # Select current folder and move to options
+                self.state.ia_download_wizard.step = "options"
+                return
+
+        # Handle IA collection wizard - start button advances through steps
+        if self.state.ia_collection_wizard.show:
+            step = self.state.ia_collection_wizard.step
+            if step == "formats":
+                self.state.ia_collection_wizard.step = "options"
+                return
+            elif step == "options":
+                self.state.ia_collection_wizard.step = "confirm"
+                return
+
         # Close any open modals
         self.state.show_search_input = False
         self.state.url_input.show = False
@@ -1440,6 +1723,9 @@ class ConsoleUtilitiesApp:
         self.state.folder_browser.show = False
         self.state.game_details.show = False
         self.state.game_details.current_game = None
+        self.state.ia_login.show = False
+        self.state.ia_download_wizard.show = False
+        self.state.ia_collection_wizard.show = False
 
         # Go to systems (home) screen
         self.state.mode = "systems"
@@ -1472,6 +1758,578 @@ class ConsoleUtilitiesApp:
         self.state.download_queue.highlighted = max(
             0, len(self.state.download_queue.items) - len(selected_games)
         )
+
+    # ---- Internet Archive Handlers ---- #
+
+    def _show_ia_login(self):
+        """Show the Internet Archive login modal."""
+        self.state.ia_login.show = True
+        self.state.ia_login.step = "email"
+        self.state.ia_login.email = self.settings.get("ia_email", "")
+        self.state.ia_login.password = ""
+        self.state.ia_login.cursor_position = 0
+        self.state.ia_login.error_message = ""
+
+    def _close_ia_login(self):
+        """Close the Internet Archive login modal."""
+        self.state.ia_login.show = False
+        self.state.ia_login.step = "email"
+        self.state.ia_login.email = ""
+        self.state.ia_login.password = ""
+        self.state.ia_login.cursor_position = 0
+        self.state.ia_login.error_message = ""
+
+    def _handle_ia_login_selection(self):
+        """Handle selection in IA login modal."""
+        step = self.state.ia_login.step
+
+        if step == "email":
+            if self.state.input_mode == "keyboard":
+                # Keyboard mode - Enter pressed, move to password
+                if self.state.ia_login.email:
+                    self.state.ia_login.step = "password"
+                    self.state.ia_login.cursor_position = 0
+            else:
+                # Gamepad/touch mode - handle on-screen keyboard
+                from ui.screens.modals.ia_login_modal import IALoginModal
+
+                modal = IALoginModal()
+                new_text, is_done = modal.handle_selection(
+                    step, self.state.ia_login.cursor_position, self.state.ia_login.email
+                )
+                self.state.ia_login.email = new_text
+                if is_done and new_text:
+                    self.state.ia_login.step = "password"
+                    self.state.ia_login.cursor_position = 0
+
+        elif step == "password":
+            if self.state.input_mode == "keyboard":
+                # Keyboard mode - Enter pressed, test credentials
+                if self.state.ia_login.password:
+                    self._test_ia_credentials()
+            else:
+                # Gamepad/touch mode - handle on-screen keyboard
+                from ui.screens.modals.ia_login_modal import IALoginModal
+
+                modal = IALoginModal()
+                new_text, is_done = modal.handle_selection(
+                    step,
+                    self.state.ia_login.cursor_position,
+                    self.state.ia_login.password,
+                )
+                self.state.ia_login.password = new_text
+                if is_done and new_text:
+                    self._test_ia_credentials()
+
+        elif step == "complete":
+            # Close modal on success
+            self._close_ia_login()
+
+        elif step == "error":
+            # Go back to email step to retry
+            self.state.ia_login.step = "email"
+            self.state.ia_login.password = ""
+            self.state.ia_login.cursor_position = 0
+            self.state.ia_login.error_message = ""
+
+    def _test_ia_credentials(self):
+        """Test IA credentials in background thread."""
+        self.state.ia_login.step = "testing"
+
+        email = self.state.ia_login.email
+        password = self.state.ia_login.password
+
+        def test_credentials():
+            success, access_key, secret_key, error = get_ia_s3_credentials(
+                email, password
+            )
+
+            if success:
+                # Save credentials
+                self.settings["ia_email"] = email
+                self.settings["ia_access_key"] = access_key
+                self.settings["ia_secret_key"] = encode_password(secret_key)
+                save_settings(self.settings)
+                self.state.ia_login.step = "complete"
+            else:
+                self.state.ia_login.step = "error"
+                self.state.ia_login.error_message = error
+
+        from threading import Thread
+
+        thread = Thread(target=test_credentials, daemon=True)
+        thread.start()
+
+    def _show_ia_download_wizard(self):
+        """Show the IA download wizard modal."""
+        self.state.ia_download_wizard.show = True
+        self.state.ia_download_wizard.step = "url"
+        self.state.ia_download_wizard.url = ""
+        self.state.ia_download_wizard.item_id = ""
+        self.state.ia_download_wizard.filename = ""
+        self.state.ia_download_wizard.output_folder = self.settings.get("work_dir", "")
+        self.state.ia_download_wizard.should_extract = True
+        self.state.ia_download_wizard.cursor_position = 0
+        self.state.ia_download_wizard.error_message = ""
+        self.state.ia_download_wizard.files_list = []
+        self.state.ia_download_wizard.selected_file_index = 0
+        self.state.ia_download_wizard.folder_items = []
+        self.state.ia_download_wizard.folder_highlighted = 0
+
+    def _close_ia_download_wizard(self):
+        """Close the IA download wizard modal."""
+        self.state.ia_download_wizard.show = False
+        self.state.ia_download_wizard.step = "url"
+        self.state.ia_download_wizard.url = ""
+        self.state.ia_download_wizard.item_id = ""
+        self.state.ia_download_wizard.files_list = []
+
+    def _handle_ia_download_wizard_selection(self):
+        """Handle selection in IA download wizard."""
+        step = self.state.ia_download_wizard.step
+
+        if step == "url":
+            if self.state.input_mode == "keyboard":
+                # Keyboard mode - Enter pressed, validate URL
+                if self.state.ia_download_wizard.url:
+                    self._validate_ia_download_item()
+            else:
+                # Gamepad/touch mode - handle on-screen keyboard
+                from ui.screens.modals.ia_download_modal import IADownloadModal
+
+                modal = IADownloadModal()
+                new_text, is_done = modal.handle_url_selection(
+                    self.state.ia_download_wizard.cursor_position,
+                    self.state.ia_download_wizard.url,
+                )
+                self.state.ia_download_wizard.url = new_text
+                if is_done and new_text:
+                    self._validate_ia_download_item()
+
+        elif step == "file_select":
+            # File selected, move to folder selection
+            if self.state.ia_download_wizard.files_list:
+                self.state.ia_download_wizard.step = "folder"
+                self.state.ia_download_wizard.folder_items = load_folder_contents(
+                    self.state.ia_download_wizard.output_folder
+                )
+                self.state.ia_download_wizard.folder_highlighted = 0
+
+        elif step == "folder":
+            # Handle folder selection
+            self._handle_ia_download_folder_selection()
+
+        elif step == "options":
+            # Toggle extract option
+            self.state.ia_download_wizard.should_extract = (
+                not self.state.ia_download_wizard.should_extract
+            )
+
+        elif step == "error":
+            # Go back to URL step to retry
+            self.state.ia_download_wizard.step = "url"
+            self.state.ia_download_wizard.cursor_position = 0
+            self.state.ia_download_wizard.error_message = ""
+
+    def _validate_ia_download_item(self):
+        """Validate IA item URL in background."""
+        self.state.ia_download_wizard.step = "validating"
+        url = self.state.ia_download_wizard.url
+
+        def validate_item():
+            valid, item_id, error = validate_ia_url(url)
+            if not valid:
+                self.state.ia_download_wizard.step = "error"
+                self.state.ia_download_wizard.error_message = error
+                return
+
+            self.state.ia_download_wizard.item_id = item_id
+
+            # Get credentials if available (use None if not set)
+            access_key = self.settings.get("ia_access_key") or None
+            secret_key = self.settings.get("ia_secret_key") or None
+            if secret_key:
+                from services.internet_archive import decode_password
+
+                secret_key = decode_password(secret_key)
+
+            # List files in the item (pass None if no credentials)
+            success, files, error = list_ia_files(
+                item_id,
+                access_key if access_key else None,
+                secret_key if secret_key else None,
+            )
+            if not success:
+                self.state.ia_download_wizard.step = "error"
+                self.state.ia_download_wizard.error_message = error
+                return
+
+            if not files:
+                self.state.ia_download_wizard.step = "error"
+                self.state.ia_download_wizard.error_message = "No files found in item"
+                return
+
+            self.state.ia_download_wizard.files_list = files
+            self.state.ia_download_wizard.selected_file_index = 0
+            self.state.ia_download_wizard.step = "file_select"
+
+        from threading import Thread
+
+        thread = Thread(target=validate_item, daemon=True)
+        thread.start()
+
+    def _handle_ia_download_folder_selection(self):
+        """Handle folder selection in IA download wizard."""
+        wizard = self.state.ia_download_wizard
+        items = wizard.folder_items
+        highlighted = wizard.folder_highlighted
+
+        if highlighted >= len(items):
+            return
+
+        item = items[highlighted]
+        item_type = item.get("type", "")
+        item_path = item.get("path", "")
+
+        if item_type == "parent":
+            # Navigate to parent
+            wizard.output_folder = item_path
+            wizard.folder_items = load_folder_contents(item_path)
+            wizard.folder_highlighted = 0
+        elif item_type == "folder":
+            # Navigate into folder
+            wizard.output_folder = item_path
+            wizard.folder_items = load_folder_contents(item_path)
+            wizard.folder_highlighted = 0
+        else:
+            # Select current folder and move to options
+            wizard.step = "options"
+
+    def _start_ia_download(self):
+        """Start the IA download."""
+        wizard = self.state.ia_download_wizard
+
+        if not wizard.files_list or wizard.selected_file_index >= len(
+            wizard.files_list
+        ):
+            return
+
+        file_info = wizard.files_list[wizard.selected_file_index]
+        filename = file_info["name"]
+        download_url = get_ia_download_url(wizard.item_id, filename)
+
+        # Create a game-like object for the download manager
+        game = {
+            "name": filename,
+            "filename": filename,
+            "href": download_url,
+            "size": file_info.get("size", 0),
+        }
+
+        # Create system data for download
+        system_data = {
+            "name": f"IA: {wizard.item_id}",
+            "url": "",
+            "download_url": True,  # Indicates direct download URL in href
+            "file_format": [
+                "." + filename.rsplit(".", 1)[-1] if "." in filename else ""
+            ],
+            "roms_folder": wizard.output_folder,
+            "should_unzip": wizard.should_extract,
+        }
+
+        # Add auth only if credentials are available
+        access_key = self.settings.get("ia_access_key") or None
+        secret_key = self.settings.get("ia_secret_key") or None
+        if access_key and secret_key:
+            from services.internet_archive import decode_password
+
+            system_data["auth"] = {
+                "type": "ia_s3",
+                "access_key": access_key,
+                "secret_key": decode_password(secret_key),
+            }
+
+        # Add to download queue
+        self.download_manager.add_to_queue([game], system_data, f"IA: {wizard.item_id}")
+
+        # Close wizard and go to downloads
+        self._close_ia_download_wizard()
+        self.state.mode = "downloads"
+        self.state.download_queue.highlighted = max(
+            0, len(self.state.download_queue.items) - 1
+        )
+
+    def _show_ia_collection_wizard(self):
+        """Show the IA collection wizard modal."""
+        self.state.ia_collection_wizard.show = True
+        self.state.ia_collection_wizard.step = "url"
+        self.state.ia_collection_wizard.url = ""
+        self.state.ia_collection_wizard.item_id = ""
+        self.state.ia_collection_wizard.collection_name = ""
+        self.state.ia_collection_wizard.folder_name = ""
+        self.state.ia_collection_wizard.file_formats = [".zip"]
+        self.state.ia_collection_wizard.should_unzip = True
+        self.state.ia_collection_wizard.cursor_position = 0
+        self.state.ia_collection_wizard.error_message = ""
+        self.state.ia_collection_wizard.available_formats = []
+        self.state.ia_collection_wizard.selected_formats = set()
+        self.state.ia_collection_wizard.format_highlighted = 0
+
+    def _close_ia_collection_wizard(self):
+        """Close the IA collection wizard modal."""
+        self.state.ia_collection_wizard.show = False
+        self.state.ia_collection_wizard.step = "url"
+        self.state.ia_collection_wizard.url = ""
+        self.state.ia_collection_wizard.item_id = ""
+        self.state.ia_collection_wizard.collection_name = ""
+        self.state.ia_collection_wizard.folder_name = ""
+        self.state.ia_collection_wizard.available_formats = []
+        self.state.ia_collection_wizard.selected_formats = set()
+
+    def _handle_ia_collection_wizard_selection(self):
+        """Handle selection in IA collection wizard."""
+        step = self.state.ia_collection_wizard.step
+
+        if step == "url":
+            if self.state.input_mode == "keyboard":
+                if self.state.ia_collection_wizard.url:
+                    self._validate_ia_collection_item()
+            else:
+                from ui.screens.modals.ia_collection_modal import IACollectionModal
+
+                modal = IACollectionModal()
+                new_text, is_done = modal.handle_selection(
+                    step,
+                    self.state.ia_collection_wizard.cursor_position,
+                    self.state.ia_collection_wizard.url,
+                )
+                self.state.ia_collection_wizard.url = new_text
+                if is_done and new_text:
+                    self._validate_ia_collection_item()
+
+        elif step == "name":
+            if self.state.input_mode == "keyboard":
+                if self.state.ia_collection_wizard.collection_name:
+                    # Open folder browser for folder selection
+                    self._open_ia_collection_folder_browser()
+            else:
+                from ui.screens.modals.ia_collection_modal import IACollectionModal
+
+                modal = IACollectionModal()
+                new_text, is_done = modal.handle_selection(
+                    step,
+                    self.state.ia_collection_wizard.cursor_position,
+                    self.state.ia_collection_wizard.collection_name,
+                )
+                self.state.ia_collection_wizard.collection_name = new_text
+                if is_done and new_text:
+                    # Open folder browser for folder selection
+                    self._open_ia_collection_folder_browser()
+
+        elif step == "folder":
+            # Folder step is now handled by folder browser modal
+            # This case handles if user somehow gets here without folder browser
+            if self.state.ia_collection_wizard.folder_name:
+                self.state.ia_collection_wizard.step = "formats"
+            else:
+                # Open folder browser if not already open
+                if not self.state.folder_browser.show:
+                    self._open_ia_collection_folder_browser()
+
+        elif step == "formats":
+            wizard = self.state.ia_collection_wizard
+
+            # Check if we're in custom format input mode
+            if wizard.adding_custom_format:
+                # Handle keyboard selection for custom format
+                if self.state.input_mode == "keyboard":
+                    # Keyboard mode - Enter pressed, add the format
+                    if wizard.custom_format_input:
+                        fmt = wizard.custom_format_input
+                        # Ensure format starts with a dot
+                        if not fmt.startswith("."):
+                            fmt = "." + fmt
+                        # Add to available formats if not already there
+                        if fmt not in wizard.available_formats:
+                            wizard.available_formats.append(fmt)
+                            # Select the newly added format
+                            wizard.selected_formats.add(
+                                len(wizard.available_formats) - 1
+                            )
+                    wizard.adding_custom_format = False
+                    wizard.custom_format_input = ""
+                    wizard.cursor_position = 0
+                else:
+                    # Gamepad/touch mode - handle on-screen keyboard
+                    from ui.screens.modals.ia_collection_modal import IACollectionModal
+
+                    modal = IACollectionModal()
+                    new_text, is_done = modal.char_keyboard.handle_selection(
+                        wizard.cursor_position,
+                        wizard.custom_format_input,
+                        char_set="default",
+                    )
+                    wizard.custom_format_input = new_text
+                    if is_done:
+                        if new_text:
+                            fmt = new_text
+                            if not fmt.startswith("."):
+                                fmt = "." + fmt
+                            if fmt not in wizard.available_formats:
+                                wizard.available_formats.append(fmt)
+                                wizard.selected_formats.add(
+                                    len(wizard.available_formats) - 1
+                                )
+                        wizard.adding_custom_format = False
+                        wizard.custom_format_input = ""
+                        wizard.cursor_position = 0
+            else:
+                # Check if highlighted is on "Add custom format..." option
+                if wizard.format_highlighted >= len(wizard.available_formats):
+                    # Enter custom format input mode
+                    wizard.adding_custom_format = True
+                    wizard.custom_format_input = ""
+                    wizard.cursor_position = 0
+                else:
+                    # Toggle format selection
+                    if wizard.format_highlighted in wizard.selected_formats:
+                        wizard.selected_formats.discard(wizard.format_highlighted)
+                    else:
+                        wizard.selected_formats.add(wizard.format_highlighted)
+
+        elif step == "options":
+            wizard = self.state.ia_collection_wizard
+            if wizard.options_highlighted == 0:
+                # Toggle unzip option
+                wizard.should_unzip = not wizard.should_unzip
+                # If unzip is turned off, reset options_highlighted to 0
+                if not wizard.should_unzip:
+                    wizard.options_highlighted = 0
+            elif wizard.options_highlighted == 1 and wizard.should_unzip:
+                # Toggle extract mode
+                wizard.extract_contents = not wizard.extract_contents
+
+        elif step == "confirm":
+            # Create the collection
+            self._create_ia_collection()
+
+        elif step == "error":
+            # Go back to URL step
+            self.state.ia_collection_wizard.step = "url"
+            self.state.ia_collection_wizard.cursor_position = 0
+            self.state.ia_collection_wizard.error_message = ""
+
+    def _validate_ia_collection_item(self):
+        """Validate IA collection ID in background."""
+        self.state.ia_collection_wizard.step = "validating"
+        # The url field now stores the collection_id directly
+        item_id = self.state.ia_collection_wizard.url.strip()
+
+        # Get credentials if available (use None if not set)
+        access_key = self.settings.get("ia_access_key") or None
+        secret_key = self.settings.get("ia_secret_key") or None
+        if secret_key:
+            from services.internet_archive import decode_password
+
+            secret_key = decode_password(secret_key)
+
+        def validate_item():
+            if not item_id:
+                self.state.ia_collection_wizard.step = "error"
+                self.state.ia_collection_wizard.error_message = "Collection ID is empty"
+                return
+
+            self.state.ia_collection_wizard.item_id = item_id
+
+            # Get available formats (pass auth if available)
+            success, formats, error = get_available_formats(
+                item_id,
+                access_key if access_key else None,
+                secret_key if secret_key else None,
+            )
+            if not success:
+                self.state.ia_collection_wizard.step = "error"
+                self.state.ia_collection_wizard.error_message = error
+                return
+
+            if not formats:
+                self.state.ia_collection_wizard.step = "error"
+                self.state.ia_collection_wizard.error_message = "No files found in item"
+                return
+
+            # Only show .zip in the format list (user can add custom formats)
+            if ".zip" in formats:
+                self.state.ia_collection_wizard.available_formats = [".zip"]
+                self.state.ia_collection_wizard.selected_formats.add(0)
+            else:
+                # No .zip available, start with empty list
+                self.state.ia_collection_wizard.available_formats = []
+
+            # Pre-fill name from item_id
+            self.state.ia_collection_wizard.collection_name = item_id.replace(
+                "_", " "
+            ).title()
+            self.state.ia_collection_wizard.folder_name = item_id.lower().replace(
+                " ", "_"
+            )
+
+            self.state.ia_collection_wizard.step = "name"
+            self.state.ia_collection_wizard.cursor_position = 0
+
+        from threading import Thread
+
+        thread = Thread(target=validate_item, daemon=True)
+        thread.start()
+
+    def _create_ia_collection(self):
+        """Create the IA collection and add to systems."""
+        wizard = self.state.ia_collection_wizard
+
+        # Get selected formats
+        selected_formats = (
+            [wizard.available_formats[i] for i in sorted(wizard.selected_formats)]
+            if wizard.selected_formats
+            else wizard.available_formats
+        )
+
+        # Build the system URL
+        system_url = f"https://archive.org/download/{wizard.item_id}/"
+
+        # Build auth config only if credentials are available
+        auth = None
+        access_key = self.settings.get("ia_access_key") or None
+        secret_key = self.settings.get("ia_secret_key") or None
+        if access_key and secret_key:
+            from services.internet_archive import decode_password
+
+            auth = {
+                "type": "ia_s3",
+                "access_key": access_key,
+                "secret_key": decode_password(secret_key),
+            }
+
+        # Add the system
+        success = add_system_to_added_systems(
+            system_name=wizard.collection_name,
+            rom_folder=wizard.folder_name,
+            system_url=system_url,
+            file_formats=selected_formats,
+            should_unzip=wizard.should_unzip,
+            extract_contents=wizard.extract_contents,
+            auth=auth,
+        )
+
+        if success:
+            # Reload data
+            self.data = load_main_systems_data(self.settings)
+            self._close_ia_collection_wizard()
+            # Go to systems screen
+            self.state.mode = "systems"
+            self.state.highlighted = 0
+        else:
+            wizard.step = "error"
+            wizard.error_message = "Failed to save collection"
 
 
 def main():

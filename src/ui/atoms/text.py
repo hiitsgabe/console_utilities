@@ -179,13 +179,13 @@ class Text:
 
         # Rainbow colors
         rainbow_colors = [
-            (255, 0, 0),      # Red
-            (255, 127, 0),    # Orange
-            (255, 255, 0),    # Yellow
-            (0, 255, 0),      # Green
-            (0, 0, 255),      # Blue
-            (75, 0, 130),     # Indigo
-            (148, 0, 211),    # Violet
+            (255, 0, 0),  # Red
+            (255, 127, 0),  # Orange
+            (255, 255, 0),  # Yellow
+            (0, 255, 0),  # Green
+            (0, 0, 255),  # Blue
+            (75, 0, 130),  # Indigo
+            (148, 0, 211),  # Violet
         ]
 
         font = self.get_font(size)
@@ -226,8 +226,10 @@ class Text:
         # Return bounding rect
         if first_rect and last_rect:
             return pygame.Rect(
-                first_rect.left, first_rect.top,
-                last_rect.right - first_rect.left, total_height
+                first_rect.left,
+                first_rect.top,
+                last_rect.right - first_rect.left,
+                total_height,
             )
         return pygame.Rect(x, y, total_width, total_height)
 

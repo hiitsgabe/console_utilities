@@ -27,6 +27,11 @@ class Settings:
     archive_json_url: str = ""
     cache_enabled: bool = True
     system_settings: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    # Internet Archive settings
+    ia_enabled: bool = False
+    ia_email: str = ""
+    ia_access_key: str = ""  # S3 access key from IA
+    ia_secret_key: str = ""  # S3 secret key (base64 encoded for minimal obfuscation)
 
     def __post_init__(self):
         """Set default paths if not specified."""
