@@ -36,7 +36,8 @@ class Settings:
     scraper_frontend: str = (
         "emulationstation_base"  # emulationstation_base, esde_android, retroarch, pegasus
     )
-    scraper_provider: str = "screenscraper"  # screenscraper, thegamesdb
+    scraper_provider: str = "libretro"  # libretro, screenscraper, thegamesdb
+    scraper_fallback_enabled: bool = True
     screenscraper_username: str = ""
     screenscraper_password: str = ""  # base64 encoded
     thegamesdb_api_key: str = ""

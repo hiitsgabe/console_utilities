@@ -63,6 +63,7 @@ class SearchState:
     cursor_position: int = 0
     cursor_blink_time: int = 0
     filtered_list: List[Any] = field(default_factory=list)
+    shift_active: bool = False
 
 
 @dataclass
@@ -97,6 +98,7 @@ class FolderNameInputState:
     input_text: str = ""
     cursor_position: int = 0
     char_index: int = 0
+    shift_active: bool = False
 
 
 @dataclass
@@ -107,6 +109,7 @@ class UrlInputState:
     input_text: str = ""
     cursor_position: int = 0
     context: str = "archive_json"  # "archive_json" or "direct_download"
+    shift_active: bool = False
 
 
 @dataclass
@@ -184,6 +187,7 @@ class IALoginState:
     password: str = ""
     cursor_position: int = 0
     error_message: str = ""
+    shift_active: bool = False
 
 
 @dataclass
@@ -191,9 +195,7 @@ class IADownloadWizardState:
     """State for Internet Archive download wizard modal."""
 
     show: bool = False
-    step: str = (
-        "url"  # "url", "validating", "file_select", "folder", "options", "downloading"
-    )
+    step: str = "url"  # "url", "validating", "file_select", "options", "downloading"
     url: str = ""
     item_id: str = ""
     filename: str = ""
@@ -203,8 +205,7 @@ class IADownloadWizardState:
     error_message: str = ""
     files_list: List[Dict[str, Any]] = field(default_factory=list)
     selected_file_index: int = 0
-    folder_items: List[Dict[str, Any]] = field(default_factory=list)
-    folder_highlighted: int = 0
+    shift_active: bool = False
 
 
 @dataclass
@@ -230,6 +231,7 @@ class IACollectionWizardState:
     custom_format_input: str = ""  # For typing custom format
     adding_custom_format: bool = False  # True when in custom format input mode
     options_highlighted: int = 0  # For options step (0=unzip toggle, 1=extract mode)
+    shift_active: bool = False
 
 
 @dataclass
@@ -237,13 +239,14 @@ class ScraperLoginState:
     """State for scraper login modal (ScreenScraper/TheGamesDB)."""
 
     show: bool = False
-    provider: str = "screenscraper"  # screenscraper or thegamesdb
+    provider: str = "screenscraper"  # screenscraper, thegamesdb, or libretro
     step: str = "username"  # username, password, api_key, testing, complete, error
     username: str = ""
     password: str = ""
     api_key: str = ""
     cursor_position: int = 0
     error_message: str = ""
+    shift_active: bool = False
 
 
 @dataclass
@@ -309,6 +312,25 @@ class DedupeWizardState:
     error_message: str = ""
     # Mode selection
     mode_highlighted: int = 0  # 0 = Safe, 1 = Manual
+
+
+@dataclass
+class RenameWizardState:
+    """State for game file rename wizard modal."""
+
+    show: bool = False
+    step: str = "mode_select"
+    mode: str = "automatic"  # "automatic" or "manual"
+    folder_path: str = ""
+    rename_items: List[Dict[str, Any]] = field(default_factory=list)
+    current_item_index: int = 0
+    scan_progress: float = 0.0
+    process_progress: float = 0.0
+    files_scanned: int = 0
+    total_files: int = 0
+    files_renamed: int = 0
+    error_message: str = ""
+    mode_highlighted: int = 0
 
 
 @dataclass
@@ -398,6 +420,9 @@ class AppState:
         # ---- Dedupe ---- #
         self.dedupe_wizard = DedupeWizardState()
 
+        # ---- Rename ---- #
+        self.rename_wizard = RenameWizardState()
+
         # ---- UI Rectangles ---- #
         self.ui_rects = UIRects()
 
@@ -444,6 +469,7 @@ class AppState:
         self.scraper_login.show = False
         self.scraper_wizard.show = False
         self.dedupe_wizard.show = False
+        self.rename_wizard.show = False
 
     def get_current_game_list(self) -> List[Any]:
         """Get the current game list (filtered or full)."""

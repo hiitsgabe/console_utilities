@@ -23,9 +23,10 @@ class ScreenScraperProvider(BaseProvider):
     """
 
     BASE_URL = "https://api.screenscraper.fr/api2"
-    # Dev credentials - users should register their own on screenscraper.fr
-    DEV_ID = "consoleutils"
-    DEV_PASSWORD = "Q3Zlcld1MmRGSmM="  # base64 encoded
+    # Dev credentials borrowed from Skyscraper (open-source scraper)
+    # See: https://github.com/muldjord/skyscraper
+    DEV_ID = "muldjord"
+    DEV_PASSWORD = "dVd1NVZSYzlRRFZNUHBEOA=="  # base64 encoded
 
     IMAGE_TYPES = [
         "box-2D",
@@ -66,13 +67,67 @@ class ScreenScraperProvider(BaseProvider):
     def is_configured(self) -> bool:
         return bool(self.username and self.password)
 
+    def test_credentials(self) -> Tuple[bool, str]:
+        """
+        Test user credentials against the ScreenScraper API.
+
+        Uses the ssuserInfos.php endpoint which is lightweight
+        and designed for credential validation.
+
+        Returns:
+            Tuple of (success, error_message)
+        """
+        if not self.is_configured():
+            return False, "ScreenScraper credentials not configured"
+
+        try:
+            params = self._get_auth_params()
+
+            response = requests.get(
+                f"{self.BASE_URL}/ssuserInfos.php",
+                params=params,
+                timeout=30,
+            )
+
+            if response.status_code == 401:
+                return (
+                    False,
+                    "Authentication failed - check credentials",
+                )
+            elif response.status_code == 403:
+                return (
+                    False,
+                    "Access denied - account may be banned",
+                )
+            elif response.status_code == 430:
+                return False, "Too many requests - please wait"
+            elif response.status_code != 200:
+                return False, f"API error: {response.status_code}"
+
+            try:
+                data = response.json()
+            except (ValueError, requests.exceptions.JSONDecodeError):
+                return False, "Invalid response from server"
+
+            if not data.get("response"):
+                return False, "Unexpected response format"
+
+            return True, ""
+
+        except requests.Timeout:
+            return False, "Request timed out"
+        except requests.RequestException as e:
+            return False, f"Network error: {str(e)}"
+        except Exception as e:
+            return False, f"Error: {str(e)}"
+
     def _get_auth_params(self) -> Dict[str, str]:
         """Get authentication parameters for API requests."""
         dev_password = base64.b64decode(self.DEV_PASSWORD).decode("utf-8")
         params = {
             "devid": self.DEV_ID,
             "devpassword": dev_password,
-            "softname": "ConsoleUtilities",
+            "softname": "skyscraper",
             "output": "json",
         }
         if self.username and self.password:
@@ -101,6 +156,12 @@ class ScreenScraperProvider(BaseProvider):
 
             if response.status_code == 401:
                 return False, [], "Authentication failed - check credentials"
+            elif response.status_code == 403:
+                return (
+                    False,
+                    [],
+                    "Access denied - account may be banned",
+                )
             elif response.status_code == 404:
                 return True, [], ""  # No results found
             elif response.status_code == 430:
@@ -108,7 +169,11 @@ class ScreenScraperProvider(BaseProvider):
             elif response.status_code != 200:
                 return False, [], f"API error: {response.status_code}"
 
-            data = response.json()
+            try:
+                data = response.json()
+            except (ValueError, requests.exceptions.JSONDecodeError):
+                return False, [], "Invalid response from server"
+
             if not data.get("response"):
                 return True, [], ""
 
@@ -204,12 +269,22 @@ class ScreenScraperProvider(BaseProvider):
 
             if response.status_code == 401:
                 return False, [], "Authentication failed"
+            elif response.status_code == 403:
+                return (
+                    False,
+                    [],
+                    "Access denied - account may be banned",
+                )
             elif response.status_code == 404:
                 return False, [], "Game not found"
             elif response.status_code != 200:
                 return False, [], f"API error: {response.status_code}"
 
-            data = response.json()
+            try:
+                data = response.json()
+            except (ValueError, requests.exceptions.JSONDecodeError):
+                return False, [], "Invalid response from server"
+
             jeu = data.get("response", {}).get("jeu", {})
             medias = jeu.get("medias", [])
 

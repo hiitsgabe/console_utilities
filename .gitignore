@@ -24,3 +24,4 @@ download.json
 .DS_Store
 assets/bundled_data.json
 .env
+downloads/

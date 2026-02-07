@@ -76,6 +76,12 @@ class TheGamesDBProvider(BaseProvider):
                 return False, [], "Invalid API key"
             elif response.status_code == 403:
                 return False, [], "API quota exceeded"
+            elif response.status_code == 418:
+                return (
+                    False,
+                    [],
+                    "API temporarily unavailable" " - please try again later",
+                )
             elif response.status_code != 200:
                 return False, [], f"API error: {response.status_code}"
 
@@ -165,6 +171,12 @@ class TheGamesDBProvider(BaseProvider):
                 return False, [], "Invalid API key"
             elif response.status_code == 403:
                 return False, [], "API quota exceeded"
+            elif response.status_code == 418:
+                return (
+                    False,
+                    [],
+                    "API temporarily unavailable" " - please try again later",
+                )
             elif response.status_code != 200:
                 return False, [], f"API error: {response.status_code}"
 

@@ -59,6 +59,7 @@ class SettingsScreen:
         "--- SCRAPER ---",
         "Scraper Frontend",
         "Scraper Provider",
+        "Provider Fallback",  # Toggle fallback chain
         "ScreenScraper Login",  # Only shown when provider = screenscraper
         "TheGamesDB API Key",  # Only shown when provider = thegamesdb
         "ES-DE Media Path",  # Only shown when frontend = esde_android
@@ -124,17 +125,18 @@ class SettingsScreen:
         items.append(self.SCRAPER_SECTION[0])  # Divider
         items.append(self.SCRAPER_SECTION[1])  # Frontend
         items.append(self.SCRAPER_SECTION[2])  # Provider
+        items.append(self.SCRAPER_SECTION[3])  # Fallback
         # Show provider-specific settings
         if scraper_provider == "screenscraper":
-            items.append(self.SCRAPER_SECTION[3])  # ScreenScraper Login
+            items.append(self.SCRAPER_SECTION[4])  # SS Login
         elif scraper_provider == "thegamesdb":
-            items.append(self.SCRAPER_SECTION[4])  # TheGamesDB API Key
+            items.append(self.SCRAPER_SECTION[5])  # TGDB Key
         # Show frontend-specific paths
         if scraper_frontend == "esde_android":
-            items.append(self.SCRAPER_SECTION[5])  # ES-DE Media Path
-            items.append(self.SCRAPER_SECTION[6])  # ES-DE Gamelists Path
+            items.append(self.SCRAPER_SECTION[6])  # ES-DE Media
+            items.append(self.SCRAPER_SECTION[7])  # ES-DE Lists
         elif scraper_frontend == "retroarch":
-            items.append(self.SCRAPER_SECTION[7])  # RetroArch Thumbnails
+            items.append(self.SCRAPER_SECTION[8])  # RetroArch
 
         # Add NSZ section (last)
         nsz_enabled = settings.get("nsz_enabled", False)
@@ -224,12 +226,22 @@ class SettingsScreen:
                 }
                 items.append((item, frontend_labels.get(frontend, frontend)))
             elif item == "Scraper Provider":
-                provider = settings.get("scraper_provider", "screenscraper")
+                provider = settings.get("scraper_provider", "libretro")
                 provider_labels = {
+                    "libretro": "Libretro Thumbnails",
                     "screenscraper": "ScreenScraper",
                     "thegamesdb": "TheGamesDB",
                 }
-                items.append((item, provider_labels.get(provider, provider)))
+                items.append(
+                    (
+                        item,
+                        provider_labels.get(provider, provider),
+                    )
+                )
+            elif item == "Provider Fallback":
+                enabled = settings.get("scraper_fallback_enabled", True)
+                value = "Enabled" if enabled else "Disabled"
+                items.append((item, value))
             elif item == "ScreenScraper Login":
                 username = settings.get("screenscraper_username", "")
                 if username:
@@ -327,6 +339,7 @@ class SettingsScreen:
                 "Enable NSZ": "toggle_nsz_enabled",
                 "Scraper Frontend": "toggle_scraper_frontend",
                 "Scraper Provider": "toggle_scraper_provider",
+                "Provider Fallback": "toggle_scraper_fallback",
                 "ScreenScraper Login": "screenscraper_login",
                 "TheGamesDB API Key": "thegamesdb_api_key",
                 "ES-DE Media Path": "select_esde_media_path",

@@ -28,6 +28,7 @@ from .modals.ia_collection_modal import IACollectionModal
 from .modals.scraper_wizard_modal import ScraperWizardModal
 from .modals.scraper_login_modal import ScraperLoginModal
 from .modals.dedupe_wizard_modal import DedupeWizardModal
+from .modals.rename_wizard_modal import RenameWizardModal
 from .downloads_screen import DownloadsScreen
 from ui.molecules.download_status_bar import DownloadStatusBar
 
@@ -69,6 +70,7 @@ class ScreenManager:
         self.scraper_login_modal = ScraperLoginModal(theme)
         self.scraper_wizard_modal = ScraperWizardModal(theme)
         self.dedupe_wizard_modal = DedupeWizardModal(theme)
+        self.rename_wizard_modal = RenameWizardModal(theme)
 
         # Initialize status bar
         self.download_status_bar = DownloadStatusBar(theme)
@@ -129,6 +131,7 @@ class ScreenManager:
                 state.search.input_text,
                 state.search.cursor_position,
                 input_mode=state.input_mode,
+                shift_active=state.search.shift_active,
             )
             rects["modal"] = modal_rect
             rects["close"] = close_rect
@@ -187,6 +190,7 @@ class ScreenManager:
                     state.url_input.cursor_position,
                     state.url_input.context,
                     input_mode=state.input_mode,
+                    shift_active=state.url_input.shift_active,
                 )
             )
             rects["modal"] = modal_rect
@@ -201,6 +205,7 @@ class ScreenManager:
                     state.folder_name_input.input_text,
                     state.folder_name_input.cursor_position,
                     input_mode=state.input_mode,
+                    shift_active=state.folder_name_input.shift_active,
                 )
             )
             rects["modal"] = modal_rect
@@ -219,6 +224,7 @@ class ScreenManager:
                     state.ia_login.cursor_position,
                     state.ia_login.error_message,
                     input_mode=state.input_mode,
+                    shift_active=state.ia_login.shift_active,
                 )
             )
             rects["modal"] = modal_rect
@@ -236,12 +242,11 @@ class ScreenManager:
                     state.ia_download_wizard.files_list,
                     state.ia_download_wizard.selected_file_index,
                     state.ia_download_wizard.output_folder,
-                    state.ia_download_wizard.folder_items,
-                    state.ia_download_wizard.folder_highlighted,
                     state.ia_download_wizard.should_extract,
                     state.ia_download_wizard.cursor_position,
                     state.ia_download_wizard.error_message,
                     input_mode=state.input_mode,
+                    shift_active=state.ia_download_wizard.shift_active,
                 )
             )
             rects["modal"] = modal_rect
@@ -270,6 +275,7 @@ class ScreenManager:
                     custom_format_input=state.ia_collection_wizard.custom_format_input,
                     extract_contents=state.ia_collection_wizard.extract_contents,
                     options_highlighted=state.ia_collection_wizard.options_highlighted,
+                    shift_active=state.ia_collection_wizard.shift_active,
                 )
             )
             rects["modal"] = modal_rect
@@ -290,6 +296,7 @@ class ScreenManager:
                     state.scraper_login.cursor_position,
                     state.scraper_login.error_message,
                     input_mode=state.input_mode,
+                    shift_active=state.scraper_login.shift_active,
                 )
             )
             rects["modal"] = modal_rect
@@ -348,6 +355,29 @@ class ScreenManager:
                     state.dedupe_wizard.space_freed,
                     state.dedupe_wizard.error_message,
                     mode_highlighted=state.dedupe_wizard.mode_highlighted,
+                    input_mode=state.input_mode,
+                )
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["item_rects"] = item_rects
+            return rects
+
+        if state.rename_wizard.show:
+            modal_rect, content_rect, close_rect, item_rects = (
+                self.rename_wizard_modal.render(
+                    screen,
+                    state.rename_wizard.step,
+                    state.rename_wizard.mode,
+                    state.rename_wizard.rename_items,
+                    state.rename_wizard.current_item_index,
+                    state.rename_wizard.scan_progress,
+                    state.rename_wizard.process_progress,
+                    state.rename_wizard.files_scanned,
+                    state.rename_wizard.total_files,
+                    state.rename_wizard.files_renamed,
+                    state.rename_wizard.error_message,
+                    mode_highlighted=state.rename_wizard.mode_highlighted,
                     input_mode=state.input_mode,
                 )
             )

@@ -21,11 +21,11 @@ class CharKeyboard:
     # Default character set
     CHARS_ALPHA = list("abcdefghijklmnopqrstuvwxyz")
     CHARS_NUMERIC = list("0123456789")
-    CHARS_SPECIAL = [" ", "DEL", "CLEAR", "DONE"]
+    CHARS_SPECIAL = [" ", "SHIFT", "DEL", "CLEAR", "DONE"]
 
     # URL-friendly characters (includes @ for emails and - for URLs)
     CHARS_URL = list("abcdefghijklmnopqrstuvwxyz0123456789.:/-_@")
-    CHARS_URL_SPECIAL = [" ", "DEL", "CLEAR", "DONE"]
+    CHARS_URL_SPECIAL = [" ", "SHIFT", "DEL", "CLEAR", "DONE"]
 
     def __init__(self, theme: Theme = default_theme):
         self.theme = theme
@@ -41,6 +41,7 @@ class CharKeyboard:
         chars_per_row: int = 13,
         char_set: str = "default",  # "default" or "url"
         show_input_field: bool = True,
+        shift_active: bool = False,
     ) -> Tuple[List[Tuple[pygame.Rect, int, str]], pygame.Rect]:
         """
         Render a character keyboard.
@@ -136,9 +137,15 @@ class CharKeyboard:
 
             # Determine if special button
             special = len(char) > 1 or char == " "
+            shift_highlight = char == "SHIFT" and shift_active
 
             self.char_button.render(
-                screen, char_rect, char, selected=(i == selected_index), special=special
+                screen,
+                char_rect,
+                char,
+                selected=(i == selected_index),
+                special=special,
+                highlighted=shift_highlight,
             )
 
             char_rects.append((char_rect, i, char))
@@ -181,8 +188,12 @@ class CharKeyboard:
         return len(self.CHARS_ALPHA) + len(self.CHARS_NUMERIC) + len(self.CHARS_SPECIAL)
 
     def handle_selection(
-        self, index: int, current_text: str, char_set: str = "default"
-    ) -> Tuple[str, bool]:
+        self,
+        index: int,
+        current_text: str,
+        char_set: str = "default",
+        shift_active: bool = False,
+    ) -> Tuple[str, bool, bool]:
         """
         Handle character selection.
 
@@ -190,22 +201,26 @@ class CharKeyboard:
             index: Selected character index
             current_text: Current input text
             char_set: Character set
+            shift_active: Whether shift is currently active
 
         Returns:
-            Tuple of (new_text, is_done)
+            Tuple of (new_text, is_done, toggle_shift)
         """
         char = self.get_char_at_index(index, char_set)
 
-        if char == "DEL":
-            return current_text[:-1] if current_text else "", False
+        if char == "SHIFT":
+            return current_text, False, True
+        elif char == "DEL":
+            return current_text[:-1] if current_text else "", False, False
         elif char == "CLEAR":
-            return "", False
+            return "", False, False
         elif char == "DONE":
-            return current_text, True
+            return current_text, True, False
         elif char == " ":
-            return current_text + " ", False
+            return current_text + " ", False, False
         else:
-            return current_text + char, False
+            append_char = char.upper() if shift_active and char.isalpha() else char
+            return current_text + append_char, False, False
 
 
 # Default instance

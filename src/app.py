@@ -354,6 +354,130 @@ class ConsoleUtilitiesApp:
         thread = threading.Thread(target=extract, daemon=True)
         thread.start()
 
+    def _is_unrar_available(self) -> bool:
+        """Check if unrar command is available."""
+        import shutil
+
+        if shutil.which("unrar"):
+            return True
+        # Check bundled location (PyInstaller)
+        if getattr(sys, "_MEIPASS", None):
+            bundled = os.path.join(sys._MEIPASS, "unrar")
+            if os.path.exists(bundled):
+                return True
+        for path in [
+            "/usr/bin/unrar",
+            "/usr/local/bin/unrar",
+            "/opt/homebrew/bin/unrar",
+        ]:
+            if os.path.exists(path):
+                return True
+        return False
+
+    def _show_unrar_missing_error(self):
+        """Show error when unrar is not installed."""
+        import threading
+
+        self._show_loading(
+            "unrar not installed. " "Please install unrar " "to extract RAR files."
+        )
+
+        def dismiss():
+            import time
+
+            time.sleep(3)
+            self._hide_loading()
+
+        thread = threading.Thread(target=dismiss, daemon=True)
+        thread.start()
+
+    def _extract_rar_file(self, rar_path: str):
+        """Extract a RAR file to the same folder using system unrar."""
+        import threading
+        import subprocess
+        import shutil
+
+        output_folder = os.path.dirname(rar_path)
+        rar_name = os.path.basename(rar_path)
+
+        self.state.folder_browser.show = False
+        self._show_loading(f"Extracting {rar_name}...")
+
+        def extract():
+            try:
+                # Find unrar command
+                unrar_cmd = shutil.which("unrar")
+                # Check bundled location (PyInstaller)
+                if not unrar_cmd:
+                    meipass = getattr(sys, "_MEIPASS", None)
+                    if meipass:
+                        bundled = os.path.join(meipass, "unrar")
+                        if os.path.exists(bundled):
+                            unrar_cmd = bundled
+                if not unrar_cmd:
+                    for path in [
+                        "/usr/bin/unrar",
+                        "/usr/local/bin/unrar",
+                        "/opt/homebrew/bin/unrar",
+                    ]:
+                        if os.path.exists(path):
+                            unrar_cmd = path
+                            break
+
+                if not unrar_cmd:
+                    self.state.loading.message = (
+                        "unrar not installed."
+                        " Please install unrar"
+                        " to extract RAR files."
+                    )
+                    import time
+
+                    time.sleep(3)
+                    self._hide_loading()
+                    return
+
+                result = subprocess.run(
+                    [
+                        unrar_cmd,
+                        "x",
+                        "-o+",
+                        "-y",
+                        rar_path,
+                        output_folder + "/",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=600,
+                )
+
+                if result.returncode != 0:
+                    from utils.logging import log_error
+
+                    log_error(f"unrar failed: {result.stderr}")
+                    self.state.loading.message = f"Error extracting {rar_name}"
+                    import time
+
+                    time.sleep(2)
+
+                self._hide_loading()
+            except subprocess.TimeoutExpired:
+                from utils.logging import log_error
+
+                log_error(f"RAR extraction timed out for {rar_name}")
+                self.state.loading.message = "Extraction timed out"
+                import time
+
+                time.sleep(2)
+                self._hide_loading()
+            except Exception as e:
+                from utils.logging import log_error
+
+                log_error(f"Failed to extract RAR: {e}")
+                self._hide_loading()
+
+        thread = threading.Thread(target=extract, daemon=True)
+        thread.start()
+
     def _render_frame(self):
         """Render a single frame (used during loading)."""
         self._draw_background()
@@ -524,8 +648,6 @@ class ConsoleUtilitiesApp:
                 )
             elif step == "file_select":
                 self._navigate_ia_file_select(direction)
-            elif step == "folder":
-                self._navigate_ia_folder_select(direction)
             return
 
         if self.state.ia_collection_wizard.show:
@@ -565,6 +687,10 @@ class ConsoleUtilitiesApp:
 
         if self.state.dedupe_wizard.show:
             self._navigate_dedupe_wizard(direction)
+            return
+
+        if self.state.rename_wizard.show:
+            self._navigate_rename_wizard(direction)
             return
 
         # Mode-based navigation
@@ -806,6 +932,8 @@ class ConsoleUtilitiesApp:
             self._move_highlight("left")
         elif event.key == pygame.K_RIGHT:
             self._move_highlight("right")
+        elif event.key == pygame.K_q:
+            self._toggle_keyboard_shift()
         elif event.key == pygame.K_s:
             self._handle_search_action()
         elif event.key == pygame.K_d:
@@ -827,6 +955,8 @@ class ConsoleUtilitiesApp:
             self._handle_search_action()
         elif action == "detail":
             self._handle_detail_action()
+        elif action == "left_shoulder":
+            self._toggle_keyboard_shift()
         elif action == "start":
             self._handle_start_action()
 
@@ -871,20 +1001,15 @@ class ConsoleUtilitiesApp:
                     return
             return
 
-        # Check IA download wizard list items (for steps with lists)
+        # Check IA download wizard list items
         if self.state.ia_download_wizard.show:
             step = self.state.ia_download_wizard.step
-            if step in ("file_select", "folder"):
+            if step == "file_select":
                 for i, rect in enumerate(self.state.ui_rects.menu_items):
                     if rect.collidepoint(x, y):
-                        if step == "file_select":
-                            self.state.ia_download_wizard.selected_file_index = i
-                            self._handle_ia_download_wizard_selection()
-                        elif step == "folder":
-                            self.state.ia_download_wizard.folder_highlighted = i
-                            self._handle_ia_download_folder_selection()
+                        self.state.ia_download_wizard.selected_file_index = i
+                        self._handle_ia_download_wizard_selection()
                         return
-                # Only return if in list mode - fall through to char_rect check otherwise
                 return
 
         # Check IA collection wizard list items (format selection)
@@ -1005,6 +1130,8 @@ class ConsoleUtilitiesApp:
             self._close_scraper_wizard()
         elif self.state.dedupe_wizard.show:
             self._close_dedupe_wizard()
+        elif self.state.rename_wizard.show:
+            self._close_rename_wizard()
         elif self.state.game_details.show:
             self.state.game_details.show = False
             self.state.game_details.current_game = None
@@ -1091,6 +1218,10 @@ class ConsoleUtilitiesApp:
 
         if self.state.dedupe_wizard.show:
             self._handle_dedupe_wizard_selection()
+            return
+
+        if self.state.rename_wizard.show:
+            self._handle_rename_wizard_selection()
             return
 
         # Mode-based selection
@@ -1300,10 +1431,18 @@ class ConsoleUtilitiesApp:
             self.settings["scraper_frontend"] = frontends[(idx + 1) % len(frontends)]
             save_settings(self.settings)
         elif action == "toggle_scraper_provider":
-            providers = ["screenscraper", "thegamesdb"]
-            current = self.settings.get("scraper_provider", "screenscraper")
+            providers = [
+                "libretro",
+                "screenscraper",
+                "thegamesdb",
+            ]
+            current = self.settings.get("scraper_provider", "libretro")
             idx = providers.index(current) if current in providers else 0
             self.settings["scraper_provider"] = providers[(idx + 1) % len(providers)]
+            save_settings(self.settings)
+        elif action == "toggle_scraper_fallback":
+            current = self.settings.get("scraper_fallback_enabled", True)
+            self.settings["scraper_fallback_enabled"] = not current
             save_settings(self.settings)
         elif action == "screenscraper_login":
             self._show_screenscraper_login()
@@ -1334,6 +1473,11 @@ class ConsoleUtilitiesApp:
             self._show_ia_collection_wizard()
         elif action == "extract_zip":
             self._open_folder_browser("extract_zip")
+        elif action == "extract_rar":
+            if not self._is_unrar_available():
+                self._show_unrar_missing_error()
+                return
+            self._open_folder_browser("extract_rar")
         elif action == "nsz_converter":
             self._open_folder_browser("nsz_converter")
         elif action == "scrape_images":
@@ -1342,6 +1486,8 @@ class ConsoleUtilitiesApp:
             self._show_scraper_wizard(batch_mode=True)
         elif action == "dedupe_games":
             self._show_dedupe_wizard()
+        elif action == "clean_filenames":
+            self._show_rename_wizard()
 
     def _show_dedupe_wizard(self):
         """Show the dedupe games wizard."""
@@ -1385,6 +1531,14 @@ class ConsoleUtilitiesApp:
             path = self.settings.get("roms_dir", os.path.expanduser("~"))
         elif selection_type == "dedupe_folder":
             path = self.settings.get("roms_dir", os.path.expanduser("~"))
+        elif selection_type in ("extract_zip", "extract_rar"):
+            path = self.settings.get("work_dir", os.path.expanduser("~"))
+        elif selection_type == "rename_folder":
+            path = self.settings.get("roms_dir", os.path.expanduser("~"))
+        elif selection_type == "ia_download_folder":
+            path = self.state.ia_download_wizard.output_folder or self.settings.get(
+                "work_dir", os.path.expanduser("~")
+            )
         else:
             path = os.path.expanduser("~")
 
@@ -1454,7 +1608,7 @@ class ConsoleUtilitiesApp:
             self.state.folder_browser.highlighted = 0
             self.state.folder_browser.focus_area = "list"
 
-        elif item_type in ("json_file", "keys_file", "zip_file", "file"):
+        elif item_type in ("json_file", "keys_file", "zip_file", "rar_file", "file"):
             # Select the file based on selection type
             self._complete_folder_browser_selection(item_path, selection_type)
 
@@ -1481,6 +1635,13 @@ class ConsoleUtilitiesApp:
             # Extract ZIP file to same folder
             self._extract_zip_file(path)
             # Don't close modal yet, extraction will handle it
+            return
+        elif selection_type == "extract_rar":
+            if not self._is_unrar_available():
+                self.state.folder_browser.show = False
+                self._show_unrar_missing_error()
+                return
+            self._extract_rar_file(path)
             return
         elif selection_type == "esde_media_path":
             self.settings["esde_media_path"] = path
@@ -1522,6 +1683,14 @@ class ConsoleUtilitiesApp:
             self.state.dedupe_wizard.folder_path = current_path
             self.state.folder_browser.show = False
             self._start_dedupe_scan()
+        elif selection_type == "rename_folder":
+            self.state.rename_wizard.folder_path = current_path
+            self.state.folder_browser.show = False
+            self._start_rename_scan()
+        elif selection_type == "ia_download_folder":
+            self.state.ia_download_wizard.output_folder = current_path
+            self.state.folder_browser.show = False
+            self.state.ia_download_wizard.step = "options"
         else:
             # For file selection, user needs to select a file
             pass
@@ -1576,6 +1745,41 @@ class ConsoleUtilitiesApp:
             # Open folder browser for custom folder
             self._open_folder_browser("custom_folder")
 
+    def _toggle_keyboard_shift(self):
+        """Toggle shift state for the currently active keyboard modal."""
+        if self.state.show_search_input:
+            self.state.search.shift_active = not self.state.search.shift_active
+        elif self.state.url_input.show:
+            self.state.url_input.shift_active = not self.state.url_input.shift_active
+        elif self.state.folder_name_input.show:
+            self.state.folder_name_input.shift_active = (
+                not self.state.folder_name_input.shift_active
+            )
+        elif self.state.ia_login.show and self.state.ia_login.step in (
+            "email",
+            "password",
+        ):
+            self.state.ia_login.shift_active = not self.state.ia_login.shift_active
+        elif (
+            self.state.ia_download_wizard.show
+            and self.state.ia_download_wizard.step == "url"
+        ):
+            self.state.ia_download_wizard.shift_active = (
+                not self.state.ia_download_wizard.shift_active
+            )
+        elif self.state.ia_collection_wizard.show and (
+            self.state.ia_collection_wizard.step in ("url", "name")
+        ):
+            self.state.ia_collection_wizard.shift_active = (
+                not self.state.ia_collection_wizard.shift_active
+            )
+        elif self.state.scraper_login.show and (
+            self.state.scraper_login.step in ("username", "password", "api_key")
+        ):
+            self.state.scraper_login.shift_active = (
+                not self.state.scraper_login.shift_active
+            )
+
     def _navigate_keyboard_modal(
         self, direction: str, modal_state, char_set: str = "default"
     ):
@@ -1617,19 +1821,32 @@ class ConsoleUtilitiesApp:
                     fb.focus_area = "buttons"
                     fb.button_index = 0
             elif direction == "left":
-                if fb.highlighted > 0:
-                    fb.highlighted -= 1
+                # Jump to buttons - Cancel button (index 1)
+                fb.focus_area = "buttons"
+                fb.button_index = 1
             elif direction == "right":
-                if fb.highlighted < max_items - 1:
-                    fb.highlighted += 1
+                # Jump to buttons - Select button (index 0)
+                fb.focus_area = "buttons"
+                fb.button_index = 0
         else:  # focus_area == "buttons"
             if direction == "up":
                 # Move back to list
                 fb.focus_area = "list"
+            elif direction == "down":
+                # Also move back to list from buttons
+                fb.focus_area = "list"
             elif direction == "left":
-                fb.button_index = 0  # Select button
+                if fb.button_index > 0:
+                    fb.button_index -= 1
+                else:
+                    # From leftmost button, go back to list
+                    fb.focus_area = "list"
             elif direction == "right":
-                fb.button_index = 1  # Cancel button
+                if fb.button_index < 1:
+                    fb.button_index += 1
+                else:
+                    # From rightmost button, go back to list
+                    fb.focus_area = "list"
 
     def _navigate_ia_file_select(self, direction: str):
         """Navigate IA download wizard file selection."""
@@ -1642,18 +1859,6 @@ class ConsoleUtilitiesApp:
         elif direction in ("down", "right"):
             if wizard.selected_file_index < max_items - 1:
                 wizard.selected_file_index += 1
-
-    def _navigate_ia_folder_select(self, direction: str):
-        """Navigate IA download wizard folder selection."""
-        wizard = self.state.ia_download_wizard
-        max_items = len(wizard.folder_items) or 1
-
-        if direction in ("up", "left"):
-            if wizard.folder_highlighted > 0:
-                wizard.folder_highlighted -= 1
-        elif direction in ("down", "right"):
-            if wizard.folder_highlighted < max_items - 1:
-                wizard.folder_highlighted += 1
 
     def _navigate_ia_format_select(self, direction: str):
         """Navigate IA collection wizard format selection."""
@@ -1686,9 +1891,13 @@ class ConsoleUtilitiesApp:
         from ui.screens.modals.url_input_modal import UrlInputModal
 
         modal = UrlInputModal()
-        new_text, is_done = modal.handle_selection(
-            self.state.url_input.cursor_position, self.state.url_input.input_text
+        new_text, is_done, toggle_shift = modal.handle_selection(
+            self.state.url_input.cursor_position,
+            self.state.url_input.input_text,
+            shift_active=self.state.url_input.shift_active,
         )
+        if toggle_shift:
+            self.state.url_input.shift_active = not self.state.url_input.shift_active
         self.state.url_input.input_text = new_text
 
         if is_done:
@@ -1701,10 +1910,15 @@ class ConsoleUtilitiesApp:
         from ui.screens.modals.folder_name_modal import FolderNameModal
 
         modal = FolderNameModal()
-        new_text, is_done = modal.handle_selection(
+        new_text, is_done, toggle_shift = modal.handle_selection(
             self.state.folder_name_input.cursor_position,
             self.state.folder_name_input.input_text,
+            shift_active=self.state.folder_name_input.shift_active,
         )
+        if toggle_shift:
+            self.state.folder_name_input.shift_active = (
+                not self.state.folder_name_input.shift_active
+            )
         self.state.folder_name_input.input_text = new_text
 
         if is_done:
@@ -1717,9 +1931,13 @@ class ConsoleUtilitiesApp:
         from ui.screens.modals.search_modal import SearchModal
 
         modal = SearchModal()
-        new_text, is_done = modal.handle_selection(
-            self.state.search.cursor_position, self.state.search.input_text
+        new_text, is_done, toggle_shift = modal.handle_selection(
+            self.state.search.cursor_position,
+            self.state.search.input_text,
+            shift_active=self.state.search.shift_active,
         )
+        if toggle_shift:
+            self.state.search.shift_active = not self.state.search.shift_active
         self.state.search.input_text = new_text
         self.state.search.query = new_text
 
@@ -1831,15 +2049,11 @@ class ConsoleUtilitiesApp:
             self._start_download()
             return
 
-        # Handle IA download wizard - start button triggers download on options step
+        # Handle IA download wizard - start button triggers download
         if self.state.ia_download_wizard.show:
             step = self.state.ia_download_wizard.step
             if step == "options":
                 self._start_ia_download()
-                return
-            elif step == "folder":
-                # Select current folder and move to options
-                self.state.ia_download_wizard.step = "options"
                 return
 
         # Handle IA collection wizard - start button advances through steps
@@ -1872,6 +2086,19 @@ class ConsoleUtilitiesApp:
                 self._start_batch_scrape()
                 return
 
+        # Handle dedupe wizard - don't close on Start button
+        if self.state.dedupe_wizard.show:
+            return
+
+        # Handle rename wizard - Start confirms in manual mode
+        if self.state.rename_wizard.show:
+            if (
+                self.state.rename_wizard.step == "review"
+                and self.state.rename_wizard.mode == "manual"
+            ):
+                self._process_renames()
+            return
+
         # Close any open modals
         self.state.show_search_input = False
         self.state.url_input.show = False
@@ -1885,6 +2112,7 @@ class ConsoleUtilitiesApp:
         self.state.scraper_login.show = False
         self.state.scraper_wizard.show = False
         self.state.dedupe_wizard.show = False
+        self.state.rename_wizard.show = False
 
         # Go to systems (home) screen
         self.state.mode = "systems"
@@ -1953,9 +2181,16 @@ class ConsoleUtilitiesApp:
                 from ui.screens.modals.ia_login_modal import IALoginModal
 
                 modal = IALoginModal()
-                new_text, is_done = modal.handle_selection(
-                    step, self.state.ia_login.cursor_position, self.state.ia_login.email
+                new_text, is_done, toggle_shift = modal.handle_selection(
+                    step,
+                    self.state.ia_login.cursor_position,
+                    self.state.ia_login.email,
+                    shift_active=self.state.ia_login.shift_active,
                 )
+                if toggle_shift:
+                    self.state.ia_login.shift_active = (
+                        not self.state.ia_login.shift_active
+                    )
                 self.state.ia_login.email = new_text
                 if is_done and new_text:
                     self.state.ia_login.step = "password"
@@ -1971,11 +2206,16 @@ class ConsoleUtilitiesApp:
                 from ui.screens.modals.ia_login_modal import IALoginModal
 
                 modal = IALoginModal()
-                new_text, is_done = modal.handle_selection(
+                new_text, is_done, toggle_shift = modal.handle_selection(
                     step,
                     self.state.ia_login.cursor_position,
                     self.state.ia_login.password,
+                    shift_active=self.state.ia_login.shift_active,
                 )
+                if toggle_shift:
+                    self.state.ia_login.shift_active = (
+                        not self.state.ia_login.shift_active
+                    )
                 self.state.ia_login.password = new_text
                 if is_done and new_text:
                     self._test_ia_credentials()
@@ -2032,8 +2272,6 @@ class ConsoleUtilitiesApp:
         self.state.ia_download_wizard.error_message = ""
         self.state.ia_download_wizard.files_list = []
         self.state.ia_download_wizard.selected_file_index = 0
-        self.state.ia_download_wizard.folder_items = []
-        self.state.ia_download_wizard.folder_highlighted = 0
 
     def _close_ia_download_wizard(self):
         """Close the IA download wizard modal."""
@@ -2057,26 +2295,23 @@ class ConsoleUtilitiesApp:
                 from ui.screens.modals.ia_download_modal import IADownloadModal
 
                 modal = IADownloadModal()
-                new_text, is_done = modal.handle_url_selection(
+                new_text, is_done, toggle_shift = modal.handle_url_selection(
                     self.state.ia_download_wizard.cursor_position,
                     self.state.ia_download_wizard.url,
+                    shift_active=self.state.ia_download_wizard.shift_active,
                 )
+                if toggle_shift:
+                    self.state.ia_download_wizard.shift_active = (
+                        not self.state.ia_download_wizard.shift_active
+                    )
                 self.state.ia_download_wizard.url = new_text
                 if is_done and new_text:
                     self._validate_ia_download_item()
 
         elif step == "file_select":
-            # File selected, move to folder selection
+            # File selected, open folder browser
             if self.state.ia_download_wizard.files_list:
-                self.state.ia_download_wizard.step = "folder"
-                self.state.ia_download_wizard.folder_items = load_folder_contents(
-                    self.state.ia_download_wizard.output_folder
-                )
-                self.state.ia_download_wizard.folder_highlighted = 0
-
-        elif step == "folder":
-            # Handle folder selection
-            self._handle_ia_download_folder_selection()
+                self._open_folder_browser("ia_download_folder")
 
         elif step == "options":
             # Toggle extract option
@@ -2136,33 +2371,6 @@ class ConsoleUtilitiesApp:
 
         thread = Thread(target=validate_item, daemon=True)
         thread.start()
-
-    def _handle_ia_download_folder_selection(self):
-        """Handle folder selection in IA download wizard."""
-        wizard = self.state.ia_download_wizard
-        items = wizard.folder_items
-        highlighted = wizard.folder_highlighted
-
-        if highlighted >= len(items):
-            return
-
-        item = items[highlighted]
-        item_type = item.get("type", "")
-        item_path = item.get("path", "")
-
-        if item_type == "parent":
-            # Navigate to parent
-            wizard.output_folder = item_path
-            wizard.folder_items = load_folder_contents(item_path)
-            wizard.folder_highlighted = 0
-        elif item_type == "folder":
-            # Navigate into folder
-            wizard.output_folder = item_path
-            wizard.folder_items = load_folder_contents(item_path)
-            wizard.folder_highlighted = 0
-        else:
-            # Select current folder and move to options
-            wizard.step = "options"
 
     def _start_ia_download(self):
         """Start the IA download."""
@@ -2258,11 +2466,16 @@ class ConsoleUtilitiesApp:
                 from ui.screens.modals.ia_collection_modal import IACollectionModal
 
                 modal = IACollectionModal()
-                new_text, is_done = modal.handle_selection(
+                new_text, is_done, toggle_shift = modal.handle_selection(
                     step,
                     self.state.ia_collection_wizard.cursor_position,
                     self.state.ia_collection_wizard.url,
+                    shift_active=self.state.ia_collection_wizard.shift_active,
                 )
+                if toggle_shift:
+                    self.state.ia_collection_wizard.shift_active = (
+                        not self.state.ia_collection_wizard.shift_active
+                    )
                 self.state.ia_collection_wizard.url = new_text
                 if is_done and new_text:
                     self._validate_ia_collection_item()
@@ -2276,11 +2489,16 @@ class ConsoleUtilitiesApp:
                 from ui.screens.modals.ia_collection_modal import IACollectionModal
 
                 modal = IACollectionModal()
-                new_text, is_done = modal.handle_selection(
+                new_text, is_done, toggle_shift = modal.handle_selection(
                     step,
                     self.state.ia_collection_wizard.cursor_position,
                     self.state.ia_collection_wizard.collection_name,
+                    shift_active=self.state.ia_collection_wizard.shift_active,
                 )
+                if toggle_shift:
+                    self.state.ia_collection_wizard.shift_active = (
+                        not self.state.ia_collection_wizard.shift_active
+                    )
                 self.state.ia_collection_wizard.collection_name = new_text
                 if is_done and new_text:
                     # Open folder browser for folder selection
@@ -2324,11 +2542,18 @@ class ConsoleUtilitiesApp:
                     from ui.screens.modals.ia_collection_modal import IACollectionModal
 
                     modal = IACollectionModal()
-                    new_text, is_done = modal.char_keyboard.handle_selection(
-                        wizard.cursor_position,
-                        wizard.custom_format_input,
-                        char_set="default",
+                    new_text, is_done, toggle_shift = (
+                        modal.char_keyboard.handle_selection(
+                            wizard.cursor_position,
+                            wizard.custom_format_input,
+                            char_set="default",
+                            shift_active=self.state.ia_collection_wizard.shift_active,
+                        )
                     )
+                    if toggle_shift:
+                        self.state.ia_collection_wizard.shift_active = (
+                            not self.state.ia_collection_wizard.shift_active
+                        )
                     wizard.custom_format_input = new_text
                     if is_done:
                         if new_text:
@@ -2645,7 +2870,7 @@ class ConsoleUtilitiesApp:
             wizard.folder_items = load_folder_contents(item_path)
             wizard.folder_highlighted = 0
 
-        elif item_type == "file":
+        elif item_type in ("file", "zip_file"):
             # ROM file selected, start searching
             wizard.selected_rom_path = item_path
             wizard.selected_rom_name = item.get("name", os.path.basename(item_path))
@@ -2753,14 +2978,19 @@ class ConsoleUtilitiesApp:
 
         from services.scraper_service import get_scraper_service
 
-        service = get_scraper_service(self.settings)
+        # Set system context from ROM path for Libretro
+        rom_dir = os.path.basename(os.path.dirname(wizard.selected_rom_path))
+        self.settings["current_system_folder"] = rom_dir
 
-        # Extract clean game name from ROM filename
-        game_name = service.extract_game_name(wizard.selected_rom_path)
+        service = get_scraper_service(self.settings)
+        service.reset_provider()
+
+        rom_path = wizard.selected_rom_path
+        game_name = service.extract_game_name(rom_path)
         wizard.selected_rom_name = game_name
 
         def search():
-            success, results, error = service.search_game(game_name)
+            success, results, error = service.search_game(game_name, rom_path=rom_path)
 
             if not success:
                 wizard.step = "error"
@@ -2916,7 +3146,12 @@ class ConsoleUtilitiesApp:
         from services.scraper_service import get_scraper_service
         from services.metadata_writer import get_metadata_writer
 
+        # Set system context from batch folder for Libretro
+        batch_dir = os.path.basename(wizard.folder_current_path)
+        self.settings["current_system_folder"] = batch_dir
+
         service = get_scraper_service(self.settings)
+        service.reset_provider()
 
         def process_batch():
             for i, rom in enumerate(wizard.batch_roms):
@@ -2927,9 +3162,10 @@ class ConsoleUtilitiesApp:
                 rom["status"] = "searching"
                 wizard.current_download = f"Searching: {rom['name']}"
 
-                # Extract game name and search
                 game_name = service.extract_game_name(rom["path"])
-                success, results, error = service.search_game(game_name)
+                success, results, error = service.search_game(
+                    game_name, rom_path=rom["path"]
+                )
 
                 if not success or not results:
                     rom["status"] = "error"
@@ -3041,9 +3277,17 @@ class ConsoleUtilitiesApp:
                     from ui.screens.modals.scraper_login_modal import ScraperLoginModal
 
                     modal = ScraperLoginModal()
-                    new_text, is_done = modal.handle_selection(
-                        provider, step, login.cursor_position, login.username
+                    new_text, is_done, toggle_shift = modal.handle_selection(
+                        provider,
+                        step,
+                        login.cursor_position,
+                        login.username,
+                        shift_active=self.state.scraper_login.shift_active,
                     )
+                    if toggle_shift:
+                        self.state.scraper_login.shift_active = (
+                            not self.state.scraper_login.shift_active
+                        )
                     login.username = new_text
                     if is_done and new_text:
                         login.step = "password"
@@ -3058,9 +3302,17 @@ class ConsoleUtilitiesApp:
                     from ui.screens.modals.scraper_login_modal import ScraperLoginModal
 
                     modal = ScraperLoginModal()
-                    new_text, is_done = modal.handle_selection(
-                        provider, step, login.cursor_position, login.password
+                    new_text, is_done, toggle_shift = modal.handle_selection(
+                        provider,
+                        step,
+                        login.cursor_position,
+                        login.password,
+                        shift_active=self.state.scraper_login.shift_active,
                     )
+                    if toggle_shift:
+                        self.state.scraper_login.shift_active = (
+                            not self.state.scraper_login.shift_active
+                        )
                     login.password = new_text
                     if is_done and new_text:
                         self._test_screenscraper_credentials()
@@ -3084,9 +3336,17 @@ class ConsoleUtilitiesApp:
                     from ui.screens.modals.scraper_login_modal import ScraperLoginModal
 
                     modal = ScraperLoginModal()
-                    new_text, is_done = modal.handle_selection(
-                        provider, step, login.cursor_position, login.api_key
+                    new_text, is_done, toggle_shift = modal.handle_selection(
+                        provider,
+                        step,
+                        login.cursor_position,
+                        login.api_key,
+                        shift_active=self.state.scraper_login.shift_active,
                     )
+                    if toggle_shift:
+                        self.state.scraper_login.shift_active = (
+                            not self.state.scraper_login.shift_active
+                        )
                     login.api_key = new_text
                     if is_done and new_text:
                         self._test_thegamesdb_credentials()
@@ -3112,20 +3372,18 @@ class ConsoleUtilitiesApp:
         def test_credentials():
             from services.scraper_providers.screenscraper import ScreenScraperProvider
 
-            # Try to search for a known game to test credentials
+            encoded_password = base64.b64encode(password.encode()).decode()
             provider = ScreenScraperProvider(
                 username=username,
-                password=base64.b64encode(password.encode()).decode(),
+                password=encoded_password,
             )
 
-            success, results, error = provider.search_game("Mario")
+            success, error = provider.test_credentials()
 
             if success:
                 # Save credentials
                 self.settings["screenscraper_username"] = username
-                self.settings["screenscraper_password"] = base64.b64encode(
-                    password.encode()
-                ).decode()
+                self.settings["screenscraper_password"] = encoded_password
                 save_settings(self.settings)
                 login.step = "complete"
             else:
@@ -3173,10 +3431,156 @@ class ConsoleUtilitiesApp:
 
         self.state.dedupe_wizard = DedupeWizardState()
 
+    def _show_rename_wizard(self):
+        """Show the file rename wizard."""
+        from state import RenameWizardState
+
+        self.state.rename_wizard = RenameWizardState()
+        self.state.rename_wizard.show = True
+        self.state.rename_wizard.step = "mode_select"
+        self.state.rename_wizard.mode_highlighted = 0
+
+    def _close_rename_wizard(self):
+        """Close the file rename wizard."""
+        from state import RenameWizardState
+
+        self.state.rename_wizard = RenameWizardState()
+
+    def _navigate_rename_wizard(self, direction: str):
+        """Handle navigation in rename wizard."""
+        wizard = self.state.rename_wizard
+        step = wizard.step
+
+        if step == "scanning":
+            return
+
+        if step == "mode_select":
+            if direction in ("up", "left"):
+                wizard.mode_highlighted = max(0, wizard.mode_highlighted - 1)
+            elif direction in ("down", "right"):
+                wizard.mode_highlighted = min(1, wizard.mode_highlighted + 1)
+
+        elif step == "review":
+            max_items = len(wizard.rename_items) or 1
+            if direction in ("left", "up"):
+                wizard.current_item_index = max(0, wizard.current_item_index - 1)
+            elif direction in ("right", "down"):
+                wizard.current_item_index = min(
+                    max_items - 1,
+                    wizard.current_item_index + 1,
+                )
+
+    def _handle_rename_wizard_selection(self):
+        """Handle selection in rename wizard."""
+        wizard = self.state.rename_wizard
+        step = wizard.step
+
+        if step == "scanning":
+            return
+
+        if step == "mode_select":
+            wizard.mode = "automatic" if wizard.mode_highlighted == 0 else "manual"
+            self._open_folder_browser("rename_folder")
+
+        elif step == "review":
+            if wizard.mode == "automatic":
+                self._process_renames()
+            else:
+                # Toggle current item selected state
+                if wizard.rename_items:
+                    idx = wizard.current_item_index
+                    item = wizard.rename_items[idx]
+                    item["selected"] = not item.get("selected", True)
+
+        elif step in (
+            "complete",
+            "no_changes",
+            "error",
+        ):
+            self._close_rename_wizard()
+
+    def _start_rename_scan(self):
+        """Start scanning for files to rename."""
+        wizard = self.state.rename_wizard
+        wizard.step = "scanning"
+        wizard.scan_progress = 0.0
+
+        folder_path = wizard.folder_path
+
+        from threading import Thread
+        from services.dedupe_service import (
+            generate_clean_names,
+        )
+
+        def scan():
+            def progress_callback(current, total):
+                wizard.files_scanned = current
+                wizard.total_files = total
+                if total > 0:
+                    wizard.scan_progress = current / total
+
+            try:
+                items = generate_clean_names(folder_path, progress_callback)
+                wizard.rename_items = items
+                wizard.current_item_index = 0
+
+                if items:
+                    wizard.step = "review"
+                else:
+                    wizard.step = "no_changes"
+            except Exception as e:
+                wizard.step = "error"
+                wizard.error_message = str(e)
+
+        thread = Thread(target=scan, daemon=True)
+        thread.start()
+
+    def _process_renames(self):
+        """Process file renames."""
+        wizard = self.state.rename_wizard
+        wizard.step = "processing"
+
+        items_to_rename = [
+            item for item in wizard.rename_items if item.get("selected", True)
+        ]
+
+        from threading import Thread
+
+        def process():
+            renamed = 0
+            total = len(items_to_rename)
+
+            for i, item in enumerate(items_to_rename):
+                try:
+                    old_path = item["path"]
+                    new_path = os.path.join(
+                        os.path.dirname(old_path),
+                        item["new_name"],
+                    )
+
+                    if not os.path.exists(new_path):
+                        os.rename(old_path, new_path)
+                        renamed += 1
+
+                    if total > 0:
+                        wizard.process_progress = (i + 1) / total
+                except OSError:
+                    pass
+
+            wizard.files_renamed = renamed
+            wizard.step = "complete"
+
+        thread = Thread(target=process, daemon=True)
+        thread.start()
+
     def _navigate_dedupe_wizard(self, direction: str):
         """Handle navigation in dedupe wizard."""
         wizard = self.state.dedupe_wizard
         step = wizard.step
+
+        if step == "scanning":
+            # Ignore navigation during scanning
+            return
 
         if step == "mode_select":
             # Two modes: safe (0) and manual (1)
@@ -3223,6 +3627,10 @@ class ConsoleUtilitiesApp:
         """Handle selection in dedupe wizard."""
         wizard = self.state.dedupe_wizard
         step = wizard.step
+
+        if step == "scanning":
+            # Ignore input during scanning
+            return
 
         if step == "mode_select":
             # Set mode based on selection

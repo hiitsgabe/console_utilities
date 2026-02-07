@@ -99,6 +99,7 @@ bundle:
 	@echo "   ⚠️  Install native libs: pip install pygame zstandard pycryptodome"
 
 # Build macOS .app bundle (standalone executable)
+# Note: Install unrar (brew install unrar) to bundle RAR extraction support
 bundle-macos:
 	@echo "🍎 Building macOS app bundle..."
 	@rm -rf build/macos dist/macos dist/macos.zip
