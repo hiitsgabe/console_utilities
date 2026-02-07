@@ -60,6 +60,9 @@ class ActionButton:
                 color = self.theme.primary
             if text_color is None:
                 text_color = self.theme.text_primary
+            # Hover fills background with primary, so use dark text for contrast
+            if hover:
+                text_color = self.theme.background
 
         # Draw button
         self.button.render(
