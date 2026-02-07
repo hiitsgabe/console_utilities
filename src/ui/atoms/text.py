@@ -23,7 +23,8 @@ class Text:
     def get_font(self, size: int) -> pygame.font.Font:
         """Get or create a font of the given size."""
         if size not in self._font_cache:
-            self._font_cache[size] = pygame.font.Font(None, size)
+            font_path = getattr(self.theme, "font_path", None)
+            self._font_cache[size] = pygame.font.Font(font_path, size)
         return self._font_cache[size]
 
     def render(
@@ -177,15 +178,15 @@ class Text:
         if size is None:
             size = self.theme.font_size_md
 
-        # Rainbow colors
+        # Green phosphor gradient for retro terminal look
         rainbow_colors = [
-            (255, 0, 0),  # Red
-            (255, 127, 0),  # Orange
-            (255, 255, 0),  # Yellow
-            (0, 255, 0),  # Green
-            (0, 0, 255),  # Blue
-            (75, 0, 130),  # Indigo
-            (148, 0, 211),  # Violet
+            self.theme.primary,
+            self.theme.primary_light,
+            self.theme.secondary,
+            self.theme.primary,
+            self.theme.primary_dark,
+            self.theme.primary_light,
+            self.theme.primary,
         ]
 
         font = self.get_font(size)

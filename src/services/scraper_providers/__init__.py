@@ -4,10 +4,18 @@ Scraper providers package.
 Provides different game artwork scraping APIs.
 """
 
-from .base_provider import BaseProvider, ScraperResult, GameSearchResult, GameImage
+from .base_provider import (
+    BaseProvider,
+    ScraperResult,
+    GameSearchResult,
+    GameImage,
+    GameVideo,
+)
 from .screenscraper import ScreenScraperProvider
 from .thegamesdb import TheGamesDBProvider
 from .libretro import LibretroProvider
+from .rawg import RAWGProvider
+from .igdb import IGDBProvider
 
 
 def get_provider(provider_name: str, settings: dict) -> BaseProvider:
@@ -34,6 +42,15 @@ def get_provider(provider_name: str, settings: dict) -> BaseProvider:
         return TheGamesDBProvider(
             api_key=settings.get("thegamesdb_api_key", ""),
         )
+    elif provider_name == "rawg":
+        return RAWGProvider(
+            api_key=settings.get("rawg_api_key", ""),
+        )
+    elif provider_name == "igdb":
+        return IGDBProvider(
+            client_id=settings.get("igdb_client_id", ""),
+            client_secret=settings.get("igdb_client_secret", ""),
+        )
     else:
         raise ValueError(f"Unknown provider: {provider_name}")
 
@@ -43,8 +60,11 @@ __all__ = [
     "ScraperResult",
     "GameSearchResult",
     "GameImage",
+    "GameVideo",
     "LibretroProvider",
     "ScreenScraperProvider",
     "TheGamesDBProvider",
+    "RAWGProvider",
+    "IGDBProvider",
     "get_provider",
 ]

@@ -8,6 +8,7 @@ from typing import List, Set, Tuple, Optional, Any, Callable
 from ui.theme import Theme, default_theme
 from ui.organisms.header import Header
 from ui.organisms.menu_list import MenuList
+from constants import BEZEL_INSET
 
 
 class ListScreenTemplate:
@@ -78,12 +79,14 @@ class ListScreenTemplate:
             center_title=center_title,
         )
 
-        # Calculate content area
+        # Calculate content area (inset from bezel on all sides)
+        inset = BEZEL_INSET
         content_rect = pygame.Rect(
-            self.theme.padding_sm,
-            header_height + self.theme.padding_sm,
-            screen.get_width() - self.theme.padding_sm * 2,
+            inset + self.theme.padding_sm,
+            inset + header_height + self.theme.padding_sm,
+            screen.get_width() - inset * 2 - self.theme.padding_sm * 2,
             screen.get_height()
+            - inset * 2
             - header_height
             - self.theme.padding_sm * 2
             - footer_height,
@@ -156,6 +159,7 @@ class ListScreenTemplate:
         # Render bottom buttons
         button_rects = []
         if button_labels:
+            inset = BEZEL_INSET
             button_width = 120
             button_height = 40
             total_width = (
@@ -165,6 +169,7 @@ class ListScreenTemplate:
             start_x = (screen.get_width() - total_width) // 2
             button_y = (
                 screen.get_height()
+                - inset
                 - footer_height
                 + (footer_height - button_height) // 2
             )

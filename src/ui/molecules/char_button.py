@@ -46,7 +46,7 @@ class CharButton:
         # Determine colors
         if selected:
             bg_color = self.theme.primary
-            text_color = self.theme.text_primary
+            text_color = self.theme.background
         elif highlighted:
             bg_color = self.theme.surface_hover
             text_color = self.theme.text_primary

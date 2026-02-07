@@ -173,7 +173,7 @@ class Grid:
         # Draw checkmark
         cx, cy = checkbox_rect.center
         points = [(cx - 5, cy), (cx - 1, cy + 4), (cx + 5, cy - 4)]
-        pygame.draw.lines(screen, (255, 255, 255), False, points, 2)
+        pygame.draw.lines(screen, self.theme.background, False, points, 2)
 
     def _draw_scroll_indicators(
         self,

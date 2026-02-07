@@ -206,6 +206,10 @@ class IADownloadWizardState:
     files_list: List[Dict[str, Any]] = field(default_factory=list)
     selected_file_index: int = 0
     shift_active: bool = False
+    # Folder navigation
+    current_folder: str = ""
+    folder_stack: List[str] = field(default_factory=list)
+    display_items: List[Dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -255,7 +259,7 @@ class ScraperWizardState:
 
     show: bool = False
     step: str = (
-        "rom_select"  # rom_select, searching, game_select, image_select, downloading, updating_metadata, complete, error
+        "rom_select"  # rom_select, searching, game_select, image_select, video_select, downloading, updating_metadata, complete, error
     )
     # Single ROM mode
     selected_rom_path: str = ""
@@ -271,6 +275,10 @@ class ScraperWizardState:
     download_progress: float = 0.0
     current_download: str = ""
     error_message: str = ""
+    # Video selection
+    available_videos: List[Dict[str, Any]] = field(default_factory=list)
+    selected_video_index: int = -1  # -1 = no video selected
+    video_highlighted: int = 0
     # Batch mode
     batch_mode: bool = False
     batch_roms: List[Dict[str, Any]] = field(default_factory=list)
@@ -298,10 +306,10 @@ class DedupeWizardState:
     # For review step
     current_group_index: int = 0
     selected_to_keep: int = 0  # Index within current group to keep
-    # For manual mode - confirmed decisions
-    confirmed_groups: List[Dict[str, Any]] = field(
-        default_factory=list
-    )  # {keep: path, remove: [paths]}
+    # Confirmed decisions keyed by group index to prevent duplicates
+    confirmed_groups: Dict[int, Dict[str, Any]] = field(
+        default_factory=dict
+    )  # {group_idx: {keep: path, remove: [paths]}}
     # Progress
     scan_progress: float = 0.0
     process_progress: float = 0.0
@@ -331,6 +339,49 @@ class RenameWizardState:
     files_renamed: int = 0
     error_message: str = ""
     mode_highlighted: int = 0
+
+
+@dataclass
+class ScraperQueueItem:
+    """State for a single scraper queue item."""
+
+    name: str  # ROM display name
+    path: str  # ROM file path
+    status: str = (
+        "pending"  # pending | searching | downloading | done | error | skipped
+    )
+    skip_reason: str = ""  # e.g. "image_exists"
+    error: str = ""
+
+
+@dataclass
+class ScraperQueueState:
+    """State for background batch scraping queue."""
+
+    items: List[ScraperQueueItem] = field(default_factory=list)
+    active: bool = False  # True when scraper thread is running
+    current_index: int = 0
+    current_status: str = ""  # Human-readable status text
+    folder_path: str = ""
+    auto_select: bool = True
+    default_images: List[str] = field(default_factory=lambda: ["box-2D", "boxart"])
+
+
+@dataclass
+class GhostCleanerWizardState:
+    """State for ghost file cleaner wizard modal."""
+
+    show: bool = False
+    step: str = "scanning"  # scanning, review, cleaning, complete, no_ghosts, error
+    folder_path: str = ""
+    ghost_files: List[Dict[str, Any]] = field(default_factory=list)
+    scan_progress: float = 0.0
+    clean_progress: float = 0.0
+    files_scanned: int = 0
+    total_files: int = 0
+    files_removed: int = 0
+    space_freed: int = 0
+    error_message: str = ""
 
 
 @dataclass
@@ -367,8 +418,9 @@ class AppState:
 
         # ---- Navigation State ---- #
         self.mode: str = (
-            "systems"  # systems, games, settings, utils, credits, add_systems, systems_settings, system_settings
+            "systems"  # systems, systems_list, games, settings, utils, credits, add_systems, systems_settings, system_settings
         )
+        self.systems_list_highlighted: int = 0
         self.highlighted: int = 0
         self.selected_system: int = 0
         self.selected_games: Set[int] = set()
@@ -423,6 +475,12 @@ class AppState:
         # ---- Rename ---- #
         self.rename_wizard = RenameWizardState()
 
+        # ---- Scraper Queue (background batch) ---- #
+        self.scraper_queue = ScraperQueueState()
+
+        # ---- Ghost Cleaner ---- #
+        self.ghost_cleaner_wizard = GhostCleanerWizardState()
+
         # ---- UI Rectangles ---- #
         self.ui_rects = UIRects()
 
@@ -470,6 +528,7 @@ class AppState:
         self.scraper_wizard.show = False
         self.dedupe_wizard.show = False
         self.rename_wizard.show = False
+        self.ghost_cleaner_wizard.show = False
 
     def get_current_game_list(self) -> List[Any]:
         """Get the current game list (filtered or full)."""

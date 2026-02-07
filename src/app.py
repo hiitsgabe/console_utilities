@@ -11,6 +11,7 @@ import sys
 from typing import Optional, Dict, Any
 
 from constants import (
+    DEV_MODE,
     FPS,
     SCREEN_WIDTH,
     SCREEN_HEIGHT,
@@ -56,6 +57,7 @@ from services.file_listing import (
 from services.installed_checker import installed_checker
 from services.image_cache import ImageCache
 from services.download_manager import DownloadManager
+from services.scraper_manager import ScraperManager
 from input.navigation import NavigationHandler
 from input.controller import ControllerHandler
 from input.touch import TouchHandler
@@ -80,10 +82,17 @@ class ConsoleUtilitiesApp:
         pygame.init()
         pygame.display.set_caption("Console Utilities")
 
-        # Create display
-        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        # Create display - auto-detect native resolution on console
+        if DEV_MODE:
+            self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        else:
+            display_info = pygame.display.Info()
+            self.screen = pygame.display.set_mode(
+                (display_info.current_w, display_info.current_h),
+                pygame.FULLSCREEN,
+            )
         self.clock = pygame.time.Clock()
-        self.font = pygame.font.Font(None, FONT_SIZE)
+        self.font = pygame.font.Font("assets/fonts/VT323-Regular.ttf", FONT_SIZE)
 
         # Initialize joystick
         pygame.joystick.init()
@@ -97,6 +106,22 @@ class ConsoleUtilitiesApp:
 
         # Initialize theme
         self.theme = Theme()
+
+        # CRT scanline overlay (use actual screen size)
+        sw, sh = self.screen.get_size()
+        self.scanline_surface = None
+        if self.theme.crt_scanlines:
+            self.scanline_surface = pygame.Surface((sw, sh), pygame.SRCALPHA)
+            for y in range(0, sh, 3):
+                pygame.draw.line(
+                    self.scanline_surface,
+                    (0, 0, 0, 40),
+                    (0, y),
+                    (sw, y),
+                )
+
+        # CRT bezel overlay (physical monitor frame)
+        self.bezel_surface = self._create_crt_bezel()
 
         # Initialize state
         self.state = AppState()
@@ -131,27 +156,48 @@ class ConsoleUtilitiesApp:
             self.settings, self.state.download_queue
         )
 
-        # Load background image
-        self.background_image = self._load_background_image()
+        # Initialize scraper manager
+        self.scraper_manager = ScraperManager(self.settings, self.state.scraper_queue)
+
+        # CRT vignette overlay (edge darkening)
+        self.vignette_surface = self._create_vignette()
 
         # Check if controller mapping needed
         self.needs_mapping = needs_controller_mapping()
 
-    def _load_background_image(self) -> Optional[pygame.Surface]:
-        """Load the background image."""
-        possible_paths = [
-            os.path.join(SCRIPT_DIR, "assets", "images", "background.png"),
-            os.path.join(os.getcwd(), "assets", "images", "background.png"),
+    def _create_vignette(self) -> pygame.Surface:
+        """Create a pre-rendered vignette overlay for CRT edge darkening."""
+        sw, sh = self.screen.get_size()
+        vignette = pygame.Surface((sw, sh), pygame.SRCALPHA)
+
+        # Draw concentric dark borders to simulate brightness falloff
+        border_rects = [
+            (40, (0, 0, 0, 50)),  # 40px border, alpha 50
+            (30, (0, 0, 0, 35)),  # 30px border, alpha 35
+            (20, (0, 0, 0, 20)),  # 20px border, alpha 20
+            (10, (0, 0, 0, 10)),  # 10px border, alpha 10
         ]
 
-        for path in possible_paths:
-            if os.path.exists(path):
-                try:
-                    return pygame.image.load(path)
-                except Exception as e:
-                    log_error(f"Failed to load background: {e}")
+        for width, color in border_rects:
+            # Top
+            pygame.draw.rect(vignette, color, (0, 0, sw, width))
+            # Bottom
+            pygame.draw.rect(vignette, color, (0, sh - width, sw, width))
+            # Left
+            pygame.draw.rect(vignette, color, (0, 0, width, sh))
+            # Right
+            pygame.draw.rect(vignette, color, (sw - width, 0, width, sh))
 
-        return None
+        # Subtle center phosphor glow
+        center = pygame.Surface((sw, sh), pygame.SRCALPHA)
+        pygame.draw.ellipse(
+            center,
+            (0, 15, 0, 25),  # Very subtle green glow
+            (sw // 4, sh // 4, sw // 2, sh // 2),
+        )
+        vignette.blit(center, (0, 0))
+
+        return vignette
 
     def _collect_controller_mapping(self) -> bool:
         """
@@ -210,6 +256,9 @@ class ConsoleUtilitiesApp:
                 mapped_surf = self.font.render(f"{mapped_key}: {val}", True, SUCCESS)
                 self.screen.blit(mapped_surf, (20, y_offset + i * 25))
 
+            if self.scanline_surface:
+                self.screen.blit(self.scanline_surface, (0, 0))
+            self.screen.blit(self.bezel_surface, (0, 0))
             pygame.display.flip()
 
             # Handle events
@@ -269,30 +318,132 @@ class ConsoleUtilitiesApp:
         return True
 
     def _draw_background(self):
-        """Draw the background."""
-        if self.background_image:
-            scaled_bg = pygame.transform.scale(
-                self.background_image, self.screen.get_size()
-            )
-            self.screen.blit(scaled_bg, (0, 0))
+        """Draw the CRT monitor background."""
+        self.screen.fill(BACKGROUND)
+        self.screen.blit(self.vignette_surface, (0, 0))
 
-            # Semi-transparent overlay
-            overlay = pygame.Surface(self.screen.get_size())
-            overlay.set_alpha(100)
-            overlay.fill((0, 0, 0))
-            self.screen.blit(overlay, (0, 0))
-        else:
-            self.screen.fill(BACKGROUND)
+    def _create_crt_bezel(self) -> pygame.Surface:
+        """
+        Create a pre-rendered CRT monitor bezel overlay.
 
-    def _get_thumbnail(self, game: Any) -> Optional[pygame.Surface]:
+        Draws a beige/tan monitor casing frame around the screen edges,
+        with an inner bevel for depth. The center is left transparent
+        so the green content shows through. Uses actual screen dimensions
+        for responsive rendering on different display sizes.
+        """
+        w, h = self.screen.get_size()
+        bezel = pygame.Surface((w, h), pygame.SRCALPHA)
+
+        # Bezel dimensions
+        outer_width = 22  # Outer beige frame thickness
+        inner_width = 4  # Inner dark bevel thickness
+        corner_radius = 10  # Rounding on the outer corners
+
+        # Colors
+        bezel_color = (190, 170, 140)  # Warm beige for the monitor casing
+        bevel_dark = (150, 130, 100)  # Darker inner bevel for depth
+        bevel_highlight = (210, 195, 170)  # Lighter top/left highlight edge
+
+        # --- Outer bezel frame ---
+        # Top edge
+        pygame.draw.rect(bezel, bezel_color, (0, 0, w, outer_width))
+        # Bottom edge
+        pygame.draw.rect(
+            bezel,
+            bezel_color,
+            (0, h - outer_width, w, outer_width),
+        )
+        # Left edge
+        pygame.draw.rect(bezel, bezel_color, (0, 0, outer_width, h))
+        # Right edge
+        pygame.draw.rect(
+            bezel,
+            bezel_color,
+            (w - outer_width, 0, outer_width, h),
+        )
+
+        # Rounded corners (filled quarter-circles in bezel color)
+        pygame.draw.circle(
+            bezel, bezel_color, (corner_radius, corner_radius), corner_radius
+        )
+        pygame.draw.circle(
+            bezel,
+            bezel_color,
+            (w - corner_radius, corner_radius),
+            corner_radius,
+        )
+        pygame.draw.circle(
+            bezel,
+            bezel_color,
+            (corner_radius, h - corner_radius),
+            corner_radius,
+        )
+        pygame.draw.circle(
+            bezel,
+            bezel_color,
+            (w - corner_radius, h - corner_radius),
+            corner_radius,
+        )
+
+        # --- Highlight edge (top and left, simulates light source) ---
+        pygame.draw.line(bezel, bevel_highlight, (0, 0), (w, 0), 2)
+        pygame.draw.line(bezel, bevel_highlight, (0, 0), (0, h), 2)
+
+        # --- Inner bevel (darker edge where bezel meets screen) ---
+        inner_x = outer_width
+        inner_y = outer_width
+        inner_w = w - 2 * outer_width
+        inner_h = h - 2 * outer_width
+
+        # Dark bevel lines around the screen opening
+        # Top inner edge
+        pygame.draw.rect(bezel, bevel_dark, (inner_x, inner_y, inner_w, inner_width))
+        # Bottom inner edge
+        pygame.draw.rect(
+            bezel,
+            bevel_dark,
+            (inner_x, inner_y + inner_h - inner_width, inner_w, inner_width),
+        )
+        # Left inner edge
+        pygame.draw.rect(bezel, bevel_dark, (inner_x, inner_y, inner_width, inner_h))
+        # Right inner edge
+        pygame.draw.rect(
+            bezel,
+            bevel_dark,
+            (inner_x + inner_w - inner_width, inner_y, inner_width, inner_h),
+        )
+
+        # --- Shadow edge (bottom and right outer, simulates depth) ---
+        pygame.draw.line(
+            bezel,
+            (120, 105, 80),
+            (0, h - 1),
+            (w, h - 1),
+            2,
+        )
+        pygame.draw.line(
+            bezel,
+            (120, 105, 80),
+            (w - 1, 0),
+            (w - 1, h),
+            2,
+        )
+
+        return bezel
+
+    def _get_thumbnail(
+        self, game: Any, system_data: Optional[dict] = None
+    ) -> Optional[pygame.Surface]:
         """Get thumbnail for a game."""
-        if self.state.selected_system < 0 or self.state.selected_system >= len(
-            self.data
-        ):
-            return None
-
-        system_data = self.data[self.state.selected_system]
-        boxart_url = system_data.get("boxarts", "")
+        if system_data:
+            boxart_url = system_data.get("boxarts", "")
+        else:
+            if self.state.selected_system < 0 or self.state.selected_system >= len(
+                self.data
+            ):
+                return None
+            system_data = self.data[self.state.selected_system]
+            boxart_url = system_data.get("boxarts", "")
 
         return self.image_cache.get_thumbnail(game, boxart_url, self.settings)
 
@@ -489,6 +640,9 @@ class ConsoleUtilitiesApp:
             get_thumbnail=self._get_thumbnail,
             get_hires_image=self._get_hires_image,
         )
+        if self.scanline_surface:
+            self.screen.blit(self.scanline_surface, (0, 0))
+        self.screen.blit(self.bezel_surface, (0, 0))
         pygame.display.flip()
         # Process events to prevent freezing
         pygame.event.pump()
@@ -584,6 +738,9 @@ class ConsoleUtilitiesApp:
             self.state.ui_rects.confirm_ok_button = rects.get("confirm_ok")
             self.state.ui_rects.confirm_cancel_button = rects.get("confirm_cancel")
 
+            if self.scanline_surface:
+                self.screen.blit(self.scanline_surface, (0, 0))
+            self.screen.blit(self.bezel_surface, (0, 0))
             pygame.display.flip()
 
         # Cleanup
@@ -695,13 +852,28 @@ class ConsoleUtilitiesApp:
 
         # Mode-based navigation
         if self.state.mode == "systems":
-            visible = get_visible_systems(self.data, self.settings)
-            max_items = len(visible) + 3  # +3 for Utils, Settings, Credits
+            from ui.screens.systems_screen import systems_screen
+
+            max_items = systems_screen.get_root_menu_count()
 
             if direction in ("up", "left"):
                 self.state.highlighted = (self.state.highlighted - 1) % max_items
             elif direction in ("down", "right"):
                 self.state.highlighted = (self.state.highlighted + 1) % max_items
+
+        elif self.state.mode == "systems_list":
+            visible = get_visible_systems(self.data, self.settings)
+            max_items = len(visible)
+
+            if max_items > 0:
+                if direction in ("up", "left"):
+                    self.state.systems_list_highlighted = (
+                        self.state.systems_list_highlighted - 1
+                    ) % max_items
+                elif direction in ("down", "right"):
+                    self.state.systems_list_highlighted = (
+                        self.state.systems_list_highlighted + 1
+                    ) % max_items
 
         elif self.state.mode == "games":
             game_list = (
@@ -738,15 +910,24 @@ class ConsoleUtilitiesApp:
                 from ui.screens.settings_screen import settings_screen
 
                 max_items = settings_screen.get_max_items(self.settings)
+                _, divider_indices = settings_screen._get_settings_items(self.settings)
             else:
                 from ui.screens.utils_screen import utils_screen
 
                 max_items = utils_screen.get_max_items(self.settings)
+                _, divider_indices = utils_screen._get_utils_items(self.settings)
 
             if direction in ("up", "left"):
-                self.state.highlighted = (self.state.highlighted - 1) % max_items
+                new_pos = (self.state.highlighted - 1) % max_items
+                # Skip divider items
+                while new_pos in divider_indices and max_items > len(divider_indices):
+                    new_pos = (new_pos - 1) % max_items
+                self.state.highlighted = new_pos
             elif direction in ("down", "right"):
-                self.state.highlighted = (self.state.highlighted + 1) % max_items
+                new_pos = (self.state.highlighted + 1) % max_items
+                while new_pos in divider_indices and max_items > len(divider_indices):
+                    new_pos = (new_pos + 1) % max_items
+                self.state.highlighted = new_pos
 
         elif self.state.mode == "add_systems":
             max_items = len(self.state.available_systems) or 1
@@ -1115,7 +1296,14 @@ class ConsoleUtilitiesApp:
         elif self.state.ia_login.show:
             self._close_ia_login()
         elif self.state.ia_download_wizard.show:
-            self._close_ia_download_wizard()
+            # Navigate up if inside a folder, otherwise close
+            if (
+                self.state.ia_download_wizard.step == "file_select"
+                and self.state.ia_download_wizard.current_folder
+            ):
+                self._ia_navigate_up()
+            else:
+                self._close_ia_download_wizard()
         elif self.state.ia_collection_wizard.show:
             # Check if we're in custom format input mode
             if self.state.ia_collection_wizard.adding_custom_format:
@@ -1127,11 +1315,16 @@ class ConsoleUtilitiesApp:
         elif self.state.scraper_login.show:
             self._close_scraper_login()
         elif self.state.scraper_wizard.show:
-            self._close_scraper_wizard()
+            if self.state.scraper_wizard.step == "video_select":
+                self.state.scraper_wizard.step = "image_select"
+            else:
+                self._close_scraper_wizard()
         elif self.state.dedupe_wizard.show:
             self._close_dedupe_wizard()
         elif self.state.rename_wizard.show:
             self._close_rename_wizard()
+        elif self.state.ghost_cleaner_wizard.show:
+            self._close_ghost_cleaner()
         elif self.state.game_details.show:
             self.state.game_details.show = False
             self.state.game_details.current_game = None
@@ -1140,6 +1333,9 @@ class ConsoleUtilitiesApp:
             self.state.system_settings_highlighted = 0
         elif self.state.mode in ("add_systems", "systems_settings"):
             self.state.mode = "settings"
+            self.state.highlighted = 1  # Skip first divider
+        elif self.state.mode == "systems_list":
+            self.state.mode = "systems"
             self.state.highlighted = 0
         elif self.state.mode == "games":
             # Reset selected games and search when leaving games mode
@@ -1149,14 +1345,14 @@ class ConsoleUtilitiesApp:
             self.state.search.input_text = ""
             self.state.search.cursor_position = 0
             self.state.search.filtered_list = []
-            self.state.mode = "systems"
+            self.state.mode = "systems_list"
             self.state.highlighted = 0
         elif self.state.mode == "downloads":
-            # Go back to games if we came from there, otherwise systems
+            # Go back to games if we came from there, otherwise systems_list
             if self.state.selected_system >= 0 and self.state.game_list:
                 self.state.mode = "games"
             else:
-                self.state.mode = "systems"
+                self.state.mode = "systems_list"
             self.state.highlighted = 0
         elif self.state.mode in ("settings", "utils", "credits"):
             self.state.mode = "systems"
@@ -1224,14 +1420,31 @@ class ConsoleUtilitiesApp:
             self._handle_rename_wizard_selection()
             return
 
+        if self.state.ghost_cleaner_wizard.show:
+            self._handle_ghost_cleaner_selection()
+            return
+
         # Mode-based selection
         if self.state.mode == "systems":
-            visible = get_visible_systems(self.data, self.settings)
-            systems_count = len(visible)
+            from ui.screens.systems_screen import systems_screen
 
-            if self.state.highlighted < systems_count:
-                # Select a system
-                system = visible[self.state.highlighted]
+            action = systems_screen.get_root_menu_action(self.state.highlighted)
+            if action == "systems_list":
+                self.state.mode = "systems_list"
+                # Don't reset systems_list_highlighted to preserve position
+            elif action == "utils":
+                self.state.mode = "utils"
+                self.state.highlighted = 1  # Skip first divider
+            elif action == "settings":
+                self.state.mode = "settings"
+                self.state.highlighted = 1  # Skip first divider
+            elif action == "credits":
+                self.state.mode = "credits"
+
+        elif self.state.mode == "systems_list":
+            visible = get_visible_systems(self.data, self.settings)
+            if visible and self.state.systems_list_highlighted < len(visible):
+                system = visible[self.state.systems_list_highlighted]
                 self.state.selected_system = get_system_index_by_name(
                     self.data, system["name"]
                 )
@@ -1248,14 +1461,6 @@ class ConsoleUtilitiesApp:
 
                 self.state.mode = "games"
                 self.state.highlighted = 0
-            elif self.state.highlighted == systems_count:
-                self.state.mode = "utils"
-                self.state.highlighted = 0
-            elif self.state.highlighted == systems_count + 1:
-                self.state.mode = "settings"
-                self.state.highlighted = 0
-            elif self.state.highlighted == systems_count + 2:
-                self.state.mode = "credits"
 
         elif self.state.mode == "games":
             game_list = (
@@ -1312,21 +1517,57 @@ class ConsoleUtilitiesApp:
         if not game_list:
             return
 
-        num_games = len(game_list)
+        total_games = len(game_list)
+
+        # Filter out installed games if setting is on
+        exclude_installed = self.settings.get("exclude_installed_on_download_all", True)
+        if exclude_installed:
+            download_list = [
+                g for g in game_list if not installed_checker.is_installed(g)
+            ]
+            installed_count = total_games - len(download_list)
+        else:
+            download_list = list(game_list)
+            installed_count = 0
+
+        if not download_list:
+            self.state.confirm_modal.show = True
+            self.state.confirm_modal.title = "All Installed"
+            self.state.confirm_modal.message_lines = [
+                f"All {total_games} games are already installed.",
+            ]
+            self.state.confirm_modal.ok_label = "OK"
+            self.state.confirm_modal.cancel_label = ""
+            self.state.confirm_modal.button_index = 0
+            self.state.confirm_modal.context = ""
+            self.state.confirm_modal.data = None
+            self.state.confirm_modal.loading = False
+            return
+
+        # Build message
+        if installed_count > 0:
+            msg_lines = [
+                f"Download {len(download_list)} of {total_games} games?",
+                f"({installed_count} already installed, skipped)",
+                "",
+                "This may take a while.",
+            ]
+        else:
+            msg_lines = [
+                f"Download all {total_games} games?",
+                "",
+                "This may take a while.",
+            ]
 
         # Show simple confirmation modal
         self.state.confirm_modal.show = True
         self.state.confirm_modal.title = "Download All Games"
-        self.state.confirm_modal.message_lines = [
-            f"Download all {num_games} games?",
-            "",
-            "This may take a while.",
-        ]
+        self.state.confirm_modal.message_lines = msg_lines
         self.state.confirm_modal.ok_label = "Download"
         self.state.confirm_modal.cancel_label = "Cancel"
         self.state.confirm_modal.button_index = 0
         self.state.confirm_modal.context = "download_all"
-        self.state.confirm_modal.data = list(game_list)  # Copy the list
+        self.state.confirm_modal.data = download_list
         self.state.confirm_modal.loading = False
 
     def _handle_confirm_modal_ok(self):
@@ -1399,6 +1640,11 @@ class ConsoleUtilitiesApp:
                 "show_download_all", False
             )
             save_settings(self.settings)
+        elif action == "toggle_exclude_installed":
+            self.settings["exclude_installed_on_download_all"] = not self.settings.get(
+                "exclude_installed_on_download_all", True
+            )
+            save_settings(self.settings)
         elif action == "select_work_dir":
             self._open_folder_browser("work_dir")
         elif action == "select_roms_dir":
@@ -1435,6 +1681,8 @@ class ConsoleUtilitiesApp:
                 "libretro",
                 "screenscraper",
                 "thegamesdb",
+                "rawg",
+                "igdb",
             ]
             current = self.settings.get("scraper_provider", "libretro")
             idx = providers.index(current) if current in providers else 0
@@ -1448,6 +1696,10 @@ class ConsoleUtilitiesApp:
             self._show_screenscraper_login()
         elif action == "thegamesdb_api_key":
             self._show_thegamesdb_api_key_input()
+        elif action == "rawg_api_key":
+            self._show_rawg_api_key_input()
+        elif action == "igdb_login":
+            self._show_igdb_login()
         elif action == "select_esde_media_path":
             self._open_folder_browser("esde_media_path")
         elif action == "select_esde_gamelists_path":
@@ -1488,6 +1740,8 @@ class ConsoleUtilitiesApp:
             self._show_dedupe_wizard()
         elif action == "clean_filenames":
             self._show_rename_wizard()
+        elif action == "ghost_cleaner":
+            self._show_ghost_cleaner()
 
     def _show_dedupe_wizard(self):
         """Show the dedupe games wizard."""
@@ -1687,6 +1941,10 @@ class ConsoleUtilitiesApp:
             self.state.rename_wizard.folder_path = current_path
             self.state.folder_browser.show = False
             self._start_rename_scan()
+        elif selection_type == "ghost_cleaner_folder":
+            self.state.ghost_cleaner_wizard.folder_path = current_path
+            self.state.folder_browser.show = False
+            self._start_ghost_scan()
         elif selection_type == "ia_download_folder":
             self.state.ia_download_wizard.output_folder = current_path
             self.state.folder_browser.show = False
@@ -1851,7 +2109,8 @@ class ConsoleUtilitiesApp:
     def _navigate_ia_file_select(self, direction: str):
         """Navigate IA download wizard file selection."""
         wizard = self.state.ia_download_wizard
-        max_items = len(wizard.files_list) or 1
+        items = wizard.display_items or wizard.files_list
+        max_items = len(items) or 1
 
         if direction in ("up", "left"):
             if wizard.selected_file_index > 0:
@@ -2070,6 +2329,14 @@ class ConsoleUtilitiesApp:
         if self.state.scraper_wizard.show:
             step = self.state.scraper_wizard.step
             if step == "image_select":
+                wizard = self.state.scraper_wizard
+                if wizard.available_videos:
+                    wizard.step = "video_select"
+                    wizard.video_highlighted = 0
+                else:
+                    self._start_scraper_download()
+                return
+            elif step == "video_select":
                 self._start_scraper_download()
                 return
             elif step == "folder_select":
@@ -2088,6 +2355,10 @@ class ConsoleUtilitiesApp:
 
         # Handle dedupe wizard - don't close on Start button
         if self.state.dedupe_wizard.show:
+            return
+
+        # Handle ghost cleaner wizard
+        if self.state.ghost_cleaner_wizard.show:
             return
 
         # Handle rename wizard - Start confirms in manual mode
@@ -2113,6 +2384,7 @@ class ConsoleUtilitiesApp:
         self.state.scraper_wizard.show = False
         self.state.dedupe_wizard.show = False
         self.state.rename_wizard.show = False
+        self.state.ghost_cleaner_wizard.show = False
 
         # Go to systems (home) screen
         self.state.mode = "systems"
@@ -2272,6 +2544,9 @@ class ConsoleUtilitiesApp:
         self.state.ia_download_wizard.error_message = ""
         self.state.ia_download_wizard.files_list = []
         self.state.ia_download_wizard.selected_file_index = 0
+        self.state.ia_download_wizard.current_folder = ""
+        self.state.ia_download_wizard.folder_stack = []
+        self.state.ia_download_wizard.display_items = []
 
     def _close_ia_download_wizard(self):
         """Close the IA download wizard modal."""
@@ -2280,6 +2555,9 @@ class ConsoleUtilitiesApp:
         self.state.ia_download_wizard.url = ""
         self.state.ia_download_wizard.item_id = ""
         self.state.ia_download_wizard.files_list = []
+        self.state.ia_download_wizard.current_folder = ""
+        self.state.ia_download_wizard.folder_stack = []
+        self.state.ia_download_wizard.display_items = []
 
     def _handle_ia_download_wizard_selection(self):
         """Handle selection in IA download wizard."""
@@ -2309,8 +2587,23 @@ class ConsoleUtilitiesApp:
                     self._validate_ia_download_item()
 
         elif step == "file_select":
-            # File selected, open folder browser
-            if self.state.ia_download_wizard.files_list:
+            wizard = self.state.ia_download_wizard
+            if not wizard.display_items:
+                return
+            idx = wizard.selected_file_index
+            if idx >= len(wizard.display_items):
+                return
+            item = wizard.display_items[idx]
+            item_type = item.get("type", "file")
+
+            if item_type == "parent":
+                # Navigate up to parent folder
+                self._ia_navigate_up()
+            elif item_type == "folder":
+                # Navigate into folder
+                self._ia_navigate_into(item["name"])
+            else:
+                # File selected, open folder browser
                 self._open_folder_browser("ia_download_folder")
 
         elif step == "options":
@@ -2365,6 +2658,12 @@ class ConsoleUtilitiesApp:
 
             self.state.ia_download_wizard.files_list = files
             self.state.ia_download_wizard.selected_file_index = 0
+            self.state.ia_download_wizard.current_folder = ""
+            self.state.ia_download_wizard.folder_stack = []
+            # Build display items for folder view
+            from services.internet_archive import build_display_items
+
+            self.state.ia_download_wizard.display_items = build_display_items(files, "")
             self.state.ia_download_wizard.step = "file_select"
 
         from threading import Thread
@@ -2376,12 +2675,14 @@ class ConsoleUtilitiesApp:
         """Start the IA download."""
         wizard = self.state.ia_download_wizard
 
-        if not wizard.files_list or wizard.selected_file_index >= len(
-            wizard.files_list
-        ):
+        # Get file from display_items if available
+        items = wizard.display_items or wizard.files_list
+        if not items or wizard.selected_file_index >= len(items):
             return
 
-        file_info = wizard.files_list[wizard.selected_file_index]
+        file_info = items[wizard.selected_file_index]
+        if file_info.get("type") in ("folder", "parent"):
+            return  # Can't download a folder entry
         filename = file_info["name"]
         download_url = get_ia_download_url(wizard.item_id, filename)
 
@@ -2425,6 +2726,35 @@ class ConsoleUtilitiesApp:
         self.state.mode = "downloads"
         self.state.download_queue.highlighted = max(
             0, len(self.state.download_queue.items) - 1
+        )
+
+    def _ia_navigate_into(self, folder_name: str):
+        """Navigate into a subfolder in IA download wizard."""
+        wizard = self.state.ia_download_wizard
+        wizard.folder_stack.append(wizard.current_folder)
+        if wizard.current_folder:
+            wizard.current_folder += "/" + folder_name
+        else:
+            wizard.current_folder = folder_name
+        wizard.selected_file_index = 0
+        from services.internet_archive import build_display_items
+
+        wizard.display_items = build_display_items(
+            wizard.files_list, wizard.current_folder
+        )
+
+    def _ia_navigate_up(self):
+        """Navigate up to parent folder in IA download wizard."""
+        wizard = self.state.ia_download_wizard
+        if wizard.folder_stack:
+            wizard.current_folder = wizard.folder_stack.pop()
+        else:
+            wizard.current_folder = ""
+        wizard.selected_file_index = 0
+        from services.internet_archive import build_display_items
+
+        wizard.display_items = build_display_items(
+            wizard.files_list, wizard.current_folder
         )
 
     def _show_ia_collection_wizard(self):
@@ -2735,6 +3065,9 @@ class ConsoleUtilitiesApp:
         wizard.available_images = []
         wizard.selected_images = set()
         wizard.image_highlighted = 0
+        wizard.available_videos = []
+        wizard.selected_video_index = -1
+        wizard.video_highlighted = 0
         wizard.download_progress = 0.0
         wizard.current_download = ""
         wizard.error_message = ""
@@ -2752,7 +3085,10 @@ class ConsoleUtilitiesApp:
         wizard.search_results = []
         wizard.available_images = []
         wizard.selected_images = set()
+        wizard.available_videos = []
+        wizard.selected_video_index = -1
         wizard.batch_roms = []
+        self.screen_manager.scraper_wizard_modal.clear_thumbs()
 
     def _navigate_scraper_wizard(self, direction: str):
         """Handle navigation in scraper wizard."""
@@ -2784,6 +3120,16 @@ class ConsoleUtilitiesApp:
             elif direction in ("down", "right"):
                 wizard.image_highlighted = min(
                     max_items - 1, wizard.image_highlighted + 1
+                )
+
+        elif step == "video_select":
+            # Items: "No Video" + available videos
+            max_items = 1 + len(wizard.available_videos)
+            if direction in ("up", "left"):
+                wizard.video_highlighted = max(0, wizard.video_highlighted - 1)
+            elif direction in ("down", "right"):
+                wizard.video_highlighted = min(
+                    max_items - 1, wizard.video_highlighted + 1
                 )
 
         elif step == "rom_list":
@@ -2826,6 +3172,17 @@ class ConsoleUtilitiesApp:
                 wizard.selected_images.discard(wizard.image_highlighted)
             else:
                 wizard.selected_images.add(wizard.image_highlighted)
+
+        elif step == "video_select":
+            # Select/deselect video (radio-style: 0=no video, 1+=video index)
+            if wizard.video_highlighted == 0:
+                wizard.selected_video_index = -1  # No video
+            else:
+                idx = wizard.video_highlighted - 1
+                if wizard.selected_video_index == idx:
+                    wizard.selected_video_index = -1  # Deselect
+                else:
+                    wizard.selected_video_index = idx
 
         elif step == "rom_list":
             # Toggle ROM skip status
@@ -3064,6 +3421,23 @@ class ConsoleUtilitiesApp:
             # Pre-select all images
             wizard.selected_images = set(range(len(wizard.available_images)))
             wizard.image_highlighted = 0
+
+            # Also fetch videos if provider supports them
+            wizard.available_videos = []
+            wizard.selected_video_index = -1
+            v_success, videos, _ = service.get_game_videos(game_id)
+            if v_success and videos:
+                wizard.available_videos = [
+                    {
+                        "url": v.url,
+                        "region": v.region,
+                        "format": v.format,
+                        "normalized": v.normalized,
+                        "label": "Video (Normalized)" if v.normalized else "Video",
+                    }
+                    for v in videos
+                ]
+
             wizard.step = "image_select"
 
         from threading import Thread
@@ -3072,7 +3446,7 @@ class ConsoleUtilitiesApp:
         thread.start()
 
     def _start_scraper_download(self):
-        """Start downloading selected images."""
+        """Start downloading selected images and optional video."""
         wizard = self.state.scraper_wizard
 
         if not wizard.selected_images or not wizard.available_images:
@@ -3088,6 +3462,13 @@ class ConsoleUtilitiesApp:
             if i < len(wizard.available_images)
         ]
 
+        # Get selected video (if any)
+        selected_video = None
+        if wizard.selected_video_index >= 0 and wizard.selected_video_index < len(
+            wizard.available_videos
+        ):
+            selected_video = wizard.available_videos[wizard.selected_video_index]
+
         # Get game info for metadata
         game_info = {}
         if wizard.search_results and wizard.selected_game_index < len(
@@ -3096,7 +3477,7 @@ class ConsoleUtilitiesApp:
             game_info = wizard.search_results[wizard.selected_game_index]
 
         from services.scraper_service import get_scraper_service
-        from services.scraper_providers.base_provider import GameImage
+        from services.scraper_providers.base_provider import GameImage, GameVideo
         from services.metadata_writer import get_metadata_writer
 
         service = get_scraper_service(self.settings)
@@ -3112,8 +3493,11 @@ class ConsoleUtilitiesApp:
                 for img in selected
             ]
 
+            total_items = len(images) + (1 if selected_video else 0)
+
             def progress_callback(current, total, current_name):
-                wizard.download_progress = current / total if total > 0 else 0
+                progress = current / total_items if total_items > 0 else 0
+                wizard.download_progress = min(progress, 1.0)
                 wizard.current_download = current_name
 
             success, paths, error = service.download_images(
@@ -3124,6 +3508,27 @@ class ConsoleUtilitiesApp:
                 wizard.step = "error"
                 wizard.error_message = error or "Download failed"
                 return
+
+            # Download video if selected
+            if selected_video:
+                wizard.current_download = "Video"
+                video = GameVideo(
+                    url=selected_video["url"],
+                    region=selected_video.get("region", ""),
+                    format=selected_video.get("format", "mp4"),
+                    normalized=selected_video.get("normalized", False),
+                )
+                video_path = service.get_video_output_path(
+                    wizard.selected_rom_path, video.format
+                )
+                if video_path:
+                    v_success, v_error = service.download_video(video, video_path)
+                    if v_success:
+                        paths.append(video_path)
+                    else:
+                        print(f"Failed to download video: {v_error}")
+
+            wizard.download_progress = 1.0
 
             # Update metadata
             wizard.step = "updating_metadata"
@@ -3138,95 +3543,29 @@ class ConsoleUtilitiesApp:
         thread.start()
 
     def _start_batch_scrape(self):
-        """Start batch scraping process."""
+        """Start background batch scraping and close wizard."""
         wizard = self.state.scraper_wizard
-        wizard.step = "batch_processing"
-        wizard.batch_current_index = 0
 
-        from services.scraper_service import get_scraper_service
-        from services.metadata_writer import get_metadata_writer
+        # Build ROM list from wizard state (filter out skipped)
+        roms = [
+            {"name": r["name"], "path": r["path"]}
+            for r in wizard.batch_roms
+            if r.get("status") != "skipped"
+        ]
 
-        # Set system context from batch folder for Libretro
-        batch_dir = os.path.basename(wizard.folder_current_path)
-        self.settings["current_system_folder"] = batch_dir
+        if not roms:
+            return
 
-        service = get_scraper_service(self.settings)
-        service.reset_provider()
+        # Start background scraping via ScraperManager
+        self.scraper_manager.start_batch(
+            folder_path=wizard.folder_current_path,
+            roms=roms,
+            default_images=list(wizard.batch_default_images),
+            auto_select=wizard.batch_auto_select,
+        )
 
-        def process_batch():
-            for i, rom in enumerate(wizard.batch_roms):
-                if rom.get("status") == "skipped":
-                    continue
-
-                wizard.batch_current_index = i
-                rom["status"] = "searching"
-                wizard.current_download = f"Searching: {rom['name']}"
-
-                game_name = service.extract_game_name(rom["path"])
-                success, results, error = service.search_game(
-                    game_name, rom_path=rom["path"]
-                )
-
-                if not success or not results:
-                    rom["status"] = "error"
-                    rom["error"] = error or "No results"
-                    continue
-
-                # Auto-select first result
-                game = results[0]
-                game_info = {
-                    "id": game.id,
-                    "name": game.name,
-                    "platform": game.platform,
-                    "release_date": game.release_date,
-                    "description": game.description,
-                }
-
-                # Get images
-                wizard.current_download = f"Fetching images: {rom['name']}"
-                success, images, error = service.get_game_images(game.id)
-
-                if not success or not images:
-                    rom["status"] = "error"
-                    rom["error"] = error or "No images"
-                    continue
-
-                # Filter to default image types
-                filtered_images = [
-                    img for img in images if img.type in wizard.batch_default_images
-                ]
-
-                if not filtered_images:
-                    # Fallback to all images if no matches
-                    filtered_images = images[:2]
-
-                # Download images
-                wizard.current_download = f"Downloading: {rom['name']}"
-
-                def progress_callback(current, total, current_name):
-                    pass  # Could update per-ROM progress
-
-                success, paths, error = service.download_images(
-                    filtered_images, rom["path"], progress_callback
-                )
-
-                if not success:
-                    rom["status"] = "error"
-                    rom["error"] = error or "Download failed"
-                    continue
-
-                # Update metadata
-                writer = get_metadata_writer(self.settings)
-                writer.update_metadata(rom["path"], game_info, paths)
-
-                rom["status"] = "done"
-
-            wizard.step = "batch_complete"
-
-        from threading import Thread
-
-        thread = Thread(target=process_batch, daemon=True)
-        thread.start()
+        # Close wizard so user can navigate freely
+        self._close_scraper_wizard()
 
     def _show_screenscraper_login(self):
         """Show ScreenScraper login modal."""
@@ -3246,6 +3585,25 @@ class ConsoleUtilitiesApp:
         self.state.scraper_login.provider = "thegamesdb"
         self.state.scraper_login.step = "api_key"
         self.state.scraper_login.api_key = self.settings.get("thegamesdb_api_key", "")
+        self.state.scraper_login.cursor_position = 0
+        self.state.scraper_login.error_message = ""
+
+    def _show_rawg_api_key_input(self):
+        """Show RAWG API key input modal."""
+        self.state.scraper_login.show = True
+        self.state.scraper_login.provider = "rawg"
+        self.state.scraper_login.step = "api_key"
+        self.state.scraper_login.api_key = self.settings.get("rawg_api_key", "")
+        self.state.scraper_login.cursor_position = 0
+        self.state.scraper_login.error_message = ""
+
+    def _show_igdb_login(self):
+        """Show IGDB login modal (Client ID + Client Secret)."""
+        self.state.scraper_login.show = True
+        self.state.scraper_login.provider = "igdb"
+        self.state.scraper_login.step = "username"
+        self.state.scraper_login.username = self.settings.get("igdb_client_id", "")
+        self.state.scraper_login.password = ""
         self.state.scraper_login.cursor_position = 0
         self.state.scraper_login.error_message = ""
 
@@ -3359,6 +3717,96 @@ class ConsoleUtilitiesApp:
                 login.cursor_position = 0
                 login.error_message = ""
 
+        elif provider == "rawg":
+            if step == "api_key":
+                if self.state.input_mode == "keyboard":
+                    if login.api_key:
+                        self._test_rawg_credentials()
+                else:
+                    from ui.screens.modals.scraper_login_modal import ScraperLoginModal
+
+                    modal = ScraperLoginModal()
+                    new_text, is_done, toggle_shift = modal.handle_selection(
+                        provider,
+                        step,
+                        login.cursor_position,
+                        login.api_key,
+                        shift_active=self.state.scraper_login.shift_active,
+                    )
+                    if toggle_shift:
+                        self.state.scraper_login.shift_active = (
+                            not self.state.scraper_login.shift_active
+                        )
+                    login.api_key = new_text
+                    if is_done and new_text:
+                        self._test_rawg_credentials()
+
+            elif step == "complete":
+                self._close_scraper_login()
+
+            elif step == "error":
+                login.step = "api_key"
+                login.cursor_position = 0
+                login.error_message = ""
+
+        elif provider == "igdb":
+            if step == "username":
+                if self.state.input_mode == "keyboard":
+                    if login.username:
+                        login.step = "password"
+                        login.cursor_position = 0
+                else:
+                    from ui.screens.modals.scraper_login_modal import (
+                        ScraperLoginModal,
+                    )
+
+                    modal = ScraperLoginModal()
+                    new_text, is_done, toggle_shift = modal.handle_selection(
+                        provider,
+                        step,
+                        login.cursor_position,
+                        login.username,
+                        shift_active=login.shift_active,
+                    )
+                    if toggle_shift:
+                        login.shift_active = not login.shift_active
+                    login.username = new_text
+                    if is_done and new_text:
+                        login.step = "password"
+                        login.cursor_position = 0
+
+            elif step == "password":
+                if self.state.input_mode == "keyboard":
+                    if login.password:
+                        self._test_igdb_credentials()
+                else:
+                    from ui.screens.modals.scraper_login_modal import (
+                        ScraperLoginModal,
+                    )
+
+                    modal = ScraperLoginModal()
+                    new_text, is_done, toggle_shift = modal.handle_selection(
+                        provider,
+                        step,
+                        login.cursor_position,
+                        login.password,
+                        shift_active=login.shift_active,
+                    )
+                    if toggle_shift:
+                        login.shift_active = not login.shift_active
+                    login.password = new_text
+                    if is_done and new_text:
+                        self._test_igdb_credentials()
+
+            elif step == "complete":
+                self._close_scraper_login()
+
+            elif step == "error":
+                login.step = "username"
+                login.password = ""
+                login.cursor_position = 0
+                login.error_message = ""
+
     def _test_screenscraper_credentials(self):
         """Test ScreenScraper credentials in background thread."""
         import base64
@@ -3417,6 +3865,66 @@ class ConsoleUtilitiesApp:
             else:
                 login.step = "error"
                 login.error_message = error or "Invalid API key"
+
+        from threading import Thread
+
+        thread = Thread(target=test_credentials, daemon=True)
+        thread.start()
+
+    def _test_rawg_credentials(self):
+        """Test RAWG API key in background thread."""
+        login = self.state.scraper_login
+        login.step = "testing"
+
+        api_key = login.api_key
+
+        def test_credentials():
+            from services.scraper_providers.rawg import RAWGProvider
+
+            provider = RAWGProvider(api_key=api_key)
+
+            success, results, error = provider.search_game("Mario")
+
+            if success:
+                # Save API key
+                self.settings["rawg_api_key"] = api_key
+                save_settings(self.settings)
+                login.step = "complete"
+            else:
+                login.step = "error"
+                login.error_message = error or "Invalid API key"
+
+        from threading import Thread
+
+        thread = Thread(target=test_credentials, daemon=True)
+        thread.start()
+
+    def _test_igdb_credentials(self):
+        """Test IGDB credentials in background thread."""
+        login = self.state.scraper_login
+        login.step = "testing"
+
+        client_id = login.username
+        client_secret = login.password
+
+        def test_credentials():
+            from services.scraper_providers.igdb import IGDBProvider
+
+            provider = IGDBProvider(
+                client_id=client_id,
+                client_secret=client_secret,
+            )
+
+            success, results, error = provider.search_game("Mario")
+
+            if success:
+                self.settings["igdb_client_id"] = client_id
+                self.settings["igdb_client_secret"] = client_secret
+                save_settings(self.settings)
+                login.step = "complete"
+            else:
+                login.step = "error"
+                login.error_message = error or "Invalid credentials"
 
         from threading import Thread
 
@@ -3640,8 +4148,8 @@ class ConsoleUtilitiesApp:
 
         elif step == "review":
             if wizard.mode == "safe":
-                # Process all duplicates automatically
-                self._process_dedupe_safe()
+                # Confirm current group and move to next, or process all confirmed
+                self._confirm_dedupe_safe_selection()
             else:
                 # Confirm current selection and move to next group or process
                 self._confirm_dedupe_manual_selection()
@@ -3697,36 +4205,32 @@ class ConsoleUtilitiesApp:
         thread = Thread(target=scan, daemon=True)
         thread.start()
 
-    def _process_dedupe_safe(self):
-        """Process all duplicates in safe mode (keep largest, remove rest)."""
+    def _confirm_dedupe_safe_selection(self):
+        """Confirm current safe-mode group and advance or process all."""
         wizard = self.state.dedupe_wizard
-        wizard.step = "processing"
-        wizard.process_progress = 0.0
 
-        # Collect all files to delete (all except first in each group)
-        files_to_delete = []
-        for group in wizard.duplicate_groups:
-            # First file is largest (kept), rest are deleted
-            for file_info in group[1:]:
-                files_to_delete.append(file_info["path"])
+        if not wizard.duplicate_groups:
+            return
 
-        from threading import Thread
-        from services.dedupe_service import delete_files
+        idx = wizard.current_group_index
 
-        def process():
-            def progress_callback(current, total, bytes_freed):
-                wizard.process_progress = current / total if total > 0 else 0
-                wizard.space_freed = bytes_freed
+        # Record the confirmation for this group (keep first = largest)
+        current_group = wizard.duplicate_groups[idx]
+        keep_file = current_group[0]
+        remove_files = current_group[1:]
 
-            files_deleted, bytes_freed = delete_files(
-                files_to_delete, progress_callback
-            )
-            wizard.files_removed = files_deleted
-            wizard.space_freed = bytes_freed
-            wizard.step = "complete"
+        # Use dict keyed by group index to avoid duplicate confirmations
+        wizard.confirmed_groups[idx] = {
+            "keep": keep_file["path"],
+            "remove": [f["path"] for f in remove_files],
+        }
 
-        thread = Thread(target=process, daemon=True)
-        thread.start()
+        # Move to next unconfirmed group or process all
+        if wizard.current_group_index < len(wizard.duplicate_groups) - 1:
+            wizard.current_group_index += 1
+        else:
+            # All groups confirmed, start processing
+            self._process_dedupe_confirmed()
 
     def _confirm_dedupe_manual_selection(self):
         """Confirm manual selection and move to next group or process."""
@@ -3735,7 +4239,8 @@ class ConsoleUtilitiesApp:
         if not wizard.duplicate_groups:
             return
 
-        current_group = wizard.duplicate_groups[wizard.current_group_index]
+        idx = wizard.current_group_index
+        current_group = wizard.duplicate_groups[idx]
 
         # Record which file to keep and which to remove
         keep_file = current_group[wizard.selected_to_keep]
@@ -3743,12 +4248,11 @@ class ConsoleUtilitiesApp:
             f for i, f in enumerate(current_group) if i != wizard.selected_to_keep
         ]
 
-        wizard.confirmed_groups.append(
-            {
-                "keep": keep_file["path"],
-                "remove": [f["path"] for f in remove_files],
-            }
-        )
+        # Use dict keyed by group index to avoid duplicate confirmations
+        wizard.confirmed_groups[idx] = {
+            "keep": keep_file["path"],
+            "remove": [f["path"] for f in remove_files],
+        }
 
         # Move to next group or start processing
         if wizard.current_group_index < len(wizard.duplicate_groups) - 1:
@@ -3756,18 +4260,20 @@ class ConsoleUtilitiesApp:
             wizard.selected_to_keep = 0
         else:
             # All groups confirmed, start processing
-            self._process_dedupe_manual()
+            self._process_dedupe_confirmed()
 
-    def _process_dedupe_manual(self):
-        """Process confirmed manual selections."""
+    def _process_dedupe_confirmed(self):
+        """Process all confirmed dedupe selections (both safe and manual modes)."""
         wizard = self.state.dedupe_wizard
         wizard.step = "processing"
         wizard.process_progress = 0.0
 
-        # Collect all files to delete from confirmed groups
+        # Collect all files to delete from confirmed groups (dict values)
         files_to_delete = []
-        for group in wizard.confirmed_groups:
-            files_to_delete.extend(group["remove"])
+        for group_decision in wizard.confirmed_groups.values():
+            files_to_delete.extend(group_decision["remove"])
+
+        base_folder = wizard.folder_path
 
         from threading import Thread
         from services.dedupe_service import delete_files
@@ -3778,13 +4284,109 @@ class ConsoleUtilitiesApp:
                 wizard.space_freed = bytes_freed
 
             files_deleted, bytes_freed = delete_files(
-                files_to_delete, progress_callback
+                files_to_delete, progress_callback, base_folder=base_folder
             )
             wizard.files_removed = files_deleted
             wizard.space_freed = bytes_freed
             wizard.step = "complete"
 
         thread = Thread(target=process, daemon=True)
+        thread.start()
+
+    # ========== Ghost File Cleaner Methods ========== #
+
+    def _show_ghost_cleaner(self):
+        """Show the ghost file cleaner wizard."""
+        from state import GhostCleanerWizardState
+
+        self.state.ghost_cleaner_wizard = GhostCleanerWizardState()
+        self.state.ghost_cleaner_wizard.show = True
+        # Open folder browser to select folder (default to roms_dir)
+        self._open_folder_browser("ghost_cleaner_folder")
+
+    def _close_ghost_cleaner(self):
+        """Close the ghost file cleaner wizard."""
+        from state import GhostCleanerWizardState
+
+        self.state.ghost_cleaner_wizard = GhostCleanerWizardState()
+
+    def _handle_ghost_cleaner_selection(self):
+        """Handle selection in ghost cleaner wizard."""
+        wizard = self.state.ghost_cleaner_wizard
+        step = wizard.step
+
+        if step == "scanning":
+            return
+
+        if step == "review":
+            # User confirmed - start cleaning
+            self._start_ghost_clean()
+
+        elif step in ("complete", "no_ghosts", "error"):
+            self._close_ghost_cleaner()
+
+    def _start_ghost_scan(self):
+        """Start scanning for ghost files."""
+        wizard = self.state.ghost_cleaner_wizard
+        wizard.step = "scanning"
+        wizard.scan_progress = 0.0
+        wizard.files_scanned = 0
+        wizard.total_files = 0
+
+        folder_path = wizard.folder_path
+
+        from threading import Thread
+        from services.ghost_cleaner import scan_ghost_files
+
+        def scan():
+            def progress_callback(current, total):
+                wizard.files_scanned = current
+                wizard.total_files = total
+                wizard.scan_progress = current / total if total > 0 else 0
+
+            try:
+                ghost_files = scan_ghost_files(
+                    folder_path, recursive=True, progress_callback=progress_callback
+                )
+                wizard.ghost_files = ghost_files
+
+                if ghost_files:
+                    wizard.step = "review"
+                else:
+                    wizard.step = "no_ghosts"
+
+            except Exception as e:
+                wizard.step = "error"
+                wizard.error_message = str(e)
+
+        thread = Thread(target=scan, daemon=True)
+        thread.start()
+
+    def _start_ghost_clean(self):
+        """Start cleaning ghost files."""
+        wizard = self.state.ghost_cleaner_wizard
+        wizard.step = "cleaning"
+        wizard.clean_progress = 0.0
+
+        ghost_files = list(wizard.ghost_files)
+        base_folder = wizard.folder_path
+
+        from threading import Thread
+        from services.ghost_cleaner import clean_ghost_files
+
+        def clean():
+            def progress_callback(current, total, bytes_freed):
+                wizard.clean_progress = current / total if total > 0 else 0
+                wizard.space_freed = bytes_freed
+
+            files_removed, bytes_freed = clean_ghost_files(
+                ghost_files, progress_callback, base_folder=base_folder
+            )
+            wizard.files_removed = files_removed
+            wizard.space_freed = bytes_freed
+            wizard.step = "complete"
+
+        thread = Thread(target=clean, daemon=True)
         thread.start()
 
 

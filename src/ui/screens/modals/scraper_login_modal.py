@@ -1,5 +1,5 @@
 """
-Scraper login modal - Multi-step login flow for ScreenScraper/TheGamesDB.
+Scraper login modal - Multi-step login flow for ScreenScraper/TheGamesDB/RAWG.
 """
 
 import pygame
@@ -22,7 +22,7 @@ class ScraperLoginModal:
     3. Testing credentials
     4. Complete or Error
 
-    For TheGamesDB:
+    For TheGamesDB/RAWG:
     1. API key input
     2. Testing credentials
     3. Complete or Error
@@ -65,10 +65,33 @@ class ScraperLoginModal:
             Tuple of (modal_rect, content_rect, close_rect, char_rects)
         """
         if provider == "thegamesdb":
-            return self._render_thegamesdb(
+            return self._render_api_key_flow(
                 screen,
                 step,
                 api_key,
+                cursor_position,
+                error_message,
+                input_mode,
+                shift_active,
+                provider_label="TheGamesDB",
+            )
+        elif provider == "rawg":
+            return self._render_api_key_flow(
+                screen,
+                step,
+                api_key,
+                cursor_position,
+                error_message,
+                input_mode,
+                shift_active,
+                provider_label="RAWG",
+            )
+        elif provider == "igdb":
+            return self._render_igdb_flow(
+                screen,
+                step,
+                username,
+                password,
                 cursor_position,
                 error_message,
                 input_mode,
@@ -121,7 +144,7 @@ class ScraperLoginModal:
                 screen, username, cursor_position, input_mode, shift_active
             )
 
-    def _render_thegamesdb(
+    def _render_api_key_flow(
         self,
         screen: pygame.Surface,
         step: str,
@@ -130,24 +153,144 @@ class ScraperLoginModal:
         error_message: str,
         input_mode: str,
         shift_active: bool = False,
+        provider_label: str = "TheGamesDB",
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
-        """Render TheGamesDB login flow."""
+        """Render API key login flow for any provider."""
         if step == "api_key":
             return self._render_api_key_step(
-                screen, api_key, cursor_position, input_mode, shift_active
+                screen,
+                api_key,
+                cursor_position,
+                input_mode,
+                shift_active,
+                provider_label=provider_label,
             )
         elif step == "testing":
-            return self._render_testing_step(screen, "TheGamesDB")
+            return self._render_testing_step(screen, provider_label)
         elif step == "complete":
-            return self._render_complete_step(screen, "", "TheGamesDB", input_mode)
+            return self._render_complete_step(screen, "", provider_label, input_mode)
         elif step == "error":
             return self._render_error_step(
-                screen, error_message, "TheGamesDB", input_mode
+                screen, error_message, provider_label, input_mode
             )
         else:
             return self._render_api_key_step(
-                screen, api_key, cursor_position, input_mode, shift_active
+                screen,
+                api_key,
+                cursor_position,
+                input_mode,
+                shift_active,
+                provider_label=provider_label,
             )
+
+    def _render_igdb_flow(
+        self,
+        screen: pygame.Surface,
+        step: str,
+        username: str,
+        password: str,
+        cursor_position: int,
+        error_message: str,
+        input_mode: str,
+        shift_active: bool = False,
+    ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
+        """Render IGDB login flow (Client ID + Client Secret)."""
+        if step == "username":
+            return self._render_igdb_input_step(
+                screen,
+                "Client ID:",
+                "Enter Twitch Client ID",
+                username,
+                cursor_position,
+                input_mode,
+                shift_active,
+            )
+        elif step == "password":
+            return self._render_igdb_input_step(
+                screen,
+                "Client Secret:",
+                "Enter Twitch Client Secret",
+                password,
+                cursor_position,
+                input_mode,
+                shift_active,
+            )
+        elif step == "testing":
+            return self._render_testing_step(screen, "IGDB")
+        elif step == "complete":
+            return self._render_complete_step(screen, "", "IGDB", input_mode)
+        elif step == "error":
+            return self._render_error_step(screen, error_message, "IGDB", input_mode)
+        else:
+            return self._render_igdb_input_step(
+                screen,
+                "Client ID:",
+                "Enter Twitch Client ID",
+                username,
+                cursor_position,
+                input_mode,
+                shift_active,
+            )
+
+    def _render_igdb_input_step(
+        self,
+        screen: pygame.Surface,
+        label: str,
+        prompt: str,
+        value: str,
+        cursor_position: int,
+        input_mode: str,
+        shift_active: bool = False,
+    ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
+        """Render an IGDB credential input step."""
+        title = "IGDB Login"
+
+        if input_mode == "keyboard":
+            return self._render_keyboard_input(
+                screen, title, label, value, prompt, input_mode
+            )
+
+        # On-screen keyboard mode
+        width = min(650, screen.get_width() - 40)
+        height = 420
+
+        show_close = input_mode == "touch"
+        modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
+            screen,
+            width,
+            height,
+            title=title,
+            show_close=show_close,
+        )
+
+        padding = self.theme.padding_sm
+        self.text.render(
+            screen,
+            prompt + ":",
+            (content_rect.left + padding, content_rect.top + padding),
+            color=self.theme.text_secondary,
+            size=self.theme.font_size_sm,
+        )
+
+        keyboard_rect = pygame.Rect(
+            content_rect.left,
+            content_rect.top + 25,
+            content_rect.width,
+            content_rect.height - 25,
+        )
+
+        char_rects, _ = self.char_keyboard.render(
+            screen,
+            keyboard_rect,
+            current_text=value,
+            selected_index=cursor_position,
+            chars_per_row=13,
+            char_set="url",
+            show_input_field=True,
+            shift_active=shift_active,
+        )
+
+        return modal_rect, content_rect, close_rect, char_rects
 
     def _render_username_step(
         self,
@@ -267,9 +410,10 @@ class ScraperLoginModal:
         cursor_position: int,
         input_mode: str,
         shift_active: bool = False,
+        provider_label: str = "TheGamesDB",
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """Render API key input step."""
-        title = "TheGamesDB API Key"
+        title = f"{provider_label} API Key"
 
         if input_mode == "keyboard":
             return self._render_keyboard_input(
@@ -288,7 +432,7 @@ class ScraperLoginModal:
         padding = self.theme.padding_sm
         self.text.render(
             screen,
-            "Enter your TheGamesDB API key:",
+            f"Enter your {provider_label} API key:",
             (content_rect.left + padding, content_rect.top + padding),
             color=self.theme.text_secondary,
             size=self.theme.font_size_sm,
@@ -557,10 +701,11 @@ class ScraperLoginModal:
             Tuple of (new_text, is_done, toggle_shift)
         """
         if step in ("username", "password"):
+            cs = "url" if provider == "igdb" else "default"
             return self.char_keyboard.handle_selection(
                 cursor_position,
                 current_text,
-                char_set="default",
+                char_set=cs,
                 shift_active=shift_active,
             )
         elif step == "api_key":

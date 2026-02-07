@@ -53,42 +53,32 @@ class Button:
         if border_radius is None:
             border_radius = self.theme.radius_md
 
-        # Apply hover/pressed effects
-        if pressed:
-            color = self._darken(color, 0.2)
-        elif hover:
-            color = self._lighten(color, 0.2)
-
-        # Draw shadow
-        if shadow and not pressed:
-            shadow_rect = rect.copy()
-            shadow_rect.y += 2
-            # Create a surface with alpha for shadow
-            shadow_surface = pygame.Surface(
-                (shadow_rect.width, shadow_rect.height), pygame.SRCALPHA
-            )
-            pygame.draw.rect(
-                shadow_surface,
-                self.theme.shadow,
-                shadow_surface.get_rect(),
-                border_radius=border_radius,
-            )
-            screen.blit(shadow_surface, shadow_rect.topleft)
-
-        # Draw button
-        pygame.draw.rect(screen, color, rect, border_radius=border_radius)
-
-        # Draw focus border when hovering (makes selection more visible)
-        if hover:
-            # Draw a white border to indicate focus
+        # Retro terminal style: border only, invert on hover
+        if hover or pressed:
+            # Filled green background with dark text
             pygame.draw.rect(
                 screen,
-                self.theme.text_primary,
+                self.theme.primary,
                 rect,
-                width=3,
                 border_radius=border_radius,
             )
-        elif border_color and border_width > 0:
+        else:
+            # Transparent with green border
+            pygame.draw.rect(
+                screen,
+                self.theme.background,
+                rect,
+                border_radius=border_radius,
+            )
+            pygame.draw.rect(
+                screen,
+                self.theme.primary,
+                rect,
+                width=1,
+                border_radius=border_radius,
+            )
+
+        if border_color and border_width > 0 and not hover:
             pygame.draw.rect(
                 screen,
                 border_color,

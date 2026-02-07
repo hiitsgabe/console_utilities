@@ -112,7 +112,10 @@ class ProgressBar:
         )
 
         # Draw text
-        font = pygame.font.Font(None, self.theme.font_size_sm)
+        font = pygame.font.Font(
+            getattr(self.theme, "font_path", None),
+            self.theme.font_size_sm,
+        )
         text_surface = font.render(text, True, text_color)
         text_rect = text_surface.get_rect(center=rect.center)
         screen.blit(text_surface, text_rect)

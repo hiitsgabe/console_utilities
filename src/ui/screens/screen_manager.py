@@ -29,8 +29,9 @@ from .modals.scraper_wizard_modal import ScraperWizardModal
 from .modals.scraper_login_modal import ScraperLoginModal
 from .modals.dedupe_wizard_modal import DedupeWizardModal
 from .modals.rename_wizard_modal import RenameWizardModal
+from .modals.ghost_cleaner_modal import GhostCleanerModal
 from .downloads_screen import DownloadsScreen
-from ui.molecules.download_status_bar import DownloadStatusBar
+from ui.molecules.status_footer import StatusFooter, StatusFooterItem
 
 
 class ScreenManager:
@@ -71,9 +72,10 @@ class ScreenManager:
         self.scraper_wizard_modal = ScraperWizardModal(theme)
         self.dedupe_wizard_modal = DedupeWizardModal(theme)
         self.rename_wizard_modal = RenameWizardModal(theme)
+        self.ghost_cleaner_modal = GhostCleanerModal(theme)
 
-        # Initialize status bar
-        self.download_status_bar = DownloadStatusBar(theme)
+        # Initialize generic status footer
+        self.status_footer = StatusFooter(theme)
 
     def render(
         self,
@@ -247,6 +249,8 @@ class ScreenManager:
                     state.ia_download_wizard.error_message,
                     input_mode=state.input_mode,
                     shift_active=state.ia_download_wizard.shift_active,
+                    display_items=state.ia_download_wizard.display_items,
+                    current_folder=state.ia_download_wizard.current_folder,
                 )
             )
             rects["modal"] = modal_rect
@@ -323,6 +327,9 @@ class ScreenManager:
                     state.scraper_wizard.current_download,
                     state.scraper_wizard.error_message,
                     input_mode=state.input_mode,
+                    available_videos=state.scraper_wizard.available_videos,
+                    selected_video_index=state.scraper_wizard.selected_video_index,
+                    video_highlighted=state.scraper_wizard.video_highlighted,
                     batch_mode=state.scraper_wizard.batch_mode,
                     batch_roms=state.scraper_wizard.batch_roms,
                     batch_current_index=state.scraper_wizard.batch_current_index,
@@ -356,6 +363,7 @@ class ScreenManager:
                     state.dedupe_wizard.error_message,
                     mode_highlighted=state.dedupe_wizard.mode_highlighted,
                     input_mode=state.input_mode,
+                    confirmed_groups=state.dedupe_wizard.confirmed_groups,
                 )
             )
             rects["modal"] = modal_rect
@@ -386,11 +394,43 @@ class ScreenManager:
             rects["item_rects"] = item_rects
             return rects
 
+        if state.ghost_cleaner_wizard.show:
+            modal_rect, content_rect, close_rect, item_rects = (
+                self.ghost_cleaner_modal.render(
+                    screen,
+                    state.ghost_cleaner_wizard.step,
+                    state.ghost_cleaner_wizard.folder_path,
+                    state.ghost_cleaner_wizard.ghost_files,
+                    state.ghost_cleaner_wizard.scan_progress,
+                    state.ghost_cleaner_wizard.clean_progress,
+                    state.ghost_cleaner_wizard.files_scanned,
+                    state.ghost_cleaner_wizard.total_files,
+                    state.ghost_cleaner_wizard.files_removed,
+                    state.ghost_cleaner_wizard.space_freed,
+                    state.ghost_cleaner_wizard.error_message,
+                    input_mode=state.input_mode,
+                )
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["item_rects"] = item_rects
+            return rects
+
         # Render main screens based on mode
         if state.mode == "systems":
-            visible_systems = self._get_visible_systems(data, settings)
             back_rect, item_rects, scroll_offset = self.systems_screen.render(
-                screen, visible_systems, state.highlighted
+                screen, [], state.highlighted
+            )
+            rects["back"] = back_rect
+            rects["item_rects"] = item_rects
+            rects["scroll_offset"] = scroll_offset
+
+        elif state.mode == "systems_list":
+            visible_systems = self._get_visible_systems(data, settings)
+            back_rect, item_rects, scroll_offset = (
+                self.systems_screen.render_systems_list(
+                    screen, visible_systems, state.systems_list_highlighted
+                )
             )
             rects["back"] = back_rect
             rects["item_rects"] = item_rects
@@ -493,11 +533,73 @@ class ScreenManager:
             rects["item_rects"] = item_rects
             rects["scroll_offset"] = scroll_offset
 
-        # Render download status bar on non-download screens when queue is active
+        # Render stacked status footers on non-download screens
         if state.mode != "downloads":
-            self.download_status_bar.render(screen, state.download_queue)
+            footer_items = self._build_footer_items(state)
+            if footer_items:
+                self.status_footer.render(screen, footer_items)
 
         return rects
+
+    def _build_footer_items(self, state) -> list:
+        """Build list of StatusFooterItems from active background tasks."""
+        items = []
+
+        # Download queue footer
+        dq = state.download_queue
+        if dq.items:
+            has_active = any(
+                it.status in ("waiting", "downloading", "extracting", "moving")
+                for it in dq.items
+            )
+            if has_active:
+                total = len(dq.items)
+                completed = sum(1 for it in dq.items if it.status == "completed")
+                active_item = None
+                for it in dq.items:
+                    if it.status in ("downloading", "extracting", "moving"):
+                        active_item = it
+                        break
+
+                if active_item:
+                    label = f"Downloading {completed + 1} of {total} games"
+                    progress = (
+                        active_item.progress
+                        if active_item.status == "downloading"
+                        else None
+                    )
+                else:
+                    waiting = sum(1 for it in dq.items if it.status == "waiting")
+                    label = (
+                        f"Queued: {waiting} games"
+                        if waiting
+                        else f"Downloads complete ({completed}/{total})"
+                    )
+                    progress = None
+
+                items.append(
+                    StatusFooterItem(
+                        label=label,
+                        progress=progress,
+                        color=self.theme.secondary,
+                    )
+                )
+
+        # Scraper queue footer
+        sq = state.scraper_queue
+        if sq.active or (sq.items and sq.current_status):
+            total = len(sq.items)
+            done = sum(1 for it in sq.items if it.status == "done")
+            progress = done / total if total > 0 else 0.0
+            items.append(
+                StatusFooterItem(
+                    label=sq.current_status or f"Scraping: {done}/{total}",
+                    progress=progress,
+                    color=self.theme.primary,
+                )
+            )
+
+        return items
 
     def _get_visible_systems(
         self, data: List[Dict[str, Any]], settings: Dict[str, Any]

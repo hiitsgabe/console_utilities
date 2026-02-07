@@ -20,13 +20,20 @@ Batch mode steps:
 """
 
 import pygame
+from io import BytesIO
+from queue import Queue, Empty
+from threading import Thread
 from typing import Tuple, List, Optional, Dict, Any, Set
+
+import requests
 
 from ui.theme import Theme, default_theme
 from ui.organisms.modal_frame import ModalFrame
 from ui.atoms.text import Text
 from ui.atoms.progress import ProgressBar
 from utils.button_hints import get_combined_hints
+
+THUMB_SIZE = (64, 64)
 
 
 class ScraperWizardModal:
@@ -42,6 +49,8 @@ class ScraperWizardModal:
         self.modal_frame = ModalFrame(theme)
         self.text = Text(theme)
         self.progress_bar = ProgressBar(theme)
+        self._thumb_cache: Dict[str, Any] = {}
+        self._thumb_queue: Queue = Queue()
 
     def render(
         self,
@@ -61,6 +70,9 @@ class ScraperWizardModal:
         current_download: str,
         error_message: str,
         input_mode: str = "keyboard",
+        available_videos: List[Dict[str, Any]] = None,
+        selected_video_index: int = -1,
+        video_highlighted: int = 0,
         batch_mode: bool = False,
         batch_roms: List[Dict[str, Any]] = None,
         batch_current_index: int = 0,
@@ -73,6 +85,7 @@ class ScraperWizardModal:
         Returns:
             Tuple of (modal_rect, content_rect, close_rect, item_rects)
         """
+        available_videos = available_videos or []
         batch_roms = batch_roms or []
         batch_default_images = batch_default_images or []
 
@@ -97,6 +110,14 @@ class ScraperWizardModal:
         elif step == "image_select":
             return self._render_image_select(
                 screen, available_images, selected_images, image_highlighted, input_mode
+            )
+        elif step == "video_select":
+            return self._render_video_select(
+                screen,
+                available_videos,
+                selected_video_index,
+                video_highlighted,
+                input_mode,
             )
         elif step == "downloading":
             return self._render_downloading(screen, download_progress, current_download)
@@ -220,7 +241,11 @@ class ScraperWizardModal:
                     item_rect.left + padding,
                     item_rect.centery - self.theme.font_size_sm // 2,
                 ),
-                color=self.theme.text_primary,
+                color=(
+                    self.theme.background
+                    if is_selected
+                    else self.theme.text_primary
+                ),
                 size=self.theme.font_size_sm,
                 max_width=item_rect.width - padding * 2,
             )
@@ -294,6 +319,9 @@ class ScraperWizardModal:
         padding = self.theme.padding_sm
         y = content_rect.top + padding
 
+        # Process any thumbnails that finished loading
+        self.update_thumbs()
+
         if not search_results:
             self.text.render(
                 screen,
@@ -324,14 +352,18 @@ class ScraperWizardModal:
         )
         y += 25
 
+        # Check if any result has a thumbnail URL
+        has_thumbs = any(r.get("thumbnail_url") for r in search_results)
+
         # Results list
         item_rects = []
-        item_height = 55
+        item_height = THUMB_SIZE[1] + 8 if has_thumbs else 55
         visible_items = (content_rect.height - 90) // item_height
         scroll_offset = max(0, selected_index - visible_items + 2)
 
         for i in range(
-            scroll_offset, min(len(search_results), scroll_offset + visible_items)
+            scroll_offset,
+            min(len(search_results), scroll_offset + visible_items),
         ):
             result = search_results[i]
             is_selected = i == selected_index
@@ -346,17 +378,46 @@ class ScraperWizardModal:
 
             bg_color = self.theme.primary if is_selected else self.theme.surface_hover
             pygame.draw.rect(
-                screen, bg_color, item_rect, border_radius=self.theme.radius_sm
+                screen,
+                bg_color,
+                item_rect,
+                border_radius=self.theme.radius_sm,
             )
+
+            # Thumbnail
+            text_x = item_rect.left + padding
+            if has_thumbs:
+                thumb_url = result.get("thumbnail_url", "")
+                thumb = self._get_thumb(thumb_url)
+                tx = item_rect.left + 4
+                ty = item_rect.top + (item_rect.height - THUMB_SIZE[1]) // 2
+                if thumb:
+                    screen.blit(thumb, (tx, ty))
+                else:
+                    # Placeholder rect
+                    ph = pygame.Rect(tx, ty, *THUMB_SIZE)
+                    pygame.draw.rect(
+                        screen,
+                        self.theme.surface,
+                        ph,
+                        border_radius=self.theme.radius_sm,
+                    )
+                text_x = tx + THUMB_SIZE[0] + padding
+
+            text_max_w = item_rect.right - text_x - padding
 
             # Game name
             self.text.render(
                 screen,
                 result.get("name", "Unknown"),
-                (item_rect.left + padding, item_rect.top + 8),
-                color=self.theme.text_primary,
+                (text_x, item_rect.top + 8),
+                color=(
+                    self.theme.background
+                    if is_selected
+                    else self.theme.text_primary
+                ),
                 size=self.theme.font_size_sm,
-                max_width=item_rect.width - padding * 2,
+                max_width=text_max_w,
             )
 
             # Platform and date
@@ -366,11 +427,11 @@ class ScraperWizardModal:
             self.text.render(
                 screen,
                 info,
-                (item_rect.left + padding, item_rect.top + 28),
+                (text_x, item_rect.top + 28),
                 color=(
                     self.theme.text_secondary
                     if not is_selected
-                    else self.theme.text_primary
+                    else self.theme.background
                 ),
                 size=self.theme.font_size_xs,
             )
@@ -471,10 +532,135 @@ class ScraperWizardModal:
                     item_rect.left + padding,
                     item_rect.centery - self.theme.font_size_sm // 2,
                 ),
-                color=self.theme.text_primary,
+                color=(
+                    self.theme.background
+                    if is_selected
+                    else self.theme.text_primary
+                ),
                 size=self.theme.font_size_sm,
             )
 
+            y += item_height
+
+        # Hints
+        hints = get_combined_hints(
+            [("select", "Toggle"), ("start", "Download"), ("back", "Cancel")],
+            input_mode,
+        )
+        self.text.render(
+            screen,
+            hints,
+            (content_rect.centerx, content_rect.bottom - padding - 10),
+            color=self.theme.text_secondary,
+            size=self.theme.font_size_sm,
+            align="center",
+        )
+
+        return modal_rect, content_rect, close_rect, item_rects
+
+    def _render_video_select(
+        self,
+        screen: pygame.Surface,
+        available_videos: List[Dict[str, Any]],
+        selected_video_index: int,
+        highlighted: int,
+        input_mode: str,
+    ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[pygame.Rect]]:
+        """Render video selection step (radio-style: pick one or none)."""
+        width = min(500, screen.get_width() - 40)
+        height = min(350, screen.get_height() - 60)
+
+        show_close = input_mode == "touch"
+        modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
+            screen, width, height, title="Select Video", show_close=show_close
+        )
+
+        padding = self.theme.padding_sm
+        y = content_rect.top + padding
+
+        self.text.render(
+            screen,
+            "Optionally download a video:",
+            (content_rect.left + padding, y),
+            color=self.theme.text_secondary,
+            size=self.theme.font_size_sm,
+        )
+        y += 25
+
+        # Build items: "No Video" + available videos
+        item_rects = []
+        item_height = 40
+
+        # "No Video" option
+        no_video_rect = pygame.Rect(
+            content_rect.left + padding,
+            y,
+            content_rect.width - padding * 2,
+            item_height - 5,
+        )
+        item_rects.append(no_video_rect)
+
+        is_selected = highlighted == 0
+        is_checked = selected_video_index == -1
+        bg_color = self.theme.primary if is_selected else self.theme.surface_hover
+        pygame.draw.rect(
+            screen, bg_color, no_video_rect, border_radius=self.theme.radius_sm
+        )
+
+        radio = "(X)" if is_checked else "( )"
+        self.text.render(
+            screen,
+            f"{radio} No Video",
+            (
+                no_video_rect.left + padding,
+                no_video_rect.centery - self.theme.font_size_sm // 2,
+            ),
+            color=(
+                self.theme.background
+                if is_selected
+                else self.theme.text_primary
+            ),
+            size=self.theme.font_size_sm,
+        )
+        y += item_height
+
+        # Video options
+        for i, video in enumerate(available_videos):
+            video_rect = pygame.Rect(
+                content_rect.left + padding,
+                y,
+                content_rect.width - padding * 2,
+                item_height - 5,
+            )
+            item_rects.append(video_rect)
+
+            is_selected = highlighted == i + 1
+            is_checked = selected_video_index == i
+            bg_color = self.theme.primary if is_selected else self.theme.surface_hover
+            pygame.draw.rect(
+                screen, bg_color, video_rect, border_radius=self.theme.radius_sm
+            )
+
+            radio = "(X)" if is_checked else "( )"
+            label = video.get("label", "Video")
+            region = video.get("region", "")
+            if region:
+                label += f" ({region.upper()})"
+
+            self.text.render(
+                screen,
+                f"{radio} {label}",
+                (
+                    video_rect.left + padding,
+                    video_rect.centery - self.theme.font_size_sm // 2,
+                ),
+                color=(
+                    self.theme.background
+                    if is_selected
+                    else self.theme.text_primary
+                ),
+                size=self.theme.font_size_sm,
+            )
             y += item_height
 
         # Hints
@@ -698,7 +884,11 @@ class ScraperWizardModal:
                     item_rect.left + padding,
                     item_rect.centery - self.theme.font_size_sm // 2,
                 ),
-                color=self.theme.text_primary,
+                color=(
+                    self.theme.background
+                    if is_selected
+                    else self.theme.text_primary
+                ),
                 size=self.theme.font_size_sm,
                 max_width=item_rect.width - padding * 2,
             )
@@ -779,9 +969,12 @@ class ScraperWizardModal:
 
             checkbox = "[ ]" if is_skipped else "[X]"
             name = rom.get("name", "Unknown")
-            text_color = (
-                self.theme.text_disabled if is_skipped else self.theme.text_primary
-            )
+            if is_selected:
+                text_color = self.theme.background
+            elif is_skipped:
+                text_color = self.theme.text_disabled
+            else:
+                text_color = self.theme.text_primary
 
             self.text.render(
                 screen,
@@ -857,7 +1050,11 @@ class ScraperWizardModal:
                 auto_rect.left + padding,
                 auto_rect.centery - self.theme.font_size_sm // 2,
             ),
-            color=self.theme.text_primary,
+            color=(
+                self.theme.background
+                if highlighted == 0
+                else self.theme.text_primary
+            ),
             size=self.theme.font_size_sm,
         )
         y += item_height
@@ -899,7 +1096,11 @@ class ScraperWizardModal:
                     img_rect.left + padding,
                     img_rect.centery - self.theme.font_size_sm // 2,
                 ),
-                color=self.theme.text_primary,
+                color=(
+                    self.theme.background
+                    if is_selected
+                    else self.theme.text_primary
+                ),
                 size=self.theme.font_size_sm,
             )
             y += item_height
@@ -1002,7 +1203,14 @@ class ScraperWizardModal:
 
         done = sum(1 for r in batch_roms if r.get("status") == "done")
         errors = sum(1 for r in batch_roms if r.get("status") == "error")
-        skipped = sum(1 for r in batch_roms if r.get("status") == "skipped")
+        already_had = sum(
+            1
+            for r in batch_roms
+            if r.get("status") == "skipped" and r.get("skip_reason") == "image_exists"
+        )
+        skipped = (
+            sum(1 for r in batch_roms if r.get("status") == "skipped") - already_had
+        )
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
             screen, width, height, title="Batch Complete", show_close=False
@@ -1032,6 +1240,17 @@ class ScraperWizardModal:
             )
             y += 30
 
+        if already_had > 0:
+            self.text.render(
+                screen,
+                f"Already had images: {already_had}",
+                (content_rect.centerx, y),
+                color=self.theme.text_secondary,
+                size=self.theme.font_size_md,
+                align="center",
+            )
+            y += 30
+
         if skipped > 0:
             self.text.render(
                 screen,
@@ -1053,6 +1272,52 @@ class ScraperWizardModal:
         )
 
         return modal_rect, content_rect, None, []
+
+    # Thumbnail helpers
+
+    def update_thumbs(self):
+        """Process loaded thumbnails from background thread."""
+        while not self._thumb_queue.empty():
+            try:
+                key, surface = self._thumb_queue.get_nowait()
+                self._thumb_cache[key] = surface
+            except Empty:
+                break
+
+    def clear_thumbs(self):
+        """Clear thumbnail cache (call when wizard closes)."""
+        self._thumb_cache.clear()
+        while not self._thumb_queue.empty():
+            try:
+                self._thumb_queue.get_nowait()
+            except Empty:
+                break
+
+    def _get_thumb(self, url: str) -> Optional[pygame.Surface]:
+        """Get thumbnail, start async load if needed."""
+        if not url:
+            return None
+        if url in self._thumb_cache:
+            cached = self._thumb_cache[url]
+            if cached == "loading":
+                return None
+            return cached
+        self._thumb_cache[url] = "loading"
+        t = Thread(target=self._load_thumb, args=(url,), daemon=True)
+        t.start()
+        return None
+
+    def _load_thumb(self, url: str):
+        """Load thumbnail in background thread."""
+        try:
+            resp = requests.get(url, timeout=10)
+            resp.raise_for_status()
+            img = pygame.image.load(BytesIO(resp.content))
+            img = img.convert_alpha()
+            scaled = pygame.transform.smoothscale(img, THUMB_SIZE)
+            self._thumb_queue.put((url, scaled))
+        except Exception:
+            self._thumb_queue.put((url, None))
 
 
 # Default instance

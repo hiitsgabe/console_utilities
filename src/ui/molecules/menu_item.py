@@ -124,13 +124,22 @@ class MenuItem:
 
         # Determine text color based on state
         if highlighted:
-            text_color = self.theme.primary  # Blue highlight color
+            text_color = self.theme.primary
         else:
-            text_color = self.theme.text_secondary  # Dimmer for non-highlighted
+            text_color = self.theme.text_secondary
+
+        # Add cursor prefix for highlighted items (retro terminal style)
+        cursor = getattr(self.theme, "menu_cursor", "")
+        if cursor:
+            display_label = (
+                cursor + label if highlighted else (" " * len(cursor) + label)
+            )
+        else:
+            display_label = label
 
         self.text.render(
             screen,
-            label,
+            display_label,
             (content_left, rect.centery - self.theme.font_size_md // 4),
             color=text_color,
             size=self.theme.font_size_md,
@@ -164,7 +173,10 @@ class MenuItem:
         )
 
         # Draw lines on either side
-        font = pygame.font.Font(None, self.theme.font_size_sm)
+        font = pygame.font.Font(
+            getattr(self.theme, "font_path", None),
+            self.theme.font_size_sm,
+        )
         text_width = font.size(label)[0]
         gap = 10
 

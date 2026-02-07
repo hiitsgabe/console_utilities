@@ -417,6 +417,7 @@ def find_duplicates_manual(
 def delete_files(
     files_to_delete: List[str],
     progress_callback: Optional[Callable[[int, int, int], None]] = None,
+    base_folder: str = "",
 ) -> Tuple[int, int]:
     """
     Delete the specified files.
@@ -424,6 +425,7 @@ def delete_files(
     Args:
         files_to_delete: List of file paths to delete
         progress_callback: Optional callback(current, total, bytes_freed) for progress
+        base_folder: If set, only delete files within this folder (safety check)
 
     Returns:
         Tuple of (files_deleted, bytes_freed)
@@ -431,10 +433,23 @@ def delete_files(
     files_deleted = 0
     bytes_freed = 0
 
+    # Resolve base folder for path validation
+    resolved_base = os.path.realpath(base_folder) if base_folder else ""
+
     for i, filepath in enumerate(files_to_delete):
         try:
-            size = os.path.getsize(filepath)
-            os.remove(filepath)
+            resolved_path = os.path.realpath(filepath)
+
+            # Safety: skip files outside the base folder
+            if resolved_base and not resolved_path.startswith(resolved_base + os.sep):
+                continue
+
+            # Safety: never delete directories through this function
+            if os.path.isdir(resolved_path):
+                continue
+
+            size = os.path.getsize(resolved_path)
+            os.remove(resolved_path)
             files_deleted += 1
             bytes_freed += size
         except OSError:

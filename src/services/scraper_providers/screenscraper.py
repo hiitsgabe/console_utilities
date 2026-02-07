@@ -11,7 +11,7 @@ import requests
 from typing import List, Tuple, Dict, Any
 from urllib.parse import quote
 
-from .base_provider import BaseProvider, GameSearchResult, GameImage
+from .base_provider import BaseProvider, GameSearchResult, GameImage, GameVideo
 
 
 class ScreenScraperProvider(BaseProvider):
@@ -328,6 +328,90 @@ class ScreenScraperProvider(BaseProvider):
                 images.append(image)
 
             return True, images, ""
+
+        except requests.Timeout:
+            return False, [], "Request timed out"
+        except requests.RequestException as e:
+            return False, [], f"Network error: {str(e)}"
+        except Exception as e:
+            traceback.print_exc()
+            return False, [], f"Error: {str(e)}"
+
+    def supports_videos(self) -> bool:
+        return True
+
+    def get_game_videos(self, game_id: str) -> Tuple[bool, List[GameVideo], str]:
+        """
+        Get available videos for a game.
+
+        ScreenScraper provides "video" and "video-normalized" media types.
+        """
+        if not self.is_configured():
+            return False, [], "ScreenScraper credentials not configured"
+
+        try:
+            params = self._get_auth_params()
+            params["gameid"] = game_id
+
+            response = requests.get(
+                f"{self.BASE_URL}/jeuInfos.php",
+                params=params,
+                timeout=30,
+            )
+
+            if response.status_code == 401:
+                return False, [], "Authentication failed"
+            elif response.status_code == 404:
+                return False, [], "Game not found"
+            elif response.status_code != 200:
+                return False, [], f"API error: {response.status_code}"
+
+            try:
+                data = response.json()
+            except (ValueError, requests.exceptions.JSONDecodeError):
+                return False, [], "Invalid response from server"
+
+            jeu = data.get("response", {}).get("jeu", {})
+            medias = jeu.get("medias", [])
+
+            videos = []
+            seen_normalized = False
+            seen_regular = False
+
+            for media in medias:
+                media_type = media.get("type", "")
+                if media_type not in ("video", "video-normalized"):
+                    continue
+
+                url = media.get("url", "")
+                if not url:
+                    continue
+
+                is_normalized = media_type == "video-normalized"
+                region = media.get("region", "")
+
+                # Prefer one of each type, favor US/world region
+                if is_normalized and seen_normalized:
+                    continue
+                if not is_normalized and seen_regular:
+                    continue
+
+                fmt = media.get("format", "mp4")
+                videos.append(
+                    GameVideo(
+                        url=url,
+                        region=region,
+                        format=fmt,
+                        normalized=is_normalized,
+                    )
+                )
+
+                if is_normalized:
+                    seen_normalized = True
+                else:
+                    seen_regular = True
+
+            return True, videos, ""
 
         except requests.Timeout:
             return False, [], "Request timed out"

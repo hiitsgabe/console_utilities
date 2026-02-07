@@ -49,6 +49,7 @@ class UtilsScreen:
         "--- FILE MANAGEMENT ---",  # Divider
         "Dedupe Games",
         "Clean File Names",
+        "Ghost File Cleaner",
     ]
 
     # NSZ section items (only shown when NSZ is enabled)
@@ -157,6 +158,7 @@ class UtilsScreen:
                 "Batch Scrape Folder": "batch_scrape",
                 "Dedupe Games": "dedupe_games",
                 "Clean File Names": "clean_filenames",
+                "Ghost File Cleaner": "ghost_cleaner",
                 "NSZ to NSP Converter": "nsz_converter",
             }
             return actions.get(item, "unknown")

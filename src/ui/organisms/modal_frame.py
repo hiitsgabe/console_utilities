@@ -9,6 +9,7 @@ from ui.theme import Theme, default_theme
 from ui.atoms.surface import Surface
 from ui.atoms.text import Text
 from ui.atoms.button import Button
+from constants import BEZEL_INSET
 
 
 class ModalFrame:
@@ -52,19 +53,18 @@ class ModalFrame:
         if with_backdrop:
             self.surface.render_modal_backdrop(screen, backdrop_alpha)
 
-        # Draw modal surface
+        # Draw modal surface with green border
         pygame.draw.rect(
-            screen, self.theme.surface, rect, border_radius=self.theme.radius_lg
+            screen,
+            self.theme.surface,
+            rect,
+            border_radius=self.theme.radius_lg,
         )
-
-        # Draw shadow
-        shadow_rect = rect.copy()
-        shadow_rect.y += 4
-        shadow_surface = pygame.Surface(rect.size, pygame.SRCALPHA)
         pygame.draw.rect(
-            shadow_surface,
-            (*self.theme.background, 100),
-            shadow_surface.get_rect(),
+            screen,
+            self.theme.primary,
+            rect,
+            width=2,
             border_radius=self.theme.radius_lg,
         )
 
@@ -83,33 +83,22 @@ class ModalFrame:
 
         # Draw header if title provided
         if title:
-            # Draw header background
-            header_rect = pygame.Rect(rect.left, rect.top, rect.width, header_height)
-            pygame.draw.rect(
-                screen,
-                self.theme.surface_hover,
-                header_rect,
-                border_radius=self.theme.radius_lg,
-            )
-            # Fix bottom corners
-            pygame.draw.rect(
-                screen,
-                self.theme.surface_hover,
-                pygame.Rect(
-                    rect.left,
-                    rect.top + header_height - self.theme.radius_lg,
-                    rect.width,
-                    self.theme.radius_lg,
-                ),
-            )
-
-            # Draw title
+            # Draw title text
             self.text.render(
                 screen,
                 title,
                 (rect.left + padding, rect.top + header_height // 2 - 4),
                 color=self.theme.text_primary,
                 size=self.theme.font_size_lg,
+            )
+
+            # Green underline beneath title
+            pygame.draw.line(
+                screen,
+                self.theme.primary,
+                (rect.left + 2, rect.top + header_height),
+                (rect.right - 2, rect.top + header_height),
+                1,
             )
 
             # Draw close button
@@ -122,7 +111,10 @@ class ModalFrame:
                     close_size,
                 )
                 self.button.render_icon_button(
-                    screen, close_button_rect.center, close_size, icon_type="close"
+                    screen,
+                    close_button_rect.center,
+                    close_size,
+                    icon_type="close",
                 )
 
         return rect, content_rect, close_button_rect
@@ -149,11 +141,17 @@ class ModalFrame:
             Tuple of (modal_rect, content_rect, close_button_rect or None)
         """
         screen_rect = screen.get_rect()
+        inset = BEZEL_INSET
+        # Clamp modal dimensions to stay within bezel-safe area
+        max_w = screen_rect.width - inset * 2
+        max_h = screen_rect.height - inset * 2
+        clamped_w = min(width, max_w)
+        clamped_h = min(height, max_h)
         modal_rect = pygame.Rect(
-            (screen_rect.width - width) // 2,
-            (screen_rect.height - height) // 2,
-            width,
-            height,
+            (screen_rect.width - clamped_w) // 2,
+            (screen_rect.height - clamped_h) // 2,
+            clamped_w,
+            clamped_h,
         )
 
         return self.render(screen, modal_rect, title, show_close)
@@ -177,8 +175,9 @@ class ModalFrame:
         Returns:
             Tuple of (modal_rect, content_rect, close_button_rect or None)
         """
+        effective_margin = max(margin, BEZEL_INSET)
         screen_rect = screen.get_rect()
-        modal_rect = screen_rect.inflate(-margin * 2, -margin * 2)
+        modal_rect = screen_rect.inflate(-effective_margin * 2, -effective_margin * 2)
 
         return self.render(screen, modal_rect, title, show_close)
 

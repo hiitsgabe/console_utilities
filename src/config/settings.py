@@ -20,6 +20,7 @@ class Settings:
     view_type: str = "grid"  # "grid" or "list"
     usa_only: bool = False
     show_download_all: bool = False  # Show "Download All" button in game lists
+    exclude_installed_on_download_all: bool = True  # Skip already-installed games
     work_dir: str = ""
     roms_dir: str = ""
     nsz_keys_path: str = ""
@@ -41,6 +42,9 @@ class Settings:
     screenscraper_username: str = ""
     screenscraper_password: str = ""  # base64 encoded
     thegamesdb_api_key: str = ""
+    rawg_api_key: str = ""
+    igdb_client_id: str = ""
+    igdb_client_secret: str = ""  # base64 encoded
     # Frontend-specific paths
     esde_media_path: str = ""
     esde_gamelists_path: str = ""

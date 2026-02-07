@@ -22,15 +22,14 @@ def update_log_file_path(work_dir: str) -> None:
     """
     Update LOG_FILE path to use the configured work directory.
 
-    Creates a py_downloads subdirectory within the work directory.
+    Saves error.log directly in the work directory.
 
     Args:
         work_dir: The work directory path
     """
     global _log_file
-    py_downloads_dir = os.path.join(work_dir, "py_downloads")
-    os.makedirs(py_downloads_dir, exist_ok=True)
-    _log_file = os.path.join(py_downloads_dir, "error.log")
+    os.makedirs(work_dir, exist_ok=True)
+    _log_file = os.path.join(work_dir, "error.log")
 
 
 def log_error(
