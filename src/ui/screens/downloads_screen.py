@@ -222,9 +222,7 @@ class DownloadsScreen:
             name,
             (name_x, rect.centery - 10),
             color=(
-                self.theme.background
-                if is_highlighted
-                else self.theme.text_primary
+                self.theme.background if is_highlighted else self.theme.text_primary
             ),
             size=self.theme.font_size_md,
             max_width=name_width,
@@ -276,7 +274,11 @@ class DownloadsScreen:
                 screen,
                 speed_text,
                 (rect.right, rect.centery),
-                color=self.theme.text_secondary,
+                color=(
+                    self.theme.background
+                    if is_highlighted
+                    else self.theme.text_secondary
+                ),
                 size=self.theme.font_size_xs,
                 align="right",
             )
@@ -287,7 +289,7 @@ class DownloadsScreen:
                 screen,
                 "Extracting...",
                 (rect.centerx, rect.centery),
-                color=self.theme.warning,
+                color=(self.theme.background if is_highlighted else self.theme.warning),
                 size=self.theme.font_size_sm,
                 align="center",
             )
@@ -297,7 +299,7 @@ class DownloadsScreen:
                 screen,
                 "Moving files...",
                 (rect.centerx, rect.centery),
-                color=self.theme.warning,
+                color=(self.theme.background if is_highlighted else self.theme.warning),
                 size=self.theme.font_size_sm,
                 align="center",
             )
@@ -307,7 +309,11 @@ class DownloadsScreen:
                 screen,
                 "Waiting",
                 (rect.centerx, rect.centery),
-                color=self.theme.text_secondary,
+                color=(
+                    self.theme.background
+                    if is_highlighted
+                    else self.theme.text_secondary
+                ),
                 size=self.theme.font_size_sm,
                 align="center",
             )
@@ -317,7 +323,7 @@ class DownloadsScreen:
                 screen,
                 "Done",
                 (rect.centerx, rect.centery),
-                color=self.theme.success,
+                color=(self.theme.background if is_highlighted else self.theme.success),
                 size=self.theme.font_size_sm,
                 align="center",
             )
@@ -328,7 +334,7 @@ class DownloadsScreen:
                 screen,
                 error_text,
                 (rect.centerx, rect.centery),
-                color=self.theme.error,
+                color=(self.theme.background if is_highlighted else self.theme.error),
                 size=self.theme.font_size_sm,
                 align="center",
             )
@@ -338,7 +344,11 @@ class DownloadsScreen:
                 screen,
                 "Cancelled",
                 (rect.centerx, rect.centery),
-                color=self.theme.text_disabled,
+                color=(
+                    self.theme.background
+                    if is_highlighted
+                    else self.theme.text_disabled
+                ),
                 size=self.theme.font_size_sm,
                 align="center",
             )

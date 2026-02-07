@@ -242,9 +242,7 @@ class ScraperWizardModal:
                     item_rect.centery - self.theme.font_size_sm // 2,
                 ),
                 color=(
-                    self.theme.background
-                    if is_selected
-                    else self.theme.text_primary
+                    self.theme.background if is_selected else self.theme.text_primary
                 ),
                 size=self.theme.font_size_sm,
                 max_width=item_rect.width - padding * 2,
@@ -412,9 +410,7 @@ class ScraperWizardModal:
                 result.get("name", "Unknown"),
                 (text_x, item_rect.top + 8),
                 color=(
-                    self.theme.background
-                    if is_selected
-                    else self.theme.text_primary
+                    self.theme.background if is_selected else self.theme.text_primary
                 ),
                 size=self.theme.font_size_sm,
                 max_width=text_max_w,
@@ -533,9 +529,7 @@ class ScraperWizardModal:
                     item_rect.centery - self.theme.font_size_sm // 2,
                 ),
                 color=(
-                    self.theme.background
-                    if is_selected
-                    else self.theme.text_primary
+                    self.theme.background if is_selected else self.theme.text_primary
                 ),
                 size=self.theme.font_size_sm,
             )
@@ -615,11 +609,7 @@ class ScraperWizardModal:
                 no_video_rect.left + padding,
                 no_video_rect.centery - self.theme.font_size_sm // 2,
             ),
-            color=(
-                self.theme.background
-                if is_selected
-                else self.theme.text_primary
-            ),
+            color=(self.theme.background if is_selected else self.theme.text_primary),
             size=self.theme.font_size_sm,
         )
         y += item_height
@@ -655,9 +645,7 @@ class ScraperWizardModal:
                     video_rect.centery - self.theme.font_size_sm // 2,
                 ),
                 color=(
-                    self.theme.background
-                    if is_selected
-                    else self.theme.text_primary
+                    self.theme.background if is_selected else self.theme.text_primary
                 ),
                 size=self.theme.font_size_sm,
             )
@@ -885,9 +873,7 @@ class ScraperWizardModal:
                     item_rect.centery - self.theme.font_size_sm // 2,
                 ),
                 color=(
-                    self.theme.background
-                    if is_selected
-                    else self.theme.text_primary
+                    self.theme.background if is_selected else self.theme.text_primary
                 ),
                 size=self.theme.font_size_sm,
                 max_width=item_rect.width - padding * 2,
@@ -1051,9 +1037,7 @@ class ScraperWizardModal:
                 auto_rect.centery - self.theme.font_size_sm // 2,
             ),
             color=(
-                self.theme.background
-                if highlighted == 0
-                else self.theme.text_primary
+                self.theme.background if highlighted == 0 else self.theme.text_primary
             ),
             size=self.theme.font_size_sm,
         )
@@ -1097,9 +1081,7 @@ class ScraperWizardModal:
                     img_rect.centery - self.theme.font_size_sm // 2,
                 ),
                 color=(
-                    self.theme.background
-                    if is_selected
-                    else self.theme.text_primary
+                    self.theme.background if is_selected else self.theme.text_primary
                 ),
                 size=self.theme.font_size_sm,
             )

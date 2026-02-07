@@ -158,7 +158,7 @@ class RenameWizardModal:
                     box_rect,
                     border_radius=8,
                 )
-                text_color = self.theme.text_primary
+                text_color = self.theme.background
             else:
                 pygame.draw.rect(
                     screen,
@@ -180,7 +180,7 @@ class RenameWizardModal:
             )
 
             desc_color = (
-                self.theme.text_primary
+                self.theme.background
                 if i == mode_highlighted
                 else self.theme.text_secondary
             )
@@ -309,7 +309,8 @@ class RenameWizardModal:
                 )
                 item_rects.append(box_rect)
 
-                if i == current_item_index:
+                is_current = i == current_item_index
+                if is_current:
                     pygame.draw.rect(
                         screen,
                         self.theme.primary,
@@ -328,7 +329,11 @@ class RenameWizardModal:
                     screen,
                     item["original_name"],
                     (box_rect.left + 10, box_rect.top + 4),
-                    color=self.theme.text_secondary,
+                    color=(
+                        self.theme.background
+                        if is_current
+                        else self.theme.text_secondary
+                    ),
                     size=self.theme.font_size_sm,
                     max_width=box_rect.width - 20,
                 )
@@ -336,7 +341,7 @@ class RenameWizardModal:
                     screen,
                     f"-> {item['new_name']}",
                     (box_rect.left + 10, box_rect.top + 22),
-                    color=self.theme.success,
+                    color=(self.theme.background if is_current else self.theme.success),
                     size=self.theme.font_size_sm,
                     max_width=box_rect.width - 20,
                 )
