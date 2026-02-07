@@ -391,9 +391,7 @@ class IADownloadModal:
                 display_name,
                 (item_rect.left + padding, item_rect.top + 8),
                 color=(
-                    self.theme.background
-                    if is_selected
-                    else self.theme.text_primary
+                    self.theme.background if is_selected else self.theme.text_primary
                 ),
                 size=self.theme.font_size_sm,
                 max_width=item_rect.width - padding * 2,

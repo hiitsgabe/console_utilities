@@ -166,7 +166,7 @@ class DedupeWizardModal:
             # Highlight if selected
             if i == mode_highlighted:
                 pygame.draw.rect(screen, self.theme.primary, box_rect, border_radius=8)
-                text_color = self.theme.text_primary
+                text_color = self.theme.background
             else:
                 pygame.draw.rect(screen, self.theme.surface, box_rect, border_radius=8)
                 text_color = self.theme.text_secondary
@@ -181,26 +181,23 @@ class DedupeWizardModal:
             )
 
             # Description lines
+            desc_color = (
+                self.theme.background
+                if i == mode_highlighted
+                else self.theme.text_secondary
+            )
             self.text.render(
                 screen,
                 mode_info["description"],
                 (box_rect.left + self.theme.padding_md, box_rect.top + 40),
-                color=(
-                    self.theme.text_secondary
-                    if i != mode_highlighted
-                    else self.theme.text_primary
-                ),
+                color=desc_color,
                 size=self.theme.font_size_sm,
             )
             self.text.render(
                 screen,
                 mode_info["description2"],
                 (box_rect.left + self.theme.padding_md, box_rect.top + 58),
-                color=(
-                    self.theme.text_secondary
-                    if i != mode_highlighted
-                    else self.theme.text_primary
-                ),
+                color=desc_color,
                 size=self.theme.font_size_sm,
             )
 
@@ -383,18 +380,22 @@ class DedupeWizardModal:
                         screen, self.theme.success, box_rect, border_radius=6
                     )
                     label = "[KEEP] "
+                    name_color = self.theme.background
+                    size_color = self.theme.background
                 else:
                     pygame.draw.rect(
                         screen, self.theme.surface, box_rect, border_radius=6
                     )
                     label = ""
+                    name_color = self.theme.text_primary
+                    size_color = self.theme.text_secondary
 
                 # File name
                 self.text.render(
                     screen,
                     f"{label}{file['name']}",
                     (box_rect.left + 10, box_rect.top + 10),
-                    color=self.theme.text_primary,
+                    color=name_color,
                     size=self.theme.font_size_sm,
                     max_width=box_rect.width - 20,
                 )
@@ -403,7 +404,7 @@ class DedupeWizardModal:
                     screen,
                     f"Size: {format_size(file['size'])}",
                     (box_rect.left + 10, box_rect.top + 30),
-                    color=self.theme.text_secondary,
+                    color=size_color,
                     size=self.theme.font_size_sm,
                 )
 

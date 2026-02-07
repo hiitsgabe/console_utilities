@@ -147,9 +147,11 @@ class Thumbnail:
             screen,
             label,
             (rect.centerx, label_y),
-            color=self.theme.text_primary
-            if selected or highlighted
-            else self.theme.text_secondary,
+            color=(
+                self.theme.text_primary
+                if selected or highlighted
+                else self.theme.text_secondary
+            ),
             size=self.theme.font_size_sm,
             max_width=rect.width,
             align="center",
