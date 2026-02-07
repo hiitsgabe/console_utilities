@@ -17,7 +17,7 @@ class Settings:
     """Application settings with default values."""
 
     enable_boxart: bool = True
-    view_type: str = "grid"  # "grid" or "list"
+    view_type: str = "list"
     usa_only: bool = False
     show_download_all: bool = False  # Show "Download All" button in game lists
     exclude_installed_on_download_all: bool = True  # Skip already-installed games

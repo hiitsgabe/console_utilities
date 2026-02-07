@@ -452,7 +452,6 @@ class ScreenManager:
                     game_list,
                     state.highlighted,
                     state.selected_games,
-                    view_type=settings.get("view_type", "grid"),
                     search_query=state.search.query if state.search.mode else "",
                     get_thumbnail=get_thumbnail,
                     input_mode=state.input_mode,

@@ -885,25 +885,10 @@ class ConsoleUtilitiesApp:
             extra_items = 1 if self.settings.get("show_download_all", False) else 0
             max_items = len(game_list) + extra_items
 
-            if self.settings.get("view_type") == "grid":
-                cols = 4
-                if direction == "up" and self.state.highlighted >= cols:
-                    self.state.highlighted -= cols
-                elif direction == "down" and self.state.highlighted + cols < max_items:
-                    self.state.highlighted += cols
-                elif direction == "left" and self.state.highlighted % cols > 0:
-                    self.state.highlighted -= 1
-                elif (
-                    direction == "right"
-                    and self.state.highlighted % cols < cols - 1
-                    and self.state.highlighted < max_items - 1
-                ):
-                    self.state.highlighted += 1
-            else:
-                if direction in ("up", "left"):
-                    self.state.highlighted = (self.state.highlighted - 1) % max_items
-                elif direction in ("down", "right"):
-                    self.state.highlighted = (self.state.highlighted + 1) % max_items
+            if direction in ("up", "left"):
+                self.state.highlighted = (self.state.highlighted - 1) % max_items
+            elif direction in ("down", "right"):
+                self.state.highlighted = (self.state.highlighted + 1) % max_items
 
         elif self.state.mode in ("settings", "utils"):
             if self.state.mode == "settings":
@@ -1627,10 +1612,6 @@ class ConsoleUtilitiesApp:
             self.settings["enable_boxart"] = not self.settings.get(
                 "enable_boxart", True
             )
-            save_settings(self.settings)
-        elif action == "toggle_view_type":
-            current = self.settings.get("view_type", "grid")
-            self.settings["view_type"] = "list" if current == "grid" else "grid"
             save_settings(self.settings)
         elif action == "toggle_usa_only":
             self.settings["usa_only"] = not self.settings.get("usa_only", False)

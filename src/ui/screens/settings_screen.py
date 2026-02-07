@@ -36,7 +36,6 @@ class SettingsScreen:
     VIEW_OPTIONS_SECTION = [
         "--- VIEW OPTIONS ---",
         "Enable Box-art Display",
-        "View Type",
         "USA Games Only",
         "Show Download All Button",
         "Skip Installed Games",
@@ -180,9 +179,6 @@ class SettingsScreen:
                 items.append(item)
             elif item == "Enable Box-art Display":
                 value = "ON" if settings.get("enable_boxart", True) else "OFF"
-                items.append((item, value))
-            elif item == "View Type":
-                value = settings.get("view_type", "grid").capitalize()
                 items.append((item, value))
             elif item == "USA Games Only":
                 value = "ON" if settings.get("usa_only", False) else "OFF"
@@ -363,7 +359,6 @@ class SettingsScreen:
                 "Enable Internet Archive": "toggle_ia_enabled",
                 "Internet Archive Login": "ia_login",
                 "Enable Box-art Display": "toggle_boxart",
-                "View Type": "toggle_view_type",
                 "USA Games Only": "toggle_usa_only",
                 "Show Download All Button": "toggle_download_all",
                 "Skip Installed Games": "toggle_exclude_installed",
