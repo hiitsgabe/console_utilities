@@ -7,7 +7,6 @@ from typing import List, Dict, Any, Tuple, Optional, Set, Callable
 
 from ui.theme import Theme, default_theme
 from ui.templates.list_screen import ListScreenTemplate
-from ui.templates.grid_screen import GridScreenTemplate
 from ui.atoms.text import Text
 from ui.molecules.thumbnail import Thumbnail
 from ui.molecules.action_button import ActionButton
@@ -20,14 +19,12 @@ class GamesScreen:
     """
     Games screen.
 
-    Displays games for a selected system in either
-    list or grid view.
+    Displays games for a selected system in list view.
     """
 
     def __init__(self, theme: Theme = default_theme):
         self.theme = theme
         self.list_template = ListScreenTemplate(theme)
-        self.grid_template = GridScreenTemplate(theme)
         self.text = Text(theme)
         self.thumbnail = Thumbnail(theme)
         self.action_button = ActionButton(theme)
@@ -39,7 +36,6 @@ class GamesScreen:
         games: List[Any],
         highlighted: int,
         selected_games: Set[int],
-        view_type: str = "grid",
         search_query: str = "",
         get_thumbnail: Optional[Callable[[Any], pygame.Surface]] = None,
         input_mode: str = "keyboard",
@@ -60,7 +56,6 @@ class GamesScreen:
             games: List of games
             highlighted: Currently highlighted index
             selected_games: Set of selected game indices
-            view_type: "list" or "grid"
             search_query: Current search query (for subtitle)
             get_thumbnail: Function to get thumbnail for a game
             input_mode: Current input mode ("keyboard", "gamepad", "touch")
@@ -83,36 +78,20 @@ class GamesScreen:
         # Adjust highlighted to not exceed display items
         display_highlighted = min(highlighted, len(display_items) - 1)
 
-        if view_type == "grid":
-            back_rect, item_rects, scroll_offset = self.grid_template.render(
-                screen,
-                title=title,
-                items=display_items,
-                highlighted=display_highlighted,
-                selected=selected_games,
-                show_back=True,
-                subtitle=subtitle,
-                columns=4,
-                get_label=self._get_game_label,
-                get_image=get_thumbnail,
-                get_placeholder=self._get_placeholder,
-                footer_height=footer_height,
-            )
-        else:
-            back_rect, item_rects, scroll_offset = self.list_template.render(
-                screen,
-                title=title,
-                items=display_items,
-                highlighted=display_highlighted,
-                selected=selected_games,
-                show_back=True,
-                subtitle=subtitle,
-                item_height=50,
-                get_label=self._get_game_label,
-                get_thumbnail=get_thumbnail,
-                show_checkbox=True,
-                footer_height=footer_height,
-            )
+        back_rect, item_rects, scroll_offset = self.list_template.render(
+            screen,
+            title=title,
+            items=display_items,
+            highlighted=display_highlighted,
+            selected=selected_games,
+            show_back=True,
+            subtitle=subtitle,
+            item_height=50,
+            get_label=self._get_game_label,
+            get_thumbnail=get_thumbnail,
+            show_checkbox=True,
+            footer_height=footer_height,
+        )
 
         # Draw status bar when games are selected
         download_button_rect = None
@@ -143,7 +122,6 @@ class GamesScreen:
         games: List[Any],
         highlighted: int,
         selected_games: Set[int],
-        view_type: str = "grid",
         search_query: str = "",
         get_thumbnail: Optional[Callable[[Any], pygame.Surface]] = None,
     ) -> Tuple[Optional[pygame.Rect], List[pygame.Rect], int, List[pygame.Rect]]:
@@ -158,36 +136,20 @@ class GamesScreen:
 
         buttons = ["Search", "Download"] if selected_games else ["Search"]
 
-        if view_type == "grid":
-            return self.grid_template.render_with_buttons(
-                screen,
-                title=title,
-                items=games,
-                highlighted=highlighted,
-                selected=selected_games,
-                button_labels=buttons,
-                show_back=True,
-                subtitle=subtitle,
-                columns=4,
-                get_label=self._get_game_label,
-                get_image=get_thumbnail,
-                get_placeholder=self._get_placeholder,
-            )
-        else:
-            return self.list_template.render_with_buttons(
-                screen,
-                title=title,
-                items=games,
-                highlighted=highlighted,
-                selected=selected_games,
-                button_labels=buttons,
-                show_back=True,
-                subtitle=subtitle,
-                item_height=50,
-                get_label=self._get_game_label,
-                get_thumbnail=get_thumbnail,
-                show_checkbox=True,
-            )
+        return self.list_template.render_with_buttons(
+            screen,
+            title=title,
+            items=games,
+            highlighted=highlighted,
+            selected=selected_games,
+            button_labels=buttons,
+            show_back=True,
+            subtitle=subtitle,
+            item_height=50,
+            get_label=self._get_game_label,
+            get_thumbnail=get_thumbnail,
+            show_checkbox=True,
+        )
 
     def _get_game_label(self, game: Any) -> str:
         """Extract display label from game."""
@@ -208,11 +170,6 @@ class GamesScreen:
             name = f"[Installed] {name}"
 
         return name
-
-    def _get_placeholder(self, game: Any) -> str:
-        """Get placeholder initials for game."""
-        label = self._get_game_label(game)
-        return self.thumbnail.get_placeholder_initials(label)
 
     def _render_status_bar(
         self, screen: pygame.Surface, selected_count: int, input_mode: str = "keyboard"
