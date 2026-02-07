@@ -93,6 +93,12 @@ class ScraperService:
         },
     }
 
+    PROVIDER_CHAIN = [
+        "libretro",
+        "screenscraper",
+        "thegamesdb",
+    ]
+
     def __init__(self, settings: Dict[str, Any]):
         """
         Initialize scraper service.
@@ -102,6 +108,7 @@ class ScraperService:
         """
         self.settings = settings
         self._provider: Optional[BaseProvider] = None
+        self._last_search_provider: Optional[BaseProvider] = None
 
     @property
     def provider(self) -> BaseProvider:
@@ -114,6 +121,39 @@ class ScraperService:
     def reset_provider(self):
         """Reset provider to force re-creation with new settings."""
         self._provider = None
+        self._last_search_provider = None
+
+    def _get_provider_chain(
+        self,
+    ) -> List[Tuple[str, BaseProvider]]:
+        """
+        Get ordered list of providers to try.
+
+        Primary provider is always first. If fallback is
+        disabled, only the primary is returned.
+        """
+        fallback = self.settings.get("scraper_fallback_enabled", True)
+        primary = self.settings.get("scraper_provider", "libretro")
+
+        if not fallback:
+            return [(primary, self.provider)]
+
+        # Build ordered list: primary first, then rest
+        ordered = [primary]
+        for p in self.PROVIDER_CHAIN:
+            if p not in ordered:
+                ordered.append(p)
+
+        providers = []
+        for name in ordered:
+            try:
+                p = get_provider(name, self.settings)
+                if p.is_configured():
+                    providers.append((name, p))
+            except (ValueError, Exception):
+                continue
+
+        return providers
 
     def extract_game_name(self, rom_path: str) -> str:
         """
@@ -154,32 +194,80 @@ class ScraperService:
 
         return name.strip()
 
-    def search_game(self, name: str) -> Tuple[bool, List[GameSearchResult], str]:
+    def search_game(
+        self, name: str, rom_path: str = ""
+    ) -> Tuple[bool, List[GameSearchResult], str]:
         """
-        Search for a game by name.
+        Search for a game, trying fallback providers
+        if the primary returns no results.
 
         Args:
             name: Game name to search for
+            rom_path: Optional ROM path for per-provider
+                name adaptation
 
         Returns:
-            Tuple of (success, list of results, error message)
+            Tuple of (success, list of results, error)
         """
-        if not self.provider.is_configured():
-            return False, [], f"{self.provider.name} credentials not configured"
+        providers = self._get_provider_chain()
 
-        return self.provider.search_game(name)
+        if not providers:
+            return (
+                False,
+                [],
+                "No configured scraper providers",
+            )
+
+        last_error = ""
+        for provider_name, provider in providers:
+            # Adapt game name per provider
+            if provider_name == "libretro" and rom_path:
+                search_name = os.path.splitext(os.path.basename(rom_path))[0]
+            elif rom_path:
+                search_name = self.extract_game_name(rom_path)
+            else:
+                search_name = name
+
+            success, results, error = provider.search_game(search_name)
+
+            if success and results:
+                self._last_search_provider = provider
+                return True, results, ""
+
+            # Skip auth errors (user needs to fix config)
+            if not success and error:
+                err_lower = error.lower()
+                if (
+                    "auth" in err_lower
+                    or "credential" in err_lower
+                    or "api key" in err_lower
+                ):
+                    continue
+
+            if error:
+                last_error = f"{provider.name}: {error}"
+
+        return (
+            False,
+            [],
+            last_error or "No results from any provider",
+        )
 
     def get_game_images(self, game_id: str) -> Tuple[bool, List[GameImage], str]:
         """
         Get available images for a game.
 
+        Uses the provider that found the search result,
+        since game IDs are provider-specific.
+
         Args:
             game_id: Provider-specific game identifier
 
         Returns:
-            Tuple of (success, list of images, error message)
+            Tuple of (success, list of images, error)
         """
-        return self.provider.get_game_images(game_id)
+        provider = self._last_search_provider or self.provider
+        return provider.get_game_images(game_id)
 
     def get_output_path(
         self, rom_path: str, image_type: str, image_format: str = "png"
@@ -262,7 +350,10 @@ class ScraperService:
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
             # Download the image
-            response = requests.get(image.url, stream=True, timeout=60)
+            headers = {
+                "User-Agent": "ConsoleUtilities/1.0",
+            }
+            response = requests.get(image.url, stream=True, timeout=60, headers=headers)
             if response.status_code != 200:
                 return False, f"Download failed: {response.status_code}"
 

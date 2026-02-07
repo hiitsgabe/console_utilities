@@ -33,6 +33,7 @@ class SearchModal:
         search_text: str,
         cursor_position: int,
         input_mode: str = "keyboard",
+        shift_active: bool = False,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """
         Render the search modal.
@@ -52,7 +53,7 @@ class SearchModal:
 
         # Gamepad and touch modes use on-screen keyboard
         return self._render_onscreen_keyboard_mode(
-            screen, search_text, cursor_position, input_mode
+            screen, search_text, cursor_position, input_mode, shift_active
         )
 
     def _render_keyboard_mode(
@@ -143,6 +144,7 @@ class SearchModal:
         search_text: str,
         cursor_position: int,
         input_mode: str,
+        shift_active: bool = False,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """Render modal with on-screen keyboard for gamepad/touch."""
         width = min(600, screen.get_width() - 40)
@@ -162,6 +164,7 @@ class SearchModal:
             selected_index=cursor_position,
             chars_per_row=13,
             show_input_field=True,
+            shift_active=shift_active,
         )
 
         # Show gamepad hints at bottom if in gamepad mode
@@ -183,19 +186,25 @@ class SearchModal:
         return modal_rect, content_rect, close_rect, char_rects
 
     def handle_selection(
-        self, cursor_position: int, current_text: str
-    ) -> Tuple[str, bool]:
+        self,
+        cursor_position: int,
+        current_text: str,
+        shift_active: bool = False,
+    ) -> Tuple[str, bool, bool]:
         """
         Handle character selection.
 
         Args:
             cursor_position: Selected character index
             current_text: Current search text
+            shift_active: Whether shift is active
 
         Returns:
-            Tuple of (new_text, is_done)
+            Tuple of (new_text, is_done, toggle_shift)
         """
-        return self.char_keyboard.handle_selection(cursor_position, current_text)
+        return self.char_keyboard.handle_selection(
+            cursor_position, current_text, shift_active=shift_active
+        )
 
 
 # Default instance

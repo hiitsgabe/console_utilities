@@ -45,6 +45,7 @@ class ScraperLoginModal:
         cursor_position: int,
         error_message: str = "",
         input_mode: str = "keyboard",
+        shift_active: bool = False,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """
         Render the scraper login modal.
@@ -65,7 +66,13 @@ class ScraperLoginModal:
         """
         if provider == "thegamesdb":
             return self._render_thegamesdb(
-                screen, step, api_key, cursor_position, error_message, input_mode
+                screen,
+                step,
+                api_key,
+                cursor_position,
+                error_message,
+                input_mode,
+                shift_active,
             )
         else:
             return self._render_screenscraper(
@@ -76,6 +83,7 @@ class ScraperLoginModal:
                 cursor_position,
                 error_message,
                 input_mode,
+                shift_active,
             )
 
     def _render_screenscraper(
@@ -87,15 +95,16 @@ class ScraperLoginModal:
         cursor_position: int,
         error_message: str,
         input_mode: str,
+        shift_active: bool = False,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """Render ScreenScraper login flow."""
         if step == "username":
             return self._render_username_step(
-                screen, username, cursor_position, input_mode
+                screen, username, cursor_position, input_mode, shift_active
             )
         elif step == "password":
             return self._render_password_step(
-                screen, password, cursor_position, input_mode
+                screen, password, cursor_position, input_mode, shift_active
             )
         elif step == "testing":
             return self._render_testing_step(screen, "ScreenScraper")
@@ -109,7 +118,7 @@ class ScraperLoginModal:
             )
         else:
             return self._render_username_step(
-                screen, username, cursor_position, input_mode
+                screen, username, cursor_position, input_mode, shift_active
             )
 
     def _render_thegamesdb(
@@ -120,11 +129,12 @@ class ScraperLoginModal:
         cursor_position: int,
         error_message: str,
         input_mode: str,
+        shift_active: bool = False,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """Render TheGamesDB login flow."""
         if step == "api_key":
             return self._render_api_key_step(
-                screen, api_key, cursor_position, input_mode
+                screen, api_key, cursor_position, input_mode, shift_active
             )
         elif step == "testing":
             return self._render_testing_step(screen, "TheGamesDB")
@@ -136,7 +146,7 @@ class ScraperLoginModal:
             )
         else:
             return self._render_api_key_step(
-                screen, api_key, cursor_position, input_mode
+                screen, api_key, cursor_position, input_mode, shift_active
             )
 
     def _render_username_step(
@@ -145,6 +155,7 @@ class ScraperLoginModal:
         username: str,
         cursor_position: int,
         input_mode: str,
+        shift_active: bool = False,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """Render username input step."""
         title = "ScreenScraper Login"
@@ -187,6 +198,7 @@ class ScraperLoginModal:
             chars_per_row=13,
             char_set="default",
             show_input_field=True,
+            shift_active=shift_active,
         )
 
         return modal_rect, content_rect, close_rect, char_rects
@@ -197,6 +209,7 @@ class ScraperLoginModal:
         password: str,
         cursor_position: int,
         input_mode: str,
+        shift_active: bool = False,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """Render password input step."""
         title = "ScreenScraper Login"
@@ -242,6 +255,7 @@ class ScraperLoginModal:
             chars_per_row=13,
             char_set="default",
             show_input_field=True,
+            shift_active=shift_active,
         )
 
         return modal_rect, content_rect, close_rect, char_rects
@@ -252,6 +266,7 @@ class ScraperLoginModal:
         api_key: str,
         cursor_position: int,
         input_mode: str,
+        shift_active: bool = False,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """Render API key input step."""
         title = "TheGamesDB API Key"
@@ -294,6 +309,7 @@ class ScraperLoginModal:
             chars_per_row=13,
             char_set="url",  # Has alphanumeric chars
             show_input_field=True,
+            shift_active=shift_active,
         )
 
         return modal_rect, content_rect, close_rect, char_rects
@@ -520,8 +536,13 @@ class ScraperLoginModal:
         return modal_rect, content_rect, None, []
 
     def handle_selection(
-        self, provider: str, step: str, cursor_position: int, current_text: str
-    ) -> Tuple[str, bool]:
+        self,
+        provider: str,
+        step: str,
+        cursor_position: int,
+        current_text: str,
+        shift_active: bool = False,
+    ) -> Tuple[str, bool, bool]:
         """
         Handle character selection for input steps.
 
@@ -530,19 +551,26 @@ class ScraperLoginModal:
             step: Current step
             cursor_position: Selected character index
             current_text: Current input text
+            shift_active: Whether shift is active
 
         Returns:
-            Tuple of (new_text, is_done)
+            Tuple of (new_text, is_done, toggle_shift)
         """
         if step in ("username", "password"):
             return self.char_keyboard.handle_selection(
-                cursor_position, current_text, char_set="default"
+                cursor_position,
+                current_text,
+                char_set="default",
+                shift_active=shift_active,
             )
         elif step == "api_key":
             return self.char_keyboard.handle_selection(
-                cursor_position, current_text, char_set="url"
+                cursor_position,
+                current_text,
+                char_set="url",
+                shift_active=shift_active,
             )
-        return current_text, False
+        return current_text, False, False
 
 
 # Default instance

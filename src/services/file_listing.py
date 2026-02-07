@@ -424,6 +424,8 @@ def load_folder_contents(path: str) -> List[Dict[str, Any]]:
                     file_type = "nsz_file"
                 elif ext == ".zip":
                     file_type = "zip_file"
+                elif ext == ".rar":
+                    file_type = "rar_file"
                 else:
                     file_type = "file"
 

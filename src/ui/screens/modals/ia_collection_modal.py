@@ -51,6 +51,7 @@ class IACollectionModal:
         custom_format_input: str = "",
         extract_contents: bool = True,
         options_highlighted: int = 0,
+        shift_active: bool = False,
     ) -> Tuple[
         pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple], List[pygame.Rect]
     ]:
@@ -61,19 +62,25 @@ class IACollectionModal:
             Tuple of (modal_rect, content_rect, close_rect, char_rects, item_rects)
         """
         if step == "url":
-            rects = self._render_url_step(screen, url, cursor_position, input_mode)
+            rects = self._render_url_step(
+                screen, url, cursor_position, input_mode, shift_active
+            )
             return (*rects, [])
         elif step == "validating":
             rects = self._render_validating_step(screen)
             return (*rects, [])
         elif step == "name":
             rects = self._render_name_step(
-                screen, collection_name, cursor_position, input_mode
+                screen,
+                collection_name,
+                cursor_position,
+                input_mode,
+                shift_active,
             )
             return (*rects, [])
         elif step == "folder":
             rects = self._render_folder_step(
-                screen, folder_name, cursor_position, input_mode
+                screen, folder_name, cursor_position, input_mode, shift_active
             )
             return (*rects, [])
         elif step == "formats":
@@ -86,6 +93,7 @@ class IACollectionModal:
                 adding_custom_format,
                 custom_format_input,
                 cursor_position,
+                shift_active,
             )
         elif step == "options":
             return self._render_options_step(
@@ -117,6 +125,7 @@ class IACollectionModal:
         collection_id: str,
         cursor_position: int,
         input_mode: str,
+        shift_active: bool = False,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """Render collection ID input step."""
         title = "Add Internet Archive Collection"
@@ -163,6 +172,7 @@ class IACollectionModal:
             chars_per_row=13,
             char_set="url",  # Keep url charset for underscore and dash in IDs
             show_input_field=True,
+            shift_active=shift_active,
         )
 
         return modal_rect, content_rect, close_rect, char_rects
@@ -204,6 +214,7 @@ class IACollectionModal:
         name: str,
         cursor_position: int,
         input_mode: str,
+        shift_active: bool = False,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """Render collection name input step."""
         title = "Add Internet Archive Collection"
@@ -250,6 +261,7 @@ class IACollectionModal:
             chars_per_row=13,
             char_set="default",
             show_input_field=True,
+            shift_active=shift_active,
         )
 
         return modal_rect, content_rect, close_rect, char_rects
@@ -260,6 +272,7 @@ class IACollectionModal:
         folder: str,
         cursor_position: int,
         input_mode: str,
+        shift_active: bool = False,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """Render folder name input step."""
         title = "Add Internet Archive Collection"
@@ -306,6 +319,7 @@ class IACollectionModal:
             chars_per_row=13,
             char_set="default",
             show_input_field=True,
+            shift_active=shift_active,
         )
 
         return modal_rect, content_rect, close_rect, char_rects
@@ -413,6 +427,7 @@ class IACollectionModal:
         adding_custom_format: bool = False,
         custom_format_input: str = "",
         cursor_position: int = 0,
+        shift_active: bool = False,
     ) -> Tuple[
         pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple], List[pygame.Rect]
     ]:
@@ -420,7 +435,11 @@ class IACollectionModal:
         # If adding custom format, show keyboard input
         if adding_custom_format:
             return self._render_custom_format_input(
-                screen, custom_format_input, cursor_position, input_mode
+                screen,
+                custom_format_input,
+                cursor_position,
+                input_mode,
+                shift_active,
             )
 
         width = min(500, screen.get_width() - 40)
@@ -520,6 +539,7 @@ class IACollectionModal:
         custom_format: str,
         cursor_position: int,
         input_mode: str,
+        shift_active: bool = False,
     ) -> Tuple[
         pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple], List[pygame.Rect]
     ]:
@@ -567,6 +587,7 @@ class IACollectionModal:
             chars_per_row=13,
             char_set="default",
             show_input_field=True,
+            shift_active=shift_active,
         )
 
         return modal_rect, content_rect, close_rect, char_rects, []
@@ -811,19 +832,29 @@ class IACollectionModal:
         return modal_rect, content_rect, None, []
 
     def handle_selection(
-        self, step: str, cursor_position: int, current_text: str
-    ) -> Tuple[str, bool]:
+        self,
+        step: str,
+        cursor_position: int,
+        current_text: str,
+        shift_active: bool = False,
+    ) -> Tuple[str, bool, bool]:
         """Handle keyboard selection for text input steps."""
         if step == "url":
             return self.char_keyboard.handle_selection(
-                cursor_position, current_text, char_set="url"
+                cursor_position,
+                current_text,
+                char_set="url",
+                shift_active=shift_active,
             )
         elif step == "name":
             return self.char_keyboard.handle_selection(
-                cursor_position, current_text, char_set="default"
+                cursor_position,
+                current_text,
+                char_set="default",
+                shift_active=shift_active,
             )
         # Note: "folder" step uses folder browser modal instead of keyboard
-        return current_text, False
+        return current_text, False, False
 
 
 # Default instance

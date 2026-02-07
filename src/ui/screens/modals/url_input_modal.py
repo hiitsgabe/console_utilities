@@ -33,6 +33,7 @@ class UrlInputModal:
         cursor_position: int,
         context: str = "archive_json",
         input_mode: str = "keyboard",
+        shift_active: bool = False,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """
         Render the URL input modal.
@@ -59,7 +60,7 @@ class UrlInputModal:
 
         # Gamepad and touch modes use on-screen keyboard
         return self._render_onscreen_keyboard_mode(
-            screen, input_text, cursor_position, title, input_mode
+            screen, input_text, cursor_position, title, input_mode, shift_active
         )
 
     def _render_keyboard_mode(
@@ -150,6 +151,7 @@ class UrlInputModal:
         cursor_position: int,
         title: str,
         input_mode: str,
+        shift_active: bool = False,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """Render modal with on-screen keyboard for gamepad/touch."""
         width = min(650, screen.get_width() - 40)
@@ -170,25 +172,33 @@ class UrlInputModal:
             chars_per_row=13,
             char_set="url",
             show_input_field=True,
+            shift_active=shift_active,
         )
 
         return modal_rect, content_rect, close_rect, char_rects
 
     def handle_selection(
-        self, cursor_position: int, current_text: str
-    ) -> Tuple[str, bool]:
+        self,
+        cursor_position: int,
+        current_text: str,
+        shift_active: bool = False,
+    ) -> Tuple[str, bool, bool]:
         """
         Handle character selection.
 
         Args:
             cursor_position: Selected character index
             current_text: Current input text
+            shift_active: Whether shift is active
 
         Returns:
-            Tuple of (new_text, is_done)
+            Tuple of (new_text, is_done, toggle_shift)
         """
         return self.char_keyboard.handle_selection(
-            cursor_position, current_text, char_set="url"
+            cursor_position,
+            current_text,
+            char_set="url",
+            shift_active=shift_active,
         )
 
 

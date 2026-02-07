@@ -104,8 +104,8 @@ def normalize_game_name(filename: str) -> str:
     """
     Normalize a game filename for comparison.
 
-    Removes common patterns like regions, versions, disc numbers, etc.
-    Converts to lowercase and removes special characters.
+    Removes all parenthetical content, brackets, and special characters.
+    Converts to lowercase for comparison.
 
     Args:
         filename: The original filename
@@ -116,9 +116,11 @@ def normalize_game_name(filename: str) -> str:
     # Remove file extension
     name = os.path.splitext(filename)[0]
 
-    # Apply all pattern removals
-    for pattern in COMPILED_PATTERNS:
-        name = pattern.sub("", name)
+    # Remove ALL parenthetical content (regions, versions, editions, etc.)
+    name = re.sub(r"\(.*?\)", "", name)
+
+    # Remove ALL bracketed content
+    name = re.sub(r"\[.*?\]", "", name)
 
     # Convert to lowercase
     name = name.lower()
@@ -130,6 +132,100 @@ def normalize_game_name(filename: str) -> str:
     name = " ".join(name.split())
 
     return name.strip()
+
+
+def generate_clean_names(
+    folder_path: str,
+    progress_callback: Optional[Callable[[int, int], None]] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Generate clean file names for game files in a folder.
+
+    Removes parenthetical and bracketed annotations
+    while preserving extension.
+
+    Returns:
+        List of dicts with: path, original_name, new_name
+        (only files that would change)
+    """
+    game_extensions = {
+        ".zip",
+        ".7z",
+        ".rar",
+        ".iso",
+        ".bin",
+        ".cue",
+        ".chd",
+        ".nsp",
+        ".nsz",
+        ".xci",
+        ".cia",
+        ".3ds",
+        ".nds",
+        ".gba",
+        ".gbc",
+        ".gb",
+        ".nes",
+        ".sfc",
+        ".smc",
+        ".md",
+        ".gen",
+        ".smd",
+        ".gg",
+        ".sms",
+        ".pce",
+        ".n64",
+        ".z64",
+        ".v64",
+        ".gcm",
+        ".wbfs",
+        ".wad",
+        ".pbp",
+        ".cso",
+        ".pkg",
+    }
+
+    results = []
+    try:
+        all_files = os.listdir(folder_path)
+        total = len(all_files)
+
+        for i, filename in enumerate(all_files):
+            if progress_callback:
+                progress_callback(i + 1, total)
+
+            filepath = os.path.join(folder_path, filename)
+            if os.path.isdir(filepath):
+                continue
+
+            ext = os.path.splitext(filename)[1].lower()
+            if ext not in game_extensions:
+                continue
+
+            name_without_ext = os.path.splitext(filename)[0]
+
+            # Remove ALL parenthetical content
+            clean_name = re.sub(r"\(.*?\)", "", name_without_ext)
+            # Remove ALL bracketed content
+            clean_name = re.sub(r"\[.*?\]", "", clean_name)
+            # Normalize whitespace and trim
+            clean_name = " ".join(clean_name.split()).strip()
+            # Re-add extension
+            clean_name = clean_name + ext
+
+            if clean_name != filename:
+                results.append(
+                    {
+                        "path": filepath,
+                        "original_name": filename,
+                        "new_name": clean_name,
+                        "selected": True,
+                    }
+                )
+    except OSError:
+        pass
+
+    return results
 
 
 def get_similarity_ratio(name1: str, name2: str) -> float:

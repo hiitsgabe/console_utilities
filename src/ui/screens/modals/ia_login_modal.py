@@ -38,6 +38,7 @@ class IALoginModal:
         cursor_position: int,
         error_message: str = "",
         input_mode: str = "keyboard",
+        shift_active: bool = False,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """
         Render the IA login modal.
@@ -50,15 +51,18 @@ class IALoginModal:
             cursor_position: Cursor position for keyboard
             error_message: Error message to display
             input_mode: Current input mode
+            shift_active: Whether shift is active
 
         Returns:
             Tuple of (modal_rect, content_rect, close_rect, char_rects)
         """
         if step == "email":
-            return self._render_email_step(screen, email, cursor_position, input_mode)
+            return self._render_email_step(
+                screen, email, cursor_position, input_mode, shift_active
+            )
         elif step == "password":
             return self._render_password_step(
-                screen, password, cursor_position, input_mode
+                screen, password, cursor_position, input_mode, shift_active
             )
         elif step == "testing":
             return self._render_testing_step(screen)
@@ -67,7 +71,9 @@ class IALoginModal:
         elif step == "error":
             return self._render_error_step(screen, error_message, input_mode)
         else:
-            return self._render_email_step(screen, email, cursor_position, input_mode)
+            return self._render_email_step(
+                screen, email, cursor_position, input_mode, shift_active
+            )
 
     def _render_email_step(
         self,
@@ -75,6 +81,7 @@ class IALoginModal:
         email: str,
         cursor_position: int,
         input_mode: str,
+        shift_active: bool = False,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """Render email input step."""
         title = "Internet Archive Login"
@@ -119,6 +126,7 @@ class IALoginModal:
             chars_per_row=13,
             char_set="url",  # Has @ and . for email
             show_input_field=True,
+            shift_active=shift_active,
         )
 
         return modal_rect, content_rect, close_rect, char_rects
@@ -129,6 +137,7 @@ class IALoginModal:
         password: str,
         cursor_position: int,
         input_mode: str,
+        shift_active: bool = False,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """Render password input step."""
         title = "Internet Archive Login"
@@ -178,6 +187,7 @@ class IALoginModal:
             chars_per_row=13,
             char_set="default",
             show_input_field=True,
+            shift_active=shift_active,
         )
 
         return modal_rect, content_rect, close_rect, char_rects
@@ -405,8 +415,12 @@ class IALoginModal:
         return modal_rect, content_rect, None, []
 
     def handle_selection(
-        self, step: str, cursor_position: int, current_text: str
-    ) -> Tuple[str, bool]:
+        self,
+        step: str,
+        cursor_position: int,
+        current_text: str,
+        shift_active: bool = False,
+    ) -> Tuple[str, bool, bool]:
         """
         Handle character selection for email/password steps.
 
@@ -414,19 +428,26 @@ class IALoginModal:
             step: Current step
             cursor_position: Selected character index
             current_text: Current input text
+            shift_active: Whether shift is active
 
         Returns:
-            Tuple of (new_text, is_done)
+            Tuple of (new_text, is_done, toggle_shift)
         """
         if step == "email":
             return self.char_keyboard.handle_selection(
-                cursor_position, current_text, char_set="url"
+                cursor_position,
+                current_text,
+                char_set="url",
+                shift_active=shift_active,
             )
         elif step == "password":
             return self.char_keyboard.handle_selection(
-                cursor_position, current_text, char_set="default"
+                cursor_position,
+                current_text,
+                char_set="default",
+                shift_active=shift_active,
             )
-        return current_text, False
+        return current_text, False, False
 
 
 # Default instance

@@ -42,45 +42,58 @@ class IADownloadModal:
         files_list: List[Dict[str, Any]],
         selected_file_index: int,
         output_folder: str,
-        folder_items: List[Dict[str, Any]],
-        folder_highlighted: int,
         should_extract: bool,
         cursor_position: int,
         error_message: str = "",
         input_mode: str = "keyboard",
+        shift_active: bool = False,
     ) -> Tuple[
-        pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple], List[pygame.Rect]
+        pygame.Rect,
+        pygame.Rect,
+        Optional[pygame.Rect],
+        List[Tuple],
+        List[pygame.Rect],
     ]:
         """
         Render the IA download wizard modal.
 
         Returns:
-            Tuple of (modal_rect, content_rect, close_rect, char_rects, item_rects)
+            Tuple of (modal_rect, content_rect, close_rect,
+                       char_rects, item_rects)
         """
         if step == "url":
-            rects = self._render_url_step(screen, url, cursor_position, input_mode)
+            rects = self._render_url_step(
+                screen, url, cursor_position, input_mode, shift_active
+            )
             return (*rects, [])
         elif step == "validating":
             rects = self._render_validating_step(screen)
             return (*rects, [])
         elif step == "file_select":
             return self._render_file_select_step(
-                screen, item_id, files_list, selected_file_index, input_mode
-            )
-        elif step == "folder":
-            return self._render_folder_step(
-                screen, output_folder, folder_items, folder_highlighted, input_mode
+                screen,
+                item_id,
+                files_list,
+                selected_file_index,
+                input_mode,
             )
         elif step == "options":
             rects = self._render_options_step(
-                screen, files_list, selected_file_index, should_extract, input_mode
+                screen,
+                files_list,
+                selected_file_index,
+                output_folder,
+                should_extract,
+                input_mode,
             )
             return (*rects, [])
         elif step == "error":
             rects = self._render_error_step(screen, error_message, input_mode)
             return (*rects, [])
         else:
-            rects = self._render_url_step(screen, url, cursor_position, input_mode)
+            rects = self._render_url_step(
+                screen, url, cursor_position, input_mode, shift_active
+            )
             return (*rects, [])
 
     def _render_url_step(
@@ -89,6 +102,7 @@ class IADownloadModal:
         url: str,
         cursor_position: int,
         input_mode: str,
+        shift_active: bool = False,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """Render URL input step."""
         title = "Download from Internet Archive"
@@ -129,6 +143,7 @@ class IADownloadModal:
             chars_per_row=13,
             char_set="url",
             show_input_field=True,
+            shift_active=shift_active,
         )
 
         return modal_rect, content_rect, close_rect, char_rects
@@ -366,118 +381,30 @@ class IADownloadModal:
 
         return modal_rect, content_rect, close_rect, [], item_rects
 
-    def _render_folder_step(
-        self,
-        screen: pygame.Surface,
-        current_path: str,
-        folder_items: List[Dict[str, Any]],
-        highlighted: int,
-        input_mode: str,
-    ) -> Tuple[
-        pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple], List[pygame.Rect]
-    ]:
-        """Render folder selection step."""
-        width = min(600, screen.get_width() - 40)
-        height = min(450, screen.get_height() - 60)
-
-        show_close = input_mode == "touch"
-        modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Select Output Folder", show_close=show_close
-        )
-
-        padding = self.theme.padding_sm
-        y = content_rect.top + padding
-
-        # Current path
-        short_path = current_path
-        if len(short_path) > 50:
-            short_path = "..." + short_path[-47:]
-        self.text.render(
-            screen,
-            short_path,
-            (content_rect.left + padding, y),
-            color=self.theme.text_secondary,
-            size=self.theme.font_size_sm,
-        )
-        y += 30
-
-        # Folder list
-        item_rects = []
-        item_height = 40
-        visible_items = (content_rect.height - 100) // item_height
-        scroll_offset = max(0, highlighted - visible_items + 2)
-
-        for i in range(
-            scroll_offset, min(len(folder_items), scroll_offset + visible_items)
-        ):
-            item = folder_items[i]
-            is_selected = i == highlighted
-
-            item_rect = pygame.Rect(
-                content_rect.left + padding,
-                y,
-                content_rect.width - padding * 2,
-                item_height - 5,
-            )
-            item_rects.append(item_rect)
-
-            bg_color = self.theme.primary if is_selected else self.theme.surface_hover
-            pygame.draw.rect(
-                screen, bg_color, item_rect, border_radius=self.theme.radius_sm
-            )
-
-            # Icon and name
-            icon = (
-                "[..]"
-                if item.get("type") == "parent"
-                else "[+]" if item.get("type") == "create_folder" else "[ ]"
-            )
-            name = item.get("name", "")
-
-            text_color = self.theme.text_primary
-            self.text.render(
-                screen,
-                f"{icon} {name}",
-                (
-                    item_rect.left + padding,
-                    item_rect.centery - self.theme.font_size_sm // 2,
-                ),
-                color=text_color,
-                size=self.theme.font_size_sm,
-                max_width=item_rect.width - padding * 2,
-            )
-
-            y += item_height
-
-        # Hints
-        hints = get_combined_hints(
-            [("select", "Select Folder"), ("back", "Cancel")], input_mode
-        )
-        self.text.render(
-            screen,
-            hints,
-            (content_rect.centerx, content_rect.bottom - padding - 10),
-            color=self.theme.text_secondary,
-            size=self.theme.font_size_sm,
-            align="center",
-        )
-
-        return modal_rect, content_rect, close_rect, [], item_rects
-
     def _render_options_step(
         self,
         screen: pygame.Surface,
         files_list: List[Dict[str, Any]],
         selected_file_index: int,
+        output_folder: str,
         should_extract: bool,
         input_mode: str,
-    ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
+    ) -> Tuple[
+        pygame.Rect,
+        pygame.Rect,
+        Optional[pygame.Rect],
+        List[Tuple],
+    ]:
         """Render options step before download."""
         width = min(500, screen.get_width() - 40)
-        height = 250
+        height = 300
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Download Options", show_close=False
+            screen,
+            width,
+            height,
+            title="Download Options",
+            show_close=False,
         )
 
         padding = self.theme.padding_sm
@@ -497,7 +424,7 @@ class IADownloadModal:
                 size=self.theme.font_size_sm,
                 max_width=content_rect.width - padding * 2,
             )
-            y += 25
+            y += 22
 
             self.text.render(
                 screen,
@@ -506,38 +433,76 @@ class IADownloadModal:
                 color=self.theme.text_secondary,
                 size=self.theme.font_size_sm,
             )
-            y += 35
+            y += 22
 
-            # Extract option (only for zip files)
+            # Output folder
+            short_path = output_folder
+            if len(short_path) > 40:
+                short_path = "..." + short_path[-37:]
+            self.text.render(
+                screen,
+                f"Folder: {short_path}",
+                (content_rect.left + padding, y),
+                color=self.theme.text_secondary,
+                size=self.theme.font_size_sm,
+            )
+            y += 30
+
+            # Extract option checkbox (only for zip files)
             if filename.lower().endswith(".zip"):
-                extract_text = "Extract ZIP: " + ("Yes" if should_extract else "No")
+                box_rect = pygame.Rect(
+                    content_rect.left + padding,
+                    y,
+                    content_rect.width - padding * 2,
+                    44,
+                )
+
+                if should_extract:
+                    pygame.draw.rect(
+                        screen,
+                        self.theme.success,
+                        box_rect,
+                        border_radius=8,
+                    )
+                    check = "[X]"
+                    label = "Extract after download"
+                else:
+                    pygame.draw.rect(
+                        screen,
+                        self.theme.surface_hover,
+                        box_rect,
+                        border_radius=8,
+                    )
+                    check = "[ ]"
+                    label = "Keep as ZIP"
+
                 self.text.render(
                     screen,
-                    extract_text,
-                    (content_rect.left + padding, y),
+                    f"{check}  {label}",
+                    (
+                        box_rect.left + padding,
+                        box_rect.centery - self.theme.font_size_md // 2,
+                    ),
                     color=self.theme.text_primary,
                     size=self.theme.font_size_md,
                 )
-                y += 25
-
-                self.text.render(
-                    screen,
-                    "(Press SELECT to toggle)",
-                    (content_rect.left + padding, y),
-                    color=self.theme.text_secondary,
-                    size=self.theme.font_size_xs,
-                )
-                y += 30
 
         # Hints
         hints = get_combined_hints(
-            [("start", "Download"), ("select", "Toggle Extract"), ("back", "Cancel")],
+            [
+                ("start", "Download"),
+                ("select", "Toggle"),
+                ("back", "Cancel"),
+            ],
             input_mode,
         )
         self.text.render(
             screen,
             hints,
-            (content_rect.centerx, content_rect.bottom - padding - 20),
+            (
+                content_rect.centerx,
+                content_rect.bottom - padding - 20,
+            ),
             color=self.theme.text_secondary,
             size=self.theme.font_size_sm,
             align="center",
@@ -583,11 +548,17 @@ class IADownloadModal:
         return modal_rect, content_rect, None, []
 
     def handle_url_selection(
-        self, cursor_position: int, current_text: str
-    ) -> Tuple[str, bool]:
+        self,
+        cursor_position: int,
+        current_text: str,
+        shift_active: bool = False,
+    ) -> Tuple[str, bool, bool]:
         """Handle URL keyboard selection."""
         return self.char_keyboard.handle_selection(
-            cursor_position, current_text, char_set="url"
+            cursor_position,
+            current_text,
+            char_set="url",
+            shift_active=shift_active,
         )
 
     def _format_size(self, size: int) -> str:
