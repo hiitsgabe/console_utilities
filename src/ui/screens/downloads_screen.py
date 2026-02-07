@@ -11,6 +11,7 @@ from ui.atoms.text import Text
 from ui.atoms.progress import ProgressBar
 from state import DownloadQueueState, DownloadQueueItem
 from utils.button_hints import get_button_hint
+from constants import BEZEL_INSET
 
 
 class DownloadsScreen:
@@ -59,14 +60,16 @@ class DownloadsScreen:
             screen, "Downloads", show_back=True, right_text=right_text
         )
 
-        # Calculate content area
+        # Calculate content area (inset from bezel on all sides)
         header_height = 60
         footer_height = 40
+        inset = BEZEL_INSET
         content_rect = pygame.Rect(
-            self.theme.padding_sm,
-            header_height + self.theme.padding_sm,
-            screen.get_width() - self.theme.padding_sm * 2,
+            inset + self.theme.padding_sm,
+            inset + header_height + self.theme.padding_sm,
+            screen.get_width() - inset * 2 - self.theme.padding_sm * 2,
             screen.get_height()
+            - inset * 2
             - header_height
             - self.theme.padding_sm * 2
             - footer_height,
@@ -179,7 +182,7 @@ class DownloadsScreen:
             color=(
                 self.theme.text_secondary
                 if not is_highlighted
-                else self.theme.text_primary
+                else self.theme.background
             ),
             size=self.theme.font_size_sm,
             align="left",
@@ -199,10 +202,10 @@ class DownloadsScreen:
             border_radius=self.theme.radius_sm,
         )
 
-        # Try to get actual thumbnail
+        # Try to get actual thumbnail (pass system_data for boxart URL)
         if get_thumbnail:
             try:
-                thumbnail = get_thumbnail(item.game)
+                thumbnail = get_thumbnail(item.game, item.system_data)
                 if thumbnail:
                     scaled = pygame.transform.scale(thumbnail, (thumb_size, thumb_size))
                     screen.blit(scaled, thumb_rect)
@@ -218,7 +221,11 @@ class DownloadsScreen:
             screen,
             name,
             (name_x, rect.centery - 10),
-            color=self.theme.text_primary,
+            color=(
+                self.theme.background
+                if is_highlighted
+                else self.theme.text_primary
+            ),
             size=self.theme.font_size_md,
             max_width=name_width,
         )
@@ -230,7 +237,7 @@ class DownloadsScreen:
             color=(
                 self.theme.text_secondary
                 if not is_highlighted
-                else self.theme.text_primary
+                else self.theme.background
             ),
             size=self.theme.font_size_sm,
         )
@@ -344,13 +351,15 @@ class DownloadsScreen:
     ):
         """Render footer hints."""
         screen_width, screen_height = screen.get_size()
+        inset = BEZEL_INSET
+        safe_width = screen_width - inset * 2
         bar_height = 40
-        bar_y = screen_height - bar_height
+        bar_y = screen_height - inset - bar_height
 
         # Draw semi-transparent background
-        bar_surface = pygame.Surface((screen_width, bar_height), pygame.SRCALPHA)
+        bar_surface = pygame.Surface((safe_width, bar_height), pygame.SRCALPHA)
         bar_surface.fill((*self.theme.surface[:3], 230))
-        screen.blit(bar_surface, (0, bar_y))
+        screen.blit(bar_surface, (inset, bar_y))
 
         # Left side: status summary
         completed = sum(1 for item in queue.items if item.status == "completed")
@@ -359,7 +368,7 @@ class DownloadsScreen:
         self.text.render(
             screen,
             status_text,
-            (self.theme.padding_md, bar_y + bar_height // 2),
+            (inset + self.theme.padding_md, bar_y + bar_height // 2),
             color=self.theme.secondary,
             size=self.theme.font_size_sm,
             align="left",
@@ -378,7 +387,10 @@ class DownloadsScreen:
         self.text.render(
             screen,
             hint_text,
-            (screen_width - self.theme.padding_md, bar_y + bar_height // 2),
+            (
+                screen_width - inset - self.theme.padding_md,
+                bar_y + bar_height // 2,
+            ),
             color=self.theme.text_secondary,
             size=self.theme.font_size_sm,
             align="right",

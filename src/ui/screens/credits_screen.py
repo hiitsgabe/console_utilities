@@ -9,6 +9,7 @@ from ui.theme import Theme, default_theme
 from ui.atoms.text import Text
 from ui.organisms.header import Header
 from utils.button_hints import get_button_hint
+from constants import BEZEL_INSET
 
 
 class CreditsScreen:
@@ -46,10 +47,11 @@ class CreditsScreen:
             screen, title="Credits", show_back=True
         )
 
-        # Content area
-        content_x = self.theme.padding_lg
-        content_y = header_height + self.theme.padding_lg
-        content_width = screen.get_width() - self.theme.padding_lg * 2
+        # Content area (inset from bezel)
+        inset = BEZEL_INSET
+        content_x = inset + self.theme.padding_lg
+        content_y = inset + header_height + self.theme.padding_lg
+        content_width = screen.get_width() - inset * 2 - self.theme.padding_lg * 2
 
         # App title
         self.text.render(
@@ -123,8 +125,13 @@ class CreditsScreen:
                 )
             content_y += self.theme.font_size_sm + 4
 
-        # Bottom text
-        bottom_y = screen.get_height() - self.theme.padding_lg - self.theme.font_size_sm
+        # Bottom text (above bezel)
+        bottom_y = (
+            screen.get_height()
+            - BEZEL_INSET
+            - self.theme.padding_lg
+            - self.theme.font_size_sm
+        )
         back_hint = get_button_hint("back", "Back", input_mode)
         self.text.render(
             screen,

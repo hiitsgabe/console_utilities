@@ -41,6 +41,17 @@ class GameImage:
     extra: Dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass
+class GameVideo:
+    """An available video for a game."""
+
+    url: str
+    region: str = ""  # us, eu, jp, etc.
+    format: str = "mp4"
+    size: int = 0
+    normalized: bool = False  # True if video is normalized/compressed
+
+
 class BaseProvider(ABC):
     """
     Abstract base class for scraper providers.
@@ -101,6 +112,22 @@ class BaseProvider(ABC):
             List of image type identifiers
         """
         pass
+
+    def supports_videos(self) -> bool:
+        """Whether this provider supports video downloads."""
+        return False
+
+    def get_game_videos(self, game_id: str) -> Tuple[bool, List[GameVideo], str]:
+        """
+        Get available videos for a game.
+
+        Args:
+            game_id: Provider-specific game identifier
+
+        Returns:
+            Tuple of (success, list of videos, error message)
+        """
+        return True, [], ""
 
     def get_image_type_label(self, image_type: str) -> str:
         """

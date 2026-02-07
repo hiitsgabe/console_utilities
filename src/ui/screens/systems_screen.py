@@ -1,5 +1,5 @@
 """
-Systems screen - Main menu showing available systems.
+Systems screen - Root menu and systems list submenu.
 """
 
 import pygame
@@ -8,13 +8,16 @@ from typing import List, Dict, Any, Tuple, Optional, Set
 from ui.theme import Theme, default_theme
 from ui.templates.list_screen import ListScreenTemplate
 
+# Root menu items
+ROOT_MENU_ITEMS = ["Systems", "Utils", "Settings", "Credits"]
+
 
 class SystemsScreen:
     """
     Systems screen.
 
-    Displays the main menu with available game systems,
-    utilities, settings, and credits options.
+    Displays the root menu (Systems/Utils/Settings/Credits)
+    and the systems list submenu.
     """
 
     def __init__(self, theme: Theme = default_theme):
@@ -29,22 +32,18 @@ class SystemsScreen:
         extra_items: List[str] = None,
     ) -> Tuple[Optional[pygame.Rect], List[pygame.Rect], int]:
         """
-        Render the systems screen.
+        Render the root menu screen.
 
         Args:
             screen: Surface to render to
-            systems: List of system configurations
+            systems: List of system configurations (unused in root)
             highlighted: Currently highlighted index
-            extra_items: Extra menu items (e.g., ["Utils", "Settings", "Credits"])
+            extra_items: Override menu items
 
         Returns:
             Tuple of (back_button_rect, item_rects, scroll_offset)
         """
-        if extra_items is None:
-            extra_items = ["Utils", "Settings", "Credits"]
-
-        # Build items list: systems + extra items
-        items = [s["name"] for s in systems] + extra_items
+        items = extra_items if extra_items is not None else ROOT_MENU_ITEMS
 
         return self.template.render(
             screen,
@@ -54,15 +53,65 @@ class SystemsScreen:
             selected=set(),
             show_back=False,
             item_height=40,
-            get_label=lambda x: x if isinstance(x, str) else x.get("name", str(x)),
+            get_label=lambda x: x,
             item_spacing=8,
             rainbow_title=True,
             center_title=True,
         )
 
+    def render_systems_list(
+        self,
+        screen: pygame.Surface,
+        systems: List[Dict[str, Any]],
+        highlighted: int,
+    ) -> Tuple[Optional[pygame.Rect], List[pygame.Rect], int]:
+        """
+        Render the systems list submenu.
+
+        Args:
+            screen: Surface to render to
+            systems: List of system configurations
+            highlighted: Currently highlighted index
+
+        Returns:
+            Tuple of (back_button_rect, item_rects, scroll_offset)
+        """
+        items = [s["name"] for s in systems]
+
+        return self.template.render(
+            screen,
+            title="Systems",
+            items=items,
+            highlighted=highlighted,
+            selected=set(),
+            show_back=True,
+            item_height=40,
+            get_label=lambda x: x,
+            item_spacing=8,
+        )
+
+    def get_root_menu_action(self, index: int) -> str:
+        """
+        Get the action for a root menu selection.
+
+        Args:
+            index: Selected index
+
+        Returns:
+            Action string: "systems_list", "utils", "settings", "credits"
+        """
+        actions = ["systems_list", "utils", "settings", "credits"]
+        if 0 <= index < len(actions):
+            return actions[index]
+        return "unknown"
+
+    def get_root_menu_count(self) -> int:
+        """Get number of root menu items."""
+        return len(ROOT_MENU_ITEMS)
+
     def get_selection_type(self, index: int, systems_count: int) -> Tuple[str, int]:
         """
-        Determine what type of item was selected.
+        Determine what type of item was selected in systems list.
 
         Args:
             index: Selected index
@@ -70,16 +119,10 @@ class SystemsScreen:
 
         Returns:
             Tuple of (type, adjusted_index)
-            type is one of: "system", "utils", "settings", "credits"
         """
         if index < systems_count:
             return ("system", index)
-        elif index == systems_count:
-            return ("utils", 0)
-        elif index == systems_count + 1:
-            return ("settings", 0)
-        else:
-            return ("credits", 0)
+        return ("unknown", 0)
 
 
 # Default instance

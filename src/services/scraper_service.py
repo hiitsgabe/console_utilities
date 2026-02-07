@@ -11,7 +11,13 @@ import traceback
 import requests
 from typing import List, Tuple, Dict, Any, Optional
 
-from .scraper_providers import get_provider, BaseProvider, GameSearchResult, GameImage
+from .scraper_providers import (
+    get_provider,
+    BaseProvider,
+    GameSearchResult,
+    GameImage,
+    GameVideo,
+)
 
 
 class ScraperService:
@@ -97,7 +103,17 @@ class ScraperService:
         "libretro",
         "screenscraper",
         "thegamesdb",
+        "rawg",
+        "igdb",
     ]
+
+    # Video path mapping per frontend
+    VIDEO_TYPE_MAP = {
+        "emulationstation_base": "videos",
+        "esde_android": "videos",
+        "retroarch": None,  # RetroArch doesn't support videos
+        "pegasus": "video",
+    }
 
     def __init__(self, settings: Dict[str, Any]):
         """
@@ -269,6 +285,104 @@ class ScraperService:
         provider = self._last_search_provider or self.provider
         return provider.get_game_images(game_id)
 
+    def get_game_videos(self, game_id: str) -> Tuple[bool, List[GameVideo], str]:
+        """
+        Get available videos for a game.
+
+        Args:
+            game_id: Provider-specific game identifier
+
+        Returns:
+            Tuple of (success, list of videos, error)
+        """
+        provider = self._last_search_provider or self.provider
+        if not provider.supports_videos():
+            return True, [], ""
+        return provider.get_game_videos(game_id)
+
+    def get_video_output_path(
+        self, rom_path: str, video_format: str = "mp4"
+    ) -> Optional[str]:
+        """
+        Get the output path for a video based on frontend configuration.
+
+        Args:
+            rom_path: Path to the ROM file
+            video_format: Video format extension (mp4)
+
+        Returns:
+            Full output path for the video, or None if not supported
+        """
+        frontend = self.settings.get("scraper_frontend", "emulationstation_base")
+        folder_name = self.VIDEO_TYPE_MAP.get(frontend)
+        if folder_name is None:
+            return None
+
+        rom_dir = os.path.dirname(rom_path)
+        rom_name = os.path.splitext(os.path.basename(rom_path))[0]
+
+        if frontend == "emulationstation_base":
+            media_dir = os.path.join(rom_dir, "media", folder_name)
+            return os.path.join(media_dir, f"{rom_name}.{video_format}")
+        elif frontend == "esde_android":
+            media_base = self.settings.get("esde_media_path", "")
+            if not media_base:
+                return None
+            platform = os.path.basename(rom_dir)
+            media_dir = os.path.join(media_base, platform, folder_name)
+            return os.path.join(media_dir, f"{rom_name}.{video_format}")
+        elif frontend == "pegasus":
+            media_dir = os.path.join(rom_dir, "media", rom_name)
+            return os.path.join(media_dir, f"{folder_name}.{video_format}")
+
+        return None
+
+    def download_video(
+        self, video: GameVideo, output_path: str, progress_callback=None
+    ) -> Tuple[bool, str]:
+        """
+        Download a video to the specified path.
+
+        Args:
+            video: GameVideo object with URL
+            output_path: Where to save the video
+            progress_callback: Optional callback(downloaded, total)
+
+        Returns:
+            Tuple of (success, error message)
+        """
+        try:
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+            headers = {"User-Agent": "ConsoleUtilities/1.0"}
+            response = requests.get(
+                video.url, stream=True, timeout=120, headers=headers
+            )
+            if response.status_code != 200:
+                return False, f"Download failed: {response.status_code}"
+
+            total_size = int(response.headers.get("content-length", 0))
+            downloaded = 0
+
+            with open(output_path, "wb") as f:
+                for chunk in response.iter_content(chunk_size=16384):
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if progress_callback and total_size:
+                        progress_callback(downloaded, total_size)
+
+            return True, ""
+
+        except requests.Timeout:
+            return False, "Download timed out"
+        except requests.RequestException as e:
+            return False, f"Network error: {str(e)}"
+        except OSError as e:
+            return False, f"File error: {str(e)}"
+        except Exception as e:
+            traceback.print_exc()
+            return False, f"Error: {str(e)}"
+
     def get_output_path(
         self, rom_path: str, image_type: str, image_format: str = "png"
     ) -> Optional[str]:
@@ -422,6 +536,27 @@ class ScraperService:
             progress_callback(total, total, "")
 
         return True, downloaded_paths, ""
+
+    def check_image_exists(self, rom_path: str, image_types: list = None) -> bool:
+        """
+        Check if images already exist for this ROM.
+
+        Args:
+            rom_path: Path to ROM file
+            image_types: Image types to check (defaults to box-2D and boxart)
+
+        Returns:
+            True if any matching image file exists
+        """
+        if image_types is None:
+            image_types = ["box-2D", "boxart"]
+
+        for image_type in image_types:
+            for fmt in ("png", "jpg", "jpeg"):
+                output_path = self.get_output_path(rom_path, image_type, fmt)
+                if output_path and os.path.exists(output_path):
+                    return True
+        return False
 
     def get_platform_from_rom_path(self, rom_path: str) -> str:
         """

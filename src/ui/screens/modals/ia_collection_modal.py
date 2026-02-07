@@ -499,7 +499,11 @@ class IACollectionModal:
                         item_rect.left + padding,
                         item_rect.centery - self.theme.font_size_sm // 2,
                     ),
-                    color=self.theme.text_primary,
+                    color=(
+                        self.theme.background
+                        if is_highlighted
+                        else self.theme.text_primary
+                    ),
                     size=self.theme.font_size_sm,
                 )
             else:
@@ -511,7 +515,11 @@ class IACollectionModal:
                         item_rect.left + padding,
                         item_rect.centery - self.theme.font_size_sm // 2,
                     ),
-                    color=self.theme.text_secondary,
+                    color=(
+                        self.theme.background
+                        if is_highlighted
+                        else self.theme.text_secondary
+                    ),
                     size=self.theme.font_size_sm,
                 )
 
@@ -636,7 +644,11 @@ class IACollectionModal:
             screen,
             unzip_text,
             (option1_rect.left + padding, option1_rect.centery - 8),
-            color=self.theme.text_primary,
+            color=(
+                self.theme.background
+                if options_highlighted == 0
+                else self.theme.text_primary
+            ),
             size=self.theme.font_size_sm,
         )
         y += item_height
@@ -669,7 +681,11 @@ class IACollectionModal:
                 screen,
                 extract_text,
                 (option2_rect.left + padding, option2_rect.centery - 8),
-                color=self.theme.text_primary,
+                color=(
+                    self.theme.background
+                    if options_highlighted == 1
+                    else self.theme.text_primary
+                ),
                 size=self.theme.font_size_sm,
             )
             y += item_height

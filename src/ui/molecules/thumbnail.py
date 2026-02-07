@@ -72,10 +72,14 @@ class Thumbnail:
                 align="center",
             )
 
-        # Draw selection/highlight border
+        # Draw border (always 1px green, thicker when selected)
         if selected:
             pygame.draw.rect(
-                screen, self.theme.primary, rect, width=3, border_radius=border_radius
+                screen,
+                self.theme.primary,
+                rect,
+                width=3,
+                border_radius=border_radius,
             )
         elif highlighted:
             pygame.draw.rect(
@@ -83,6 +87,14 @@ class Thumbnail:
                 self.theme.primary_light,
                 rect,
                 width=2,
+                border_radius=border_radius,
+            )
+        else:
+            pygame.draw.rect(
+                screen,
+                self.theme.primary_dark,
+                rect,
+                width=1,
                 border_radius=border_radius,
             )
 

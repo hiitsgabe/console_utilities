@@ -39,6 +39,7 @@ class SettingsScreen:
         "View Type",
         "USA Games Only",
         "Show Download All Button",
+        "Skip Installed Games",
     ]
 
     # Input section
@@ -62,6 +63,8 @@ class SettingsScreen:
         "Provider Fallback",  # Toggle fallback chain
         "ScreenScraper Login",  # Only shown when provider = screenscraper
         "TheGamesDB API Key",  # Only shown when provider = thegamesdb
+        "RAWG API Key",  # Only shown when provider = rawg
+        "IGDB Login",  # Only shown when provider = igdb
         "ES-DE Media Path",  # Only shown when frontend = esde_android
         "ES-DE Gamelists Path",  # Only shown when frontend = esde_android
         "RetroArch Thumbnails",  # Only shown when frontend = retroarch
@@ -120,7 +123,7 @@ class SettingsScreen:
 
         # Add Scraper section
         scraper_frontend = settings.get("scraper_frontend", "emulationstation_base")
-        scraper_provider = settings.get("scraper_provider", "screenscraper")
+        scraper_provider = settings.get("scraper_provider", "libretro")
         divider_indices.add(len(items))
         items.append(self.SCRAPER_SECTION[0])  # Divider
         items.append(self.SCRAPER_SECTION[1])  # Frontend
@@ -131,12 +134,16 @@ class SettingsScreen:
             items.append(self.SCRAPER_SECTION[4])  # SS Login
         elif scraper_provider == "thegamesdb":
             items.append(self.SCRAPER_SECTION[5])  # TGDB Key
+        elif scraper_provider == "rawg":
+            items.append(self.SCRAPER_SECTION[6])  # RAWG Key
+        elif scraper_provider == "igdb":
+            items.append(self.SCRAPER_SECTION[7])  # IGDB Login
         # Show frontend-specific paths
         if scraper_frontend == "esde_android":
-            items.append(self.SCRAPER_SECTION[6])  # ES-DE Media
-            items.append(self.SCRAPER_SECTION[7])  # ES-DE Lists
+            items.append(self.SCRAPER_SECTION[8])  # ES-DE Media Path
+            items.append(self.SCRAPER_SECTION[9])  # ES-DE Gamelists Path
         elif scraper_frontend == "retroarch":
-            items.append(self.SCRAPER_SECTION[8])  # RetroArch
+            items.append(self.SCRAPER_SECTION[10])  # RetroArch Thumbnails
 
         # Add NSZ section (last)
         nsz_enabled = settings.get("nsz_enabled", False)
@@ -182,6 +189,13 @@ class SettingsScreen:
                 items.append((item, value))
             elif item == "Show Download All Button":
                 value = "ON" if settings.get("show_download_all", False) else "OFF"
+                items.append((item, value))
+            elif item == "Skip Installed Games":
+                value = (
+                    "ON"
+                    if settings.get("exclude_installed_on_download_all", True)
+                    else "OFF"
+                )
                 items.append((item, value))
             elif item == "Work Directory":
                 path = settings.get("work_dir", "")
@@ -231,6 +245,8 @@ class SettingsScreen:
                     "libretro": "Libretro Thumbnails",
                     "screenscraper": "ScreenScraper",
                     "thegamesdb": "TheGamesDB",
+                    "rawg": "RAWG",
+                    "igdb": "IGDB (Twitch)",
                 }
                 items.append(
                     (
@@ -255,6 +271,20 @@ class SettingsScreen:
             elif item == "TheGamesDB API Key":
                 api_key = settings.get("thegamesdb_api_key", "")
                 value = "Set" if api_key else "Not Set"
+                items.append((item, value))
+            elif item == "RAWG API Key":
+                api_key = settings.get("rawg_api_key", "")
+                value = "Set" if api_key else "Not Set"
+                items.append((item, value))
+            elif item == "IGDB Login":
+                client_id = settings.get("igdb_client_id", "")
+                if client_id:
+                    if len(client_id) > 15:
+                        value = client_id[:12] + "..."
+                    else:
+                        value = client_id
+                else:
+                    value = "Not configured"
                 items.append((item, value))
             elif item == "ES-DE Media Path":
                 path = settings.get("esde_media_path", "")
@@ -336,12 +366,15 @@ class SettingsScreen:
                 "View Type": "toggle_view_type",
                 "USA Games Only": "toggle_usa_only",
                 "Show Download All Button": "toggle_download_all",
+                "Skip Installed Games": "toggle_exclude_installed",
                 "Enable NSZ": "toggle_nsz_enabled",
                 "Scraper Frontend": "toggle_scraper_frontend",
                 "Scraper Provider": "toggle_scraper_provider",
                 "Provider Fallback": "toggle_scraper_fallback",
                 "ScreenScraper Login": "screenscraper_login",
                 "TheGamesDB API Key": "thegamesdb_api_key",
+                "RAWG API Key": "rawg_api_key",
+                "IGDB Login": "igdb_login",
                 "ES-DE Media Path": "select_esde_media_path",
                 "ES-DE Gamelists Path": "select_esde_gamelists_path",
                 "RetroArch Thumbnails": "select_retroarch_thumbnails",

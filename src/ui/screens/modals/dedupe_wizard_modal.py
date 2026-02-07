@@ -47,6 +47,7 @@ class DedupeWizardModal:
         error_message: str,
         mode_highlighted: int = 0,
         input_mode: str = "keyboard",
+        confirmed_groups: Optional[Dict] = None,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[pygame.Rect]]:
         """
         Render the dedupe wizard modal.
@@ -88,6 +89,7 @@ class DedupeWizardModal:
                 current_group_index,
                 selected_to_keep,
                 input_mode,
+                confirmed_groups=confirmed_groups or {},
             )
         elif step == "processing":
             self._render_processing(screen, content_rect, process_progress)
@@ -267,23 +269,29 @@ class DedupeWizardModal:
         current_group_index: int,
         selected_to_keep: int,
         input_mode: str,
+        confirmed_groups: Dict = None,
     ) -> List[pygame.Rect]:
         """Render duplicate review step."""
         item_rects = []
+        if confirmed_groups is None:
+            confirmed_groups = {}
 
         if not duplicate_groups:
             return item_rects
 
         total_groups = len(duplicate_groups)
+        confirmed_count = len(confirmed_groups)
         current_group = duplicate_groups[current_group_index]
+        is_confirmed = current_group_index in confirmed_groups
 
-        # Header with count
+        # Header with count and confirmation status
         y = content_rect.top
+        status = " [confirmed]" if is_confirmed else ""
         self.text.render(
             screen,
-            f"Duplicate Group {current_group_index + 1} of {total_groups}",
+            f"Group {current_group_index + 1}/{total_groups} ({confirmed_count} confirmed){status}",
             (content_rect.centerx, y),
-            color=self.theme.text_primary,
+            color=self.theme.success if is_confirmed else self.theme.text_primary,
             size=self.theme.font_size_lg,
             align="center",
         )
@@ -403,7 +411,7 @@ class DedupeWizardModal:
 
         # Navigation hints
         if mode == "safe":
-            hint = "L/R: Prev/Next group, [A] Process all, [B] Cancel"
+            hint = "L/R: Prev/Next group, [A] Confirm group, [B] Cancel"
         else:
             hint = "Up/Down: Select, L/R: Prev/Next, [A] Confirm, [B] Cancel"
 

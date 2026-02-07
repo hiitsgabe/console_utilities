@@ -47,6 +47,8 @@ class IADownloadModal:
         error_message: str = "",
         input_mode: str = "keyboard",
         shift_active: bool = False,
+        display_items: Optional[List[Dict[str, Any]]] = None,
+        current_folder: str = "",
     ) -> Tuple[
         pygame.Rect,
         pygame.Rect,
@@ -70,17 +72,20 @@ class IADownloadModal:
             rects = self._render_validating_step(screen)
             return (*rects, [])
         elif step == "file_select":
+            items = display_items if display_items else files_list
             return self._render_file_select_step(
                 screen,
                 item_id,
-                files_list,
+                items,
                 selected_file_index,
                 input_mode,
+                current_folder=current_folder,
             )
         elif step == "options":
+            opt_items = display_items if display_items else files_list
             rects = self._render_options_step(
                 screen,
-                files_list,
+                opt_items,
                 selected_file_index,
                 output_folder,
                 should_extract,
@@ -283,10 +288,15 @@ class IADownloadModal:
         files_list: List[Dict[str, Any]],
         selected_file_index: int,
         input_mode: str,
+        current_folder: str = "",
     ) -> Tuple[
-        pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple], List[pygame.Rect]
+        pygame.Rect,
+        pygame.Rect,
+        Optional[pygame.Rect],
+        List[Tuple],
+        List[pygame.Rect],
     ]:
-        """Render file selection step."""
+        """Render file selection step with folder hierarchy."""
         width = min(600, screen.get_width() - 40)
         height = min(450, screen.get_height() - 60)
 
@@ -302,26 +312,43 @@ class IADownloadModal:
         padding = self.theme.padding_sm
         y = content_rect.top + padding
 
+        # Breadcrumb / path indicator
+        if current_folder:
+            breadcrumb = "/" + current_folder
+            if len(breadcrumb) > 50:
+                breadcrumb = ".../" + current_folder.rsplit("/", 1)[-1]
+            self.text.render(
+                screen,
+                breadcrumb,
+                (content_rect.left + padding, y),
+                color=self.theme.primary,
+                size=self.theme.font_size_xs,
+            )
+            y += 18
+
         self.text.render(
             screen,
-            f"Found {len(files_list)} files. Select one to download:",
+            f"{len(files_list)} items:",
             (content_rect.left + padding, y),
             color=self.theme.text_secondary,
             size=self.theme.font_size_sm,
         )
-        y += 30
+        y += 25
 
-        # File list
+        # Item list (folders + files)
         item_rects = []
         item_height = 45
-        visible_items = (content_rect.height - 80) // item_height
+        header_used = y - content_rect.top
+        visible_items = (content_rect.height - header_used - 30) // item_height
         scroll_offset = max(0, selected_file_index - visible_items + 2)
 
         for i in range(
-            scroll_offset, min(len(files_list), scroll_offset + visible_items)
+            scroll_offset,
+            min(len(files_list), scroll_offset + visible_items),
         ):
-            file_info = files_list[i]
+            item_info = files_list[i]
             is_selected = i == selected_file_index
+            item_type = item_info.get("type", "file")
 
             item_rect = pygame.Rect(
                 content_rect.left + padding,
@@ -332,48 +359,78 @@ class IADownloadModal:
             item_rects.append(item_rect)
 
             # Background
-            bg_color = self.theme.primary if is_selected else self.theme.surface_hover
+            if is_selected:
+                bg_color = self.theme.primary
+            elif item_type in ("folder", "parent"):
+                bg_color = self.theme.surface_hover
+            else:
+                bg_color = self.theme.surface_hover
             pygame.draw.rect(
-                screen, bg_color, item_rect, border_radius=self.theme.radius_sm
+                screen,
+                bg_color,
+                item_rect,
+                border_radius=self.theme.radius_sm,
             )
 
-            # Filename
-            text_color = (
-                self.theme.text_primary if is_selected else self.theme.text_primary
-            )
+            # Display name with type prefix
+            if item_type == "parent":
+                display_name = "[..] Parent folder"
+                subtitle = ""
+            elif item_type == "folder":
+                display_name = "[DIR] " + item_info["name"]
+                subtitle = "Folder"
+            else:
+                display_name = item_info["name"]
+                # For files in subfolders, show just the filename
+                if "/" in display_name:
+                    display_name = display_name.rsplit("/", 1)[-1]
+                subtitle = self._format_size(item_info.get("size", 0))
+
             self.text.render(
                 screen,
-                file_info["name"],
+                display_name,
                 (item_rect.left + padding, item_rect.top + 8),
-                color=text_color,
+                color=(
+                    self.theme.background
+                    if is_selected
+                    else self.theme.text_primary
+                ),
                 size=self.theme.font_size_sm,
                 max_width=item_rect.width - padding * 2,
             )
 
-            # Size
-            size_str = self._format_size(file_info.get("size", 0))
-            self.text.render(
-                screen,
-                size_str,
-                (item_rect.left + padding, item_rect.top + 24),
-                color=(
-                    self.theme.text_secondary
-                    if not is_selected
-                    else self.theme.text_primary
-                ),
-                size=self.theme.font_size_xs,
-            )
+            if subtitle:
+                self.text.render(
+                    screen,
+                    subtitle,
+                    (
+                        item_rect.left + padding,
+                        item_rect.top + 24,
+                    ),
+                    color=(
+                        self.theme.text_secondary
+                        if not is_selected
+                        else self.theme.background
+                    ),
+                    size=self.theme.font_size_xs,
+                )
 
             y += item_height
 
         # Hints at bottom
-        hints = get_combined_hints(
-            [("select", "Select"), ("back", "Cancel")], input_mode
-        )
+        hint_actions = [("select", "Open/Select")]
+        if current_folder:
+            hint_actions.append(("back", "Back"))
+        else:
+            hint_actions.append(("back", "Cancel"))
+        hints = get_combined_hints(hint_actions, input_mode)
         self.text.render(
             screen,
             hints,
-            (content_rect.centerx, content_rect.bottom - padding - 10),
+            (
+                content_rect.centerx,
+                content_rect.bottom - padding - 10,
+            ),
             color=self.theme.text_secondary,
             size=self.theme.font_size_sm,
             align="center",
@@ -466,6 +523,7 @@ class IADownloadModal:
                     )
                     check = "[X]"
                     label = "Extract after download"
+                    text_color = self.theme.background
                 else:
                     pygame.draw.rect(
                         screen,
@@ -475,6 +533,7 @@ class IADownloadModal:
                     )
                     check = "[ ]"
                     label = "Keep as ZIP"
+                    text_color = self.theme.text_primary
 
                 self.text.render(
                     screen,
@@ -483,7 +542,7 @@ class IADownloadModal:
                         box_rect.left + padding,
                         box_rect.centery - self.theme.font_size_md // 2,
                     ),
-                    color=self.theme.text_primary,
+                    color=text_color,
                     size=self.theme.font_size_md,
                 )
 

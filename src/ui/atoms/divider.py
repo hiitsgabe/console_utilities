@@ -108,7 +108,10 @@ class Divider:
         if text_color is None:
             text_color = self.theme.text_disabled
 
-        font = pygame.font.Font(None, self.theme.font_size_sm)
+        font = pygame.font.Font(
+            getattr(self.theme, "font_path", None),
+            self.theme.font_size_sm,
+        )
         text_surface = font.render(label, True, text_color)
         text_rect = text_surface.get_rect(centery=y, centerx=(x_start + x_end) // 2)
 

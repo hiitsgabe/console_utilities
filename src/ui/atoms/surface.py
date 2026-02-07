@@ -62,39 +62,27 @@ class Surface:
         if border_radius is None:
             border_radius = self.theme.radius_lg
 
-        # Draw shadow
-        if shadow:
-            shadow_rect = rect.copy()
-            shadow_rect.y += shadow_offset
-            shadow_surface = pygame.Surface(
-                (shadow_rect.width, shadow_rect.height), pygame.SRCALPHA
-            )
-            pygame.draw.rect(
-                shadow_surface,
-                self.theme.shadow,
-                shadow_surface.get_rect(),
-                border_radius=border_radius,
-            )
-            screen.blit(shadow_surface, shadow_rect.topleft)
-
         # Draw main surface
         pygame.draw.rect(screen, color, rect, border_radius=border_radius)
 
-        # Draw border
-        if border_color and border_width > 0:
-            pygame.draw.rect(
-                screen,
-                border_color,
-                rect,
-                width=border_width,
-                border_radius=border_radius,
-            )
+        # Draw green border
+        border_c = border_color or self.theme.primary_dark
+        pygame.draw.rect(
+            screen,
+            border_c,
+            rect,
+            width=max(border_width, 1),
+            border_radius=border_radius,
+        )
 
-        # Draw selection indicator
+        # Draw selection indicator (green left bar)
         if selected:
             indicator_rect = pygame.Rect(rect.left + 4, rect.centery - 10, 4, 20)
             pygame.draw.rect(
-                screen, self.theme.primary, indicator_rect, border_radius=2
+                screen,
+                self.theme.primary,
+                indicator_rect,
+                border_radius=0,
             )
 
         return rect
@@ -123,9 +111,7 @@ class Surface:
         if padding is None:
             padding = self.theme.padding_sm
 
-        self.render(
-            screen, rect, shadow=True, selected=selected, highlighted=highlighted
-        )
+        self.render(screen, rect, selected=selected, highlighted=highlighted)
 
         content_rect = rect.inflate(-padding * 2, -padding * 2)
         return rect, content_rect
@@ -165,9 +151,7 @@ class Surface:
             self.render_modal_backdrop(screen)
 
         # Draw modal surface
-        self.render(
-            screen, rect, color=self.theme.surface, shadow=True, shadow_offset=4
-        )
+        self.render(screen, rect, color=self.theme.surface)
 
         content_rect = rect.inflate(
             -self.theme.padding_lg * 2, -self.theme.padding_lg * 2
@@ -175,7 +159,10 @@ class Surface:
 
         # Draw title if provided
         if title:
-            font = pygame.font.Font(None, self.theme.font_size_lg)
+            font = pygame.font.Font(
+                getattr(self.theme, "font_path", None),
+                self.theme.font_size_lg,
+            )
             title_surface = font.render(title, True, self.theme.text_primary)
             title_rect = title_surface.get_rect(
                 centerx=rect.centerx, top=rect.top + self.theme.padding_lg

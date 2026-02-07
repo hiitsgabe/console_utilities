@@ -13,6 +13,7 @@ from ui.molecules.thumbnail import Thumbnail
 from ui.molecules.action_button import ActionButton
 from utils.button_hints import get_download_hint
 from services.installed_checker import installed_checker
+from constants import BEZEL_INSET
 
 
 class GamesScreen:
@@ -222,13 +223,15 @@ class GamesScreen:
             Download button rect if in touch mode, None otherwise.
         """
         screen_width, screen_height = screen.get_size()
+        inset = BEZEL_INSET
+        safe_width = screen_width - inset * 2
         bar_height = 40
-        bar_y = screen_height - bar_height
+        bar_y = screen_height - inset - bar_height
 
         # Draw semi-transparent background
-        bar_surface = pygame.Surface((screen_width, bar_height), pygame.SRCALPHA)
+        bar_surface = pygame.Surface((safe_width, bar_height), pygame.SRCALPHA)
         bar_surface.fill((*self.theme.surface[:3], 230))
-        screen.blit(bar_surface, (0, bar_y))
+        screen.blit(bar_surface, (inset, bar_y))
 
         # Draw selected count on the left
         count_text = (
@@ -237,7 +240,7 @@ class GamesScreen:
         self.text.render(
             screen,
             count_text,
-            (self.theme.padding_md, bar_y + bar_height // 2),
+            (inset + self.theme.padding_md, bar_y + bar_height // 2),
             color=self.theme.secondary,
             size=self.theme.font_size_md,
             align="left",
@@ -250,7 +253,7 @@ class GamesScreen:
             button_width = 100
             button_height = 32
             button_rect = pygame.Rect(
-                screen_width - self.theme.padding_md - button_width,
+                screen_width - inset - self.theme.padding_md - button_width,
                 bar_y + (bar_height - button_height) // 2,
                 button_width,
                 button_height,
@@ -263,7 +266,10 @@ class GamesScreen:
             self.text.render(
                 screen,
                 hint_text,
-                (screen_width - self.theme.padding_md, bar_y + bar_height // 2),
+                (
+                    screen_width - inset - self.theme.padding_md,
+                    bar_y + bar_height // 2,
+                ),
                 color=self.theme.warning,
                 size=self.theme.font_size_md,
                 align="right",

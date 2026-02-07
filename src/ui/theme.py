@@ -4,7 +4,7 @@ Centralizes all visual constants for consistent styling.
 """
 
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Tuple, Optional
 
 # Type alias for colors
 Color = Tuple[int, int, int]
@@ -21,34 +21,34 @@ class Theme:
     """
 
     # ---- Base Colors ---- #
-    background: Color = (18, 20, 24)
-    surface: Color = (30, 34, 40)
-    surface_hover: Color = (40, 44, 50)
-    surface_selected: Color = (45, 50, 60)
+    background: Color = (0, 20, 0)  # Dark green CRT phosphor
+    surface: Color = (0, 30, 0)
+    surface_hover: Color = (0, 40, 0)
+    surface_selected: Color = (0, 50, 5)
 
-    # ---- Primary Accent (Blue) ---- #
-    primary: Color = (66, 165, 245)
-    primary_dark: Color = (48, 123, 184)
-    primary_light: Color = (100, 181, 246)
+    # ---- Primary Accent (Phosphor Green) ---- #
+    primary: Color = (0, 255, 65)
+    primary_dark: Color = (0, 180, 45)
+    primary_light: Color = (0, 255, 100)
 
-    # ---- Secondary Accent (Green) ---- #
-    secondary: Color = (102, 187, 106)
-    secondary_dark: Color = (76, 140, 79)
-    secondary_light: Color = (129, 199, 132)
+    # ---- Secondary Accent (Amber) ---- #
+    secondary: Color = (200, 200, 0)
+    secondary_dark: Color = (160, 160, 0)
+    secondary_light: Color = (230, 230, 50)
 
     # ---- Text Colors ---- #
-    text_primary: Color = (255, 255, 255)
-    text_secondary: Color = (189, 189, 189)
-    text_disabled: Color = (117, 117, 117)
+    text_primary: Color = (0, 255, 65)
+    text_secondary: Color = (0, 180, 45)
+    text_disabled: Color = (0, 80, 20)
 
     # ---- Status Colors ---- #
-    warning: Color = (255, 193, 7)
-    error: Color = (244, 67, 54)
-    success: Color = (76, 175, 80)
+    warning: Color = (200, 200, 0)
+    error: Color = (255, 50, 30)
+    success: Color = (0, 255, 65)
 
     # ---- Effects ---- #
-    shadow: ColorAlpha = (0, 0, 0, 60)
-    glow: ColorAlpha = (66, 165, 245, 40)
+    shadow: ColorAlpha = (0, 0, 0, 80)
+    glow: ColorAlpha = (0, 255, 65, 40)
 
     # ---- Spacing ---- #
     padding_xs: int = 4
@@ -63,12 +63,13 @@ class Theme:
     font_size_md: int = 28
     font_size_lg: int = 36
     font_size_xl: int = 48
+    font_path: Optional[str] = "assets/fonts/VT323-Regular.ttf"
 
     # ---- Border Radius ---- #
-    radius_sm: int = 4
-    radius_md: int = 8
-    radius_lg: int = 12
-    radius_xl: int = 16
+    radius_sm: int = 0
+    radius_md: int = 0
+    radius_lg: int = 0
+    radius_xl: int = 0
 
     # ---- Component Sizes ---- #
     button_height: int = 40
@@ -83,6 +84,10 @@ class Theme:
     transition_normal: int = 200  # ms
     transition_slow: int = 300  # ms
     cursor_blink_rate: int = 500  # ms
+
+    # ---- Retro Theme Features ---- #
+    crt_scanlines: bool = True
+    menu_cursor: str = "> "
 
     @property
     def thumbnail_border_radius(self) -> int:

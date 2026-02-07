@@ -409,3 +409,71 @@ def get_ia_item_metadata(item_id: str) -> Tuple[bool, Dict[str, Any], str]:
 
     except Exception as e:
         return False, {}, str(e)
+
+
+def group_files_by_folder(
+    files: List[Dict[str, Any]], current_folder: str = ""
+) -> Tuple[List[str], List[Dict[str, Any]]]:
+    """
+    Group files by folder prefix for hierarchical navigation.
+
+    Args:
+        files: Full flat list of files from list_ia_files
+        current_folder: Current folder path (empty for root)
+
+    Returns:
+        Tuple of (subfolder_names sorted, files_in_current_folder)
+    """
+    folders = set()
+    current_files = []
+    prefix = current_folder + "/" if current_folder else ""
+
+    for f in files:
+        name = f.get("name", "")
+        if not name.startswith(prefix):
+            continue
+        remaining = name[len(prefix) :]
+        if "/" in remaining:
+            folder_name = remaining.split("/")[0]
+            folders.add(folder_name)
+        else:
+            if remaining:
+                current_files.append(f)
+
+    return sorted(folders), current_files
+
+
+def build_display_items(
+    files: List[Dict[str, Any]], current_folder: str = ""
+) -> List[Dict[str, Any]]:
+    """
+    Build a display list with folder entries and file entries
+    for the current folder level.
+
+    Args:
+        files: Full flat list of files
+        current_folder: Current folder path
+
+    Returns:
+        List of display items. Folders have type="folder",
+        files have type="file" with original file data.
+    """
+    folders, current_files = group_files_by_folder(files, current_folder)
+
+    items = []
+
+    # Add ".." entry if inside a folder
+    if current_folder:
+        items.append({"type": "parent", "name": ".."})
+
+    # Add folders first
+    for folder in folders:
+        items.append({"type": "folder", "name": folder})
+
+    # Add files
+    for f in current_files:
+        item = dict(f)
+        item["type"] = "file"
+        items.append(item)
+
+    return items
