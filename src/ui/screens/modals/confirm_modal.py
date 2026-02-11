@@ -53,14 +53,23 @@ class ConfirmModal:
         # Calculate modal size based on content
         width = min(450, screen.get_width() - 40)
         line_height = self.theme.font_size_md + 4
-        content_height = len(message_lines) * line_height + self.theme.padding_lg
+        text_height = len(message_lines) * line_height
+        button_area = 44 + self.theme.padding_lg
+        content_height = (
+            text_height
+            + self.theme.padding_sm
+            + button_area
+            + self.theme.padding_lg
+        )
         height = min(
             content_height + 120, screen.get_height() - 60
-        )  # 120 for title + buttons
+        )  # 120 for title + padding
 
         # Render modal frame
-        modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title=title, show_close=True
+        modal_rect, content_rect, close_rect = (
+            self.modal_frame.render_centered(
+                screen, width, height, title=title, show_close=True
+            )
         )
 
         # Draw message lines
@@ -73,37 +82,58 @@ class ConfirmModal:
                 color=self.theme.text_primary,
                 size=self.theme.font_size_md,
                 align="center",
-                max_width=content_rect.width - self.theme.padding_md * 2,
+                max_width=content_rect.width
+                - self.theme.padding_md * 2,
             )
             y += line_height
 
-        # Draw action buttons
-        button_y = content_rect.bottom - 55
+        # Draw action buttons below text
+        button_y = y + self.theme.padding_lg
         button_width = 120
         button_height = 44
         button_spacing = self.theme.padding_lg
 
-        # OK button
-        ok_rect = pygame.Rect(
-            content_rect.centerx - button_width - button_spacing // 2,
-            button_y,
-            button_width,
-            button_height,
-        )
-        ok_focused = button_index == 0
-        self.action_button.render(screen, ok_rect, ok_label, hover=ok_focused)
+        has_cancel = bool(cancel_label)
 
-        # Cancel button
-        cancel_rect = pygame.Rect(
-            content_rect.centerx + button_spacing // 2,
-            button_y,
-            button_width,
-            button_height,
+        if has_cancel:
+            # Two buttons side by side
+            ok_rect = pygame.Rect(
+                content_rect.centerx
+                - button_width
+                - button_spacing // 2,
+                button_y,
+                button_width,
+                button_height,
+            )
+            cancel_rect = pygame.Rect(
+                content_rect.centerx + button_spacing // 2,
+                button_y,
+                button_width,
+                button_height,
+            )
+        else:
+            # Single centered OK button
+            ok_rect = pygame.Rect(
+                content_rect.centerx - button_width // 2,
+                button_y,
+                button_width,
+                button_height,
+            )
+            cancel_rect = pygame.Rect(0, 0, 0, 0)
+
+        ok_focused = button_index == 0
+        self.action_button.render(
+            screen, ok_rect, ok_label, hover=ok_focused
         )
-        cancel_focused = button_index == 1
-        self.action_button.render_secondary(
-            screen, cancel_rect, cancel_label, hover=cancel_focused
-        )
+
+        if has_cancel:
+            cancel_focused = button_index == 1
+            self.action_button.render_secondary(
+                screen,
+                cancel_rect,
+                cancel_label,
+                hover=cancel_focused,
+            )
 
         return modal_rect, ok_rect, cancel_rect, close_rect
 

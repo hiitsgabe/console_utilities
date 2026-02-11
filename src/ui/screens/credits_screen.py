@@ -11,34 +11,39 @@ from ui.organisms.header import Header
 from utils.button_hints import get_button_hint
 from constants import BEZEL_INSET, APP_VERSION, BUILD_TARGET
 
+SCROLL_STEP = 20
+
 
 class CreditsScreen:
     """
     Credits screen.
 
     Displays application credits, version info,
-    and legal disclaimers.
+    and legal disclaimers with D-pad scrolling.
     """
 
     def __init__(self, theme: Theme = default_theme):
         self.theme = theme
         self.header = Header(theme)
         self.text = Text(theme)
+        self.total_content_height = 0
 
     def render(
         self,
         screen: pygame.Surface,
         input_mode: str = "keyboard",
-    ) -> Optional[pygame.Rect]:
+        scroll_offset: int = 0,
+    ) -> Tuple[Optional[pygame.Rect], int]:
         """
         Render the credits screen.
 
         Args:
             screen: Surface to render to
             input_mode: Current input mode
+            scroll_offset: Pixel scroll offset
 
         Returns:
-            Back button rect
+            Tuple of (back_button_rect, max_scroll)
         """
         # Draw header
         header_height = 60
@@ -49,18 +54,42 @@ class CreditsScreen:
         # Content area (inset from bezel)
         inset = BEZEL_INSET
         content_x = inset + self.theme.padding_lg
-        content_y = inset + header_height + self.theme.padding_lg
-        content_width = screen.get_width() - inset * 2 - self.theme.padding_lg * 2
+        content_top = inset + header_height + self.theme.padding_lg
+        content_width = (
+            screen.get_width()
+            - inset * 2
+            - self.theme.padding_lg * 2
+        )
+
+        # Bottom hint area
+        hint_height = (
+            self.theme.font_size_sm
+            + self.theme.padding_lg
+        )
+        content_bottom = (
+            screen.get_height() - BEZEL_INSET - hint_height
+        )
+        visible_height = content_bottom - content_top
+
+        # Set clipping rect for scrollable area
+        clip_rect = pygame.Rect(
+            0, content_top, screen.get_width(), visible_height
+        )
+        old_clip = screen.get_clip()
+        screen.set_clip(clip_rect)
+
+        # Draw content with scroll offset
+        y = content_top - scroll_offset
 
         # App title
         self.text.render(
             screen,
             "Console Utilities",
-            (content_x, content_y),
+            (content_x, y),
             color=self.theme.primary,
             size=self.theme.font_size_xl,
         )
-        content_y += self.theme.font_size_xl + self.theme.padding_sm
+        y += self.theme.font_size_xl + self.theme.padding_sm
 
         # Version and build target
         version_text = f"Version {APP_VERSION}"
@@ -69,17 +98,19 @@ class CreditsScreen:
         self.text.render(
             screen,
             version_text,
-            (content_x, content_y),
+            (content_x, y),
             color=self.theme.text_secondary,
             size=self.theme.font_size_md,
         )
-        content_y += self.theme.font_size_md + self.theme.padding_lg
+        y += self.theme.font_size_md + self.theme.padding_lg
 
         # Description
         description = [
-            "A download management tool for handheld gaming consoles.",
+            "A download management tool for handheld",
+            "gaming consoles.",
             "",
-            "Designed for Knulli RG35xxSP and similar devices.",
+            "Designed for Knulli RG35xxSP and similar",
+            "devices.",
             "",
         ]
 
@@ -88,31 +119,33 @@ class CreditsScreen:
                 self.text.render(
                     screen,
                     line,
-                    (content_x, content_y),
+                    (content_x, y),
                     color=self.theme.text_primary,
                     size=self.theme.font_size_sm,
                     max_width=content_width,
                 )
-            content_y += self.theme.font_size_sm + 4
+            y += self.theme.font_size_sm + 4
 
-        content_y += self.theme.padding_md
+        y += self.theme.padding_md
 
         # Legal disclaimer
         self.text.render(
             screen,
             "LEGAL DISCLAIMER",
-            (content_x, content_y),
+            (content_x, y),
             color=self.theme.warning,
             size=self.theme.font_size_md,
         )
-        content_y += self.theme.font_size_md + self.theme.padding_sm
+        y += self.theme.font_size_md + self.theme.padding_sm
 
         disclaimer = [
-            "This application is a download management tool only.",
-            "It contains no game data or copyrighted content.",
+            "This application is a download management",
+            "tool only. It contains no game data or",
+            "copyrighted content.",
             "",
-            "Users must only download content they legally own.",
-            "The developers are not responsible for misuse.",
+            "Users must only download content they",
+            "legally own. The developers are not",
+            "responsible for misuse.",
         ]
 
         for line in disclaimer:
@@ -120,21 +153,31 @@ class CreditsScreen:
                 self.text.render(
                     screen,
                     line,
-                    (content_x, content_y),
+                    (content_x, y),
                     color=self.theme.text_secondary,
                     size=self.theme.font_size_sm,
                     max_width=content_width,
                 )
-            content_y += self.theme.font_size_sm + 4
+            y += self.theme.font_size_sm + 4
 
-        # Bottom text (above bezel)
+        # Restore clipping
+        screen.set_clip(old_clip)
+
+        # Calculate total content height and max scroll
+        total_height = (y + scroll_offset) - content_top
+        self.total_content_height = total_height
+        max_scroll = max(0, total_height - visible_height)
+
+        # Bottom hint text (outside clipped area)
         bottom_y = (
             screen.get_height()
             - BEZEL_INSET
             - self.theme.padding_lg
             - self.theme.font_size_sm
         )
-        back_hint = get_button_hint("back", "Back", input_mode)
+        back_hint = get_button_hint(
+            "back", "Back", input_mode
+        )
         self.text.render(
             screen,
             back_hint,
@@ -144,7 +187,7 @@ class CreditsScreen:
             align="center",
         )
 
-        return back_button_rect
+        return back_button_rect, max_scroll
 
 
 # Default instance

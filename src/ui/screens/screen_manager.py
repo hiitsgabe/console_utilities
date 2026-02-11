@@ -468,7 +468,7 @@ class ScreenManager:
 
         elif state.mode == "settings":
             back_rect, item_rects, scroll_offset = self.settings_screen.render(
-                screen, state.highlighted, settings
+                screen, state.highlighted, settings, data
             )
             rects["back"] = back_rect
             rects["item_rects"] = item_rects
@@ -483,8 +483,13 @@ class ScreenManager:
             rects["scroll_offset"] = scroll_offset
 
         elif state.mode == "credits":
-            back_rect = self.credits_screen.render(screen, input_mode=state.input_mode)
+            back_rect, max_scroll = self.credits_screen.render(
+                screen,
+                input_mode=state.input_mode,
+                scroll_offset=state.credits_scroll_offset,
+            )
             rects["back"] = back_rect
+            rects["credits_max_scroll"] = max_scroll
 
         elif state.mode == "add_systems":
             back_rect, item_rects, scroll_offset = self.add_systems_screen.render(

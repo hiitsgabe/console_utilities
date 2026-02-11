@@ -65,7 +65,7 @@ class SystemsSettingsScreen:
 
         return self.template.render(
             screen,
-            title="Systems Settings",
+            title="Games Backup Settings",
             items=items,
             highlighted=highlighted,
             selected=set(),

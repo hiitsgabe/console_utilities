@@ -400,6 +400,7 @@ class UIRects:
     modal_char_rects: List[Any] = field(default_factory=list)
     modal_back_button: Optional[pygame.Rect] = None
     scroll_offset: int = 0  # Current scroll offset for item index calculation
+    rects: Dict[str, Any] = field(default_factory=dict)
 
 
 class AppState:
@@ -428,6 +429,7 @@ class AppState:
         self.total_pages: int = 1
         self.menu_scroll_offset: int = 0
         self.settings_scroll_offset: int = 0
+        self.credits_scroll_offset: int = 0
 
         # ---- Mode-specific highlights ---- #
         self.add_systems_highlighted: int = 0
@@ -512,6 +514,8 @@ class AppState:
             self.systems_settings_highlighted = 0
         elif new_mode == "system_settings":
             self.system_settings_highlighted = 0
+        elif new_mode == "credits":
+            self.credits_scroll_offset = 0
 
     def close_all_modals(self):
         """Close all modal dialogs."""
