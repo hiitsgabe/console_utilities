@@ -505,48 +505,10 @@ class ConsoleUtilitiesApp:
         thread = threading.Thread(target=extract, daemon=True)
         thread.start()
 
-    def _is_unrar_available(self) -> bool:
-        """Check if unrar command is available."""
-        import shutil
-
-        if shutil.which("unrar"):
-            return True
-        # Check bundled location (PyInstaller)
-        if getattr(sys, "_MEIPASS", None):
-            bundled = os.path.join(sys._MEIPASS, "unrar")
-            if os.path.exists(bundled):
-                return True
-        for path in [
-            "/usr/bin/unrar",
-            "/usr/local/bin/unrar",
-            "/opt/homebrew/bin/unrar",
-        ]:
-            if os.path.exists(path):
-                return True
-        return False
-
-    def _show_unrar_missing_error(self):
-        """Show error when unrar is not installed."""
-        import threading
-
-        self._show_loading(
-            "unrar not installed. " "Please install unrar " "to extract RAR files."
-        )
-
-        def dismiss():
-            import time
-
-            time.sleep(3)
-            self._hide_loading()
-
-        thread = threading.Thread(target=dismiss, daemon=True)
-        thread.start()
-
     def _extract_rar_file(self, rar_path: str):
-        """Extract a RAR file to the same folder using system unrar."""
+        """Extract a RAR file to the same folder using rarfile."""
         import threading
-        import subprocess
-        import shutil
+        import rarfile
 
         output_folder = os.path.dirname(rar_path)
         rar_name = os.path.basename(rar_path)
@@ -556,75 +518,58 @@ class ConsoleUtilitiesApp:
 
         def extract():
             try:
-                # Find unrar command
-                unrar_cmd = shutil.which("unrar")
-                # Check bundled location (PyInstaller)
-                if not unrar_cmd:
-                    meipass = getattr(sys, "_MEIPASS", None)
-                    if meipass:
-                        bundled = os.path.join(meipass, "unrar")
-                        if os.path.exists(bundled):
-                            unrar_cmd = bundled
-                if not unrar_cmd:
-                    for path in [
-                        "/usr/bin/unrar",
-                        "/usr/local/bin/unrar",
-                        "/opt/homebrew/bin/unrar",
-                    ]:
-                        if os.path.exists(path):
-                            unrar_cmd = path
-                            break
-
-                if not unrar_cmd:
-                    self.state.loading.message = (
-                        "unrar not installed."
-                        " Please install unrar"
-                        " to extract RAR files."
-                    )
-                    import time
-
-                    time.sleep(3)
-                    self._hide_loading()
-                    return
-
-                result = subprocess.run(
-                    [
-                        unrar_cmd,
-                        "x",
-                        "-o+",
-                        "-y",
-                        rar_path,
-                        output_folder + "/",
-                    ],
-                    capture_output=True,
-                    text=True,
-                    timeout=600,
-                )
-
-                if result.returncode != 0:
-                    from utils.logging import log_error
-
-                    log_error(f"unrar failed: {result.stderr}")
-                    self.state.loading.message = f"Error extracting {rar_name}"
-                    import time
-
-                    time.sleep(2)
-
-                self._hide_loading()
-            except subprocess.TimeoutExpired:
-                from utils.logging import log_error
-
-                log_error(f"RAR extraction timed out for {rar_name}")
-                self.state.loading.message = "Extraction timed out"
-                import time
-
-                time.sleep(2)
+                with rarfile.RarFile(rar_path, "r") as rf:
+                    members = rf.infolist()
+                    total = len(members)
+                    for i, member in enumerate(members):
+                        rf.extract(member, output_folder)
+                        progress = int((i + 1) / total * 100)
+                        self.state.loading.progress = progress
+                        self.state.loading.message = (
+                            f"Extracting {rar_name}... {progress}%"
+                        )
                 self._hide_loading()
             except Exception as e:
                 from utils.logging import log_error
 
                 log_error(f"Failed to extract RAR: {e}")
                 self._hide_loading()
+
+        thread = threading.Thread(target=extract, daemon=True)
+        thread.start()
+
+    def _extract_7z_file(self, sz_path: str):
+        """Extract a 7z file to the same folder using rarfile."""
+        import threading
+        import rarfile
+
+        output_folder = os.path.dirname(sz_path)
+        sz_name = os.path.basename(sz_path)
+
+        self.state.folder_browser.show = False
+        self._show_loading(f"Extracting {sz_name}...")
+
+        def extract():
+            try:
+                with rarfile.RarFile(sz_path, "r") as rf:
+                    members = rf.infolist()
+                    total = len(members)
+                    for i, member in enumerate(members):
+                        rf.extract(member, output_folder)
+                        progress = int((i + 1) / total * 100)
+                        self.state.loading.progress = progress
+                        self.state.loading.message = (
+                            f"Extracting {sz_name}... {progress}%"
+                        )
+                self._hide_loading()
+            except Exception as e:
+                from utils.logging import log_error
+
+                log_error(f"Failed to extract 7z: {e}")
+                self._hide_loading()
+
+        thread = threading.Thread(target=extract, daemon=True)
+        thread.start()
 
         thread = threading.Thread(target=extract, daemon=True)
         thread.start()
@@ -1848,10 +1793,9 @@ class ConsoleUtilitiesApp:
         elif action == "extract_zip":
             self._open_folder_browser("extract_zip")
         elif action == "extract_rar":
-            if not self._is_unrar_available():
-                self._show_unrar_missing_error()
-                return
             self._open_folder_browser("extract_rar")
+        elif action == "extract_7z":
+            self._open_folder_browser("extract_7z")
         elif action == "nsz_converter":
             self._open_folder_browser("nsz_converter")
         elif action == "scrape_images":
@@ -1907,7 +1851,7 @@ class ConsoleUtilitiesApp:
             path = self.settings.get("roms_dir", os.path.expanduser("~"))
         elif selection_type == "dedupe_folder":
             path = self.settings.get("roms_dir", os.path.expanduser("~"))
-        elif selection_type in ("extract_zip", "extract_rar"):
+        elif selection_type in ("extract_zip", "extract_rar", "extract_7z"):
             path = self.settings.get("work_dir", os.path.expanduser("~"))
         elif selection_type == "rename_folder":
             path = self.settings.get("roms_dir", os.path.expanduser("~"))
@@ -1984,7 +1928,14 @@ class ConsoleUtilitiesApp:
             self.state.folder_browser.highlighted = 0
             self.state.folder_browser.focus_area = "list"
 
-        elif item_type in ("json_file", "keys_file", "zip_file", "rar_file", "file"):
+        elif item_type in (
+            "json_file",
+            "keys_file",
+            "zip_file",
+            "rar_file",
+            "7z_file",
+            "file",
+        ):
             # Select the file based on selection type
             self._complete_folder_browser_selection(item_path, selection_type)
 
@@ -2013,11 +1964,10 @@ class ConsoleUtilitiesApp:
             # Don't close modal yet, extraction will handle it
             return
         elif selection_type == "extract_rar":
-            if not self._is_unrar_available():
-                self.state.folder_browser.show = False
-                self._show_unrar_missing_error()
-                return
             self._extract_rar_file(path)
+            return
+        elif selection_type == "extract_7z":
+            self._extract_7z_file(path)
             return
         elif selection_type == "esde_media_path":
             self.settings["esde_media_path"] = path

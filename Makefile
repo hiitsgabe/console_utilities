@@ -60,12 +60,12 @@ bundle:
 	@rm -f .bundle_tmp/bundle/constants.py.bak
 	@# Bundle pure-Python dependencies only (native libs can't load from zip)
 	@# requests is pure Python, but zstandard/pycryptodome have native code
-	@echo "📥 Bundling pure-Python dependencies (requests)..."
+	@echo "📥 Bundling pure-Python dependencies (requests, rarfile)..."
 	@mkdir -p .bundle_tmp/libs_temp
 	@pip3 install --target .bundle_tmp/libs_temp --no-compile \
-		requests 2>/dev/null || \
+		requests rarfile 2>/dev/null || \
 	pip install --target .bundle_tmp/libs_temp --no-compile \
-		requests
+		requests rarfile
 	@# Move lib packages to bundle root (flat structure)
 	@find .bundle_tmp/libs_temp -maxdepth 1 -mindepth 1 -exec mv {} .bundle_tmp/bundle/ \;
 	@rm -rf .bundle_tmp/libs_temp
@@ -102,11 +102,10 @@ bundle:
 	@echo "     - console_utils.pygame"
 	@echo "     - assets/ folder"
 	@echo "     - requirements.txt"
-	@echo "   📦 Bundled: requests (pure Python)"
+	@echo "   📦 Bundled: requests, rarfile (pure Python)"
 	@echo "   ⚠️  Install native libs: pip install pygame zstandard pycryptodome"
 
 # Build macOS .app bundle (standalone executable)
-# Note: Install unrar (brew install unrar) to bundle RAR extraction support
 bundle-macos:
 	@echo "🍎 Building macOS app bundle..."
 	@rm -rf build/macos dist/macos dist/macos.zip
