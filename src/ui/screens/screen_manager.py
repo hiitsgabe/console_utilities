@@ -609,9 +609,9 @@ class ScreenManager:
                     )
                 )
 
-        # Scraper queue footer
+        # Scraper queue footer (only while actively scraping)
         sq = state.scraper_queue
-        if sq.active or (sq.items and sq.current_status):
+        if sq.active:
             total = len(sq.items)
             done = sum(1 for it in sq.items if it.status == "done")
             progress = done / total if total > 0 else 0.0

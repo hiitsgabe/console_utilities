@@ -48,6 +48,8 @@ class ScreenScraperProvider(BaseProvider):
             username: ScreenScraper account username
             password: ScreenScraper account password (base64 encoded)
         """
+        self._search_medias: Dict[str, list] = {}  # game_id -> medias from search
+        self._system_ids: Dict[str, str] = {}  # game_id -> systemeid from search
         self.username = username
         self.password = self._decode_password(password) if password else ""
 
@@ -104,7 +106,8 @@ class ScreenScraperProvider(BaseProvider):
             elif response.status_code == 430:
                 return False, "Too many requests - please wait"
             elif response.status_code != 200:
-                return False, f"API error: {response.status_code}"
+                body = self._safe_response_text(response)
+                return False, f"API error {response.status_code}: {body}"
 
             try:
                 data = response.json()
@@ -122,6 +125,17 @@ class ScreenScraperProvider(BaseProvider):
             return False, f"Network error: {str(e)}"
         except Exception as e:
             return False, f"Error: {str(e)}"
+
+    @staticmethod
+    def _safe_response_text(response: requests.Response, max_len: int = 200) -> str:
+        """Extract a truncated, safe string from a response body for logging."""
+        try:
+            text = response.text.strip()
+            if not text:
+                return "(empty body)"
+            return text[:max_len]
+        except Exception:
+            return "(unreadable body)"
 
     def _get_auth_params(self) -> Dict[str, str]:
         """Get authentication parameters for API requests."""
@@ -159,17 +173,19 @@ class ScreenScraperProvider(BaseProvider):
             if response.status_code == 401:
                 return False, [], "Authentication failed - check credentials"
             elif response.status_code == 403:
+                body = self._safe_response_text(response)
                 return (
                     False,
                     [],
-                    "Access denied - account may be banned",
+                    f"Access denied (403): {body}",
                 )
             elif response.status_code == 404:
                 return True, [], ""  # No results found
             elif response.status_code == 430:
                 return False, [], "Too many requests - please wait"
             elif response.status_code != 200:
-                return False, [], f"API error: {response.status_code}"
+                body = self._safe_response_text(response)
+                return False, [], f"API error {response.status_code}: {body}"
 
             try:
                 data = response.json()
@@ -212,6 +228,7 @@ class ScreenScraperProvider(BaseProvider):
 
             system_info = jeu.get("systeme", {})
             platform = system_info.get("text", "")
+            system_id = str(system_info.get("id", ""))
 
             dates = jeu.get("dates", [])
             release_date = ""
@@ -238,6 +255,13 @@ class ScreenScraperProvider(BaseProvider):
                     thumbnail_url = media.get("url", "")
                     break
 
+            # Cache data from search for use in jeuInfos calls
+            if game_id:
+                if medias:
+                    self._search_medias[game_id] = medias
+                if system_id:
+                    self._system_ids[game_id] = system_id
+
             return GameSearchResult(
                 id=game_id,
                 name=name,
@@ -262,6 +286,10 @@ class ScreenScraperProvider(BaseProvider):
         try:
             params = self._get_auth_params()
             params["gameid"] = game_id
+            # Include system ID if known from search (required by some games)
+            sys_id = self._system_ids.get(game_id)
+            if sys_id:
+                params["systemeid"] = sys_id
 
             response = requests.get(
                 f"{self.BASE_URL}/jeuInfos.php",
@@ -272,15 +300,20 @@ class ScreenScraperProvider(BaseProvider):
             if response.status_code == 401:
                 return False, [], "Authentication failed"
             elif response.status_code == 403:
+                body = self._safe_response_text(response)
                 return (
                     False,
                     [],
-                    "Access denied - account may be banned",
+                    f"Access denied (403): {body}",
                 )
             elif response.status_code == 404:
-                return False, [], "Game not found"
+                return False, [], "Image not found"
             elif response.status_code != 200:
-                return False, [], f"API error: {response.status_code}"
+                # Fall back to medias cached from search response
+                cached = self._search_medias.get(game_id)
+                if cached:
+                    return self._parse_medias(cached)
+                return False, [], "Image not found"
 
             try:
                 data = response.json()
@@ -290,46 +323,7 @@ class ScreenScraperProvider(BaseProvider):
             jeu = data.get("response", {}).get("jeu", {})
             medias = jeu.get("medias", [])
 
-            images = []
-            seen_types = set()
-
-            for media in medias:
-                media_type = media.get("type", "")
-                if media_type not in self.IMAGE_TYPES:
-                    continue
-
-                region = media.get("region", "")
-                url = media.get("url", "")
-
-                if not url:
-                    continue
-
-                # Prefer US region, then world, then any
-                type_key = f"{media_type}_{region}"
-                if media_type in seen_types and region not in ("us", "wor"):
-                    continue
-
-                if region in ("us", "wor"):
-                    seen_types.add(media_type)
-
-                # Check if we already have this type with better region
-                existing = next((i for i in images if i.type == media_type), None)
-                if existing:
-                    if region in ("us", "wor") and existing.region not in ("us", "wor"):
-                        images.remove(existing)
-                    else:
-                        continue
-
-                image = GameImage(
-                    type=media_type,
-                    url=url,
-                    region=region,
-                    format=media.get("format", ""),
-                    extra={"parent": media.get("parent", "")},
-                )
-                images.append(image)
-
-            return True, images, ""
+            return self._parse_medias(medias)
 
         except requests.Timeout:
             return False, [], "Request timed out"
@@ -338,6 +332,48 @@ class ScreenScraperProvider(BaseProvider):
         except Exception as e:
             traceback.print_exc()
             return False, [], f"Error: {str(e)}"
+
+    def _parse_medias(self, medias: list) -> Tuple[bool, List[GameImage], str]:
+        """Parse media list into GameImage objects with region preference."""
+        images = []
+        seen_types = set()
+
+        for media in medias:
+            media_type = media.get("type", "")
+            if media_type not in self.IMAGE_TYPES:
+                continue
+
+            region = media.get("region", "")
+            url = media.get("url", "")
+
+            if not url:
+                continue
+
+            # Prefer US region, then world, then any
+            if media_type in seen_types and region not in ("us", "wor"):
+                continue
+
+            if region in ("us", "wor"):
+                seen_types.add(media_type)
+
+            # Check if we already have this type with better region
+            existing = next((i for i in images if i.type == media_type), None)
+            if existing:
+                if region in ("us", "wor") and existing.region not in ("us", "wor"):
+                    images.remove(existing)
+                else:
+                    continue
+
+            image = GameImage(
+                type=media_type,
+                url=url,
+                region=region,
+                format=media.get("format", ""),
+                extra={"parent": media.get("parent", "")},
+            )
+            images.append(image)
+
+        return True, images, ""
 
     def supports_videos(self) -> bool:
         return True
@@ -354,6 +390,9 @@ class ScreenScraperProvider(BaseProvider):
         try:
             params = self._get_auth_params()
             params["gameid"] = game_id
+            sys_id = self._system_ids.get(game_id)
+            if sys_id:
+                params["systemeid"] = sys_id
 
             response = requests.get(
                 f"{self.BASE_URL}/jeuInfos.php",
@@ -366,7 +405,8 @@ class ScreenScraperProvider(BaseProvider):
             elif response.status_code == 404:
                 return False, [], "Game not found"
             elif response.status_code != 200:
-                return False, [], f"API error: {response.status_code}"
+                body = self._safe_response_text(response)
+                return False, [], f"API error {response.status_code}: {body}"
 
             try:
                 data = response.json()
