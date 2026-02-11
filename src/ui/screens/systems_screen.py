@@ -9,7 +9,7 @@ from ui.theme import Theme, default_theme
 from ui.templates.list_screen import ListScreenTemplate
 
 # Root menu items
-ROOT_MENU_ITEMS = ["Systems", "Utils", "Settings", "Credits"]
+ROOT_MENU_ITEMS = ["Backup Games", "Utils", "Settings", "Credits"]
 
 
 class SystemsScreen:
@@ -80,7 +80,7 @@ class SystemsScreen:
 
         return self.template.render(
             screen,
-            title="Systems",
+            title="Backup Games",
             items=items,
             highlighted=highlighted,
             selected=set(),

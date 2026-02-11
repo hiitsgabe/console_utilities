@@ -165,6 +165,8 @@ class FolderBrowserModal:
             "json_file": ".json",
             "nsz_file": ".nsz",
             "zip_file": ".zip",
+            "rar_file": ".rar",
+            "7z_file": ".7z",
             "file": "File",
         }
         return type_labels.get(item_type, "")
@@ -182,6 +184,8 @@ class FolderBrowserModal:
             "nsz_keys": "Select Keys",
             "system_folder": "Select",
             "extract_zip": "Extract",
+            "extract_rar": "Extract",
+            "extract_7z": "Extract",
         }
         return labels.get(selection_type, "Select")
 

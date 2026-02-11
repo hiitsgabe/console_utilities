@@ -154,6 +154,7 @@ class UtilsScreen:
                 "Add Internet Archive Collection": "ia_add_collection",
                 "Extract ZIP File": "extract_zip",
                 "Extract RAR File": "extract_rar",
+                "Extract 7z File": "extract_7z",
                 "Scrape Game Images": "scrape_images",
                 "Batch Scrape Folder": "batch_scrape",
                 "Dedupe Games": "dedupe_games",

@@ -23,6 +23,7 @@ a = Analysis(
         'certifi',
         'charset_normalizer',
         'idna',
+        'rarfile',
         'zstandard',
         'Crypto',
         'Crypto.Cipher',

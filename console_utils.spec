@@ -3,23 +3,13 @@
 
 import os
 import sys
-import shutil
 
 block_cipher = None
 
 # Get the directory containing the spec file
 spec_dir = os.path.dirname(os.path.abspath(SPEC))
 
-# Find unrar binary to bundle for RAR extraction support
 _binaries = []
-_unrar = shutil.which('unrar')
-if not _unrar:
-    for p in ['/usr/local/bin/unrar', '/opt/homebrew/bin/unrar', '/usr/bin/unrar']:
-        if os.path.exists(p):
-            _unrar = p
-            break
-if _unrar:
-    _binaries.append((_unrar, '.'))
 
 a = Analysis(
     ['src/app.py'],
@@ -35,6 +25,7 @@ a = Analysis(
         'certifi',
         'charset_normalizer',
         'idna',
+        'rarfile',
         'zstandard',
         'Crypto',
         'Crypto.Cipher',
