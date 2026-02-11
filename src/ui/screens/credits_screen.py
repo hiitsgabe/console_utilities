@@ -9,7 +9,7 @@ from ui.theme import Theme, default_theme
 from ui.atoms.text import Text
 from ui.organisms.header import Header
 from utils.button_hints import get_button_hint
-from constants import BEZEL_INSET
+from constants import BEZEL_INSET, APP_VERSION, BUILD_TARGET
 
 
 class CreditsScreen:
@@ -28,7 +28,6 @@ class CreditsScreen:
     def render(
         self,
         screen: pygame.Surface,
-        version: str = "1.0.0",
         input_mode: str = "keyboard",
     ) -> Optional[pygame.Rect]:
         """
@@ -36,7 +35,7 @@ class CreditsScreen:
 
         Args:
             screen: Surface to render to
-            version: Application version
+            input_mode: Current input mode
 
         Returns:
             Back button rect
@@ -63,10 +62,13 @@ class CreditsScreen:
         )
         content_y += self.theme.font_size_xl + self.theme.padding_sm
 
-        # Version
+        # Version and build target
+        version_text = f"Version {APP_VERSION}"
+        if BUILD_TARGET != "source":
+            version_text += f" ({BUILD_TARGET})"
         self.text.render(
             screen,
-            f"Version {version}",
+            version_text,
             (content_x, content_y),
             color=self.theme.text_secondary,
             size=self.theme.font_size_md,

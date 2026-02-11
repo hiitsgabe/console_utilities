@@ -51,6 +51,13 @@ bundle:
 	@mkdir -p dist
 	@# Copy all source modules into bundle (excluding __pycache__ and .pyc files)
 	@rsync -a --exclude='__pycache__' --exclude='*.pyc' --exclude='.DS_Store' src/ .bundle_tmp/bundle/
+	@# Inject build info into constants
+	@if [ -n "$(VERSION)" ]; then \
+		sed -i.bak 's/^APP_VERSION = .*/APP_VERSION = "$(VERSION)"/' .bundle_tmp/bundle/constants.py; \
+		rm -f .bundle_tmp/bundle/constants.py.bak; \
+	fi
+	@sed -i.bak 's/^BUILD_TARGET = .*/BUILD_TARGET = "pygame"/' .bundle_tmp/bundle/constants.py
+	@rm -f .bundle_tmp/bundle/constants.py.bak
 	@# Bundle pure-Python dependencies only (native libs can't load from zip)
 	@# requests is pure Python, but zstandard/pycryptodome have native code
 	@echo "📥 Bundling pure-Python dependencies (requests)..."
@@ -104,8 +111,16 @@ bundle-macos:
 	@echo "🍎 Building macOS app bundle..."
 	@rm -rf build/macos dist/macos dist/macos.zip
 	@mkdir -p dist/macos
+	@# Inject build info into constants before building
+	@if [ -n "$(VERSION)" ]; then \
+		sed -i.bak 's/^APP_VERSION = .*/APP_VERSION = "$(VERSION)"/' src/constants.py; \
+	fi
+	@sed -i.bak 's/^BUILD_TARGET = .*/BUILD_TARGET = "macos"/' src/constants.py
+	@rm -f src/constants.py.bak
 	@echo "📦 Running PyInstaller..."
 	@python3 -m PyInstaller console_utils.spec --distpath dist/macos --workpath build/macos --noconfirm
+	@# Restore constants after build
+	@git checkout src/constants.py 2>/dev/null || true
 	@# Copy macOS-specific docs
 	@cp assets/docs/macos.md dist/macos/README.md 2>/dev/null || echo "No macOS docs found"
 	@# Create zip with the .app and README
@@ -119,8 +134,16 @@ bundle-windows:
 	@echo "🪟 Building Windows executable..."
 	@rm -rf build/windows dist/windows dist/windows.zip
 	@mkdir -p dist/windows
+	@# Inject build info into constants before building
+	@if [ -n "$(VERSION)" ]; then \
+		sed -i.bak 's/^APP_VERSION = .*/APP_VERSION = "$(VERSION)"/' src/constants.py; \
+	fi
+	@sed -i.bak 's/^BUILD_TARGET = .*/BUILD_TARGET = "windows"/' src/constants.py
+	@rm -f src/constants.py.bak
 	@echo "📦 Running PyInstaller..."
 	@python -m PyInstaller console_utils_win.spec --distpath dist/windows --workpath build/windows --noconfirm
+	@# Restore constants after build
+	@git checkout src/constants.py 2>/dev/null || true
 	@# Copy Windows-specific docs
 	@cp assets/docs/windows.md dist/windows/README.md 2>/dev/null || echo "No Windows docs found"
 	@# Create zip with the exe folder and README
@@ -152,6 +175,12 @@ CMD ?= debug
 build-android:
 	@echo "🚀 Building Console Utilities Android APK ($(CMD))..."
 	@mkdir -p dist
+	@# Inject build info into constants before building
+	@if [ -n "$(VERSION)" ]; then \
+		sed -i.bak 's/^APP_VERSION = .*/APP_VERSION = "$(VERSION)"/' src/constants.py; \
+	fi
+	@sed -i.bak 's/^BUILD_TARGET = .*/BUILD_TARGET = "android"/' src/constants.py
+	@rm -f src/constants.py.bak
 	@echo "🚀 Building Docker Image..."
 	docker build -t rom-builder -f docker/dockerfile.android .
 	@echo "🚀 Running Docker Container..."
@@ -165,6 +194,8 @@ build-android:
 	rm -rf dist/android
 	@echo "🚀 Removing Docker Container..."
 	docker rm rom-build
+	@# Restore constants after build
+	@git checkout src/constants.py 2>/dev/null || true
 	@echo "🎉 APK built successfully!"
 # Format code with black
 format:
