@@ -6,6 +6,8 @@ Manages background batch scraping with threading support.
 import os
 import threading
 import traceback
+import concurrent.futures
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, List, Optional
 
 from state import ScraperQueueItem, ScraperQueueState
@@ -83,6 +85,7 @@ class ScraperManager:
         roms: List[Dict[str, str]],
         default_images: List[str],
         auto_select: bool = True,
+        download_video: bool = False,
     ):
         """
         Start a background batch scraping job.
@@ -92,6 +95,7 @@ class ScraperManager:
             roms: List of ROM dicts (name, path)
             default_images: Image types to download
             auto_select: Auto-select first search result
+            download_video: Download video for each ROM
         """
         if self.queue.active:
             return  # Already running
@@ -104,6 +108,7 @@ class ScraperManager:
         self.queue.folder_path = folder_path
         self.queue.auto_select = auto_select
         self.queue.default_images = list(default_images)
+        self.queue.download_video = download_video
         self.queue.active = True
 
         self._stop_requested = False
@@ -122,39 +127,38 @@ class ScraperManager:
             self.queue.current_status = ""
 
     def _scrape_thread(self):
-        """Background thread that processes the scrape queue."""
+        """Background thread that processes the scrape queue using a worker pool."""
         try:
-            from services.scraper_service import get_scraper_service
-            from services.metadata_writer import get_metadata_writer
+            from services.scraper_service import ScraperService
+            from services.metadata_writer import MetadataWriter
 
-            # Set system context from batch folder for Libretro
             batch_dir = os.path.basename(self.queue.folder_path)
-            self.settings["current_system_folder"] = batch_dir
-
-            service = get_scraper_service(self.settings)
-            service.reset_provider()
-
             items = self.queue.items
             total = len(items)
+            workers = self.settings.get("scraper_parallel_downloads", 1)
+            self.queue.parallel_workers = workers
+            metadata_lock = threading.Lock()
 
-            for i, item in enumerate(items):
+            def scrape_item(i, item):
+                """Process a single ROM — each call gets its own service instance."""
                 if self._stop_requested:
                     item.status = "skipped"
                     item.skip_reason = "cancelled"
-                    continue
+                    return
 
-                self.queue.current_index = i
-                self.queue.current_status = f"Scraping {i + 1}/{total}: {item.name}"
+                # Each worker gets its own ScraperService to avoid shared state races
+                worker_settings = dict(self.settings)
+                worker_settings["current_system_folder"] = batch_dir
+                service = ScraperService(worker_settings)
 
                 # Skip if already has images
                 if service.check_image_exists(item.path, self.queue.default_images):
                     item.status = "skipped"
                     item.skip_reason = "image_exists"
-                    continue
+                    return
 
                 # Search
                 item.status = "searching"
-                self.queue.current_status = f"Searching {i + 1}/{total}: {item.name}"
 
                 game_name = service.extract_game_name(item.path)
                 success, results, error = service.search_game(
@@ -164,7 +168,12 @@ class ScraperManager:
                 if not success or not results:
                     item.status = "error"
                     item.error = error or "No results"
-                    continue
+                    log_error(
+                        f"Scraper: {item.name} - Search failed: {error or 'No results'}",
+                        "ScraperSearchError",
+                        "",
+                    )
+                    return
 
                 # Auto-select first result
                 game = results[0]
@@ -178,13 +187,17 @@ class ScraperManager:
 
                 # Get images
                 item.status = "downloading"
-                self.queue.current_status = f"Downloading {i + 1}/{total}: {item.name}"
 
                 success, images, error = service.get_game_images(game.id)
                 if not success or not images:
                     item.status = "error"
                     item.error = error or "No images"
-                    continue
+                    log_error(
+                        f"Scraper: {item.name} - Image fetch failed: {error or 'No images'}",
+                        "ScraperImageError",
+                        "",
+                    )
+                    return
 
                 # Filter to default image types
                 filtered = [
@@ -199,13 +212,88 @@ class ScraperManager:
                 if not success:
                     item.status = "error"
                     item.error = error or "Download failed"
-                    continue
+                    log_error(
+                        f"Scraper: {item.name} - Download failed: {error or 'Download failed'}",
+                        "ScraperDownloadError",
+                        "",
+                    )
+                    return
 
-                # Update metadata
-                writer = get_metadata_writer(self.settings)
-                writer.update_metadata(item.path, game_info, paths)
+                # Download video if enabled
+                if self.queue.download_video:
+                    try:
+                        v_success, videos, v_error = service.get_game_videos(game.id)
+                        if v_success and videos:
+                            # Pick first normalized video, or first available
+                            video = next(
+                                (v for v in videos if v.normalized), videos[0]
+                            )
+                            video_path = service.get_video_output_path(
+                                item.path, video.format or "mp4"
+                            )
+                            if video_path:
+                                dl_ok, dl_err = service.download_video(
+                                    video, video_path
+                                )
+                                if dl_ok:
+                                    paths.append(video_path)
+                                else:
+                                    log_error(
+                                        f"Scraper: {item.name} - Video download failed: {dl_err}",
+                                        "ScraperVideoError",
+                                        "",
+                                    )
+                    except Exception as ve:
+                        log_error(
+                            f"Scraper: {item.name} - Video error: {ve}",
+                            type(ve).__name__,
+                            traceback.format_exc(),
+                        )
+
+                # Metadata write with lock (prevents gamelist.xml corruption)
+                with metadata_lock:
+                    writer = MetadataWriter(worker_settings)
+                    writer.update_metadata(item.path, game_info, paths)
 
                 item.status = "done"
+
+            # Submit all items to thread pool
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                futures = {}
+                for i, item in enumerate(items):
+                    if self._stop_requested:
+                        # Mark remaining as skipped
+                        for remaining in items[i:]:
+                            remaining.status = "skipped"
+                            remaining.skip_reason = "cancelled"
+                        break
+                    future = executor.submit(scrape_item, i, item)
+                    futures[future] = (i, item)
+
+                # Update status as futures complete
+                for future in concurrent.futures.as_completed(futures):
+                    i, item = futures[future]
+                    try:
+                        future.result()
+                    except Exception as e:
+                        item.status = "error"
+                        item.error = str(e)[:50]
+                        log_error(
+                            f"Scraper: {item.name} - {e}",
+                            type(e).__name__,
+                            traceback.format_exc(),
+                        )
+
+                    # Update overall progress
+                    done = sum(
+                        1
+                        for it in items
+                        if it.status in ("done", "error", "skipped")
+                    )
+                    self.queue.current_index = done - 1
+                    self.queue.current_status = (
+                        f"Scraping: {done}/{total} complete"
+                    )
 
             # Final status
             done_count = sum(1 for it in items if it.status == "done")

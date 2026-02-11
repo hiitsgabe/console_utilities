@@ -78,6 +78,8 @@ class ScraperWizardModal:
         batch_current_index: int = 0,
         batch_auto_select: bool = True,
         batch_default_images: List[str] = None,
+        mixed_images_enabled: bool = False,
+        download_video: bool = False,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[pygame.Rect]]:
         """
         Render the scraper wizard modal.
@@ -147,6 +149,8 @@ class ScraperWizardModal:
                 batch_default_images,
                 image_highlighted,
                 input_mode,
+                mixed_images_enabled,
+                download_video,
             )
         elif step == "batch_processing":
             return self._render_batch_processing(
@@ -998,10 +1002,14 @@ class ScraperWizardModal:
         default_images: List[str],
         highlighted: int,
         input_mode: str,
+        mixed_images_enabled: bool = False,
+        download_video: bool = False,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[pygame.Rect]]:
         """Render batch options selection."""
         width = min(500, screen.get_width() - 40)
-        height = min(350, screen.get_height() - 60)
+        # +40 for video toggle row
+        base_height = (430 if mixed_images_enabled else 350) + 40
+        height = min(base_height, screen.get_height() - 60)
 
         show_close = input_mode == "touch"
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
@@ -1053,7 +1061,18 @@ class ScraperWizardModal:
         )
         y += 25
 
-        all_image_types = ["box-2D", "boxart", "screenshot", "wheel", "fanart"]
+        if mixed_images_enabled:
+            all_image_types = [
+                "box-2D",
+                "boxart",
+                "mixrbv1",
+                "mixrbv2",
+                "screenshot",
+                "wheel",
+                "fanart",
+            ]
+        else:
+            all_image_types = ["box-2D", "boxart", "screenshot", "wheel", "fanart"]
         for i, img_type in enumerate(all_image_types):
             img_rect = pygame.Rect(
                 content_rect.left + padding,
@@ -1072,7 +1091,11 @@ class ScraperWizardModal:
             )
 
             checkbox = "[X]" if is_checked else "[ ]"
-            label = img_type.replace("-", " ").title()
+            type_labels = {
+                "mixrbv1": "Mix V1",
+                "mixrbv2": "Mix V2",
+            }
+            label = type_labels.get(img_type, img_type.replace("-", " ").title())
             self.text.render(
                 screen,
                 f"{checkbox} {label}",
@@ -1086,6 +1109,41 @@ class ScraperWizardModal:
                 size=self.theme.font_size_sm,
             )
             y += item_height
+
+        # Download Video toggle
+        y += 5  # Small gap before video option
+        video_idx = len(all_image_types) + 1  # +1 for auto-select at index 0
+        video_rect = pygame.Rect(
+            content_rect.left + padding,
+            y,
+            content_rect.width - padding * 2,
+            item_height - 5,
+        )
+        item_rects.append(video_rect)
+
+        is_video_selected = highlighted == video_idx
+        bg_color = (
+            self.theme.primary if is_video_selected else self.theme.surface_hover
+        )
+        pygame.draw.rect(
+            screen, bg_color, video_rect, border_radius=self.theme.radius_sm
+        )
+
+        video_checkbox = "[X]" if download_video else "[ ]"
+        self.text.render(
+            screen,
+            f"{video_checkbox} Download Video",
+            (
+                video_rect.left + padding,
+                video_rect.centery - self.theme.font_size_sm // 2,
+            ),
+            color=(
+                self.theme.background
+                if is_video_selected
+                else self.theme.text_primary
+            ),
+            size=self.theme.font_size_sm,
+        )
 
         hints = get_combined_hints(
             [("select", "Toggle"), ("start", "Start Batch"), ("back", "Cancel")],

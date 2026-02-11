@@ -620,9 +620,6 @@ class ConsoleUtilitiesApp:
                     running = False
 
                 elif event.type == pygame.KEYDOWN:
-                    log_error(
-                        f"KEYDOWN: key={event.key}, unicode='{event.unicode}', joystick={'connected' if self.joystick else 'none'}"
-                    )
                     # Skip ALL keyboard events if joystick is connected
                     # Some consoles/controllers generate keyboard events alongside joystick events
                     # which causes double input. Joystick takes priority.
@@ -842,7 +839,9 @@ class ConsoleUtilitiesApp:
                 from ui.screens.settings_screen import settings_screen
 
                 max_items = settings_screen.get_max_items(self.settings, self.data)
-                _, divider_indices = settings_screen._get_settings_items(self.settings, self.data)
+                _, divider_indices = settings_screen._get_settings_items(
+                    self.settings, self.data
+                )
             else:
                 from ui.screens.utils_screen import utils_screen
 
@@ -864,9 +863,7 @@ class ConsoleUtilitiesApp:
         elif self.state.mode == "credits":
             from ui.screens.credits_screen import SCROLL_STEP
 
-            max_scroll = self.state.ui_rects.rects.get(
-                "credits_max_scroll", 0
-            )
+            max_scroll = self.state.ui_rects.rects.get("credits_max_scroll", 0)
             if direction == "down":
                 self.state.credits_scroll_offset = min(
                     self.state.credits_scroll_offset + SCROLL_STEP,
@@ -920,6 +917,17 @@ class ConsoleUtilitiesApp:
             elif direction in ("down", "right"):
                 self.state.download_queue.highlighted = (
                     self.state.download_queue.highlighted + 1
+                ) % max_items
+
+        elif self.state.mode == "scraper_downloads":
+            max_items = len(self.state.scraper_queue.items) or 1
+            if direction in ("up", "left"):
+                self.state.scraper_queue.highlighted = (
+                    self.state.scraper_queue.highlighted - 1
+                ) % max_items
+            elif direction in ("down", "right"):
+                self.state.scraper_queue.highlighted = (
+                    self.state.scraper_queue.highlighted + 1
                 ) % max_items
 
     def _handle_key_event(self, event: pygame.event.Event):
@@ -1303,6 +1311,10 @@ class ConsoleUtilitiesApp:
             else:
                 self.state.mode = "systems_list"
             self.state.highlighted = 0
+        elif self.state.mode == "scraper_downloads":
+            # Go back to utils; scraping continues in background
+            self.state.mode = "utils"
+            self.state.highlighted = 0
         elif self.state.mode in ("settings", "utils", "credits"):
             self.state.mode = "systems"
             self.state.highlighted = 0
@@ -1639,6 +1651,18 @@ class ConsoleUtilitiesApp:
             current = self.settings.get("scraper_fallback_enabled", True)
             self.settings["scraper_fallback_enabled"] = not current
             save_settings(self.settings)
+        elif action == "toggle_mixed_images":
+            current = self.settings.get("scraper_mixed_images", False)
+            self.settings["scraper_mixed_images"] = not current
+            save_settings(self.settings)
+        elif action == "cycle_parallel_downloads":
+            options = [1, 2, 3, 4, 5]
+            current = self.settings.get("scraper_parallel_downloads", 1)
+            idx = options.index(current) if current in options else 0
+            self.settings["scraper_parallel_downloads"] = options[
+                (idx + 1) % len(options)
+            ]
+            save_settings(self.settings)
         elif action == "screenscraper_login":
             self._show_screenscraper_login()
         elif action == "thegamesdb_api_key":
@@ -1653,6 +1677,8 @@ class ConsoleUtilitiesApp:
             self._open_folder_browser("esde_gamelists_path")
         elif action == "select_retroarch_thumbnails":
             self._open_folder_browser("retroarch_thumbnails")
+        elif action == "add_to_frontend":
+            self._add_to_frontend()
         elif action == "check_for_updates":
             self._check_for_updates()
 
@@ -1671,6 +1697,141 @@ class ConsoleUtilitiesApp:
 
         thread = threading.Thread(target=_do_load, daemon=True)
         thread.start()
+
+    def _add_to_frontend(self):
+        """Register Console Utilities in the frontend gamelist.xml."""
+        from constants import BUILD_TARGET
+        from xml.etree import ElementTree as ET
+        from xml.dom import minidom
+
+        roms_dir = self.settings.get("roms_dir", "")
+        if not roms_dir:
+            self.state.confirm_modal.show = True
+            self.state.confirm_modal.title = "Link App to Frontend"
+            self.state.confirm_modal.message_lines = [
+                "ROMs directory is not set.",
+                "",
+                "Please set the ROMs directory first.",
+            ]
+            self.state.confirm_modal.ok_label = "OK"
+            self.state.confirm_modal.cancel_label = ""
+            self.state.confirm_modal.button_index = 0
+            self.state.confirm_modal.context = ""
+            return
+
+        # Determine the build folder name (e.g., "pygame")
+        build_folder = BUILD_TARGET if BUILD_TARGET != "source" else "pygame"
+        target_dir = os.path.join(roms_dir, build_folder)
+
+        if not os.path.exists(target_dir):
+            os.makedirs(target_dir, exist_ok=True)
+
+        gamelist_path = os.path.join(target_dir, "gamelist.xml")
+
+        # Find the .pygame file in SCRIPT_DIR
+        pygame_file = None
+        for f in os.listdir(SCRIPT_DIR):
+            if f.endswith(".pygame"):
+                pygame_file = f
+                break
+
+        if not pygame_file:
+            pygame_file = "console_utils.pygame"
+
+        # Resolve assets directory - try SCRIPT_DIR first (bundle),
+        # then SCRIPT_DIR/.. (dev mode where SCRIPT_DIR=src/)
+        assets_dir = os.path.join(SCRIPT_DIR, "assets", "images")
+        if not os.path.exists(assets_dir):
+            assets_dir = os.path.join(SCRIPT_DIR, "..", "assets", "images")
+
+        # Copy images into the target folder so the XML is self-contained
+        import shutil
+
+        images_dir = os.path.join(target_dir, "images")
+        os.makedirs(images_dir, exist_ok=True)
+
+        logo_src = os.path.join(assets_dir, "logo.png")
+        screenshot_src = os.path.join(assets_dir, "screenshot.png")
+        logo_dest = os.path.join(images_dir, "logo.png")
+        screenshot_dest = os.path.join(images_dir, "screenshot.png")
+
+        if os.path.exists(logo_src):
+            shutil.copy2(logo_src, logo_dest)
+        if os.path.exists(screenshot_src):
+            shutil.copy2(screenshot_src, screenshot_dest)
+
+        # Load or create gamelist.xml
+        if os.path.exists(gamelist_path):
+            try:
+                tree = ET.parse(gamelist_path)
+                root = tree.getroot()
+            except ET.ParseError:
+                root = ET.Element("gameList")
+        else:
+            root = ET.Element("gameList")
+
+        # Find existing entry or create new
+        game_path = f"./{pygame_file}"
+        game_elem = None
+        for game in root.findall("game"):
+            path_elem = game.find("path")
+            if path_elem is not None and path_elem.text == game_path:
+                game_elem = game
+                break
+
+        if game_elem is None:
+            game_elem = ET.SubElement(root, "game")
+
+        def _set_elem(parent, tag, text):
+            elem = parent.find(tag)
+            if elem is None:
+                elem = ET.SubElement(parent, tag)
+            elem.text = text
+
+        _set_elem(game_elem, "path", game_path)
+        _set_elem(game_elem, "name", "Console Utilities")
+        _set_elem(
+            game_elem,
+            "desc",
+            "A download management tool for handheld gaming consoles. "
+            "Manage ROMs, scrape game metadata, and organize your library.",
+        )
+        if os.path.exists(logo_dest):
+            _set_elem(game_elem, "image", "./images/logo.png")
+        if os.path.exists(screenshot_dest):
+            _set_elem(game_elem, "thumbnail", "./images/screenshot.png")
+        _set_elem(game_elem, "rating", "1")
+        _set_elem(game_elem, "releasedate", "20250101T000000")
+
+        # Write pretty XML
+        xml_str = ET.tostring(root, encoding="unicode")
+        dom = minidom.parseString(xml_str)
+        pretty_xml = dom.toprettyxml(indent="  ")
+        lines = [line for line in pretty_xml.split("\n") if line.strip()]
+        if lines and lines[0].startswith("<?xml"):
+            lines = lines[1:]
+        final_xml = (
+            '<?xml version="1.0" encoding="UTF-8"?>\n' + "\n".join(lines)
+        )
+
+        with open(gamelist_path, "w", encoding="utf-8") as f:
+            f.write(final_xml)
+
+        # Show success
+        self.state.confirm_modal.show = True
+        self.state.confirm_modal.title = "Link App to Frontend"
+        self.state.confirm_modal.message_lines = [
+            "Console Utilities linked!",
+            "",
+            f"Gamelist: {build_folder}/gamelist.xml",
+            "",
+            "Rescan games in your frontend",
+            "to see it.",
+        ]
+        self.state.confirm_modal.ok_label = "OK"
+        self.state.confirm_modal.cancel_label = ""
+        self.state.confirm_modal.button_index = 0
+        self.state.confirm_modal.context = ""
 
     def _check_for_updates(self):
         """Check GitHub releases for a newer version."""
@@ -1860,8 +2021,11 @@ class ConsoleUtilitiesApp:
         self.state.folder_browser.focus_area = "list"
         self.state.folder_browser.button_index = 0
         # Preserve selected_system_to_add if already set (e.g. add_system_folder)
-        if not self.state.folder_browser.selected_system_to_add or \
-                self.state.folder_browser.selected_system_to_add.get("type") != selection_type:
+        if (
+            not self.state.folder_browser.selected_system_to_add
+            or self.state.folder_browser.selected_system_to_add.get("type")
+            != selection_type
+        ):
             self.state.folder_browser.selected_system_to_add = {"type": selection_type}
 
         # Set initial path based on selection type
@@ -2091,9 +2255,7 @@ class ConsoleUtilitiesApp:
             return
 
         # Find the parent list_systems entry to inherit config
-        parent = next(
-            (d for d in self.data if d.get("list_systems") is True), None
-        )
+        parent = next((d for d in self.data if d.get("list_systems") is True), None)
 
         # Build system config from parent entry, inheriting all relevant fields
         file_formats = parent.get("file_format", [".zip"]) if parent else [".zip"]
@@ -2104,9 +2266,15 @@ class ConsoleUtilitiesApp:
 
         # Inherit extra fields from parent (download_url, regex, auth config, etc.)
         inherit_keys = {
-            "download_url", "regex", "list_url", "list_json_file_location",
-            "list_item_id", "usa_regex", "ignore_extension_filtering",
-            "should_filter_usa", "should_decompress_nsz",
+            "download_url",
+            "regex",
+            "list_url",
+            "list_json_file_location",
+            "list_item_id",
+            "usa_regex",
+            "ignore_extension_filtering",
+            "should_filter_usa",
+            "should_decompress_nsz",
         }
         extra_fields = {}
         if parent:
@@ -3228,9 +3396,7 @@ class ConsoleUtilitiesApp:
         wizard.show = True
         wizard.batch_mode = batch_mode
         wizard.step = "folder_select" if batch_mode else "rom_select"
-        wizard.folder_current_path = self.settings.get(
-            "roms_dir", SCRIPT_DIR
-        )
+        wizard.folder_current_path = self.settings.get("roms_dir", SCRIPT_DIR)
         wizard.folder_items = load_folder_contents(wizard.folder_current_path)
         wizard.folder_highlighted = 0
         wizard.selected_rom_path = ""
@@ -3249,7 +3415,13 @@ class ConsoleUtilitiesApp:
         wizard.batch_roms = []
         wizard.batch_current_index = 0
         wizard.batch_auto_select = True
-        wizard.batch_default_images = ["box-2D", "boxart"]
+        if (
+            self.settings.get("scraper_mixed_images", False)
+            and self.settings.get("scraper_provider", "libretro") == "screenscraper"
+        ):
+            wizard.batch_default_images = ["mixrbv2"]
+        else:
+            wizard.batch_default_images = ["box-2D", "boxart"]
 
     def _close_scraper_wizard(self):
         """Close the scraper wizard modal."""
@@ -3317,8 +3489,12 @@ class ConsoleUtilitiesApp:
                 )
 
         elif step == "batch_options":
-            # Auto-select + 5 image types = 6 items
-            max_items = 6
+            mixed = (
+                self.settings.get("scraper_mixed_images", False)
+                and self.settings.get("scraper_provider", "libretro") == "screenscraper"
+            )
+            # Auto-select + image types + Download Video toggle
+            max_items = (8 if mixed else 6) + 1
             if direction in ("up", "left"):
                 wizard.image_highlighted = max(0, wizard.image_highlighted - 1)
             elif direction in ("down", "right"):
@@ -3495,13 +3671,35 @@ class ConsoleUtilitiesApp:
             # Toggle auto-select
             wizard.batch_auto_select = not wizard.batch_auto_select
         else:
-            # Toggle image type
-            all_types = ["box-2D", "boxart", "screenshot", "wheel", "fanart"]
-            img_type = all_types[highlighted - 1]
-            if img_type in wizard.batch_default_images:
-                wizard.batch_default_images.remove(img_type)
+            # Toggle image type or video
+            if (
+                self.settings.get("scraper_mixed_images", False)
+                and self.settings.get("scraper_provider", "libretro") == "screenscraper"
+            ):
+                all_types = [
+                    "box-2D",
+                    "boxart",
+                    "mixrbv1",
+                    "mixrbv2",
+                    "screenshot",
+                    "wheel",
+                    "fanart",
+                ]
             else:
-                wizard.batch_default_images.append(img_type)
+                all_types = ["box-2D", "boxart", "screenshot", "wheel", "fanart"]
+
+            img_index = highlighted - 1
+            if img_index < len(all_types):
+                img_type = all_types[img_index]
+                if img_type in wizard.batch_default_images:
+                    wizard.batch_default_images.remove(img_type)
+                else:
+                    wizard.batch_default_images.append(img_type)
+            else:
+                # Download Video toggle
+                self.state.scraper_queue.download_video = (
+                    not self.state.scraper_queue.download_video
+                )
 
     def _search_scraper_game(self):
         """Search for game info using scraper provider."""
@@ -3737,10 +3935,13 @@ class ConsoleUtilitiesApp:
             roms=roms,
             default_images=list(wizard.batch_default_images),
             auto_select=wizard.batch_auto_select,
+            download_video=self.state.scraper_queue.download_video,
         )
 
-        # Close wizard so user can navigate freely
+        # Close wizard and navigate to scraper downloads screen
         self._close_scraper_wizard()
+        self.state.mode = "scraper_downloads"
+        self.state.scraper_queue.highlighted = 0
 
     def _show_screenscraper_login(self):
         """Show ScreenScraper login modal."""

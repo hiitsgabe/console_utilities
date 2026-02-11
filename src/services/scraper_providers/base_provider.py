@@ -143,6 +143,8 @@ class BaseProvider(ABC):
             "box-2D": "Box Art (2D)",
             "box-3D": "Box Art (3D)",
             "boxart": "Box Art",
+            "mixrbv1": "Mix V1 (Screenshot+Box+Logo)",
+            "mixrbv2": "Mix V2 (Screenshot+Box+Logo+Media)",
             "screenshot": "Screenshot",
             "ss": "Screenshot",
             "sstitle": "Title Screen",

@@ -31,6 +31,8 @@ class ScreenScraperProvider(BaseProvider):
     IMAGE_TYPES = [
         "box-2D",
         "box-3D",
+        "mixrbv1",
+        "mixrbv2",
         "ss",
         "sstitle",
         "wheel",
@@ -430,6 +432,8 @@ class ScreenScraperProvider(BaseProvider):
         labels = {
             "box-2D": "Box Art (2D)",
             "box-3D": "Box Art (3D)",
+            "mixrbv1": "Mix V1 (Screenshot+Box+Logo)",
+            "mixrbv2": "Mix V2 (Screenshot+Box+Logo+Media)",
             "ss": "Screenshot",
             "sstitle": "Title Screen",
             "wheel": "Wheel/Logo",

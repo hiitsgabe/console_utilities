@@ -327,7 +327,9 @@ class MetadataWriter:
     def _get_es_image_type(self, img_path: str) -> Optional[str]:
         """Get EmulationStation XML tag for an image path."""
         path_lower = img_path.lower()
-        if "screenshot" in path_lower or "/snaps/" in path_lower:
+        if "miximage" in path_lower or "miximages" in path_lower:
+            return "image"
+        elif "screenshot" in path_lower or "/snaps/" in path_lower:
             return "image"
         elif (
             "cover" in path_lower or "boxart" in path_lower or "/images/" in path_lower
@@ -346,7 +348,9 @@ class MetadataWriter:
     def _get_pegasus_asset_type(self, img_path: str) -> Optional[str]:
         """Get Pegasus asset type for an image path."""
         path_lower = img_path.lower()
-        if "boxfront" in path_lower or "cover" in path_lower:
+        if "miximage" in path_lower:
+            return "box_front"
+        elif "boxfront" in path_lower or "cover" in path_lower:
             return "box_front"
         elif "screenshot" in path_lower:
             return "screenshot"

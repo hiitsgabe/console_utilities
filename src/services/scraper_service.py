@@ -49,6 +49,18 @@ class ScraperService:
             "retroarch": "Named_Boxarts",
             "pegasus": "boxFront",
         },
+        "mixrbv1": {
+            "emulationstation_base": "miximages",
+            "esde_android": "miximages",
+            "retroarch": None,
+            "pegasus": "miximage",
+        },
+        "mixrbv2": {
+            "emulationstation_base": "miximages",
+            "esde_android": "miximages",
+            "retroarch": None,
+            "pegasus": "miximage",
+        },
         "ss": {
             "emulationstation_base": "screenshots",
             "esde_android": "screenshots",
@@ -322,7 +334,7 @@ class ScraperService:
         rom_name = os.path.splitext(os.path.basename(rom_path))[0]
 
         if frontend == "emulationstation_base":
-            media_dir = os.path.join(rom_dir, "media", folder_name)
+            media_dir = os.path.join(rom_dir, folder_name)
             return os.path.join(media_dir, f"{rom_name}.{video_format}")
         elif frontend == "esde_android":
             media_base = self.settings.get("esde_media_path", "")
@@ -409,8 +421,8 @@ class ScraperService:
         rom_name = os.path.splitext(os.path.basename(rom_path))[0]
 
         if frontend == "emulationstation_base":
-            # ./media/<type>/<romname>.png
-            media_dir = os.path.join(rom_dir, "media", folder_name)
+            # ./<type>/<romname>.png
+            media_dir = os.path.join(rom_dir, folder_name)
             return os.path.join(media_dir, f"{rom_name}.{image_format}")
 
         elif frontend == "esde_android":

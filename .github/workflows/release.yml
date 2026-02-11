@@ -309,3 +309,12 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Delete old releases (keep last 2)
+        run: |
+          gh release list --limit 100 | tail -n +3 | awk '{print $1}' | while read tag; do
+            echo "Deleting release: $tag"
+            gh release delete "$tag" --yes --cleanup-tag
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

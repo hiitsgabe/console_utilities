@@ -31,6 +31,7 @@ from .modals.dedupe_wizard_modal import DedupeWizardModal
 from .modals.rename_wizard_modal import RenameWizardModal
 from .modals.ghost_cleaner_modal import GhostCleanerModal
 from .downloads_screen import DownloadsScreen
+from .scraper_downloads_screen import ScraperDownloadsScreen
 from ui.molecules.status_footer import StatusFooter, StatusFooterItem
 
 
@@ -55,6 +56,7 @@ class ScreenManager:
         self.systems_settings_screen = SystemsSettingsScreen(theme)
         self.system_settings_screen = SystemSettingsScreen(theme)
         self.downloads_screen = DownloadsScreen(theme)
+        self.scraper_downloads_screen = ScraperDownloadsScreen(theme)
 
         # Initialize modals
         self.search_modal = SearchModal(theme)
@@ -335,6 +337,12 @@ class ScreenManager:
                     batch_current_index=state.scraper_wizard.batch_current_index,
                     batch_auto_select=state.scraper_wizard.batch_auto_select,
                     batch_default_images=state.scraper_wizard.batch_default_images,
+                    mixed_images_enabled=(
+                        settings.get("scraper_mixed_images", False)
+                        and settings.get("scraper_provider", "libretro")
+                        == "screenscraper"
+                    ),
+                    download_video=state.scraper_queue.download_video,
                 )
             )
             rects["modal"] = modal_rect
@@ -537,8 +545,20 @@ class ScreenManager:
             rects["item_rects"] = item_rects
             rects["scroll_offset"] = scroll_offset
 
+        elif state.mode == "scraper_downloads":
+            back_rect, item_rects, scroll_offset = (
+                self.scraper_downloads_screen.render(
+                    screen,
+                    state.scraper_queue,
+                    input_mode=state.input_mode,
+                )
+            )
+            rects["back"] = back_rect
+            rects["item_rects"] = item_rects
+            rects["scroll_offset"] = scroll_offset
+
         # Render stacked status footers on non-download screens
-        if state.mode != "downloads":
+        if state.mode not in ("downloads", "scraper_downloads"):
             footer_items = self._build_footer_items(state)
             if footer_items:
                 self.status_footer.render(screen, footer_items)

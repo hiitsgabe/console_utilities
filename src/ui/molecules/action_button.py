@@ -74,9 +74,11 @@ class ActionButton:
             shadow=not disabled,
         )
 
-        # Calculate text position
+        # Calculate text position (vertically centered using actual font height)
         text_x = rect.centerx
-        text_y = rect.centery - self.theme.font_size_md // 4
+        font = self.text.get_font(self.theme.font_size_md)
+        text_height = font.size(label)[1]
+        text_y = rect.centery - text_height // 2
 
         if icon:
             # Draw icon on left side
