@@ -1569,6 +1569,9 @@ class ConsoleUtilitiesApp:
             # Navigate to downloads screen
             self.state.mode = "downloads"
             self.state.download_queue.highlighted = 0
+        elif context == "apply_update" and data:
+            self._apply_update(data)
+            return  # Don't close modal yet - _apply_update manages its own UI
 
         # Close the modal
         self._handle_confirm_modal_cancel()
@@ -1687,6 +1690,144 @@ class ConsoleUtilitiesApp:
             self._open_folder_browser("esde_gamelists_path")
         elif action == "select_retroarch_thumbnails":
             self._open_folder_browser("retroarch_thumbnails")
+        elif action == "check_for_updates":
+            self._check_for_updates()
+
+    def _check_for_updates(self):
+        """Check GitHub releases for a newer version."""
+        import threading
+        from services.update_service import check_for_update
+        from constants import APP_VERSION, BUILD_TARGET
+
+        self.state.loading.show = True
+        self.state.loading.message = "Checking for updates..."
+        self.state.loading.progress = 0
+
+        def _do_check():
+            update_available, release_info, error = check_for_update()
+
+            self.state.loading.show = False
+
+            if error and not update_available:
+                if error == "Cannot check updates in dev mode":
+                    self.state.confirm_modal.show = True
+                    self.state.confirm_modal.title = "Check for Updates"
+                    self.state.confirm_modal.message_lines = [
+                        "Cannot check for updates in dev mode.",
+                        "",
+                        f"Current: {APP_VERSION} ({BUILD_TARGET})",
+                    ]
+                    self.state.confirm_modal.ok_label = "OK"
+                    self.state.confirm_modal.cancel_label = ""
+                    self.state.confirm_modal.button_index = 0
+                    self.state.confirm_modal.context = ""
+                else:
+                    self.state.confirm_modal.show = True
+                    self.state.confirm_modal.title = "Update Error"
+                    self.state.confirm_modal.message_lines = [error]
+                    self.state.confirm_modal.ok_label = "OK"
+                    self.state.confirm_modal.cancel_label = ""
+                    self.state.confirm_modal.button_index = 0
+                    self.state.confirm_modal.context = ""
+                return
+
+            if not update_available:
+                self.state.confirm_modal.show = True
+                self.state.confirm_modal.title = "Up to Date"
+                self.state.confirm_modal.message_lines = [
+                    "You are running the latest version.",
+                    "",
+                    f"Current: {APP_VERSION}",
+                ]
+                self.state.confirm_modal.ok_label = "OK"
+                self.state.confirm_modal.cancel_label = ""
+                self.state.confirm_modal.button_index = 0
+                self.state.confirm_modal.context = ""
+                return
+
+            # Update available - show details
+            lines = [
+                f"New version available: {release_info['tag']}",
+                f"Current version: {APP_VERSION}",
+                "",
+            ]
+
+            can_auto_update = BUILD_TARGET == "pygame" and release_info.get("asset_url")
+
+            if can_auto_update:
+                size = release_info.get("asset_size", 0)
+                if size > 0:
+                    size_str = self._format_bytes(size)
+                    lines.append(f"Download size: {size_str}")
+                lines.append("")
+                lines.append("Update now?")
+            else:
+                lines.append("Visit GitHub releases to download")
+                lines.append("the latest version for your platform.")
+
+            self.state.confirm_modal.show = True
+            self.state.confirm_modal.title = "Update Available"
+            self.state.confirm_modal.message_lines = lines
+            self.state.confirm_modal.button_index = 0
+            self.state.confirm_modal.context = "apply_update" if can_auto_update else ""
+            self.state.confirm_modal.data = release_info
+            if can_auto_update:
+                self.state.confirm_modal.ok_label = "Update"
+                self.state.confirm_modal.cancel_label = "Later"
+            else:
+                self.state.confirm_modal.ok_label = "OK"
+                self.state.confirm_modal.cancel_label = ""
+
+        thread = threading.Thread(target=_do_check, daemon=True)
+        thread.start()
+
+    def _apply_update(self, release_info):
+        """Apply a pygame update from release_info."""
+        from services.update_service import apply_pygame_update
+
+        self.state.confirm_modal.show = False
+        self.state.loading.show = True
+        self.state.loading.message = "Downloading update..."
+        self.state.loading.progress = 0
+
+        def on_progress(progress, status):
+            self.state.loading.progress = int(progress * 100)
+            self.state.loading.message = status
+
+        def on_complete():
+            self.state.loading.show = False
+            self.state.confirm_modal.show = True
+            self.state.confirm_modal.title = "Update Complete"
+            self.state.confirm_modal.message_lines = [
+                f"Updated to {release_info['tag']}.",
+                "",
+                "Please restart the application",
+                "to use the new version.",
+            ]
+            self.state.confirm_modal.ok_label = "OK"
+            self.state.confirm_modal.cancel_label = ""
+            self.state.confirm_modal.button_index = 0
+            self.state.confirm_modal.context = ""
+
+        def on_error(error):
+            self.state.loading.show = False
+            self.state.confirm_modal.show = True
+            self.state.confirm_modal.title = "Update Failed"
+            self.state.confirm_modal.message_lines = [
+                "Failed to apply update:",
+                str(error),
+            ]
+            self.state.confirm_modal.ok_label = "OK"
+            self.state.confirm_modal.cancel_label = ""
+            self.state.confirm_modal.button_index = 0
+            self.state.confirm_modal.context = ""
+
+        apply_pygame_update(
+            release_info["asset_url"],
+            on_progress=on_progress,
+            on_complete=on_complete,
+            on_error=on_error,
+        )
 
     def _handle_utils_selection(self):
         """Handle utils item selection."""

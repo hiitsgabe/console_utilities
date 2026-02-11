@@ -7,6 +7,7 @@ from typing import List, Dict, Any, Tuple, Optional, Set
 
 from ui.theme import Theme, default_theme
 from ui.templates.list_screen import ListScreenTemplate
+from constants import APP_VERSION
 
 
 class SettingsScreen:
@@ -69,11 +70,17 @@ class SettingsScreen:
         "RetroArch Thumbnails",  # Only shown when frontend = retroarch
     ]
 
-    # NSZ section (last)
+    # NSZ section
     NSZ_SECTION = [
         "--- NSZ ---",
         "Enable NSZ",
         "NSZ Keys",  # Only shown when NSZ is enabled
+    ]
+
+    # App section (last)
+    APP_SECTION = [
+        "--- APP ---",
+        "Check for Updates",
     ]
 
     def __init__(self, theme: Theme = default_theme):
@@ -144,7 +151,7 @@ class SettingsScreen:
         elif scraper_frontend == "retroarch":
             items.append(self.SCRAPER_SECTION[10])  # RetroArch Thumbnails
 
-        # Add NSZ section (last)
+        # Add NSZ section
         nsz_enabled = settings.get("nsz_enabled", False)
         divider_indices.add(len(items))
         items.append(self.NSZ_SECTION[0])  # Divider
@@ -152,6 +159,10 @@ class SettingsScreen:
         # Only show NSZ Keys if NSZ is enabled
         if nsz_enabled:
             items.append(self.NSZ_SECTION[2])  # NSZ Keys
+
+        # Add App section (last)
+        divider_indices.add(len(items))
+        items.extend(self.APP_SECTION)
 
         return items, divider_indices
 
@@ -294,6 +305,8 @@ class SettingsScreen:
                 path = settings.get("retroarch_thumbnails_path", "")
                 value = self._shorten_path(path) if path else "Not Set"
                 items.append((item, value))
+            elif item == "Check for Updates":
+                items.append((item, APP_VERSION))
             else:
                 items.append((item, ""))
 
@@ -373,6 +386,7 @@ class SettingsScreen:
                 "ES-DE Media Path": "select_esde_media_path",
                 "ES-DE Gamelists Path": "select_esde_gamelists_path",
                 "RetroArch Thumbnails": "select_retroarch_thumbnails",
+                "Check for Updates": "check_for_updates",
             }
             return actions.get(item, "unknown")
 

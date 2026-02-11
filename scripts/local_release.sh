@@ -79,7 +79,7 @@ fi
 
 # Build pygame bundle
 echo -e "\n${YELLOW}Building pygame bundle...${NC}"
-make bundle
+make bundle VERSION="$VERSION"
 if [ -f dist/pygame.zip ]; then
     echo -e "${GREEN}✅ pygame.zip created${NC}"
 else
@@ -97,7 +97,7 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
         pip3 install pyinstaller
     fi
 
-    make bundle-macos
+    make bundle-macos VERSION="$VERSION"
     if [ -f dist/macos.zip ]; then
         echo -e "${GREEN}✅ macos.zip created${NC}"
     else
