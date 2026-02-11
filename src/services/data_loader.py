@@ -238,9 +238,7 @@ def load_available_systems(
 
     try:
         # Find the first list_systems entry
-        list_entry = next(
-            (d for d in data if d.get("list_systems") is True), None
-        )
+        list_entry = next((d for d in data if d.get("list_systems") is True), None)
         if not list_entry:
             return []
 

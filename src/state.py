@@ -365,6 +365,9 @@ class ScraperQueueState:
     folder_path: str = ""
     auto_select: bool = True
     default_images: List[str] = field(default_factory=lambda: ["box-2D", "boxart"])
+    parallel_workers: int = 1
+    highlighted: int = 0  # Currently highlighted item in scraper downloads screen
+    download_video: bool = False  # Download video for each ROM during batch
 
 
 @dataclass

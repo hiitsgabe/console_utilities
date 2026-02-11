@@ -143,8 +143,7 @@ def apply_pygame_update(
             # Extract the zip
             extract_dir = os.path.join(tmp_dir, "extracted")
             with ZipFile(tmp_zip, "r") as zip_ref:
-                for file_info in zip_ref.infolist():
-                    zip_ref.extract(file_info, extract_dir)
+                zip_ref.extractall(extract_dir)
 
             if on_progress:
                 on_progress(0.85, "Applying update...")
@@ -162,7 +161,7 @@ def apply_pygame_update(
                 if current_pygame:
                     shutil.copy2(new_pygame, current_pygame)
 
-            # Replace assets folder if present
+            # Replace assets folder
             new_assets = os.path.join(extract_dir, "assets")
             if os.path.isdir(new_assets):
                 current_assets = os.path.join(SCRIPT_DIR, "assets")

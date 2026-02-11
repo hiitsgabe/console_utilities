@@ -55,26 +55,15 @@ class CreditsScreen:
         inset = BEZEL_INSET
         content_x = inset + self.theme.padding_lg
         content_top = inset + header_height + self.theme.padding_lg
-        content_width = (
-            screen.get_width()
-            - inset * 2
-            - self.theme.padding_lg * 2
-        )
+        content_width = screen.get_width() - inset * 2 - self.theme.padding_lg * 2
 
         # Bottom hint area
-        hint_height = (
-            self.theme.font_size_sm
-            + self.theme.padding_lg
-        )
-        content_bottom = (
-            screen.get_height() - BEZEL_INSET - hint_height
-        )
+        hint_height = self.theme.font_size_sm + self.theme.padding_lg
+        content_bottom = screen.get_height() - BEZEL_INSET - hint_height
         visible_height = content_bottom - content_top
 
         # Set clipping rect for scrollable area
-        clip_rect = pygame.Rect(
-            0, content_top, screen.get_width(), visible_height
-        )
+        clip_rect = pygame.Rect(0, content_top, screen.get_width(), visible_height)
         old_clip = screen.get_clip()
         screen.set_clip(clip_rect)
 
@@ -109,8 +98,7 @@ class CreditsScreen:
             "A download management tool for handheld",
             "gaming consoles.",
             "",
-            "Designed for Knulli RG35xxSP and similar",
-            "devices.",
+            "Designed for Knulli RG35xxSP and Odin 2 Android using Emulation Station, should work on similar devices.",
             "",
         ]
 
@@ -175,9 +163,7 @@ class CreditsScreen:
             - self.theme.padding_lg
             - self.theme.font_size_sm
         )
-        back_hint = get_button_hint(
-            "back", "Back", input_mode
-        )
+        back_hint = get_button_hint("back", "Back", input_mode)
         self.text.render(
             screen,
             back_hint,

@@ -2,12 +2,14 @@
 Settings screen - Application settings menu.
 """
 
+import os
 import pygame
 from typing import List, Dict, Any, Tuple, Optional, Set
+from xml.etree import ElementTree as ET
 
 from ui.theme import Theme, default_theme
 from ui.templates.list_screen import ListScreenTemplate
-from constants import APP_VERSION
+from constants import APP_VERSION, SCRIPT_DIR
 
 
 class SettingsScreen:
@@ -21,7 +23,6 @@ class SettingsScreen:
     # Directories section
     DIRECTORIES_SECTION = [
         "--- DIRECTORIES ---",
-        "Select Backup Map Json",
         "Work Directory",
         "ROMs Directory",
     ]
@@ -29,6 +30,7 @@ class SettingsScreen:
     # Systems section
     SYSTEMS_SECTION = [
         "--- GAME BACKUP ---",
+        "Select Backup Map Json",
         "Add Game System from Backup",
         "Games Backup Settings",
     ]
@@ -61,6 +63,8 @@ class SettingsScreen:
         "Scraper Frontend",
         "Scraper Provider",
         "Provider Fallback",  # Toggle fallback chain
+        "Parallel Downloads",  # Number of parallel scraper workers (1-5)
+        "Mixed Images",  # Only shown when provider = screenscraper
         "ScreenScraper Login",  # Only shown when provider = screenscraper
         "TheGamesDB API Key",  # Only shown when provider = thegamesdb
         "RAWG API Key",  # Only shown when provider = rawg
@@ -68,6 +72,7 @@ class SettingsScreen:
         "ES-DE Media Path",  # Only shown when frontend = esde_android
         "ES-DE Gamelists Path",  # Only shown when frontend = esde_android
         "RetroArch Thumbnails",  # Only shown when frontend = retroarch
+        "Link App to Frontend",  # Register app in frontend gamelist
     ]
 
     # NSZ section
@@ -106,9 +111,7 @@ class SettingsScreen:
         divider_indices = set()
 
         # Check if data has a list_systems entry (backup list available)
-        has_backup_list = data and any(
-            d.get("list_systems") is True for d in data
-        )
+        has_backup_list = data and any(d.get("list_systems") is True for d in data)
 
         # Add Directories section
         divider_indices.add(len(items))
@@ -117,10 +120,11 @@ class SettingsScreen:
         # Add Systems section
         divider_indices.add(len(items))
         items.append(self.SYSTEMS_SECTION[0])  # Divider
+        items.append(self.SYSTEMS_SECTION[1])  # Select Backup Map Json
         # Only show "Add Game System from Backup" when data has a list_systems entry
         if has_backup_list:
-            items.append(self.SYSTEMS_SECTION[1])  # Add Game System from Backup
-        items.append(self.SYSTEMS_SECTION[2])  # Games Backup Settings
+            items.append(self.SYSTEMS_SECTION[2])  # Add Game System from Backup
+        items.append(self.SYSTEMS_SECTION[3])  # Games Backup Settings
 
         # Add View Options section
         divider_indices.add(len(items))
@@ -147,21 +151,26 @@ class SettingsScreen:
         items.append(self.SCRAPER_SECTION[1])  # Frontend
         items.append(self.SCRAPER_SECTION[2])  # Provider
         items.append(self.SCRAPER_SECTION[3])  # Fallback
+        items.append(self.SCRAPER_SECTION[4])  # Parallel Downloads
         # Show provider-specific settings
         if scraper_provider == "screenscraper":
-            items.append(self.SCRAPER_SECTION[4])  # SS Login
+            items.append(self.SCRAPER_SECTION[5])  # Mixed Images
+            items.append(self.SCRAPER_SECTION[6])  # SS Login
         elif scraper_provider == "thegamesdb":
-            items.append(self.SCRAPER_SECTION[5])  # TGDB Key
+            items.append(self.SCRAPER_SECTION[7])  # TGDB Key
         elif scraper_provider == "rawg":
-            items.append(self.SCRAPER_SECTION[6])  # RAWG Key
+            items.append(self.SCRAPER_SECTION[8])  # RAWG Key
         elif scraper_provider == "igdb":
-            items.append(self.SCRAPER_SECTION[7])  # IGDB Login
+            items.append(self.SCRAPER_SECTION[9])  # IGDB Login
         # Show frontend-specific paths
         if scraper_frontend == "esde_android":
-            items.append(self.SCRAPER_SECTION[8])  # ES-DE Media Path
-            items.append(self.SCRAPER_SECTION[9])  # ES-DE Gamelists Path
+            items.append(self.SCRAPER_SECTION[10])  # ES-DE Media Path
+            items.append(self.SCRAPER_SECTION[11])  # ES-DE Gamelists Path
         elif scraper_frontend == "retroarch":
-            items.append(self.SCRAPER_SECTION[10])  # RetroArch Thumbnails
+            items.append(self.SCRAPER_SECTION[12])  # RetroArch Thumbnails
+        # Only show "Link App to Frontend" if not already in gamelist.xml
+        if not self._is_linked_to_frontend(settings):
+            items.append(self.SCRAPER_SECTION[13])  # Link App to Frontend
 
         # Add NSZ section
         nsz_enabled = settings.get("nsz_enabled", False)
@@ -282,6 +291,12 @@ class SettingsScreen:
                 enabled = settings.get("scraper_fallback_enabled", True)
                 value = "Enabled" if enabled else "Disabled"
                 items.append((item, value))
+            elif item == "Parallel Downloads":
+                value = str(settings.get("scraper_parallel_downloads", 1))
+                items.append((item, value))
+            elif item == "Mixed Images":
+                value = "ON" if settings.get("scraper_mixed_images", False) else "OFF"
+                items.append((item, value))
             elif item == "ScreenScraper Login":
                 username = settings.get("screenscraper_username", "")
                 if username:
@@ -322,6 +337,8 @@ class SettingsScreen:
                 path = settings.get("retroarch_thumbnails_path", "")
                 value = self._shorten_path(path) if path else "Not Set"
                 items.append((item, value))
+            elif item == "Link App to Frontend":
+                items.append((item, ""))
             elif item == "Check for Updates":
                 items.append((item, APP_VERSION))
             else:
@@ -340,6 +357,47 @@ class SettingsScreen:
             divider_indices=divider_indices,
             item_spacing=8,
         )
+
+    def _is_linked_to_frontend(self, settings: dict) -> bool:
+        """Check if the app is already registered in the frontend gamelist.xml."""
+        from constants import BUILD_TARGET
+
+        roms_dir = settings.get("roms_dir", "")
+        if not roms_dir:
+            return False
+
+        build_folder = BUILD_TARGET if BUILD_TARGET != "source" else "pygame"
+        gamelist_path = os.path.join(roms_dir, build_folder, "gamelist.xml")
+
+        if not os.path.exists(gamelist_path):
+            return False
+
+        # Find the .pygame file name
+        pygame_file = None
+        try:
+            for f in os.listdir(SCRIPT_DIR):
+                if f.endswith(".pygame"):
+                    pygame_file = f
+                    break
+        except OSError:
+            pass
+
+        if not pygame_file:
+            pygame_file = "console_utils.pygame"
+
+        game_path = f"./{pygame_file}"
+
+        try:
+            tree = ET.parse(gamelist_path)
+            root = tree.getroot()
+            for game in root.findall("game"):
+                path_elem = game.find("path")
+                if path_elem is not None and path_elem.text == game_path:
+                    return True
+        except (ET.ParseError, OSError):
+            pass
+
+        return False
 
     def _shorten_path(self, path: str, max_length: int = 25) -> str:
         """Shorten a path for display."""
@@ -402,6 +460,8 @@ class SettingsScreen:
                 "Scraper Frontend": "toggle_scraper_frontend",
                 "Scraper Provider": "toggle_scraper_provider",
                 "Provider Fallback": "toggle_scraper_fallback",
+                "Parallel Downloads": "cycle_parallel_downloads",
+                "Mixed Images": "toggle_mixed_images",
                 "ScreenScraper Login": "screenscraper_login",
                 "TheGamesDB API Key": "thegamesdb_api_key",
                 "RAWG API Key": "rawg_api_key",
@@ -409,6 +469,7 @@ class SettingsScreen:
                 "ES-DE Media Path": "select_esde_media_path",
                 "ES-DE Gamelists Path": "select_esde_gamelists_path",
                 "RetroArch Thumbnails": "select_retroarch_thumbnails",
+                "Link App to Frontend": "add_to_frontend",
                 "Check for Updates": "check_for_updates",
             }
             return actions.get(item, "unknown")

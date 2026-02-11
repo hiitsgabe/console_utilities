@@ -83,7 +83,8 @@ class FolderBrowserModal:
         )
 
         # List area (below path, above buttons)
-        button_area_height = 60
+        button_height = 44
+        button_area_height = button_height + self.theme.padding_lg + self.theme.padding_sm
         list_rect = pygame.Rect(
             content_rect.left,
             path_y + self.theme.font_size_sm + self.theme.padding_sm,
@@ -106,10 +107,9 @@ class FolderBrowserModal:
             get_secondary=self._get_item_type_label,
         )
 
-        # Draw action buttons
-        button_y = content_rect.bottom - 50
+        # Draw action buttons anchored to bottom of content area
+        button_y = content_rect.bottom - button_height - self.theme.padding_sm
         button_width = 140
-        button_height = 44
         button_spacing = self.theme.padding_lg
 
         # Select button
