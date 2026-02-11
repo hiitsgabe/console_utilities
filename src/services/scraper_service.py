@@ -297,6 +297,78 @@ class ScraperService:
         provider = self._last_search_provider or self.provider
         return provider.get_game_images(game_id)
 
+    def get_game_images_with_fallback(
+        self,
+        game_id: str,
+        game_name: str,
+        rom_path: str,
+        wanted_types: List[str],
+    ) -> Tuple[bool, List[GameImage], str, Optional[dict]]:
+        """
+        Get images, falling back to other providers if the primary fails.
+
+        When the primary provider fails to return images, searches on
+        each fallback provider and returns their images instead.
+
+        Args:
+            game_id: Provider-specific game identifier (for primary)
+            game_name: Game name for re-searching on fallback providers
+            rom_path: ROM path for provider-specific name adaptation
+            wanted_types: Image types the caller wants
+
+        Returns:
+            Tuple of (success, images, error, fallback_game_info or None)
+        """
+        # Try primary provider first
+        success, images, error = self.get_game_images(game_id)
+
+        if success and images:
+            # Check if any wanted types are present
+            matched = [img for img in images if img.type in wanted_types]
+            if matched or images:
+                return success, images, error, None
+
+        # Primary failed — try fallback providers
+        primary_provider = self._last_search_provider or self.provider
+        providers = self._get_provider_chain()
+
+        for provider_name, provider in providers:
+            if provider is primary_provider:
+                continue
+
+            # Search on this fallback provider
+            if provider_name == "libretro" and rom_path:
+                search_name = os.path.splitext(os.path.basename(rom_path))[0]
+            elif rom_path:
+                search_name = self.extract_game_name(rom_path)
+            else:
+                search_name = game_name
+
+            try:
+                s_ok, results, _ = provider.search_game(search_name)
+                if not s_ok or not results:
+                    continue
+
+                fb_game = results[0]
+                i_ok, fb_images, _ = provider.get_game_images(fb_game.id)
+                if not i_ok or not fb_images:
+                    continue
+
+                fb_info = {
+                    "id": fb_game.id,
+                    "name": fb_game.name,
+                    "platform": fb_game.platform,
+                    "release_date": fb_game.release_date,
+                    "description": fb_game.description,
+                }
+                self._last_search_provider = provider
+                return True, fb_images, "", fb_info
+            except Exception:
+                continue
+
+        # All providers exhausted
+        return False, [], error or "No images from any provider", None
+
     def get_game_videos(self, game_id: str) -> Tuple[bool, List[GameVideo], str]:
         """
         Get available videos for a game.
