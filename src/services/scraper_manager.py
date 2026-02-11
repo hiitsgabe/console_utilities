@@ -185,10 +185,17 @@ class ScraperManager:
                     "description": game.description,
                 }
 
-                # Get images
+                # Get images (with fallback to other providers)
                 item.status = "downloading"
 
-                success, images, error = service.get_game_images(game.id)
+                success, images, error, fb_info = (
+                    service.get_game_images_with_fallback(
+                        game.id,
+                        game_name,
+                        item.path,
+                        self.queue.default_images,
+                    )
+                )
                 if not success or not images:
                     item.status = "error"
                     item.error = error or "No images"
@@ -198,6 +205,10 @@ class ScraperManager:
                         "",
                     )
                     return
+
+                # Use fallback game info for metadata if primary failed
+                if fb_info:
+                    game_info = fb_info
 
                 # Filter to default image types
                 filtered = [
