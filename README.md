@@ -10,103 +10,103 @@ This project is an exercise to test Vibe Coding's capabilities. (CLAUDE)
 
 **Disclaimer: This application does not endorse any form of piracy. Only download games you legally own.**
 
-A PyGame-based console utilities application designed for handheld gaming consoles, tested specifically with Knulli RG35xxSP. Features an interactive menu system with D-pad navigation, real-time download progress, and automatic file organization.
+A PyGame-based utility suite for handheld gaming consoles, with a retro CRT-themed interface designed for D-pad and controller navigation. Browse, download, organize, and manage game files from configurable sources. Supports HTML directory listings, JSON APIs, and Internet Archive. Runs on Batocera/Knulli handhelds, macOS, Windows, Linux, and Android.
 
 ## Features
 
-- **Interactive UI**: PyGame-based interface with D-pad and keyboard navigation
-- **Multiple View Modes**: List view and 4-column grid layout
-- **Multi-game Selection**: Batch downloading with real-time progress tracking
-- **Smart Download Management**: Resume capability and speed indicators
-- **Automatic Organization**: File extraction and proper directory structure
-- **Image Caching**: Thumbnail loading and caching for file artwork
-- **Platform Detection**: Auto-configures paths for Batocera and development environments
-- **Comprehensive Logging**: Error tracking and recovery mechanisms
-- **NSZ Support**: Built-in NSZ file decompression capability
+### Download Management
+- **Batch Downloads**: Select multiple games and download them in a queue with real-time progress, speed, and ETA
+- **Resume Capability**: Interrupted downloads can be resumed
+- **Automatic Extraction**: ZIP and RAR files are extracted and organized into the correct system folder
+- **NSZ Decompression**: Built-in Nintendo Switch NSZ to NSP conversion
+
+### Browsing & Navigation
+- **Multiple View Modes**: List view and grid layout with box art thumbnails
+- **Search**: Filter games by name within any system
+- **Region Filtering**: USA-only filter with configurable regex per system
+- **Installed Detection**: Optionally hide games already downloaded
+
+### Utilities
+- **Direct URL Download**: Download a file from any URL
+- **Internet Archive Integration**: Download individual files or add entire IA collections as systems
+- **Image Scraping**: Scrape game artwork from multiple providers (Libretro, ScreenScraper, TheGamesDB, RAWG, IGDB) with batch mode support
+- **File Deduplication**: Detect and remove duplicate files (safe and fuzzy matching)
+- **Filename Cleanup**: Batch rename files to clean formats
+- **Ghost File Cleaner**: Find and remove orphaned split archives
+- **ZIP/RAR Extraction**: Extract archives from the file browser
+
+### System Management
+- **Add Custom Systems**: Discover systems from directory listings or manually configure new sources
+- **Per-System Settings**: Custom ROM folders, hide/show systems
+- **Multiple Server Formats**: HTML directory listings, JSON APIs, Internet Archive metadata API
+- **Authentication**: Bearer tokens, cookies, and IA S3 credentials
+
+### Interface
+- **CRT Theme**: Phosphor green retro aesthetic with scanlines, vignette, and bezel effects
+- **Controller & Keyboard**: Full D-pad/gamepad support with acceleration and touch/mouse input
+- **Auto-Updates**: Check for and install app updates from within the app
 
 ## Installation
 
 ### Development Setup
 
-#### Using Make (Recommended)
 ```bash
-# Setup conda environment and dependencies
+# Setup conda environment and install dependencies
 make setup
 
-# Run the application with auto-restart on file changes
+# Run with auto-restart on file changes
 make run
 
-# Other useful commands
-make help      # Show all available commands
-make clean     # Clean generated files
-make format    # Format code with black
-make lint      # Lint code with flake8
-make build     # Create distribution package for console
+# Run without auto-restart (full error logs)
+make debug
 ```
 
-#### Manual Setup
+Or manually:
+
 ```bash
-# Create and activate conda environment
 conda env create -f environment.yml
 conda activate console_utilities
-
-# Install in development mode
 pip install -e .[dev]
-
-# Run the application
-python src/app.py
+DEV_MODE=true python src/app.py
 ```
 
-### Console Installation
+### Console Installation (Batocera/Knulli)
+
 1. Create a `downloader` folder inside your console's `pygame` roms directory
-2. Use `make build` to create distribution files, then copy `dist/dw.pygame` and `dist/download.json` to the console folder
-3. Configure `download.json` with your download sources
+2. Run `make bundle` to create the distribution package
+3. Copy `dist/pygame.zip` contents (`console_utils.pygame` + `assets/`) to the console folder
 4. Rescan games in EmulationStation
-5. Navigate to PyGame library and run the downloader
+5. Navigate to the PyGame library and launch Console Utilities
+
+### Building for Other Platforms
+
+```bash
+make bundle            # PyGame bundle for consoles
+make bundle-macos      # macOS .app standalone
+make bundle-windows    # Windows .exe standalone
+make build-android     # Android APK (Docker-based)
+```
 
 ## Configuration
 
-### System Configuration (`assets/config/download.json`)
+### System Sources (`bundled_data.json`)
 
-Configure gaming systems and download sources:
+Systems are configured via JSON files that define where to find files and how to parse server responses. See the docs for details:
 
-```json
-[
-  {
-    "name": "System Name",
-    "url": "https://example.com/roms/system/",
-    "file_format": [".iso", ".bin", ".zip"],
-    "roms_folder": "system_folder",
-    "regex": "href=\"([^\"]*\.(iso|bin|zip))\"",
-    "boxarts": "https://example.com/boxart/system/",
-    "should_unzip": true
-  }
-]
-```
-
-### Configuration Fields
-
-- `name`: Display name for the gaming system
-- `url`: Base URL for ROM directory listing (supports HTML parsing or JSON APIs)
-- `file_format`: Array of supported file extensions
-- `roms_folder`: Target directory within roms folder
-- `regex`: Custom regex for HTML parsing (optional)
-- `boxarts`: Base URL for game thumbnails (optional)
-- `should_unzip`: Automatically extract ZIP files after download
+- [Server Response Format](docs/server-response-format.md) - How your server needs to respond for the app to detect files
+- [Adding a System](docs/adding-a-system.md) - How to add custom systems
 
 ### User Settings (`config.json`)
 
-Runtime settings are automatically created and stored:
-- Display preferences (thumbnails, view type)
-- Directory paths (work directory, ROM directory)
-- Cache settings and filtering options
+Runtime settings are auto-generated and stored in `config.json`:
+
+- **Directories**: Working directory, ROMs directory
+- **Display**: Box art thumbnails, USA-only filter, skip installed games
+- **Internet Archive**: Enable/disable, S3 credentials
+- **Scraper**: Provider selection (Libretro, ScreenScraper, TheGamesDB, RAWG, IGDB), frontend format (EmulationStation, ES-DE, RetroArch, Pegasus), API credentials
+- **NSZ**: Enable/disable, keys file path
 
 ## Controls
-
-### Navigation Modes
-- **Systems Mode**: Browse available gaming systems
-- **Games Mode**: Browse and select games within a system
-- **Settings Mode**: Configure application behavior
 
 ### System Selection
 - **D-pad Up/Down** or **Arrow Keys**: Navigate systems
@@ -116,7 +116,7 @@ Runtime settings are automatically created and stored:
 
 ### Game Selection
 - **D-pad Up/Down** or **Arrow Keys**: Navigate games
-- **D-pad Left/Right** or **Page Up/Down**: Jump pages or letters
+- **D-pad Left/Right** or **Page Up/Down**: Jump by letter
 - **B Button** or **Space**: Toggle game selection
 - **A Button** or **Escape**: Return to systems
 - **START** or **Enter**: Begin download
@@ -124,16 +124,7 @@ Runtime settings are automatically created and stored:
 
 ### During Download
 - **A Button** or **Escape**: Cancel download
-- Real-time progress display with speed indicators
-
-## Dependencies
-
-- Python 3.11+
-- pygame >= 2.0.0
-- requests >= 2.25.0
-- watchdog (development only)
-- black (development only)
-- flake8 (development only)
+- Real-time progress display with speed and ETA
 
 ## Project Structure
 
@@ -142,51 +133,75 @@ console_utilities/
 ├── src/
 │   ├── app.py                          # Main application entry point
 │   ├── state.py                        # Centralized state management
-│   ├── constants.py                    # Global constants and configuration
-│   ├── config/                         # Configuration management
-│   │   └── settings.py
-│   ├── services/                       # Business logic layer
-│   │   ├── data_loader.py             # System/game data loading
-│   │   ├── download.py                # Download service with progress tracking
-│   │   ├── file_listing.py            # Remote file listing and parsing
-│   │   └── image_cache.py             # Thumbnail caching
-│   ├── input/                          # Input handling
-│   │   ├── controller.py              # Controller/gamepad input
-│   │   ├── navigation.py              # D-pad navigation with acceleration
-│   │   └── touch.py                   # Touch/mouse input
-│   ├── ui/                             # UI components (Atomic Design)
-│   │   ├── theme.py                   # Design tokens and theming
-│   │   ├── atoms/                     # Basic components
-│   │   ├── molecules/                 # Composite components
-│   │   ├── organisms/                 # Complex UI sections
-│   │   ├── templates/                 # Page layouts
-│   │   └── screens/                   # Complete screens
-│   ├── utils/                          # Utility functions
-│   │   ├── formatting.py
-│   │   ├── logging.py
-│   │   └── nsz.py                     # NSZ decompression wrapper
-│   └── nsz/                            # Embedded NSZ library
-├── assets/
+│   ├── constants.py                    # Global constants and paths
 │   ├── config/
-│   │   └── download.json              # System configuration
-│   ├── docs/                           # Platform-specific documentation
-│   ├── images/                         # Application assets
-│   └── examples/                       # Example configuration files
-├── workdir/                            # Development working directory
-├── dist/                               # Built distributions
-├── Makefile                            # Build and development commands
-├── environment.yml                     # Conda environment specification
-├── pyproject.toml                      # Python project configuration
-├── CLAUDE.md                           # AI assistant instructions
-└── README.md                           # This documentation
+│   │   └── settings.py                # User settings persistence
+│   ├── services/
+│   │   ├── data_loader.py            # System/game data loading
+│   │   ├── download_manager.py       # Download queue management
+│   │   ├── file_listing.py           # Remote file listing (HTML/JSON/IA)
+│   │   ├── image_cache.py            # Thumbnail caching
+│   │   ├── installed_checker.py      # Local file detection
+│   │   ├── internet_archive.py       # Internet Archive API integration
+│   │   ├── scraper_manager.py        # Image scraper orchestration
+│   │   └── scraper_providers/        # Libretro, ScreenScraper, etc.
+│   ├── input/
+│   │   ├── controller.py             # Controller/gamepad input
+│   │   ├── navigation.py             # D-pad navigation with acceleration
+│   │   └── touch.py                  # Touch/mouse input
+│   ├── ui/                            # UI components (Atomic Design)
+│   │   ├── theme.py                  # Design tokens and theming
+│   │   ├── atoms/                    # Basic components
+│   │   ├── molecules/                # Composite components
+│   │   ├── organisms/                # Complex sections
+│   │   ├── templates/                # Page layouts
+│   │   └── screens/                  # Complete screens and modals
+│   ├── utils/                         # Logging, formatting, NSZ wrapper
+│   └── nsz/                           # Embedded NSZ library
+├── assets/
+│   ├── bundled_data.json             # System configuration
+│   ├── docs/                         # Platform-specific build docs
+│   ├── examples/                     # Example configuration files
+│   ├── fonts/                        # VT323 retro font
+│   └── images/                       # Logo and screenshots
+├── docs/                              # User documentation
+│   ├── server-response-format.md     # Server response format guide
+│   └── adding-a-system.md           # Adding custom systems guide
+├── workdir/                           # Development runtime data
+├── dist/                              # Built distributions
+├── Makefile                           # Build and development commands
+├── buildozer.spec                     # Android build configuration
+├── console_utils.spec                 # macOS PyInstaller configuration
+├── console_utils_win.spec             # Windows PyInstaller configuration
+├── environment.yml                    # Conda environment specification
+├── pyproject.toml                     # Python project configuration
+└── README.md
 ```
+
+## Dependencies
+
+- Python 3.11+
+- pygame >= 2.0.0
+- requests >= 2.25.0
+- rarfile (bundled for console)
+- watchdog (development only)
+- black, flake8 (development only)
 
 ## Compatibility
 
-- **Primary Target**: Knulli RG35xxSP and other Batocera-based handheld consoles
-- **Development**: Cross-platform (Windows, macOS, Linux)
-- **Download Sources**: Supports multiple formats including HTML directory parsing, JSON APIs, and direct file downloads
-- **File Formats**: Handles various ROM formats with automatic extraction for ZIP archives
+- **Console**: Knulli RG35xxSP and other Batocera-based handheld consoles
+- **Desktop**: macOS (.app bundle), Windows (.exe bundle), Linux
+- **Mobile**: Android (APK via Buildozer)
+- **Display**: 800x600 resolution, optimized for small screens
+
+## Documentation
+
+- [Server Response Format](docs/server-response-format.md) - How your server needs to respond for the app to detect and list files
+- [Adding a System](docs/adding-a-system.md) - How to add custom gaming systems
+- [PyGame Bundle Guide](assets/docs/pygame.md) - Deploying to Batocera/Knulli consoles
+- [macOS Build Guide](assets/docs/macos.md) - Building the macOS standalone app
+- [Windows Build Guide](assets/docs/windows.md) - Building the Windows standalone app
+- [Android Build Guide](assets/docs/android.md) - Building the Android APK
 
 ## Legal Notice and Disclaimer
 
@@ -196,11 +211,11 @@ console_utilities/
 
 - **No Game Copies**: This application contains no copies of games, ROMs, or any copyrighted gaming content whatsoever.
 
-- **Example Configuration**: The included `download.json` file serves as an example configuration only. It demonstrates how the system works but does not endorse or recommend any specific download sources.
+- **Example Configuration**: Any included configuration files serve as examples only. They demonstrate how the system works but do not endorse or recommend any specific download sources.
 
 - **Legal Responsibility**: Users are solely responsible for:
   - Ensuring they have legal rights to download any content
-  - Complying with copyright laws in their jurisdiction  
+  - Complying with copyright laws in their jurisdiction
   - Verifying the legality of any download sources they configure
   - Understanding that downloading copyrighted content without permission may be illegal
 
@@ -216,30 +231,27 @@ This project incorporates the following open source libraries:
 
 - **NSZ Library**: NSZ compression/decompression functionality provided by [nicoboss/nsz](https://github.com/nicoboss/nsz) - A compression/decompression tool with fast compression and decompression for various file formats.
 
-## Contributing
-
-Pull requests are welcome. For major changes, please open an issue first to discuss proposed modifications.
-
 ## Troubleshooting
 
 ### Error Logging
 - Check `error.log` in the application directory for detailed error information
 - On Batocera systems: `/userdata/roms/pygame/downloader/error.log`
-- Development: `error.log` in the project root
+- Development: `py_downloads/error.log` in the project root
 
 ### Common Issues
-- **No games showing**: Verify `download.json` configuration and network connectivity
+- **No games showing**: Verify your system configuration and network connectivity
 - **Download failures**: Check available disk space and directory permissions
 - **Display issues**: Ensure pygame dependencies are properly installed
+- **Thumbnails not loading**: Check that the `boxarts` URL is correct and accessible
 
 ### Development
 ```bash
-# Check code quality
-make lint
-
-# Format code
-make format
-
-# Clean build artifacts
-make clean
+make format    # Format code with black
+make lint      # Lint code with flake8
+make test      # Run tests with pytest
+make clean     # Clean build artifacts
 ```
+
+## Contributing
+
+Pull requests are welcome. For major changes, please open an issue first to discuss proposed modifications.

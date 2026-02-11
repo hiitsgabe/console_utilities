@@ -34,6 +34,7 @@ from config.settings import (
 )
 from services.data_loader import (
     load_main_systems_data,
+    load_available_systems,
     update_json_file_path,
     get_visible_systems,
     get_system_index_by_name,
@@ -682,6 +683,7 @@ class ConsoleUtilitiesApp:
             self.state.ui_rects.folder_cancel_button = rects.get("cancel_button")
             self.state.ui_rects.confirm_ok_button = rects.get("confirm_ok")
             self.state.ui_rects.confirm_cancel_button = rects.get("confirm_cancel")
+            self.state.ui_rects.rects = rects
 
             if self.scanline_surface:
                 self.screen.blit(self.scanline_surface, (0, 0))
@@ -839,8 +841,8 @@ class ConsoleUtilitiesApp:
             if self.state.mode == "settings":
                 from ui.screens.settings_screen import settings_screen
 
-                max_items = settings_screen.get_max_items(self.settings)
-                _, divider_indices = settings_screen._get_settings_items(self.settings)
+                max_items = settings_screen.get_max_items(self.settings, self.data)
+                _, divider_indices = settings_screen._get_settings_items(self.settings, self.data)
             else:
                 from ui.screens.utils_screen import utils_screen
 
@@ -858,6 +860,23 @@ class ConsoleUtilitiesApp:
                 while new_pos in divider_indices and max_items > len(divider_indices):
                     new_pos = (new_pos + 1) % max_items
                 self.state.highlighted = new_pos
+
+        elif self.state.mode == "credits":
+            from ui.screens.credits_screen import SCROLL_STEP
+
+            max_scroll = self.state.ui_rects.rects.get(
+                "credits_max_scroll", 0
+            )
+            if direction == "down":
+                self.state.credits_scroll_offset = min(
+                    self.state.credits_scroll_offset + SCROLL_STEP,
+                    max_scroll,
+                )
+            elif direction == "up":
+                self.state.credits_scroll_offset = max(
+                    self.state.credits_scroll_offset - SCROLL_STEP,
+                    0,
+                )
 
         elif self.state.mode == "add_systems":
             max_items = len(self.state.available_systems) or 1
@@ -1549,7 +1568,7 @@ class ConsoleUtilitiesApp:
         from ui.screens.settings_screen import settings_screen
 
         action = settings_screen.get_setting_action(
-            self.state.highlighted, self.settings
+            self.state.highlighted, self.settings, self.data
         )
 
         if action == "select_archive_json":
@@ -1579,8 +1598,7 @@ class ConsoleUtilitiesApp:
         elif action == "select_roms_dir":
             self._open_folder_browser("roms_dir")
         elif action == "add_systems":
-            self.state.mode = "add_systems"
-            self.state.add_systems_highlighted = 0
+            self._load_add_systems()
         elif action == "systems_settings":
             self.state.mode = "systems_settings"
             self.state.systems_settings_highlighted = 0
@@ -1637,6 +1655,22 @@ class ConsoleUtilitiesApp:
             self._open_folder_browser("retroarch_thumbnails")
         elif action == "check_for_updates":
             self._check_for_updates()
+
+    def _load_add_systems(self):
+        """Load available systems in a background thread."""
+        import threading
+
+        self._show_loading("Loading available systems...")
+
+        def _do_load():
+            result = load_available_systems(self.data)
+            self.state.available_systems = result
+            self._hide_loading()
+            self.state.mode = "add_systems"
+            self.state.add_systems_highlighted = 0
+
+        thread = threading.Thread(target=_do_load, daemon=True)
+        thread.start()
 
     def _check_for_updates(self):
         """Check GitHub releases for a newer version."""
@@ -1825,47 +1859,52 @@ class ConsoleUtilitiesApp:
         self.state.folder_browser.highlighted = 0
         self.state.folder_browser.focus_area = "list"
         self.state.folder_browser.button_index = 0
-        self.state.folder_browser.selected_system_to_add = {"type": selection_type}
+        # Preserve selected_system_to_add if already set (e.g. add_system_folder)
+        if not self.state.folder_browser.selected_system_to_add or \
+                self.state.folder_browser.selected_system_to_add.get("type") != selection_type:
+            self.state.folder_browser.selected_system_to_add = {"type": selection_type}
 
         # Set initial path based on selection type
         if selection_type == "work_dir":
-            path = self.settings.get("work_dir", os.path.expanduser("~"))
+            path = self.settings.get("work_dir", SCRIPT_DIR)
         elif selection_type == "roms_dir":
-            path = self.settings.get("roms_dir", os.path.expanduser("~"))
+            path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "archive_json":
             current = self.settings.get("archive_json_path", "")
-            path = os.path.dirname(current) if current else os.path.expanduser("~")
+            path = os.path.dirname(current) if current else SCRIPT_DIR
         elif selection_type == "nsz_keys":
             current = self.settings.get("nsz_keys_path", "")
-            path = os.path.dirname(current) if current else os.path.expanduser("~")
+            path = os.path.dirname(current) if current else SCRIPT_DIR
         elif selection_type == "esde_media_path":
             current = self.settings.get("esde_media_path", "")
-            path = current if current else os.path.expanduser("~")
+            path = current if current else SCRIPT_DIR
         elif selection_type == "esde_gamelists_path":
             current = self.settings.get("esde_gamelists_path", "")
-            path = current if current else os.path.expanduser("~")
+            path = current if current else SCRIPT_DIR
         elif selection_type == "retroarch_thumbnails":
             current = self.settings.get("retroarch_thumbnails_path", "")
-            path = current if current else os.path.expanduser("~")
+            path = current if current else SCRIPT_DIR
         elif selection_type == "scraper_rom_select":
-            path = self.settings.get("roms_dir", os.path.expanduser("~"))
+            path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "dedupe_folder":
-            path = self.settings.get("roms_dir", os.path.expanduser("~"))
+            path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type in ("extract_zip", "extract_rar", "extract_7z"):
-            path = self.settings.get("work_dir", os.path.expanduser("~"))
+            path = self.settings.get("work_dir", SCRIPT_DIR)
         elif selection_type == "rename_folder":
-            path = self.settings.get("roms_dir", os.path.expanduser("~"))
+            path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "ia_download_folder":
             path = self.state.ia_download_wizard.output_folder or self.settings.get(
-                "work_dir", os.path.expanduser("~")
+                "work_dir", SCRIPT_DIR
             )
+        elif selection_type == "add_system_folder":
+            path = self.settings.get("roms_dir", SCRIPT_DIR)
         else:
-            path = os.path.expanduser("~")
+            path = SCRIPT_DIR
 
         if os.path.exists(path):
             self.state.folder_browser.current_path = path
         else:
-            self.state.folder_browser.current_path = os.path.expanduser("~")
+            self.state.folder_browser.current_path = SCRIPT_DIR
 
         self.state.folder_browser.items = load_folder_contents(
             self.state.folder_browser.current_path
@@ -1883,11 +1922,11 @@ class ConsoleUtilitiesApp:
         }
 
         # Start from roms directory
-        path = self.settings.get("roms_dir", os.path.expanduser("~"))
+        path = self.settings.get("roms_dir", SCRIPT_DIR)
         if os.path.exists(path):
             self.state.folder_browser.current_path = path
         else:
-            self.state.folder_browser.current_path = os.path.expanduser("~")
+            self.state.folder_browser.current_path = SCRIPT_DIR
 
         self.state.folder_browser.items = load_folder_contents(
             self.state.folder_browser.current_path
@@ -1999,6 +2038,9 @@ class ConsoleUtilitiesApp:
             "retroarch_thumbnails",
         ):
             self._complete_folder_browser_selection(current_path, selection_type)
+        elif selection_type == "add_system_folder":
+            self.state.folder_browser.show = False
+            self._complete_add_system(current_path)
         elif selection_type == "ia_collection_folder":
             # Set the folder path for IA collection and continue wizard
             self.state.ia_collection_wizard.folder_name = current_path
@@ -2026,20 +2068,81 @@ class ConsoleUtilitiesApp:
             pass
 
     def _handle_add_systems_selection(self):
-        """Handle add systems item selection."""
+        """Handle add systems item selection — open folder browser for destination."""
         if not self.state.available_systems:
             return
 
-        if self.state.add_systems_highlighted < len(self.state.available_systems):
-            system = self.state.available_systems[self.state.add_systems_highlighted]
-            # Open folder browser to select location for the new system
-            self.state.folder_browser.show = True
-            self.state.folder_browser.highlighted = 0
-            self.state.folder_browser.selected_system_to_add = system
-            self.state.folder_browser.current_path = os.path.expanduser("~")
-            self.state.folder_browser.items = load_folder_contents(
-                self.state.folder_browser.current_path
-            )
+        if self.state.add_systems_highlighted >= len(self.state.available_systems):
+            return
+
+        system = self.state.available_systems[self.state.add_systems_highlighted]
+
+        # Store the selected system and open folder browser to pick destination
+        self.state.folder_browser.selected_system_to_add = {
+            "type": "add_system_folder",
+            "system": system,
+        }
+        self._open_folder_browser("add_system_folder")
+
+    def _complete_add_system(self, folder_path: str):
+        """Complete adding a system after folder selection."""
+        system = self.state.folder_browser.selected_system_to_add.get("system", {})
+        if not system:
+            return
+
+        # Find the parent list_systems entry to inherit config
+        parent = next(
+            (d for d in self.data if d.get("list_systems") is True), None
+        )
+
+        # Build system config from parent entry, inheriting all relevant fields
+        file_formats = parent.get("file_format", [".zip"]) if parent else [".zip"]
+        should_unzip = parent.get("should_unzip", True) if parent else True
+        extract_contents = parent.get("extract_contents", True) if parent else True
+        boxarts_url = parent.get("boxarts", "") if parent else ""
+        auth = parent.get("auth") if parent else None
+
+        # Inherit extra fields from parent (download_url, regex, auth config, etc.)
+        inherit_keys = {
+            "download_url", "regex", "list_url", "list_json_file_location",
+            "list_item_id", "usa_regex", "ignore_extension_filtering",
+            "should_filter_usa", "should_decompress_nsz",
+        }
+        extra_fields = {}
+        if parent:
+            for key in inherit_keys:
+                if key in parent:
+                    extra_fields[key] = parent[key]
+
+        success = add_system_to_added_systems(
+            system_name=system["name"],
+            rom_folder=folder_path,
+            system_url=system["url"],
+            boxarts_url=boxarts_url,
+            file_formats=file_formats,
+            should_unzip=should_unzip,
+            extract_contents=extract_contents,
+            auth=auth,
+            extra_fields=extra_fields if extra_fields else None,
+        )
+
+        if success:
+            # Reload data
+            self.data = load_main_systems_data(self.settings)
+            # Show confirmation
+            self.state.confirm_modal.show = True
+            self.state.confirm_modal.title = "System Added"
+            self.state.confirm_modal.message_lines = [
+                f'"{system["name"]}" has been added.',
+                "",
+                "It will now appear in your systems list.",
+            ]
+            self.state.confirm_modal.ok_label = "OK"
+            self.state.confirm_modal.cancel_label = ""
+            self.state.confirm_modal.button_index = 0
+            self.state.confirm_modal.context = ""
+            # Return to settings
+            self.state.mode = "settings"
 
     def _handle_systems_settings_selection(self):
         """Handle systems settings item selection."""
@@ -3126,7 +3229,7 @@ class ConsoleUtilitiesApp:
         wizard.batch_mode = batch_mode
         wizard.step = "folder_select" if batch_mode else "rom_select"
         wizard.folder_current_path = self.settings.get(
-            "roms_dir", os.path.expanduser("~")
+            "roms_dir", SCRIPT_DIR
         )
         wizard.folder_items = load_folder_contents(wizard.folder_current_path)
         wizard.folder_highlighted = 0

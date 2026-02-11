@@ -5,8 +5,12 @@ Handles loading system configurations, added systems, and available systems.
 
 import json
 import os
+import re
 import traceback
 from typing import List, Dict, Any, Optional
+from urllib.parse import urljoin
+
+import requests
 
 from constants import ADDED_SYSTEMS_FILE, SCRIPT_DIR, DEV_MODE
 from utils.logging import log_error
@@ -150,6 +154,7 @@ def add_system_to_added_systems(
     should_unzip: bool = True,
     extract_contents: bool = True,
     auth: Optional[Dict[str, Any]] = None,
+    extra_fields: Optional[Dict[str, Any]] = None,
 ) -> bool:
     """
     Add a new system to the added systems list.
@@ -163,6 +168,8 @@ def add_system_to_added_systems(
         should_unzip: Whether to auto-extract ZIP files
         extract_contents: Whether to extract only contents (True) or keep folder structure (False)
         auth: Optional authentication config (e.g., {"type": "ia_s3", "access_key": ..., "secret_key": ...})
+        extra_fields: Optional dict of additional fields to include (e.g., download_url, regex,
+            ignore_extension_filtering, should_decompress_nsz, etc.)
 
     Returns:
         True if successful, False otherwise
@@ -185,6 +192,9 @@ def add_system_to_added_systems(
 
         if auth:
             new_system["auth"] = auth
+
+        if extra_fields:
+            new_system.update(extra_fields)
 
         # Check if system already exists
         existing_idx = next(
@@ -210,20 +220,84 @@ def add_system_to_added_systems(
 
 
 def load_available_systems(
-    main_config_url: Optional[str] = None,
+    data: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
     """
-    Load available systems from remote config.
+    Load available systems from a list_systems entry.
+
+    Finds entries with list_systems: true in data, fetches their URL,
+    parses the HTML with the entry's regex to discover sub-systems.
 
     Args:
-        main_config_url: Optional URL to fetch system list from
+        data: Full list of system configuration dictionaries
 
     Returns:
-        List of available system dictionaries
+        List of available system dictionaries with name, href, url, size
     """
-    # This would typically fetch from a remote API
-    # For now, return empty list - implementation depends on external service
-    return []
+    from services.file_listing import _get_request_headers_cookies
+
+    try:
+        # Find the first list_systems entry
+        list_entry = next(
+            (d for d in data if d.get("list_systems") is True), None
+        )
+        if not list_entry:
+            return []
+
+        url = list_entry.get("url", "")
+        regex_pattern = list_entry.get(
+            "regex", '<a href="(?P<href>[^"]+)"[^>]*>(?P<title>[^<]+)</a>'
+        )
+
+        if not url:
+            return []
+
+        headers, cookies = _get_request_headers_cookies(list_entry)
+        r = requests.get(url, timeout=15, headers=headers, cookies=cookies)
+        r.raise_for_status()
+        html = r.text
+
+        systems = []
+        skip_names = {".", "..", "Parent Directory", "Parent directory"}
+
+        for match in re.finditer(regex_pattern, html):
+            groups = match.groupdict()
+            href = groups.get("href", "")
+            title = groups.get("title", "")
+            text = groups.get("text", title)
+            size = groups.get("size", "")
+
+            name = (text or title or href).strip()
+
+            # Skip navigation entries
+            if not name or name in skip_names or href in ("../", "./", "/"):
+                continue
+
+            # Clean up trailing slash from name
+            display_name = name.rstrip("/")
+            if not display_name:
+                continue
+
+            full_url = urljoin(url, href)
+
+            systems.append(
+                {
+                    "name": display_name,
+                    "href": href,
+                    "url": full_url,
+                    "size": size.strip() if size else "",
+                }
+            )
+
+        return systems
+
+    except Exception as e:
+        log_error(
+            "Failed to load available systems",
+            type(e).__name__,
+            traceback.format_exc(),
+        )
+        return []
 
 
 def fix_added_systems_roms_folder(roms_dir: str) -> None:

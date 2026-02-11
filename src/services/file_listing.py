@@ -267,7 +267,7 @@ def _list_files_html(
 
     if "regex" in system_data:
         # Use the provided named capture group regex
-        matches = re.finditer(regex_pattern, html_content)
+        matches = re.finditer(regex_pattern, html_content, re.DOTALL)
 
         for match in matches:
             try:

@@ -21,16 +21,16 @@ class SettingsScreen:
     # Directories section
     DIRECTORIES_SECTION = [
         "--- DIRECTORIES ---",
-        "Select Archive Json",
+        "Select Backup Map Json",
         "Work Directory",
         "ROMs Directory",
     ]
 
     # Systems section
     SYSTEMS_SECTION = [
-        "--- SYSTEMS ---",
-        "Add Systems",
-        "Systems Settings",
+        "--- GAME BACKUP ---",
+        "Add Game System from Backup",
+        "Games Backup Settings",
     ]
 
     # View options section
@@ -88,13 +88,16 @@ class SettingsScreen:
         self.template = ListScreenTemplate(theme)
 
     def _get_settings_items(
-        self, settings: Dict[str, Any]
+        self,
+        settings: Dict[str, Any],
+        data: Optional[List[Dict[str, Any]]] = None,
     ) -> Tuple[List[str], Set[int]]:
         """
         Build the settings items list dynamically based on current settings.
 
         Args:
             settings: Current settings dictionary
+            data: Optional system data list to check for list_systems entries
 
         Returns:
             Tuple of (items list, divider indices set)
@@ -102,13 +105,22 @@ class SettingsScreen:
         items = []
         divider_indices = set()
 
+        # Check if data has a list_systems entry (backup list available)
+        has_backup_list = data and any(
+            d.get("list_systems") is True for d in data
+        )
+
         # Add Directories section
         divider_indices.add(len(items))
         items.extend(self.DIRECTORIES_SECTION)
 
         # Add Systems section
         divider_indices.add(len(items))
-        items.extend(self.SYSTEMS_SECTION)
+        items.append(self.SYSTEMS_SECTION[0])  # Divider
+        # Only show "Add Game System from Backup" when data has a list_systems entry
+        if has_backup_list:
+            items.append(self.SYSTEMS_SECTION[1])  # Add Game System from Backup
+        items.append(self.SYSTEMS_SECTION[2])  # Games Backup Settings
 
         # Add View Options section
         divider_indices.add(len(items))
@@ -167,7 +179,11 @@ class SettingsScreen:
         return items, divider_indices
 
     def render(
-        self, screen: pygame.Surface, highlighted: int, settings: Dict[str, Any]
+        self,
+        screen: pygame.Surface,
+        highlighted: int,
+        settings: Dict[str, Any],
+        data: Optional[List[Dict[str, Any]]] = None,
     ) -> Tuple[Optional[pygame.Rect], List[pygame.Rect], int]:
         """
         Render the settings screen.
@@ -176,12 +192,13 @@ class SettingsScreen:
             screen: Surface to render to
             highlighted: Currently highlighted index
             settings: Current settings dictionary
+            data: Optional system data list
 
         Returns:
             Tuple of (back_button_rect, item_rects, scroll_offset)
         """
         # Build items dynamically based on settings
-        settings_items, divider_indices = self._get_settings_items(settings)
+        settings_items, divider_indices = self._get_settings_items(settings, data)
 
         # Build items with current values
         items = []
@@ -216,7 +233,7 @@ class SettingsScreen:
                 path = settings.get("nsz_keys_path", "")
                 value = "Set" if path else "Not Set"
                 items.append((item, value))
-            elif item == "Select Archive Json":
+            elif item == "Select Backup Map Json":
                 path = settings.get("archive_json_path", "")
                 value = "Set" if path else "Not Set"
                 items.append((item, value))
@@ -342,19 +359,25 @@ class SettingsScreen:
 
         return "..." + result if result else "..." + path[-max_length + 3 :]
 
-    def get_setting_action(self, index: int, settings: Dict[str, Any]) -> str:
+    def get_setting_action(
+        self,
+        index: int,
+        settings: Dict[str, Any],
+        data: Optional[List[Dict[str, Any]]] = None,
+    ) -> str:
         """
         Get the action for a settings item.
 
         Args:
             index: Selected index
             settings: Current settings dictionary
+            data: Optional system data list
 
         Returns:
             Action string
         """
         # Build items dynamically to match what's displayed
-        settings_items, divider_indices = self._get_settings_items(settings)
+        settings_items, divider_indices = self._get_settings_items(settings, data)
 
         if index in divider_indices:
             return "divider"
@@ -362,13 +385,13 @@ class SettingsScreen:
         if index < len(settings_items):
             item = settings_items[index]
             actions = {
-                "Select Archive Json": "select_archive_json",
+                "Select Backup Map Json": "select_archive_json",
                 "Work Directory": "select_work_dir",
                 "ROMs Directory": "select_roms_dir",
                 "NSZ Keys": "select_nsz_keys",
                 "Remap Controller": "remap_controller",
-                "Add Systems": "add_systems",
-                "Systems Settings": "systems_settings",
+                "Add Game System from Backup": "add_systems",
+                "Games Backup Settings": "systems_settings",
                 "Enable Internet Archive": "toggle_ia_enabled",
                 "Internet Archive Login": "ia_login",
                 "Enable Box-art Display": "toggle_boxart",
@@ -392,17 +415,22 @@ class SettingsScreen:
 
         return "unknown"
 
-    def get_max_items(self, settings: Dict[str, Any]) -> int:
+    def get_max_items(
+        self,
+        settings: Dict[str, Any],
+        data: Optional[List[Dict[str, Any]]] = None,
+    ) -> int:
         """
         Get the maximum number of items based on current settings.
 
         Args:
             settings: Current settings dictionary
+            data: Optional system data list
 
         Returns:
             Number of items
         """
-        settings_items, _ = self._get_settings_items(settings)
+        settings_items, _ = self._get_settings_items(settings, data)
         return len(settings_items)
 
 
