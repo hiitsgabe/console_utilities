@@ -11,7 +11,7 @@ from ui.templates.list_screen import ListScreenTemplate
 # All possible root menu entries and their action keys (in order)
 _ALL_ROOT_ENTRIES = [
     ("Backup Games", "systems_list"),
-    ("PortMaster", "portmaster"),
+    ("PortMaster (beta)", "portmaster"),
     ("Utils", "utils"),
     ("Settings", "settings"),
     ("Credits", "credits"),
