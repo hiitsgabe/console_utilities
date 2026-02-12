@@ -35,6 +35,7 @@ class MenuList:
         show_checkbox: bool = False,
         divider_indices: Optional[Set[int]] = None,
         item_spacing: int = 0,
+        text_scroll_offset: int = 0,
     ) -> Tuple[List[pygame.Rect], int]:
         """
         Render a menu list.
@@ -101,6 +102,7 @@ class MenuList:
                     thumbnail=thumbnail,
                     secondary_text=secondary,
                     show_checkbox=show_checkbox,
+                    text_scroll_offset=text_scroll_offset if i == highlighted else 0,
                 )
 
             item_rects.append(item_rect)

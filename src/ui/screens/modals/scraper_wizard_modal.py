@@ -1007,9 +1007,7 @@ class ScraperWizardModal:
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[pygame.Rect]]:
         """Render batch options selection."""
         width = min(500, screen.get_width() - 40)
-        # +40 for video toggle row
-        base_height = (430 if mixed_images_enabled else 350) + 40
-        height = min(base_height, screen.get_height() - 60)
+        height = min(480, screen.get_height() - 60)
 
         show_close = input_mode == "touch"
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
@@ -1018,48 +1016,6 @@ class ScraperWizardModal:
 
         padding = self.theme.padding_sm
         y = content_rect.top + padding
-
-        item_rects = []
-        item_height = 40
-
-        # Auto-select option
-        auto_rect = pygame.Rect(
-            content_rect.left + padding,
-            y,
-            content_rect.width - padding * 2,
-            item_height - 5,
-        )
-        item_rects.append(auto_rect)
-
-        bg_color = self.theme.primary if highlighted == 0 else self.theme.surface_hover
-        pygame.draw.rect(
-            screen, bg_color, auto_rect, border_radius=self.theme.radius_sm
-        )
-
-        checkbox = "[X]" if auto_select else "[ ]"
-        self.text.render(
-            screen,
-            f"{checkbox} Auto-select first result",
-            (
-                auto_rect.left + padding,
-                auto_rect.centery - self.theme.font_size_sm // 2,
-            ),
-            color=(
-                self.theme.background if highlighted == 0 else self.theme.text_primary
-            ),
-            size=self.theme.font_size_sm,
-        )
-        y += item_height
-
-        # Default images section
-        self.text.render(
-            screen,
-            "Default images to download:",
-            (content_rect.left + padding, y + 5),
-            color=self.theme.text_secondary,
-            size=self.theme.font_size_xs,
-        )
-        y += 25
 
         if mixed_images_enabled:
             all_image_types = [
@@ -1073,77 +1029,73 @@ class ScraperWizardModal:
             ]
         else:
             all_image_types = ["box-2D", "boxart", "screenshot", "wheel", "fanart"]
-        for i, img_type in enumerate(all_image_types):
-            img_rect = pygame.Rect(
+
+        # Build flat items list: auto-select, image types, video
+        type_labels = {
+            "mixrbv1": "Mix V1",
+            "mixrbv2": "Mix V2",
+        }
+        items = []
+        items.append(
+            {
+                "label": "Auto-select first result",
+                "checked": auto_select,
+            }
+        )
+        for img_type in all_image_types:
+            label = type_labels.get(img_type, img_type.replace("-", " ").title())
+            items.append(
+                {
+                    "label": label,
+                    "checked": img_type in default_images,
+                }
+            )
+        items.append(
+            {
+                "label": "Download Video",
+                "checked": download_video,
+            }
+        )
+
+        item_rects = []
+        item_height = 40
+        visible_items = (content_rect.height - 90) // item_height
+        scroll_offset = max(0, highlighted - visible_items + 2)
+
+        for i in range(
+            scroll_offset, min(len(items), scroll_offset + visible_items)
+        ):
+            item = items[i]
+            is_selected = i == highlighted
+
+            item_rect = pygame.Rect(
                 content_rect.left + padding,
                 y,
                 content_rect.width - padding * 2,
                 item_height - 5,
             )
-            item_rects.append(img_rect)
-
-            is_selected = highlighted == i + 1
-            is_checked = img_type in default_images
+            item_rects.append(item_rect)
 
             bg_color = self.theme.primary if is_selected else self.theme.surface_hover
             pygame.draw.rect(
-                screen, bg_color, img_rect, border_radius=self.theme.radius_sm
+                screen, bg_color, item_rect, border_radius=self.theme.radius_sm
             )
 
-            checkbox = "[X]" if is_checked else "[ ]"
-            type_labels = {
-                "mixrbv1": "Mix V1",
-                "mixrbv2": "Mix V2",
-            }
-            label = type_labels.get(img_type, img_type.replace("-", " ").title())
+            checkbox = "[X]" if item["checked"] else "[ ]"
             self.text.render(
                 screen,
-                f"{checkbox} {label}",
+                f"{checkbox} {item['label']}",
                 (
-                    img_rect.left + padding,
-                    img_rect.centery - self.theme.font_size_sm // 2,
+                    item_rect.left + padding,
+                    item_rect.centery - self.theme.font_size_sm // 2,
                 ),
                 color=(
                     self.theme.background if is_selected else self.theme.text_primary
                 ),
                 size=self.theme.font_size_sm,
             )
+
             y += item_height
-
-        # Download Video toggle
-        y += 5  # Small gap before video option
-        video_idx = len(all_image_types) + 1  # +1 for auto-select at index 0
-        video_rect = pygame.Rect(
-            content_rect.left + padding,
-            y,
-            content_rect.width - padding * 2,
-            item_height - 5,
-        )
-        item_rects.append(video_rect)
-
-        is_video_selected = highlighted == video_idx
-        bg_color = (
-            self.theme.primary if is_video_selected else self.theme.surface_hover
-        )
-        pygame.draw.rect(
-            screen, bg_color, video_rect, border_radius=self.theme.radius_sm
-        )
-
-        video_checkbox = "[X]" if download_video else "[ ]"
-        self.text.render(
-            screen,
-            f"{video_checkbox} Download Video",
-            (
-                video_rect.left + padding,
-                video_rect.centery - self.theme.font_size_sm // 2,
-            ),
-            color=(
-                self.theme.background
-                if is_video_selected
-                else self.theme.text_primary
-            ),
-            size=self.theme.font_size_sm,
-        )
 
         hints = get_combined_hints(
             [("select", "Toggle"), ("start", "Start Batch"), ("back", "Cancel")],

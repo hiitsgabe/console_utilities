@@ -43,6 +43,7 @@ class ListScreenTemplate:
         item_spacing: int = 0,
         rainbow_title: bool = False,
         center_title: bool = False,
+        text_scroll_offset: int = 0,
     ) -> Tuple[Optional[pygame.Rect], List[pygame.Rect], int]:
         """
         Render a list screen.
@@ -106,6 +107,7 @@ class ListScreenTemplate:
             show_checkbox=show_checkbox,
             divider_indices=divider_indices,
             item_spacing=item_spacing,
+            text_scroll_offset=text_scroll_offset,
         )
 
         return back_button_rect, item_rects, scroll_offset

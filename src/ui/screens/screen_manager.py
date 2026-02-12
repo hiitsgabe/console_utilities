@@ -180,6 +180,7 @@ class ScreenManager:
                 button_focused=state.game_details.button_focused,
                 loading_size=state.game_details.loading_size,
                 input_mode=state.input_mode,
+                text_scroll_offset=state.text_scroll_offset,
             )
             rects["modal"] = modal_rect
             rects["download_button"] = download_rect
@@ -464,6 +465,7 @@ class ScreenManager:
                     get_thumbnail=get_thumbnail,
                     input_mode=state.input_mode,
                     show_download_all=settings.get("show_download_all", False),
+                    text_scroll_offset=state.text_scroll_offset,
                 )
             )
             rects["back"] = back_rect
