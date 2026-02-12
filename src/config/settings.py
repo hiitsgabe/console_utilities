@@ -28,6 +28,8 @@ class Settings:
     archive_json_url: str = ""
     cache_enabled: bool = True
     system_settings: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    # PortMaster settings
+    portmaster_enabled: bool = False
     # Internet Archive settings
     ia_enabled: bool = False
     ia_email: str = ""
@@ -73,7 +75,7 @@ class Settings:
 def _get_default_work_dir() -> str:
     """Get the default work directory based on environment."""
     if DEV_MODE:
-        return os.path.join(SCRIPT_DIR, "..", "downloads")
+        return os.path.join(SCRIPT_DIR, "..", "workdir", "downloads")
     elif os.path.exists("/userdata") and os.access("/userdata", os.W_OK):
         return "/userdata/downloads"
     else:

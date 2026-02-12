@@ -9,7 +9,7 @@ from xml.etree import ElementTree as ET
 
 from ui.theme import Theme, default_theme
 from ui.templates.list_screen import ListScreenTemplate
-from constants import APP_VERSION, SCRIPT_DIR
+from constants import APP_VERSION, BUILD_TARGET, SCRIPT_DIR
 
 
 class SettingsScreen:
@@ -42,6 +42,12 @@ class SettingsScreen:
         "USA Games Only",
         "Show Download All Button",
         "Skip Installed Games",
+    ]
+
+    # PortMaster section (only shown for pygame builds)
+    PORTMASTER_SECTION = [
+        "--- PORTMASTER ---",
+        "Enable PortMaster",
     ]
 
     # Input section
@@ -129,6 +135,11 @@ class SettingsScreen:
         # Add View Options section
         divider_indices.add(len(items))
         items.extend(self.VIEW_OPTIONS_SECTION)
+
+        # Add PortMaster section (only for pygame builds)
+        if BUILD_TARGET in ("pygame", "source"):
+            divider_indices.add(len(items))
+            items.extend(self.PORTMASTER_SECTION)
 
         # Add Input section
         divider_indices.add(len(items))
@@ -245,6 +256,9 @@ class SettingsScreen:
             elif item == "Select Backup Map Json":
                 path = settings.get("archive_json_path", "")
                 value = "Set" if path else "Not Set"
+                items.append((item, value))
+            elif item == "Enable PortMaster":
+                value = "ON" if settings.get("portmaster_enabled", False) else "OFF"
                 items.append((item, value))
             elif item == "Enable Internet Archive":
                 value = "ON" if settings.get("ia_enabled", False) else "OFF"
@@ -450,6 +464,7 @@ class SettingsScreen:
                 "Remap Controller": "remap_controller",
                 "Add Game System from Backup": "add_systems",
                 "Games Backup Settings": "systems_settings",
+                "Enable PortMaster": "toggle_portmaster_enabled",
                 "Enable Internet Archive": "toggle_ia_enabled",
                 "Internet Archive Login": "ia_login",
                 "Enable Box-art Display": "toggle_boxart",

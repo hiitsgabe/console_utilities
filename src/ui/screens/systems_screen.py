@@ -8,8 +8,29 @@ from typing import List, Dict, Any, Tuple, Optional, Set
 from ui.theme import Theme, default_theme
 from ui.templates.list_screen import ListScreenTemplate
 
-# Root menu items
-ROOT_MENU_ITEMS = ["Backup Games", "Utils", "Settings", "Credits"]
+# All possible root menu entries and their action keys (in order)
+_ALL_ROOT_ENTRIES = [
+    ("Backup Games", "systems_list"),
+    ("PortMaster", "portmaster"),
+    ("Utils", "utils"),
+    ("Settings", "settings"),
+    ("Credits", "credits"),
+]
+
+
+def _build_root_menu(settings: Dict[str, Any]) -> Tuple[List[str], List[str]]:
+    """Return (labels, actions) for the root menu based on settings."""
+    from constants import BUILD_TARGET
+
+    labels = []
+    actions = []
+    for label, action in _ALL_ROOT_ENTRIES:
+        if action == "portmaster":
+            if BUILD_TARGET not in ("pygame", "source") or not settings.get("portmaster_enabled", False):
+                continue
+        labels.append(label)
+        actions.append(action)
+    return labels, actions
 
 
 class SystemsScreen:
@@ -29,6 +50,7 @@ class SystemsScreen:
         screen: pygame.Surface,
         systems: List[Dict[str, Any]],
         highlighted: int,
+        settings: Dict[str, Any] = None,
         extra_items: List[str] = None,
     ) -> Tuple[Optional[pygame.Rect], List[pygame.Rect], int]:
         """
@@ -38,12 +60,16 @@ class SystemsScreen:
             screen: Surface to render to
             systems: List of system configurations (unused in root)
             highlighted: Currently highlighted index
+            settings: Current settings dictionary
             extra_items: Override menu items
 
         Returns:
             Tuple of (back_button_rect, item_rects, scroll_offset)
         """
-        items = extra_items if extra_items is not None else ROOT_MENU_ITEMS
+        if extra_items is not None:
+            items = extra_items
+        else:
+            items, _ = _build_root_menu(settings or {})
 
         return self.template.render(
             screen,
@@ -90,24 +116,26 @@ class SystemsScreen:
             item_spacing=8,
         )
 
-    def get_root_menu_action(self, index: int) -> str:
+    def get_root_menu_action(self, index: int, settings: Dict[str, Any] = None) -> str:
         """
         Get the action for a root menu selection.
 
         Args:
             index: Selected index
+            settings: Current settings dictionary
 
         Returns:
-            Action string: "systems_list", "utils", "settings", "credits"
+            Action string: "systems_list", "portmaster", "utils", "settings", "credits"
         """
-        actions = ["systems_list", "utils", "settings", "credits"]
+        _, actions = _build_root_menu(settings or {})
         if 0 <= index < len(actions):
             return actions[index]
         return "unknown"
 
-    def get_root_menu_count(self) -> int:
+    def get_root_menu_count(self, settings: Dict[str, Any] = None) -> int:
         """Get number of root menu items."""
-        return len(ROOT_MENU_ITEMS)
+        labels, _ = _build_root_menu(settings or {})
+        return len(labels)
 
     def get_selection_type(self, index: int, systems_count: int) -> Tuple[str, int]:
         """

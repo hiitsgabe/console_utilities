@@ -59,6 +59,7 @@ from services.installed_checker import installed_checker
 from services.image_cache import ImageCache
 from services.download_manager import DownloadManager
 from services.scraper_manager import ScraperManager
+from services.portmaster_loader import PortMasterLoader, PortMasterInstaller
 from input.navigation import NavigationHandler
 from input.controller import ControllerHandler
 from input.touch import TouchHandler
@@ -159,6 +160,12 @@ class ConsoleUtilitiesApp:
 
         # Initialize scraper manager
         self.scraper_manager = ScraperManager(self.settings, self.state.scraper_queue)
+
+        # Initialize PortMaster loader and installer
+        self.portmaster_loader = PortMasterLoader(self.settings)
+        self.portmaster_installer = PortMasterInstaller(
+            self.settings, self.portmaster_loader
+        )
 
         # CRT vignette overlay (edge darkening)
         self.vignette_surface = self._create_vignette()
@@ -436,6 +443,10 @@ class ConsoleUtilitiesApp:
         self, game: Any, system_data: Optional[dict] = None
     ) -> Optional[pygame.Surface]:
         """Get thumbnail for a game."""
+        # PortMaster ports have banner_url directly in the dict
+        if isinstance(game, dict) and game.get("banner_url"):
+            return self.image_cache.get_thumbnail(game, "", self.settings)
+
         if system_data:
             boxart_url = system_data.get("boxarts", "")
         else:
@@ -450,6 +461,10 @@ class ConsoleUtilitiesApp:
 
     def _get_hires_image(self, game: Any) -> Optional[pygame.Surface]:
         """Get hi-res image for a game."""
+        # PortMaster ports have banner_url directly in the dict
+        if isinstance(game, dict) and game.get("banner_url"):
+            return self.image_cache.get_hires_image(game, "", self.settings)
+
         if self.state.selected_system < 0 or self.state.selected_system >= len(
             self.data
         ):
@@ -703,6 +718,18 @@ class ConsoleUtilitiesApp:
             )
             return
 
+        if self.state.port_details.show:
+            # Left/right scroll the port title text horizontally
+            if direction in ("left", "right"):
+                scroll_step = 20
+                if direction == "right":
+                    self.state.text_scroll_offset += scroll_step
+                else:
+                    self.state.text_scroll_offset = max(
+                        0, self.state.text_scroll_offset - scroll_step
+                    )
+            return
+
         if self.state.game_details.show:
             # Left/right scroll the game name text horizontally
             if direction in ("left", "right"):
@@ -806,7 +833,7 @@ class ConsoleUtilitiesApp:
         if self.state.mode == "systems":
             from ui.screens.systems_screen import systems_screen
 
-            max_items = systems_screen.get_root_menu_count()
+            max_items = systems_screen.get_root_menu_count(self.settings)
 
             if direction in ("up", "left"):
                 self.state.highlighted = (self.state.highlighted - 1) % max_items
@@ -949,6 +976,25 @@ class ConsoleUtilitiesApp:
                     self.state.scraper_queue.highlighted + 1
                 ) % max_items
 
+        elif self.state.mode == "portmaster":
+            pm = self.state.portmaster
+            max_items = len(pm.filtered_ports) or 1
+            if direction == "up":
+                pm.highlighted = (pm.highlighted - 1) % max_items
+                self.state.text_scroll_offset = 0
+            elif direction == "down":
+                pm.highlighted = (pm.highlighted + 1) % max_items
+                self.state.text_scroll_offset = 0
+            elif direction in ("left", "right"):
+                # Left/right scroll the highlighted item's text horizontally
+                scroll_step = 20
+                if direction == "right":
+                    self.state.text_scroll_offset += scroll_step
+                else:
+                    self.state.text_scroll_offset = max(
+                        0, self.state.text_scroll_offset - scroll_step
+                    )
+
     def _handle_key_event(self, event: pygame.event.Event):
         """Handle keyboard events."""
         # Handle keyboard text input for search modal
@@ -1090,7 +1136,13 @@ class ConsoleUtilitiesApp:
         elif event.key == pygame.K_RIGHT:
             self._move_highlight("right")
         elif event.key == pygame.K_q:
-            self._toggle_keyboard_shift()
+            if self.state.mode == "portmaster" and not self._any_modal_open():
+                self._portmaster_cycle_genre(-1)
+            else:
+                self._toggle_keyboard_shift()
+        elif event.key == pygame.K_e:
+            if self.state.mode == "portmaster" and not self._any_modal_open():
+                self._portmaster_cycle_genre(1)
         elif event.key == pygame.K_s:
             self._handle_search_action()
         elif event.key == pygame.K_d:
@@ -1113,7 +1165,13 @@ class ConsoleUtilitiesApp:
         elif action == "detail":
             self._handle_detail_action()
         elif action == "left_shoulder":
-            self._toggle_keyboard_shift()
+            if self.state.mode == "portmaster" and not self._any_modal_open():
+                self._portmaster_cycle_genre(-1)
+            else:
+                self._toggle_keyboard_shift()
+        elif action == "right_shoulder":
+            if self.state.mode == "portmaster" and not self._any_modal_open():
+                self._portmaster_cycle_genre(1)
         elif action == "start":
             self._handle_start_action()
 
@@ -1184,7 +1242,9 @@ class ConsoleUtilitiesApp:
         # Check download button (modal or games screen)
         if self.state.ui_rects.download_button:
             if self.state.ui_rects.download_button.collidepoint(x, y):
-                if self.state.game_details.show:
+                if self.state.port_details.show:
+                    self._handle_port_details_selection()
+                elif self.state.game_details.show:
                     self._handle_game_details_selection()
                 elif self.state.mode == "games" and self.state.selected_games:
                     self._start_download()
@@ -1226,7 +1286,10 @@ class ConsoleUtilitiesApp:
             if rect.collidepoint(x, y):
                 # Add scroll offset to get actual item index
                 actual_index = i + self.state.ui_rects.scroll_offset
-                self.state.highlighted = actual_index
+                if self.state.mode == "portmaster":
+                    self.state.portmaster.highlighted = actual_index
+                else:
+                    self.state.highlighted = actual_index
                 self._select_item()
                 return
 
@@ -1301,10 +1364,18 @@ class ConsoleUtilitiesApp:
             self._close_rename_wizard()
         elif self.state.ghost_cleaner_wizard.show:
             self._close_ghost_cleaner()
+        elif self.state.port_details.show:
+            self.state.port_details.show = False
+            self.state.port_details.port = None
+            self.state.text_scroll_offset = 0
         elif self.state.game_details.show:
             self.state.game_details.show = False
             self.state.game_details.current_game = None
             self.state.text_scroll_offset = 0
+        elif self.state.mode == "portmaster":
+            self.state.portmaster.search_query = ""
+            self.state.mode = "systems"
+            self.state.highlighted = 0
         elif self.state.mode == "system_settings":
             self.state.mode = "systems_settings"
             self.state.system_settings_highlighted = 0
@@ -1405,14 +1476,20 @@ class ConsoleUtilitiesApp:
             self._handle_ghost_cleaner_selection()
             return
 
+        if self.state.port_details.show:
+            self._handle_port_details_selection()
+            return
+
         # Mode-based selection
         if self.state.mode == "systems":
             from ui.screens.systems_screen import systems_screen
 
-            action = systems_screen.get_root_menu_action(self.state.highlighted)
+            action = systems_screen.get_root_menu_action(self.state.highlighted, self.settings)
             if action == "systems_list":
                 self.state.mode = "systems_list"
                 # Don't reset systems_list_highlighted to preserve position
+            elif action == "portmaster":
+                self._enter_portmaster()
             elif action == "utils":
                 self.state.mode = "utils"
                 self.state.highlighted = 1  # Skip first divider
@@ -1475,6 +1552,9 @@ class ConsoleUtilitiesApp:
 
         elif self.state.mode == "system_settings":
             self._handle_system_settings_selection()
+
+        elif self.state.mode == "portmaster":
+            self._handle_portmaster_selection()
 
         elif self.state.mode == "downloads":
             self._handle_downloads_selection()
@@ -1636,6 +1716,9 @@ class ConsoleUtilitiesApp:
             self.state.systems_settings_highlighted = 0
         elif action == "remap_controller":
             self._start_controller_mapping()
+        elif action == "toggle_portmaster_enabled":
+            self.settings["portmaster_enabled"] = not self.settings.get("portmaster_enabled", False)
+            save_settings(self.settings)
         elif action == "toggle_ia_enabled":
             self.settings["ia_enabled"] = not self.settings.get("ia_enabled", False)
             save_settings(self.settings)
@@ -2573,6 +2656,22 @@ class ConsoleUtilitiesApp:
     def _apply_search_filter(self):
         """Apply search filter and close search modal."""
         self.state.show_search_input = False
+
+        if self.state.mode == "portmaster":
+            pm = self.state.portmaster
+            pm.search_query = self.state.search.query or ""
+            genre = pm.genres[pm.selected_genre] if pm.genres else ""
+            pm.filtered_ports = self.portmaster_loader.filter_ports(
+                pm.ports, genre=genre, query=pm.search_query
+            )
+            pm.highlighted = 0
+            pm.scroll_offset = 0
+            self.state.search.mode = False
+            self.state.search.query = ""
+            self.state.search.input_text = ""
+            self.state.text_scroll_offset = 0
+            return
+
         if self.state.search.query:
             self.state.search.filtered_list = filter_games_by_search(
                 self.state.game_list, self.state.search.query
@@ -2619,14 +2718,22 @@ class ConsoleUtilitiesApp:
 
     def _handle_search_action(self):
         """Handle search key press."""
-        # Only show search in games mode
+        # Only show search in games mode or portmaster mode
         if self.state.mode == "games":
+            self.state.show_search_input = True
+            self.state.search.mode = True
+            self.state.search.query = ""
+        elif self.state.mode == "portmaster":
             self.state.show_search_input = True
             self.state.search.mode = True
             self.state.search.query = ""
 
     def _handle_detail_action(self):
         """Handle detail key press."""
+        # Show details in portmaster mode
+        if self.state.mode == "portmaster":
+            self._handle_portmaster_selection()
+            return
         # Only show details in games mode with a valid selection
         if self.state.mode == "games":
             game_list = (
@@ -2741,6 +2848,8 @@ class ConsoleUtilitiesApp:
         self.state.folder_browser.show = False
         self.state.game_details.show = False
         self.state.game_details.current_game = None
+        self.state.port_details.show = False
+        self.state.port_details.port = None
         self.state.ia_login.show = False
         self.state.ia_download_wizard.show = False
         self.state.ia_collection_wizard.show = False
@@ -2781,6 +2890,134 @@ class ConsoleUtilitiesApp:
         self.state.download_queue.highlighted = max(
             0, len(self.state.download_queue.items) - len(selected_games)
         )
+
+    def _any_modal_open(self) -> bool:
+        """Check if any modal dialog is currently open."""
+        return (
+            self.state.show_search_input
+            or self.state.game_details.show
+            or self.state.port_details.show
+            or self.state.folder_browser.show
+            or self.state.url_input.show
+            or self.state.folder_name_input.show
+            or self.state.confirm_modal.show
+            or self.state.ia_login.show
+            or self.state.ia_download_wizard.show
+            or self.state.ia_collection_wizard.show
+            or self.state.scraper_login.show
+            or self.state.scraper_wizard.show
+            or self.state.dedupe_wizard.show
+            or self.state.rename_wizard.show
+            or self.state.ghost_cleaner_wizard.show
+        )
+
+    # ---- PortMaster Handlers ---- #
+
+    def _enter_portmaster(self):
+        """Fetch ports from PortMaster and enter portmaster mode."""
+        self._show_loading("Loading PortMaster ports...")
+
+        import threading
+
+        def fetch():
+            success, ports, error = self.portmaster_loader.fetch_ports()
+            if success:
+                pm = self.state.portmaster
+                pm.ports = ports
+                pm.genres = self.portmaster_loader.get_genres(ports)
+                pm.selected_genre = 0
+                pm.highlighted = 0
+                pm.scroll_offset = 0
+                pm.search_query = ""
+                pm.error = ""
+                pm.filtered_ports = self.portmaster_loader.filter_ports(ports)
+                self._hide_loading()
+                self.state.mode = "portmaster"
+            else:
+                pm = self.state.portmaster
+                pm.error = error
+                self._hide_loading()
+                self.state.mode = "portmaster"
+
+        thread = threading.Thread(target=fetch, daemon=True)
+        thread.start()
+
+    def _handle_portmaster_selection(self):
+        """Handle selection in portmaster mode - open port details."""
+        pm = self.state.portmaster
+        if pm.filtered_ports and 0 <= pm.highlighted < len(pm.filtered_ports):
+            port = pm.filtered_ports[pm.highlighted]
+            self.state.port_details.show = True
+            self.state.port_details.port = port
+            self.state.port_details.button_focused = True
+            self.state.text_scroll_offset = 0
+
+    def _handle_port_details_selection(self):
+        """Handle port details modal selection (Download button).
+
+        Uses the PortMasterInstaller to perform a proper installation:
+        download, MD5 verify, extract with file routing, write port.json,
+        inject PM signatures, fix permissions, install runtimes, and
+        update gamelist.xml.
+        """
+        port = self.state.port_details.port
+        if not port or not port.get("download_url"):
+            return
+
+        # Close modal
+        self.state.port_details.show = False
+        self.state.port_details.port = None
+
+        # Show loading modal for install progress
+        self.state.loading.show = True
+        self.state.loading.message = f"Installing {port.get('title', 'port')}..."
+        self.state.loading.progress = 0
+
+        import threading
+
+        def _do_install():
+            def progress_cb(status_text, progress):
+                self.state.loading.message = status_text
+                self.state.loading.progress = int(progress * 100)
+
+            success, error = self.portmaster_installer.install_port(
+                port, progress_cb=progress_cb
+            )
+
+            self.state.loading.show = False
+            self.state.loading.progress = 0
+
+            if success:
+                self.state.loading.message = ""
+            else:
+                # Show error via confirm modal
+                self.state.confirm_modal.show = True
+                self.state.confirm_modal.title = "Install Failed"
+                self.state.confirm_modal.message_lines = [
+                    f"Failed to install {port.get('title', 'port')}:",
+                    error[:80] if error else "Unknown error",
+                ]
+                self.state.confirm_modal.ok_label = "OK"
+                self.state.confirm_modal.cancel_label = ""
+                self.state.confirm_modal.button_index = 0
+                self.state.confirm_modal.context = ""
+
+        thread = threading.Thread(target=_do_install, daemon=True)
+        thread.start()
+
+    def _portmaster_cycle_genre(self, direction: int):
+        """Cycle through genres in portmaster mode. direction: 1 or -1."""
+        pm = self.state.portmaster
+        if not pm.genres:
+            return
+        pm.selected_genre = (pm.selected_genre + direction) % len(pm.genres)
+        genre = pm.genres[pm.selected_genre]
+        pm.filtered_ports = self.portmaster_loader.filter_ports(
+            pm.ports, genre=genre, query=pm.search_query
+        )
+        pm.highlighted = 0
+        pm.scroll_offset = 0
+        self.state.text_scroll_offset = 0
 
     # ---- Internet Archive Handlers ---- #
 

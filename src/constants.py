@@ -32,7 +32,7 @@ else:
 #                       Path Configuration                           #
 # **************************************************************** #
 if DEV_MODE:
-    TEMP_LOG_DIR = os.path.join(SCRIPT_DIR, "..", "py_downloads")
+    TEMP_LOG_DIR = os.path.join(SCRIPT_DIR, "..", "workdir")
     CONFIG_FILE = os.path.join(SCRIPT_DIR, "..", "workdir", "config.json")
     ADDED_SYSTEMS_FILE = os.path.join(SCRIPT_DIR, "..", "workdir", "added_systems.json")
 else:
