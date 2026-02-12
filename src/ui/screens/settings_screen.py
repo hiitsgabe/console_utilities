@@ -46,8 +46,8 @@ class SettingsScreen:
 
     # PortMaster section (only shown for pygame builds)
     PORTMASTER_SECTION = [
-        "--- PORTMASTER ---",
-        "Enable PortMaster",
+        "--- PORTMASTER (BETA) ---",
+        "Enable PortMaster (beta)",
     ]
 
     # Input section
@@ -257,7 +257,7 @@ class SettingsScreen:
                 path = settings.get("archive_json_path", "")
                 value = "Set" if path else "Not Set"
                 items.append((item, value))
-            elif item == "Enable PortMaster":
+            elif item == "Enable PortMaster (beta)":
                 value = "ON" if settings.get("portmaster_enabled", False) else "OFF"
                 items.append((item, value))
             elif item == "Enable Internet Archive":
@@ -464,7 +464,7 @@ class SettingsScreen:
                 "Remap Controller": "remap_controller",
                 "Add Game System from Backup": "add_systems",
                 "Games Backup Settings": "systems_settings",
-                "Enable PortMaster": "toggle_portmaster_enabled",
+                "Enable PortMaster (beta)": "toggle_portmaster_enabled",
                 "Enable Internet Archive": "toggle_ia_enabled",
                 "Internet Archive Login": "ia_login",
                 "Enable Box-art Display": "toggle_boxart",

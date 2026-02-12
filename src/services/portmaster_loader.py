@@ -245,32 +245,56 @@ class PortMasterInstaller:
         """Where port scripts and data live: roms/ports/"""
         return os.path.join(self.roms_dir, "ports")
 
-    @property
-    def libs_dir(self) -> str:
-        """Where runtime .squashfs files live: roms/ports/PortMaster/libs/"""
-        return os.path.join(self.ports_dir, "PortMaster", "libs")
-
     # ------------------------------------------------------------------
     # Base package detection & install
     # ------------------------------------------------------------------
 
-    def is_base_installed(self) -> bool:
-        """Check if the PortMaster base package is installed.
+    # Candidate PortMaster directories in priority order (matching the
+    # same paths that port .sh scripts check for ``$controlfolder``).
+    _PM_DIR_CANDIDATES = [
+        "/opt/system/Tools/PortMaster",
+        "/opt/tools/PortMaster",
+    ]
 
-        Checks for control.txt in the same locations that port .sh scripts
-        use when they ``source $controlfolder/control.txt``.
+    def get_portmaster_dir(self) -> Optional[str]:
+        """Return the detected PortMaster install directory, or None.
+
+        Checks known system paths first, then XDG_DATA_HOME, then the
+        fallback inside roms/ports/.
         """
-        candidates = [
-            "/opt/system/Tools/PortMaster/control.txt",
-            "/opt/tools/PortMaster/control.txt",
-            os.path.join(
-                os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share")),
-                "PortMaster",
-                "control.txt",
-            ),
-            os.path.join(self.ports_dir, "PortMaster", "control.txt"),
-        ]
-        return any(os.path.isfile(p) for p in candidates)
+        for d in self._PM_DIR_CANDIDATES:
+            if os.path.isfile(os.path.join(d, "control.txt")):
+                return d
+
+        xdg = os.path.join(
+            os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share")),
+            "PortMaster",
+        )
+        if os.path.isfile(os.path.join(xdg, "control.txt")):
+            return xdg
+
+        fallback = os.path.join(self.ports_dir, "PortMaster")
+        if os.path.isfile(os.path.join(fallback, "control.txt")):
+            return fallback
+
+        return None
+
+    def is_base_installed(self) -> bool:
+        """Check if the PortMaster base package is installed."""
+        return self.get_portmaster_dir() is not None
+
+    @property
+    def libs_dir(self) -> str:
+        """Where runtime .squashfs files live.
+
+        Uses the detected PortMaster directory so runtimes end up next
+        to the rest of the PortMaster install.  Falls back to
+        roms/ports/PortMaster/libs/ if the base hasn't been installed yet.
+        """
+        pm_dir = self.get_portmaster_dir()
+        if pm_dir:
+            return os.path.join(pm_dir, "libs")
+        return os.path.join(self.ports_dir, "PortMaster", "libs")
 
     def install_base_package(
         self,
