@@ -704,7 +704,15 @@ class ConsoleUtilitiesApp:
             return
 
         if self.state.game_details.show:
-            # Game details modal has only Download button, always focused
+            # Left/right scroll the game name text horizontally
+            if direction in ("left", "right"):
+                scroll_step = 20
+                if direction == "right":
+                    self.state.text_scroll_offset += scroll_step
+                else:
+                    self.state.text_scroll_offset = max(
+                        0, self.state.text_scroll_offset - scroll_step
+                    )
             return
 
         if self.state.folder_browser.show:
@@ -829,10 +837,21 @@ class ConsoleUtilitiesApp:
             extra_items = 1 if self.settings.get("show_download_all", False) else 0
             max_items = len(game_list) + extra_items
 
-            if direction in ("up", "left"):
+            if direction in ("left", "right"):
+                # Left/right scroll the highlighted item's text horizontally
+                scroll_step = 20
+                if direction == "right":
+                    self.state.text_scroll_offset += scroll_step
+                else:
+                    self.state.text_scroll_offset = max(
+                        0, self.state.text_scroll_offset - scroll_step
+                    )
+            elif direction == "up":
                 self.state.highlighted = (self.state.highlighted - 1) % max_items
-            elif direction in ("down", "right"):
+                self.state.text_scroll_offset = 0
+            elif direction == "down":
                 self.state.highlighted = (self.state.highlighted + 1) % max_items
+                self.state.text_scroll_offset = 0
 
         elif self.state.mode in ("settings", "utils"):
             if self.state.mode == "settings":
@@ -1285,6 +1304,7 @@ class ConsoleUtilitiesApp:
         elif self.state.game_details.show:
             self.state.game_details.show = False
             self.state.game_details.current_game = None
+            self.state.text_scroll_offset = 0
         elif self.state.mode == "system_settings":
             self.state.mode = "systems_settings"
             self.state.system_settings_highlighted = 0
@@ -2627,6 +2647,7 @@ class ConsoleUtilitiesApp:
                 self.state.game_details.show = True
                 self.state.game_details.current_game = game
                 self.state.game_details.loading_size = False
+                self.state.text_scroll_offset = 0
 
                 # Fetch file size in background if not already present
                 if "size" not in game and self.state.selected_system >= 0:

@@ -234,6 +234,66 @@ class Text:
             )
         return pygame.Rect(x, y, total_width, total_height)
 
+    def render_scrolled(
+        self,
+        screen: pygame.Surface,
+        text: str,
+        position: Tuple[int, int],
+        max_width: int,
+        scroll_offset: int = 0,
+        color: Optional[Color] = None,
+        size: Optional[int] = None,
+        antialias: bool = True,
+    ) -> pygame.Rect:
+        """
+        Render text with horizontal scrolling, clipped to max_width.
+
+        When scroll_offset is 0 and text fits, renders normally.
+        When text is wider than max_width, shifts the text left by scroll_offset pixels.
+
+        Args:
+            screen: Surface to render to
+            text: Text to render
+            position: (x, y) position (left-aligned)
+            max_width: Maximum visible width
+            scroll_offset: Horizontal pixel offset (0 = start)
+            color: Text color
+            size: Font size
+            antialias: Use antialiasing
+
+        Returns:
+            Rect of rendered text
+        """
+        if color is None:
+            color = self.theme.text_primary
+        if size is None:
+            size = self.theme.font_size_md
+
+        font = self.get_font(size)
+        text_width, text_height = font.size(text)
+
+        # If text fits, render normally (no scrolling needed)
+        if text_width <= max_width:
+            return self.render(
+                screen, text, position, color=color, size=size, align="left"
+            )
+
+        # Clamp scroll offset
+        max_offset = text_width - max_width
+        offset = max(0, min(scroll_offset, max_offset))
+
+        # Render full text to temporary surface
+        full_surface = font.render(text, antialias, color)
+
+        # Create clipped view
+        clip_w = min(max_width, text_width - offset)
+        clip_rect = pygame.Rect(offset, 0, clip_w, text_height)
+        clipped = full_surface.subsurface(clip_rect)
+
+        x, y = position
+        screen.blit(clipped, (x, y))
+        return pygame.Rect(x, y, clip_w, text_height)
+
     def _truncate(
         self, text: str, font: pygame.font.Font, max_width: int, suffix: str = "..."
     ) -> str:

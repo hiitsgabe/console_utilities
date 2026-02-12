@@ -489,6 +489,9 @@ class AppState:
         # ---- UI Rectangles ---- #
         self.ui_rects = UIRects()
 
+        # ---- Text Scroll (horizontal scroll for long names) ---- #
+        self.text_scroll_offset: int = 0
+
         # ---- Runtime Flags ---- #
         self.running: bool = True
         self.movement_occurred: bool = False
@@ -498,6 +501,7 @@ class AppState:
         self.highlighted = 0
         self.menu_scroll_offset = 0
         self.selected_games = set()
+        self.text_scroll_offset = 0
 
     def enter_mode(self, new_mode: str):
         """

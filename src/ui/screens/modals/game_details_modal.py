@@ -44,6 +44,7 @@ class GameDetailsModal:
         button_focused: bool = True,
         loading_size: bool = False,
         input_mode: str = "keyboard",
+        text_scroll_offset: int = 0,
     ) -> Tuple[pygame.Rect, Optional[pygame.Rect], Optional[pygame.Rect]]:
         """
         Render the game details modal.
@@ -75,17 +76,30 @@ class GameDetailsModal:
         center_x = content_rect.centerx
         y = content_rect.top
 
-        # Game name at top (centered)
+        # Game name at top (centered, or scrollable if offset)
         game_name = self._get_game_name(game)
-        self.text.render(
-            screen,
-            game_name,
-            (center_x, y),
-            color=self.theme.text_primary,
-            size=self.theme.font_size_lg,
-            max_width=content_rect.width - self.theme.padding_md * 2,
-            align="center",
-        )
+        name_max_width = content_rect.width - self.theme.padding_md * 2
+        if text_scroll_offset > 0:
+            # Left-aligned scrolled rendering
+            self.text.render_scrolled(
+                screen,
+                game_name,
+                (content_rect.left + self.theme.padding_md, y),
+                max_width=name_max_width,
+                scroll_offset=text_scroll_offset,
+                color=self.theme.text_primary,
+                size=self.theme.font_size_lg,
+            )
+        else:
+            self.text.render(
+                screen,
+                game_name,
+                (center_x, y),
+                color=self.theme.text_primary,
+                size=self.theme.font_size_lg,
+                max_width=name_max_width,
+                align="center",
+            )
         y += self.theme.font_size_lg + self.theme.padding_sm
 
         # Calculate space for image - use as much as possible

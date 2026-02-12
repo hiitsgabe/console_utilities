@@ -31,6 +31,7 @@ class MenuItem:
         thumbnail: Optional[pygame.Surface] = None,
         secondary_text: Optional[str] = None,
         show_checkbox: bool = False,
+        text_scroll_offset: int = 0,
     ) -> pygame.Rect:
         """
         Render a menu item.
@@ -137,14 +138,25 @@ class MenuItem:
         else:
             display_label = label
 
-        self.text.render(
-            screen,
-            display_label,
-            (content_left, rect.centery - self.theme.font_size_md // 4),
-            color=text_color,
-            size=self.theme.font_size_md,
-            max_width=max_text_width,
-        )
+        if highlighted and text_scroll_offset > 0:
+            self.text.render_scrolled(
+                screen,
+                display_label,
+                (content_left, rect.centery - self.theme.font_size_md // 4),
+                max_width=max_text_width,
+                scroll_offset=text_scroll_offset,
+                color=text_color,
+                size=self.theme.font_size_md,
+            )
+        else:
+            self.text.render(
+                screen,
+                display_label,
+                (content_left, rect.centery - self.theme.font_size_md // 4),
+                color=text_color,
+                size=self.theme.font_size_md,
+                max_width=max_text_width,
+            )
 
         return rect
 

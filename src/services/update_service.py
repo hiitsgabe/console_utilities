@@ -161,13 +161,38 @@ def apply_pygame_update(
                 if current_pygame:
                     shutil.copy2(new_pygame, current_pygame)
 
-            # Replace assets folder
+            # Replace assets folder using safe swap with rollback.
+            # Copy new assets to a staging dir first, then rename the old
+            # assets out of the way before renaming the new ones in. If
+            # anything fails the old assets are restored so fonts and other
+            # files are never lost.
             new_assets = os.path.join(extract_dir, "assets")
             if os.path.isdir(new_assets):
                 current_assets = os.path.join(SCRIPT_DIR, "assets")
-                if os.path.isdir(current_assets):
-                    shutil.rmtree(current_assets)
-                shutil.copytree(new_assets, current_assets)
+                backup_assets = os.path.join(SCRIPT_DIR, "assets_backup")
+                staged_assets = os.path.join(SCRIPT_DIR, "assets_new")
+
+                # Clean up any leftover staging/backup dirs from a prior crash
+                shutil.rmtree(backup_assets, ignore_errors=True)
+                shutil.rmtree(staged_assets, ignore_errors=True)
+
+                try:
+                    # Stage new assets next to final location
+                    shutil.copytree(new_assets, staged_assets)
+                    # Swap: move old out, move new in
+                    if os.path.isdir(current_assets):
+                        os.rename(current_assets, backup_assets)
+                    os.rename(staged_assets, current_assets)
+                    # Success - remove the old backup
+                    shutil.rmtree(backup_assets, ignore_errors=True)
+                except Exception:
+                    # Rollback: restore old assets if they were moved
+                    if os.path.isdir(backup_assets) and not os.path.isdir(
+                        current_assets
+                    ):
+                        os.rename(backup_assets, current_assets)
+                    shutil.rmtree(staged_assets, ignore_errors=True)
+                    raise
 
             if on_progress:
                 on_progress(1.0, "Update complete!")

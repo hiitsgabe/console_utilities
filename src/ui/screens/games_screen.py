@@ -40,6 +40,7 @@ class GamesScreen:
         get_thumbnail: Optional[Callable[[Any], pygame.Surface]] = None,
         input_mode: str = "keyboard",
         show_download_all: bool = False,
+        text_scroll_offset: int = 0,
     ) -> Tuple[
         Optional[pygame.Rect],
         List[pygame.Rect],
@@ -91,6 +92,7 @@ class GamesScreen:
             get_thumbnail=get_thumbnail,
             show_checkbox=True,
             footer_height=footer_height,
+            text_scroll_offset=text_scroll_offset,
         )
 
         # Draw status bar when games are selected

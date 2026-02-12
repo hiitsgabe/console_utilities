@@ -187,7 +187,8 @@ class ScraperService:
         """
         Extract a clean game name from a ROM filename.
 
-        Removes region tags, version info, and other common suffixes.
+        Removes region tags, version info, numeric prefixes,
+        and other common artifacts from ROM naming conventions.
 
         Args:
             rom_path: Path to ROM file
@@ -198,6 +199,15 @@ class ScraperService:
         # Get filename without path and extension
         filename = os.path.basename(rom_path)
         name, _ = os.path.splitext(filename)
+
+        # Replace underscores with spaces
+        name = name.replace("_", " ")
+
+        # Remove numeric prefixes (e.g., "0001 - ", "001.", "1234 -")
+        name = re.sub(r"^\d{2,}\s*[-_.]\s*", "", name)
+
+        # Remove title ID patterns (e.g., "[0100152000022000]" for Switch)
+        name = re.sub(r"\[[\da-fA-F]{16}\]", "", name)
 
         # Remove common patterns
         patterns = [
