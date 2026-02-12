@@ -1645,6 +1645,9 @@ class ConsoleUtilitiesApp:
             # Navigate to downloads screen
             self.state.mode = "downloads"
             self.state.download_queue.highlighted = 0
+        elif context == "install_portmaster":
+            self._install_portmaster_base()
+            return  # Don't close modal - _install_portmaster_base manages UI
         elif context == "apply_update" and data:
             self._apply_update(data)
             return  # Don't close modal yet - _apply_update manages its own UI
@@ -1717,8 +1720,28 @@ class ConsoleUtilitiesApp:
         elif action == "remap_controller":
             self._start_controller_mapping()
         elif action == "toggle_portmaster_enabled":
-            self.settings["portmaster_enabled"] = not self.settings.get("portmaster_enabled", False)
-            save_settings(self.settings)
+            if self.settings.get("portmaster_enabled", False):
+                # Disabling — just toggle off
+                self.settings["portmaster_enabled"] = False
+                save_settings(self.settings)
+            elif self.portmaster_installer.is_base_installed():
+                # Enabling and base already installed — just toggle on
+                self.settings["portmaster_enabled"] = True
+                save_settings(self.settings)
+            else:
+                # Enabling but base not installed — ask to install
+                self.state.confirm_modal.show = True
+                self.state.confirm_modal.title = "Install PortMaster"
+                self.state.confirm_modal.message_lines = [
+                    "PortMaster base package is required",
+                    "for ports to run.",
+                    "",
+                    "Download and install now? (~24 MB)",
+                ]
+                self.state.confirm_modal.ok_label = "Install"
+                self.state.confirm_modal.cancel_label = "Cancel"
+                self.state.confirm_modal.button_index = 0
+                self.state.confirm_modal.context = "install_portmaster"
         elif action == "toggle_ia_enabled":
             self.settings["ia_enabled"] = not self.settings.get("ia_enabled", False)
             save_settings(self.settings)
@@ -2995,6 +3018,47 @@ class ConsoleUtilitiesApp:
                 self.state.confirm_modal.title = "Install Failed"
                 self.state.confirm_modal.message_lines = [
                     f"Failed to install {port.get('title', 'port')}:",
+                    error[:80] if error else "Unknown error",
+                ]
+                self.state.confirm_modal.ok_label = "OK"
+                self.state.confirm_modal.cancel_label = ""
+                self.state.confirm_modal.button_index = 0
+                self.state.confirm_modal.context = ""
+
+        thread = threading.Thread(target=_do_install, daemon=True)
+        thread.start()
+
+    def _install_portmaster_base(self):
+        """Download and run the PortMaster base package installer."""
+        import threading
+
+        self._handle_confirm_modal_cancel()
+
+        self.state.loading.show = True
+        self.state.loading.message = "Installing PortMaster..."
+        self.state.loading.progress = 0
+
+        def _do_install():
+            def progress_cb(status_text, progress):
+                self.state.loading.message = status_text
+                self.state.loading.progress = int(progress * 100)
+
+            success, error = self.portmaster_installer.install_base_package(
+                progress_cb=progress_cb
+            )
+
+            self.state.loading.show = False
+            self.state.loading.progress = 0
+
+            if success:
+                self.state.loading.message = ""
+                self.settings["portmaster_enabled"] = True
+                save_settings(self.settings)
+            else:
+                self.state.confirm_modal.show = True
+                self.state.confirm_modal.title = "Install Failed"
+                self.state.confirm_modal.message_lines = [
+                    "Failed to install PortMaster:",
                     error[:80] if error else "Unknown error",
                 ]
                 self.state.confirm_modal.ok_label = "OK"

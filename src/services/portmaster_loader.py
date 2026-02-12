@@ -216,6 +216,8 @@ class PortMasterInstaller:
       7. Update gamelist.xml with gameinfo.xml entries
     """
 
+    INSTALL_SCRIPT_URL = "https://github.com/PortsMaster/PortMaster-GUI/releases/latest/download/Install.PortMaster.sh"
+
     def __init__(
         self,
         settings: Dict[str, Any],
@@ -247,6 +249,101 @@ class PortMasterInstaller:
     def libs_dir(self) -> str:
         """Where runtime .squashfs files live: roms/ports/PortMaster/libs/"""
         return os.path.join(self.ports_dir, "PortMaster", "libs")
+
+    # ------------------------------------------------------------------
+    # Base package detection & install
+    # ------------------------------------------------------------------
+
+    def is_base_installed(self) -> bool:
+        """Check if the PortMaster base package is installed.
+
+        Checks for control.txt in the same locations that port .sh scripts
+        use when they ``source $controlfolder/control.txt``.
+        """
+        candidates = [
+            "/opt/system/Tools/PortMaster/control.txt",
+            "/opt/tools/PortMaster/control.txt",
+            os.path.join(
+                os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share")),
+                "PortMaster",
+                "control.txt",
+            ),
+            os.path.join(self.ports_dir, "PortMaster", "control.txt"),
+        ]
+        return any(os.path.isfile(p) for p in candidates)
+
+    def install_base_package(
+        self,
+        progress_cb: Optional[Callable[[str, float], None]] = None,
+    ) -> Tuple[bool, str]:
+        """Download and run the official Install.PortMaster.sh installer.
+
+        Args:
+            progress_cb: Optional callback ``(status_text, progress_0_to_1)``
+
+        Returns:
+            (success, error_message)
+        """
+        os.makedirs(self.ports_dir, exist_ok=True)
+        script_path = os.path.join(self.ports_dir, "Install.PortMaster.sh")
+
+        try:
+            # Download
+            if progress_cb:
+                progress_cb("Downloading PortMaster installer...", 0.0)
+
+            resp = requests.get(self.INSTALL_SCRIPT_URL, stream=True, timeout=60)
+            resp.raise_for_status()
+            total = int(resp.headers.get("content-length", 0))
+            downloaded = 0
+            last_update = time.time()
+
+            with open(script_path, "wb") as f:
+                for chunk in resp.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        now = time.time()
+                        if progress_cb and total > 0 and now - last_update >= 0.3:
+                            progress_cb(
+                                "Downloading PortMaster installer...",
+                                downloaded / total * 0.5,
+                            )
+                            last_update = now
+
+            # Make executable and run
+            if progress_cb:
+                progress_cb("Running installer...", 0.6)
+
+            os.chmod(script_path, 0o755)
+
+            result = subprocess.run(
+                ["bash", script_path],
+                cwd=self.ports_dir,
+                capture_output=True,
+                timeout=120,
+            )
+
+            if result.returncode != 0:
+                stderr = result.stderr.decode("utf-8", errors="replace")[:200]
+                return False, f"Installer exited with code {result.returncode}: {stderr}"
+
+            if progress_cb:
+                progress_cb("PortMaster installed!", 1.0)
+
+            return True, ""
+
+        except subprocess.TimeoutExpired:
+            return False, "Installer timed out after 120 seconds"
+        except Exception as e:
+            return False, str(e)
+        finally:
+            # Clean up install script
+            if os.path.exists(script_path):
+                try:
+                    os.remove(script_path)
+                except OSError:
+                    pass
 
     # ------------------------------------------------------------------
     # Public API
