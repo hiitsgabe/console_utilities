@@ -161,38 +161,14 @@ def apply_pygame_update(
                 if current_pygame:
                     shutil.copy2(new_pygame, current_pygame)
 
-            # Replace assets folder using safe swap with rollback.
-            # Copy new assets to a staging dir first, then rename the old
-            # assets out of the way before renaming the new ones in. If
-            # anything fails the old assets are restored so fonts and other
-            # files are never lost.
+            # Merge new assets into existing assets folder.
+            # Only overwrite files that exist in the update — preserve
+            # everything else (fonts, bundled_data, etc.).
             new_assets = os.path.join(extract_dir, "assets")
             if os.path.isdir(new_assets):
                 current_assets = os.path.join(SCRIPT_DIR, "assets")
-                backup_assets = os.path.join(SCRIPT_DIR, "assets_backup")
-                staged_assets = os.path.join(SCRIPT_DIR, "assets_new")
-
-                # Clean up any leftover staging/backup dirs from a prior crash
-                shutil.rmtree(backup_assets, ignore_errors=True)
-                shutil.rmtree(staged_assets, ignore_errors=True)
-
-                try:
-                    # Stage new assets next to final location
-                    shutil.copytree(new_assets, staged_assets)
-                    # Swap: move old out, move new in
-                    if os.path.isdir(current_assets):
-                        os.rename(current_assets, backup_assets)
-                    os.rename(staged_assets, current_assets)
-                    # Success - remove the old backup
-                    shutil.rmtree(backup_assets, ignore_errors=True)
-                except Exception:
-                    # Rollback: restore old assets if they were moved
-                    if os.path.isdir(backup_assets) and not os.path.isdir(
-                        current_assets
-                    ):
-                        os.rename(backup_assets, current_assets)
-                    shutil.rmtree(staged_assets, ignore_errors=True)
-                    raise
+                os.makedirs(current_assets, exist_ok=True)
+                _merge_directory(new_assets, current_assets)
 
             if on_progress:
                 on_progress(1.0, "Update complete!")
@@ -214,6 +190,18 @@ def apply_pygame_update(
     thread = threading.Thread(target=_do_update, daemon=True)
     thread.start()
     return thread
+
+
+def _merge_directory(src: str, dst: str):
+    """Recursively merge src into dst, overwriting files but preserving extras."""
+    for entry in os.listdir(src):
+        src_path = os.path.join(src, entry)
+        dst_path = os.path.join(dst, entry)
+        if os.path.isdir(src_path):
+            os.makedirs(dst_path, exist_ok=True)
+            _merge_directory(src_path, dst_path)
+        else:
+            shutil.copy2(src_path, dst_path)
 
 
 def _find_current_pygame() -> Optional[str]:

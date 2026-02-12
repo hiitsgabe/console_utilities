@@ -371,6 +371,33 @@ class ScraperQueueState:
 
 
 @dataclass
+class PortMasterState:
+    """State for PortMaster port browsing."""
+
+    ports: List[Dict[str, Any]] = field(default_factory=list)
+    filtered_ports: List[Dict[str, Any]] = field(default_factory=list)
+    genres: List[str] = field(default_factory=list)
+    selected_genre: int = 0  # 0 = "All"
+    highlighted: int = 0
+    scroll_offset: int = 0
+    search_query: str = ""
+    loading: bool = False
+    error: str = ""
+    last_fetched: float = 0.0
+    view_type: str = "list"
+
+
+@dataclass
+class PortDetailsState:
+    """State for port details modal."""
+
+    show: bool = False
+    port: Optional[Dict[str, Any]] = None
+    button_focused: bool = True
+    loading_image: bool = False
+
+
+@dataclass
 class GhostCleanerWizardState:
     """State for ghost file cleaner wizard modal."""
 
@@ -422,7 +449,7 @@ class AppState:
 
         # ---- Navigation State ---- #
         self.mode: str = (
-            "systems"  # systems, systems_list, games, settings, utils, credits, add_systems, systems_settings, system_settings
+            "systems"  # systems, systems_list, games, settings, utils, credits, add_systems, systems_settings, system_settings, portmaster
         )
         self.systems_list_highlighted: int = 0
         self.highlighted: int = 0
@@ -486,6 +513,10 @@ class AppState:
         # ---- Ghost Cleaner ---- #
         self.ghost_cleaner_wizard = GhostCleanerWizardState()
 
+        # ---- PortMaster ---- #
+        self.portmaster = PortMasterState()
+        self.port_details = PortDetailsState()
+
         # ---- UI Rectangles ---- #
         self.ui_rects = UIRects()
 
@@ -540,6 +571,7 @@ class AppState:
         self.dedupe_wizard.show = False
         self.rename_wizard.show = False
         self.ghost_cleaner_wizard.show = False
+        self.port_details.show = False
 
     def get_current_game_list(self) -> List[Any]:
         """Get the current game list (filtered or full)."""

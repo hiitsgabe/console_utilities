@@ -30,6 +30,8 @@ from .modals.scraper_login_modal import ScraperLoginModal
 from .modals.dedupe_wizard_modal import DedupeWizardModal
 from .modals.rename_wizard_modal import RenameWizardModal
 from .modals.ghost_cleaner_modal import GhostCleanerModal
+from .modals.port_details_modal import PortDetailsModal
+from .portmaster_screen import PortMasterScreen
 from .downloads_screen import DownloadsScreen
 from .scraper_downloads_screen import ScraperDownloadsScreen
 from ui.molecules.status_footer import StatusFooter, StatusFooterItem
@@ -57,6 +59,7 @@ class ScreenManager:
         self.system_settings_screen = SystemSettingsScreen(theme)
         self.downloads_screen = DownloadsScreen(theme)
         self.scraper_downloads_screen = ScraperDownloadsScreen(theme)
+        self.portmaster_screen = PortMasterScreen(theme)
 
         # Initialize modals
         self.search_modal = SearchModal(theme)
@@ -75,6 +78,7 @@ class ScreenManager:
         self.dedupe_wizard_modal = DedupeWizardModal(theme)
         self.rename_wizard_modal = RenameWizardModal(theme)
         self.ghost_cleaner_modal = GhostCleanerModal(theme)
+        self.port_details_modal = PortDetailsModal(theme)
 
         # Initialize generic status footer
         self.status_footer = StatusFooter(theme)
@@ -425,10 +429,31 @@ class ScreenManager:
             rects["item_rects"] = item_rects
             return rects
 
+        if state.port_details.show and state.port_details.port:
+            hires_image = (
+                get_hires_image(state.port_details.port)
+                if get_hires_image
+                else None
+            )
+            modal_rect, download_rect, close_rect = (
+                self.port_details_modal.render(
+                    screen,
+                    state.port_details.port,
+                    hires_image,
+                    button_focused=state.port_details.button_focused,
+                    input_mode=state.input_mode,
+                    text_scroll_offset=state.text_scroll_offset,
+                )
+            )
+            rects["modal"] = modal_rect
+            rects["download_button"] = download_rect
+            rects["close"] = close_rect
+            return rects
+
         # Render main screens based on mode
         if state.mode == "systems":
             back_rect, item_rects, scroll_offset = self.systems_screen.render(
-                screen, [], state.highlighted
+                screen, [], state.highlighted, settings=settings
             )
             rects["back"] = back_rect
             rects["item_rects"] = item_rects
@@ -553,6 +578,24 @@ class ScreenManager:
                     screen,
                     state.scraper_queue,
                     input_mode=state.input_mode,
+                )
+            )
+            rects["back"] = back_rect
+            rects["item_rects"] = item_rects
+            rects["scroll_offset"] = scroll_offset
+
+        elif state.mode == "portmaster":
+            pm = state.portmaster
+            genre = pm.genres[pm.selected_genre] if pm.genres else "All"
+            back_rect, item_rects, scroll_offset = (
+                self.portmaster_screen.render(
+                    screen,
+                    pm.filtered_ports,
+                    pm.highlighted,
+                    genre=genre,
+                    search_query=pm.search_query,
+                    get_thumbnail=get_thumbnail,
+                    text_scroll_offset=state.text_scroll_offset,
                 )
             )
             rects["back"] = back_rect
