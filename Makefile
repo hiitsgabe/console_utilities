@@ -1,4 +1,4 @@
-.PHONY: run debug watch install dev clean test lint format setup build-android bundle bundle-macos bundle-windows release
+.PHONY: run debug stream watch install dev clean test lint format setup build-android bundle bundle-macos bundle-windows release
 
 CONDA_ENV = app_cutil
 CONDA_ACTIVATE = conda run -n $(CONDA_ENV)
@@ -6,6 +6,10 @@ CONDA_ACTIVATE = conda run -n $(CONDA_ENV)
 # Default target
 run:
 	DEV_MODE=true $(CONDA_ACTIVATE) watchmedo auto-restart --patterns="*.py;download.json" --recursive --signal SIGTERM python src/app.py
+
+# Stream to phone browser for touch testing (open the printed URL on your phone)
+stream:
+	DEV_MODE=true $(CONDA_ACTIVATE) python src/stream_server.py
 
 # Run without auto-restart to see full error logs
 debug:
@@ -217,6 +221,7 @@ release:
 help:
 	@echo "Available targets:"
 	@echo "  run           - Run the console utilities application"
+	@echo "  stream        - Stream to phone browser for touch testing"
 	@echo "  debug         - Run without auto-restart (shows full error logs)"
 	@echo "  watch         - Run with file watching (auto-restart on changes)"
 	@echo "  setup         - Create conda environment"
