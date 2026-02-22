@@ -50,7 +50,9 @@ class TheGamesDBProvider(BaseProvider):
     def is_configured(self) -> bool:
         return bool(self.api_key)
 
-    def search_game(self, name: str) -> Tuple[bool, List[GameSearchResult], str]:
+    def search_game(
+        self, name: str, system_id: str = ""
+    ) -> Tuple[bool, List[GameSearchResult], str]:
         """
         Search for a game by name.
 

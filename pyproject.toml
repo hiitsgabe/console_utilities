@@ -11,7 +11,8 @@ requires-python = ">=3.11"
 dependencies = [
     "pygame>=2.0.0",
     "requests>=2.25.0",
-    "rarfile>=4.0"
+    "rarfile>=4.0",
+    "Pillow>=9.0.0",
 ]
 
 [project.scripts]

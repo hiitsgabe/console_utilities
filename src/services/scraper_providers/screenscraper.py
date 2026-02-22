@@ -5,11 +5,9 @@ API Documentation: https://www.screenscraper.fr/webapi2.php
 """
 
 import base64
-import hashlib
 import traceback
 import requests
 from typing import List, Tuple, Dict, Any
-from urllib.parse import quote
 
 from .base_provider import BaseProvider, GameSearchResult, GameImage, GameVideo
 
@@ -39,6 +37,62 @@ class ScreenScraperProvider(BaseProvider):
         "marquee",
         "fanart",
     ]
+
+    SYSTEM_ID_MAP = {
+        "nes": "3",
+        "famicom": "3",
+        "snes": "4",
+        "superfamicom": "4",
+        "n64": "14",
+        "nintendo64": "14",
+        "gb": "9",
+        "gameboy": "9",
+        "gbc": "10",
+        "gameboycolor": "10",
+        "gba": "12",
+        "gameboyadvance": "12",
+        "nds": "15",
+        "ds": "15",
+        "nintendods": "15",
+        "psx": "57",
+        "ps1": "57",
+        "playstation": "57",
+        "playstation1": "57",
+        "ps2": "58",
+        "playstation2": "58",
+        "psp": "61",
+        "megadrive": "1",
+        "genesis": "1",
+        "md": "1",
+        "sega32x": "19",
+        "32x": "19",
+        "gamegear": "21",
+        "gg": "21",
+        "mastersystem": "2",
+        "sms": "2",
+        "saturn": "22",
+        "dreamcast": "23",
+        "dc": "23",
+        "atari2600": "26",
+        "2600": "26",
+        "atari7800": "41",
+        "7800": "41",
+        "lynx": "28",
+        "neogeo": "142",
+        "neogeomvs": "142",
+        "arcade": "75",
+        "mame": "75",
+        "pcengine": "31",
+        "turbografx16": "31",
+        "tg16": "31",
+        "pcfx": "72",
+        "3do": "29",
+        "jaguar": "27",
+        "gc": "13",
+        "gamecube": "13",
+        "wii": "16",
+        "pico8": "234",
+    }
 
     def __init__(self, username: str = "", password: str = ""):
         """
@@ -151,11 +205,17 @@ class ScreenScraperProvider(BaseProvider):
             params["sspassword"] = self.password
         return params
 
-    def search_game(self, name: str) -> Tuple[bool, List[GameSearchResult], str]:
+    def search_game(
+        self, name: str, system_id: str = ""
+    ) -> Tuple[bool, List[GameSearchResult], str]:
         """
         Search for a game by name.
 
         Uses the jeuRecherche.php endpoint.
+
+        Args:
+            name: Game name to search for
+            system_id: Optional system hint (e.g. "psx", "snes") to filter results
         """
         if not self.is_configured():
             return False, [], "ScreenScraper credentials not configured"
@@ -163,6 +223,17 @@ class ScreenScraperProvider(BaseProvider):
         try:
             params = self._get_auth_params()
             params["recherche"] = name
+
+            if system_id:
+                normalized = system_id.lower().replace("-", "").replace("_", "")
+                mapped_id = self.SYSTEM_ID_MAP.get(normalized)
+                if not mapped_id:
+                    for key, val in self.SYSTEM_ID_MAP.items():
+                        if key in normalized or normalized in key:
+                            mapped_id = val
+                            break
+                if mapped_id:
+                    params["systemeid"] = mapped_id
 
             response = requests.get(
                 f"{self.BASE_URL}/jeuRecherche.php",

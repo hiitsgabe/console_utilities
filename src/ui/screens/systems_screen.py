@@ -3,7 +3,7 @@ Systems screen - Root menu and systems list submenu.
 """
 
 import pygame
-from typing import List, Dict, Any, Tuple, Optional, Set
+from typing import List, Dict, Any, Tuple, Optional
 
 from ui.theme import Theme, default_theme
 from ui.templates.list_screen import ListScreenTemplate
@@ -12,6 +12,7 @@ from ui.templates.list_screen import ListScreenTemplate
 _ALL_ROOT_ENTRIES = [
     ("Backup Games", "systems_list"),
     ("PortMaster (beta)", "portmaster"),
+    ("Sports Game Patcher", "sports_patcher"),
     ("Utils", "utils"),
     ("Settings", "settings"),
     ("Credits", "credits"),
@@ -26,7 +27,12 @@ def _build_root_menu(settings: Dict[str, Any]) -> Tuple[List[str], List[str]]:
     actions = []
     for label, action in _ALL_ROOT_ENTRIES:
         if action == "portmaster":
-            if BUILD_TARGET not in ("pygame", "source") or not settings.get("portmaster_enabled", False):
+            if BUILD_TARGET not in ("pygame", "source") or not settings.get(
+                "portmaster_enabled", False
+            ):
+                continue
+        if action == "sports_patcher":
+            if not settings.get("sports_roster_enabled", False):
                 continue
         labels.append(label)
         actions.append(action)

@@ -64,7 +64,20 @@ class ScraperLoginModal:
         Returns:
             Tuple of (modal_rect, content_rect, close_rect, char_rects)
         """
-        if provider == "thegamesdb":
+        if provider == "preferred_system":
+            return self._render_api_key_flow(
+                screen,
+                step,
+                api_key,
+                cursor_position,
+                error_message,
+                input_mode,
+                shift_active,
+                provider_label="Preferred System",
+                input_label="Preferred System",
+                input_prompt="e.g. psx, snes, gba, genesis",
+            )
+        elif provider == "thegamesdb":
             return self._render_api_key_flow(
                 screen,
                 step,
@@ -154,6 +167,8 @@ class ScraperLoginModal:
         input_mode: str,
         shift_active: bool = False,
         provider_label: str = "TheGamesDB",
+        input_label: str = "",
+        input_prompt: str = "",
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """Render API key login flow for any provider."""
         if step == "api_key":
@@ -164,6 +179,8 @@ class ScraperLoginModal:
                 input_mode,
                 shift_active,
                 provider_label=provider_label,
+                input_label=input_label,
+                input_prompt=input_prompt,
             )
         elif step == "testing":
             return self._render_testing_step(screen, provider_label)
@@ -411,13 +428,18 @@ class ScraperLoginModal:
         input_mode: str,
         shift_active: bool = False,
         provider_label: str = "TheGamesDB",
+        input_label: str = "",
+        input_prompt: str = "",
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """Render API key input step."""
-        title = f"{provider_label} API Key"
+        title = input_label or f"{provider_label} API Key"
+        prompt = input_prompt or f"Enter your {provider_label} API key:"
+        label = input_label or "API Key:"
+        placeholder = input_prompt or "Enter API key"
 
         if input_mode == "keyboard":
             return self._render_keyboard_input(
-                screen, title, "API Key:", api_key, "Enter API key", input_mode
+                screen, title, label, api_key, placeholder, input_mode
             )
 
         # On-screen keyboard mode
@@ -432,7 +454,7 @@ class ScraperLoginModal:
         padding = self.theme.padding_sm
         self.text.render(
             screen,
-            f"Enter your {provider_label} API key:",
+            prompt,
             (content_rect.left + padding, content_rect.top + padding),
             color=self.theme.text_secondary,
             size=self.theme.font_size_sm,

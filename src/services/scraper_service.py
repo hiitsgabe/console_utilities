@@ -233,7 +233,7 @@ class ScraperService:
         return name.strip()
 
     def search_game(
-        self, name: str, rom_path: str = ""
+        self, name: str, rom_path: str = "", system_id: str = ""
     ) -> Tuple[bool, List[GameSearchResult], str]:
         """
         Search for a game, trying fallback providers
@@ -243,10 +243,23 @@ class ScraperService:
             name: Game name to search for
             rom_path: Optional ROM path for per-provider
                 name adaptation
+            system_id: Optional system hint (e.g. "psx") to
+                filter results by platform
 
         Returns:
             Tuple of (success, list of results, error)
         """
+        # Resolve system_id: explicit param > settings > folder name detection
+        if not system_id:
+            system_id = self.settings.get("scraper_preferred_system", "")
+        if not system_id and rom_path:
+            from services.scraper_providers.screenscraper import ScreenScraperProvider
+
+            folder_name = os.path.basename(os.path.dirname(rom_path))
+            normalized = folder_name.lower().replace("-", "").replace("_", "")
+            if normalized in ScreenScraperProvider.SYSTEM_ID_MAP:
+                system_id = folder_name
+
         providers = self._get_provider_chain()
 
         if not providers:
@@ -266,7 +279,9 @@ class ScraperService:
             else:
                 search_name = name
 
-            success, results, error = provider.search_game(search_name)
+            success, results, error = provider.search_game(
+                search_name, system_id=system_id
+            )
 
             if success and results:
                 self._last_search_provider = provider
@@ -342,6 +357,16 @@ class ScraperService:
         primary_provider = self._last_search_provider or self.provider
         providers = self._get_provider_chain()
 
+        # Resolve system_id for fallback searches
+        system_id = self.settings.get("scraper_preferred_system", "")
+        if not system_id and rom_path:
+            from services.scraper_providers.screenscraper import ScreenScraperProvider
+
+            folder_name = os.path.basename(os.path.dirname(rom_path))
+            normalized = folder_name.lower().replace("-", "").replace("_", "")
+            if normalized in ScreenScraperProvider.SYSTEM_ID_MAP:
+                system_id = folder_name
+
         for provider_name, provider in providers:
             if provider is primary_provider:
                 continue
@@ -355,7 +380,9 @@ class ScraperService:
                 search_name = game_name
 
             try:
-                s_ok, results, _ = provider.search_game(search_name)
+                s_ok, results, _ = provider.search_game(
+                    search_name, system_id=system_id
+                )
                 if not s_ok or not results:
                     continue
 

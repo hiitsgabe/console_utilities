@@ -69,6 +69,7 @@ class SettingsScreen:
         "Scraper Frontend",
         "Scraper Provider",
         "Provider Fallback",  # Toggle fallback chain
+        "Preferred System",  # e.g. "psx", "snes" — filter scraper results by system
         "Parallel Downloads",  # Number of parallel scraper workers (1-5)
         "Mixed Images",  # Only shown when provider = screenscraper
         "ScreenScraper Login",  # Only shown when provider = screenscraper
@@ -79,6 +80,13 @@ class SettingsScreen:
         "ES-DE Gamelists Path",  # Only shown when frontend = esde_android
         "RetroArch Thumbnails",  # Only shown when frontend = retroarch
         "Link App to Frontend",  # Register app in frontend gamelist
+    ]
+
+    # Sports Roster section
+    SPORTS_ROSTER_SECTION = [
+        "--- SPORTS ROSTER ---",
+        "Enable Sports Roster",
+        "API-Football Key",
     ]
 
     # NSZ section
@@ -162,26 +170,35 @@ class SettingsScreen:
         items.append(self.SCRAPER_SECTION[1])  # Frontend
         items.append(self.SCRAPER_SECTION[2])  # Provider
         items.append(self.SCRAPER_SECTION[3])  # Fallback
-        items.append(self.SCRAPER_SECTION[4])  # Parallel Downloads
+        items.append(self.SCRAPER_SECTION[4])  # Preferred System
+        items.append(self.SCRAPER_SECTION[5])  # Parallel Downloads
         # Show provider-specific settings
         if scraper_provider == "screenscraper":
-            items.append(self.SCRAPER_SECTION[5])  # Mixed Images
-            items.append(self.SCRAPER_SECTION[6])  # SS Login
+            items.append(self.SCRAPER_SECTION[6])  # Mixed Images
+            items.append(self.SCRAPER_SECTION[7])  # SS Login
         elif scraper_provider == "thegamesdb":
-            items.append(self.SCRAPER_SECTION[7])  # TGDB Key
+            items.append(self.SCRAPER_SECTION[8])  # TGDB Key
         elif scraper_provider == "rawg":
-            items.append(self.SCRAPER_SECTION[8])  # RAWG Key
+            items.append(self.SCRAPER_SECTION[9])  # RAWG Key
         elif scraper_provider == "igdb":
-            items.append(self.SCRAPER_SECTION[9])  # IGDB Login
+            items.append(self.SCRAPER_SECTION[10])  # IGDB Login
         # Show frontend-specific paths
         if scraper_frontend == "esde_android":
-            items.append(self.SCRAPER_SECTION[10])  # ES-DE Media Path
-            items.append(self.SCRAPER_SECTION[11])  # ES-DE Gamelists Path
+            items.append(self.SCRAPER_SECTION[11])  # ES-DE Media Path
+            items.append(self.SCRAPER_SECTION[12])  # ES-DE Gamelists Path
         elif scraper_frontend == "retroarch":
-            items.append(self.SCRAPER_SECTION[12])  # RetroArch Thumbnails
+            items.append(self.SCRAPER_SECTION[13])  # RetroArch Thumbnails
         # Only show "Link App to Frontend" if not already in gamelist.xml
         if not self._is_linked_to_frontend(settings):
-            items.append(self.SCRAPER_SECTION[13])  # Link App to Frontend
+            items.append(self.SCRAPER_SECTION[14])  # Link App to Frontend
+
+        # Add Sports Roster section
+        sports_roster_enabled = settings.get("sports_roster_enabled", False)
+        divider_indices.add(len(items))
+        items.append(self.SPORTS_ROSTER_SECTION[0])
+        items.append(self.SPORTS_ROSTER_SECTION[1])
+        if sports_roster_enabled:
+            items.append(self.SPORTS_ROSTER_SECTION[2])
 
         # Add NSZ section
         nsz_enabled = settings.get("nsz_enabled", False)
@@ -274,6 +291,16 @@ class SettingsScreen:
                 else:
                     value = "Not logged in"
                 items.append((item, value))
+            elif item == "Enable Sports Roster":
+                value = "ON" if settings.get("sports_roster_enabled", False) else "OFF"
+                items.append((item, value))
+            elif item == "API-Football Key":
+                key = settings.get("api_football_key", "")
+                if key:
+                    value = "••••••" + key[-3:] if len(key) > 3 else "••••••"
+                else:
+                    value = "Not set"
+                items.append((item, value))
             elif item == "Enable NSZ":
                 value = "ON" if settings.get("nsz_enabled", False) else "OFF"
                 items.append((item, value))
@@ -304,6 +331,10 @@ class SettingsScreen:
             elif item == "Provider Fallback":
                 enabled = settings.get("scraper_fallback_enabled", True)
                 value = "Enabled" if enabled else "Disabled"
+                items.append((item, value))
+            elif item == "Preferred System":
+                sys_name = settings.get("scraper_preferred_system", "")
+                value = sys_name if sys_name else "Not Set"
                 items.append((item, value))
             elif item == "Parallel Downloads":
                 value = str(settings.get("scraper_parallel_downloads", 1))
@@ -471,10 +502,13 @@ class SettingsScreen:
                 "USA Games Only": "toggle_usa_only",
                 "Show Download All Button": "toggle_download_all",
                 "Skip Installed Games": "toggle_exclude_installed",
+                "Enable Sports Roster": "toggle_sports_roster_enabled",
+                "API-Football Key": "edit_api_football_key",
                 "Enable NSZ": "toggle_nsz_enabled",
                 "Scraper Frontend": "toggle_scraper_frontend",
                 "Scraper Provider": "toggle_scraper_provider",
                 "Provider Fallback": "toggle_scraper_fallback",
+                "Preferred System": "edit_scraper_preferred_system",
                 "Parallel Downloads": "cycle_parallel_downloads",
                 "Mixed Images": "toggle_mixed_images",
                 "ScreenScraper Login": "screenscraper_login",

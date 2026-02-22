@@ -31,7 +31,13 @@ from .modals.dedupe_wizard_modal import DedupeWizardModal
 from .modals.rename_wizard_modal import RenameWizardModal
 from .modals.ghost_cleaner_modal import GhostCleanerModal
 from .modals.port_details_modal import PortDetailsModal
+from .modals.league_browser_modal import LeagueBrowserModal
+from .modals.roster_preview_modal import RosterPreviewModal
+from .modals.slot_mapping_modal import SlotMappingModal
+from .modals.patch_progress_modal import PatchProgressModal
 from .portmaster_screen import PortMasterScreen
+from .sports_patcher_screen import SportsPatcherScreen
+from .we_patcher_screen import WePatcherScreen
 from .downloads_screen import DownloadsScreen
 from .scraper_downloads_screen import ScraperDownloadsScreen
 from ui.molecules.status_footer import StatusFooter, StatusFooterItem
@@ -60,6 +66,8 @@ class ScreenManager:
         self.downloads_screen = DownloadsScreen(theme)
         self.scraper_downloads_screen = ScraperDownloadsScreen(theme)
         self.portmaster_screen = PortMasterScreen(theme)
+        self.sports_patcher_screen = SportsPatcherScreen(theme)
+        self.we_patcher_screen = WePatcherScreen(theme)
 
         # Initialize modals
         self.search_modal = SearchModal(theme)
@@ -79,6 +87,10 @@ class ScreenManager:
         self.rename_wizard_modal = RenameWizardModal(theme)
         self.ghost_cleaner_modal = GhostCleanerModal(theme)
         self.port_details_modal = PortDetailsModal(theme)
+        self.league_browser_modal = LeagueBrowserModal(theme)
+        self.roster_preview_modal = RosterPreviewModal(theme)
+        self.slot_mapping_modal = SlotMappingModal(theme)
+        self.patch_progress_modal = PatchProgressModal(theme)
 
         # Initialize generic status footer
         self.status_footer = StatusFooter(theme)
@@ -431,23 +443,57 @@ class ScreenManager:
 
         if state.port_details.show and state.port_details.port:
             hires_image = (
-                get_hires_image(state.port_details.port)
-                if get_hires_image
-                else None
+                get_hires_image(state.port_details.port) if get_hires_image else None
             )
-            modal_rect, download_rect, close_rect = (
-                self.port_details_modal.render(
-                    screen,
-                    state.port_details.port,
-                    hires_image,
-                    button_focused=state.port_details.button_focused,
-                    input_mode=state.input_mode,
-                    text_scroll_offset=state.text_scroll_offset,
-                )
+            modal_rect, download_rect, close_rect = self.port_details_modal.render(
+                screen,
+                state.port_details.port,
+                hires_image,
+                button_focused=state.port_details.button_focused,
+                input_mode=state.input_mode,
+                text_scroll_offset=state.text_scroll_offset,
             )
             rects["modal"] = modal_rect
             rects["download_button"] = download_rect
             rects["close"] = close_rect
+            return rects
+
+        # WE Patcher modals
+        if state.we_patcher.active_modal == "league_browser":
+            modal_rect, content_rect, close_rect, char_rects, item_rects = (
+                self.league_browser_modal.render(screen, state, settings)
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["char_rects"] = char_rects
+            rects["item_rects"] = item_rects
+            return rects
+
+        if state.we_patcher.active_modal == "roster_preview":
+            modal_rect, content_rect, close_rect, item_rects = (
+                self.roster_preview_modal.render(screen, state)
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["item_rects"] = item_rects
+            return rects
+
+        if state.we_patcher.active_modal == "slot_mapping":
+            modal_rect, content_rect, close_rect, item_rects = (
+                self.slot_mapping_modal.render(screen, state)
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["item_rects"] = item_rects
+            return rects
+
+        if state.we_patcher.active_modal == "patch_progress":
+            modal_rect, content_rect, close_rect, item_rects = (
+                self.patch_progress_modal.render(screen, state)
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["item_rects"] = item_rects
             return rects
 
         # Render main screens based on mode
@@ -573,12 +619,10 @@ class ScreenManager:
             rects["scroll_offset"] = scroll_offset
 
         elif state.mode == "scraper_downloads":
-            back_rect, item_rects, scroll_offset = (
-                self.scraper_downloads_screen.render(
-                    screen,
-                    state.scraper_queue,
-                    input_mode=state.input_mode,
-                )
+            back_rect, item_rects, scroll_offset = self.scraper_downloads_screen.render(
+                screen,
+                state.scraper_queue,
+                input_mode=state.input_mode,
             )
             rects["back"] = back_rect
             rects["item_rects"] = item_rects
@@ -587,16 +631,30 @@ class ScreenManager:
         elif state.mode == "portmaster":
             pm = state.portmaster
             genre = pm.genres[pm.selected_genre] if pm.genres else "All"
-            back_rect, item_rects, scroll_offset = (
-                self.portmaster_screen.render(
-                    screen,
-                    pm.filtered_ports,
-                    pm.highlighted,
-                    genre=genre,
-                    search_query=pm.search_query,
-                    get_thumbnail=get_thumbnail,
-                    text_scroll_offset=state.text_scroll_offset,
-                )
+            back_rect, item_rects, scroll_offset = self.portmaster_screen.render(
+                screen,
+                pm.filtered_ports,
+                pm.highlighted,
+                genre=genre,
+                search_query=pm.search_query,
+                get_thumbnail=get_thumbnail,
+                text_scroll_offset=state.text_scroll_offset,
+            )
+            rects["back"] = back_rect
+            rects["item_rects"] = item_rects
+            rects["scroll_offset"] = scroll_offset
+
+        elif state.mode == "sports_patcher":
+            back_rect, item_rects, scroll_offset = self.sports_patcher_screen.render(
+                screen, state.highlighted, settings
+            )
+            rects["back"] = back_rect
+            rects["item_rects"] = item_rects
+            rects["scroll_offset"] = scroll_offset
+
+        elif state.mode == "we_patcher":
+            back_rect, item_rects, scroll_offset = self.we_patcher_screen.render(
+                screen, state.highlighted, state, settings
             )
             rects["back"] = back_rect
             rects["item_rects"] = item_rects

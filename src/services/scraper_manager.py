@@ -188,13 +188,11 @@ class ScraperManager:
                 # Get images (with fallback to other providers)
                 item.status = "downloading"
 
-                success, images, error, fb_info = (
-                    service.get_game_images_with_fallback(
-                        game.id,
-                        game_name,
-                        item.path,
-                        self.queue.default_images,
-                    )
+                success, images, error, fb_info = service.get_game_images_with_fallback(
+                    game.id,
+                    game_name,
+                    item.path,
+                    self.queue.default_images,
                 )
                 if not success or not images:
                     item.status = "error"
@@ -236,9 +234,7 @@ class ScraperManager:
                         v_success, videos, v_error = service.get_game_videos(game.id)
                         if v_success and videos:
                             # Pick first normalized video, or first available
-                            video = next(
-                                (v for v in videos if v.normalized), videos[0]
-                            )
+                            video = next((v for v in videos if v.normalized), videos[0])
                             video_path = service.get_video_output_path(
                                 item.path, video.format or "mp4"
                             )
@@ -297,14 +293,10 @@ class ScraperManager:
 
                     # Update overall progress
                     done = sum(
-                        1
-                        for it in items
-                        if it.status in ("done", "error", "skipped")
+                        1 for it in items if it.status in ("done", "error", "skipped")
                     )
                     self.queue.current_index = done - 1
-                    self.queue.current_status = (
-                        f"Scraping: {done}/{total} complete"
-                    )
+                    self.queue.current_status = f"Scraping: {done}/{total} complete"
 
             # Final status
             done_count = sum(1 for it in items if it.status == "done")

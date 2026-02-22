@@ -7,7 +7,7 @@ import json
 import os
 import traceback
 from dataclasses import dataclass, field, asdict
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 
 from constants import CONFIG_FILE, SCRIPT_DIR, DEV_MODE
 
@@ -35,12 +35,18 @@ class Settings:
     ia_email: str = ""
     ia_access_key: str = ""  # S3 access key from IA
     ia_secret_key: str = ""  # S3 secret key (base64 encoded for minimal obfuscation)
+    # Sports Roster settings
+    sports_roster_enabled: bool = False
+    api_football_key: str = ""
     # Scraper settings
     scraper_frontend: str = (
         "emulationstation_base"  # emulationstation_base, esde_android, retroarch, pegasus
     )
     scraper_provider: str = "libretro"  # libretro, screenscraper, thegamesdb
     scraper_fallback_enabled: bool = True
+    scraper_preferred_system: str = (
+        ""  # e.g. "psx", "snes" — used to filter scraper results
+    )
     screenscraper_username: str = ""
     screenscraper_password: str = ""  # base64 encoded
     thegamesdb_api_key: str = ""
