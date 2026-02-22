@@ -176,7 +176,9 @@ class LibretroProvider(BaseProvider):
 
         return variations
 
-    def search_game(self, name: str) -> Tuple[bool, List[GameSearchResult], str]:
+    def search_game(
+        self, name: str, system_id: str = ""
+    ) -> Tuple[bool, List[GameSearchResult], str]:
         """
         Search for a game by name.
 

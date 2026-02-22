@@ -43,6 +43,12 @@ else:
 os.makedirs(TEMP_LOG_DIR, exist_ok=True)
 LOG_FILE = os.path.join(TEMP_LOG_DIR, "error.log")
 
+# WE Patcher cache directory
+if DEV_MODE:
+    WE_PATCHER_CACHE_DIR = os.path.join(SCRIPT_DIR, "..", "workdir", "we_patcher_cache")
+else:
+    WE_PATCHER_CACHE_DIR = os.path.join(SCRIPT_DIR, "we_patcher_cache")
+
 # **************************************************************** #
 #                       Display Settings                             #
 # **************************************************************** #

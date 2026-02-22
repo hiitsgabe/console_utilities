@@ -415,6 +415,47 @@ class GhostCleanerWizardState:
 
 
 @dataclass
+class WePatcherState:
+    """State for the WE Patcher feature."""
+
+    # League selection
+    selected_league: Any = None
+    selected_season: int = 2025
+    available_leagues: List[Any] = field(default_factory=list)
+    league_search_query: str = ""
+    league_search_cursor: int = 0
+    league_search_shift: bool = False
+    # Fetched data
+    league_data: Any = None
+    fetch_progress: float = 0.0
+    fetch_status: str = ""
+    is_fetching: bool = False
+    fetch_error: str = ""
+    # ROM
+    rom_path: str = ""
+    rom_info: Any = None
+    rom_valid: bool = False
+    # Slot mapping
+    slot_mapping: List[Any] = field(default_factory=list)
+    slot_mapping_highlighted: int = 0
+    # Patching
+    patch_progress: float = 0.0
+    patch_status: str = ""
+    is_patching: bool = False
+    patch_output_path: str = ""
+    patch_complete: bool = False
+    patch_error: str = ""
+    # Roster preview
+    roster_preview_team_index: int = 0
+    roster_preview_player_index: int = 0
+    # UI navigation
+    active_modal: Optional[str] = None
+    leagues_highlighted: int = 0
+    roster_teams_highlighted: int = 0
+    roster_players_highlighted: int = 0
+
+
+@dataclass
 class UIRects:
     """Stores rectangles for clickable UI elements."""
 
@@ -517,6 +558,9 @@ class AppState:
         self.portmaster = PortMasterState()
         self.port_details = PortDetailsState()
 
+        # ---- WE Patcher ---- #
+        self.we_patcher = WePatcherState()
+
         # ---- UI Rectangles ---- #
         self.ui_rects = UIRects()
 
@@ -572,6 +616,7 @@ class AppState:
         self.rename_wizard.show = False
         self.ghost_cleaner_wizard.show = False
         self.port_details.show = False
+        self.we_patcher.active_modal = None
 
     def get_current_game_list(self) -> List[Any]:
         """Get the current game list (filtered or full)."""

@@ -4,7 +4,7 @@ Base provider interface for game scraping APIs.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import List, Tuple, Optional, Dict, Any
+from typing import List, Tuple, Dict, Any
 
 
 @dataclass
@@ -78,12 +78,15 @@ class BaseProvider(ABC):
         pass
 
     @abstractmethod
-    def search_game(self, name: str) -> Tuple[bool, List[GameSearchResult], str]:
+    def search_game(
+        self, name: str, system_id: str = ""
+    ) -> Tuple[bool, List[GameSearchResult], str]:
         """
         Search for a game by name.
 
         Args:
             name: Game name to search for
+            system_id: Optional system hint (e.g. "psx", "snes") to filter results
 
         Returns:
             Tuple of (success, list of results, error message)

@@ -995,6 +995,85 @@ class ConsoleUtilitiesApp:
                         0, self.state.text_scroll_offset - scroll_step
                     )
 
+        elif self.state.mode == "sports_patcher":
+            from ui.screens.sports_patcher_screen import sports_patcher_screen
+
+            max_items = sports_patcher_screen.get_count()
+            if direction in ("up", "left"):
+                self.state.highlighted = (self.state.highlighted - 1) % max_items
+            elif direction in ("down", "right"):
+                self.state.highlighted = (self.state.highlighted + 1) % max_items
+
+        elif self.state.mode == "we_patcher":
+            self._handle_we_patcher_navigation(direction)
+
+    def _handle_we_patcher_navigation(self, direction):
+        """Handle D-pad navigation for we_patcher mode and its modals."""
+        we = self.state.we_patcher
+
+        if we.active_modal == "league_browser":
+            from ui.screens.modals.league_browser_modal import league_browser_modal
+
+            filtered = league_browser_modal.get_filtered_leagues(self.state)
+            max_items = len(filtered) or 1
+            if direction in ("up", "left"):
+                we.leagues_highlighted = (we.leagues_highlighted - 1) % max_items
+            elif direction in ("down", "right"):
+                we.leagues_highlighted = (we.leagues_highlighted + 1) % max_items
+
+        elif we.active_modal == "roster_preview":
+            league_data = we.league_data
+            if not league_data or not hasattr(league_data, "teams"):
+                return
+            teams = league_data.teams
+            if direction == "left":
+                we.roster_preview_team_index = (we.roster_preview_team_index - 1) % max(
+                    len(teams), 1
+                )
+                we.roster_preview_player_index = 0
+            elif direction == "right":
+                we.roster_preview_team_index = (we.roster_preview_team_index + 1) % max(
+                    len(teams), 1
+                )
+                we.roster_preview_player_index = 0
+            elif direction == "up":
+                we.roster_preview_player_index = max(
+                    0, we.roster_preview_player_index - 1
+                )
+            elif direction == "down":
+                team_idx = we.roster_preview_team_index
+                if 0 <= team_idx < len(teams):
+                    players = (
+                        teams[team_idx].players
+                        if hasattr(teams[team_idx], "players")
+                        else []
+                    )
+                    we.roster_preview_player_index = min(
+                        we.roster_preview_player_index + 1,
+                        max(len(players) - 1, 0),
+                    )
+
+        elif we.active_modal == "slot_mapping":
+            max_items = len(we.slot_mapping) or 1
+            if direction in ("up", "left"):
+                we.slot_mapping_highlighted = (
+                    we.slot_mapping_highlighted - 1
+                ) % max_items
+            elif direction in ("down", "right"):
+                we.slot_mapping_highlighted = (
+                    we.slot_mapping_highlighted + 1
+                ) % max_items
+
+        elif we.active_modal is None:
+            # Main we_patcher menu
+            from ui.screens.we_patcher_screen import we_patcher_screen
+
+            max_items = we_patcher_screen.get_count()
+            if direction in ("up", "left"):
+                self.state.highlighted = (self.state.highlighted - 1) % max_items
+            elif direction in ("down", "right"):
+                self.state.highlighted = (self.state.highlighted + 1) % max_items
+
     def _handle_key_event(self, event: pygame.event.Event):
         """Handle keyboard events."""
         # Handle keyboard text input for search modal
@@ -1063,6 +1142,26 @@ class ConsoleUtilitiesApp:
                     elif step == "api_key":
                         self.state.scraper_login.api_key += event.unicode
                 return
+
+        # Handle keyboard text input for WE Patcher league browser search
+        if (
+            self.state.we_patcher.active_modal == "league_browser"
+            and self.state.input_mode == "keyboard"
+        ):
+            if event.key == pygame.K_ESCAPE:
+                self._go_back()
+            elif event.key == pygame.K_RETURN:
+                self._handle_league_browser_selection()
+            elif event.key == pygame.K_BACKSPACE:
+                if self.state.we_patcher.league_search_query:
+                    self.state.we_patcher.league_search_query = (
+                        self.state.we_patcher.league_search_query[:-1]
+                    )
+                    self.state.we_patcher.leagues_highlighted = 0
+            elif event.unicode and event.unicode.isprintable():
+                self.state.we_patcher.league_search_query += event.unicode
+                self.state.we_patcher.leagues_highlighted = 0
+            return
 
         # Handle keyboard text input for IA download wizard
         if self.state.ia_download_wizard.show and self.state.input_mode == "keyboard":
@@ -1376,6 +1475,15 @@ class ConsoleUtilitiesApp:
             self.state.portmaster.search_query = ""
             self.state.mode = "systems"
             self.state.highlighted = 0
+        elif self.state.mode == "sports_patcher":
+            self.state.mode = "systems"
+            self.state.highlighted = 0
+        elif self.state.mode == "we_patcher":
+            if self.state.we_patcher.active_modal:
+                self.state.we_patcher.active_modal = None
+            else:
+                self.state.mode = "sports_patcher"
+                self.state.highlighted = 0
         elif self.state.mode == "system_settings":
             self.state.mode = "systems_settings"
             self.state.system_settings_highlighted = 0
@@ -1484,12 +1592,17 @@ class ConsoleUtilitiesApp:
         if self.state.mode == "systems":
             from ui.screens.systems_screen import systems_screen
 
-            action = systems_screen.get_root_menu_action(self.state.highlighted, self.settings)
+            action = systems_screen.get_root_menu_action(
+                self.state.highlighted, self.settings
+            )
             if action == "systems_list":
                 self.state.mode = "systems_list"
                 # Don't reset systems_list_highlighted to preserve position
             elif action == "portmaster":
                 self._enter_portmaster()
+            elif action == "sports_patcher":
+                self.state.mode = "sports_patcher"
+                self.state.highlighted = 0
             elif action == "utils":
                 self.state.mode = "utils"
                 self.state.highlighted = 1  # Skip first divider
@@ -1555,6 +1668,17 @@ class ConsoleUtilitiesApp:
 
         elif self.state.mode == "portmaster":
             self._handle_portmaster_selection()
+
+        elif self.state.mode == "sports_patcher":
+            from ui.screens.sports_patcher_screen import sports_patcher_screen
+
+            action = sports_patcher_screen.get_action(self.state.highlighted)
+            if action == "we_patcher":
+                self.state.mode = "we_patcher"
+                self.state.highlighted = 0
+
+        elif self.state.mode == "we_patcher":
+            self._handle_we_patcher_selection()
 
         elif self.state.mode == "downloads":
             self._handle_downloads_selection()
@@ -1742,6 +1866,13 @@ class ConsoleUtilitiesApp:
                 self.state.confirm_modal.cancel_label = "Cancel"
                 self.state.confirm_modal.button_index = 0
                 self.state.confirm_modal.context = "install_portmaster"
+        elif action == "toggle_sports_roster_enabled":
+            self.settings["sports_roster_enabled"] = not self.settings.get(
+                "sports_roster_enabled", False
+            )
+            save_settings(self.settings)
+        elif action == "edit_api_football_key":
+            self._show_api_football_key_input()
         elif action == "toggle_ia_enabled":
             self.settings["ia_enabled"] = not self.settings.get("ia_enabled", False)
             save_settings(self.settings)
@@ -1789,6 +1920,8 @@ class ConsoleUtilitiesApp:
                 (idx + 1) % len(options)
             ]
             save_settings(self.settings)
+        elif action == "edit_scraper_preferred_system":
+            self._show_preferred_system_input()
         elif action == "screenscraper_login":
             self._show_screenscraper_login()
         elif action == "thegamesdb_api_key":
@@ -1936,9 +2069,7 @@ class ConsoleUtilitiesApp:
         lines = [line for line in pretty_xml.split("\n") if line.strip()]
         if lines and lines[0].startswith("<?xml"):
             lines = lines[1:]
-        final_xml = (
-            '<?xml version="1.0" encoding="UTF-8"?>\n' + "\n".join(lines)
-        )
+        final_xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + "\n".join(lines)
 
         with open(gamelist_path, "w", encoding="utf-8") as f:
             f.write(final_xml)
@@ -2188,6 +2319,8 @@ class ConsoleUtilitiesApp:
             )
         elif selection_type == "add_system_folder":
             path = self.settings.get("roms_dir", SCRIPT_DIR)
+        elif selection_type == "we_patcher_rom":
+            path = self.settings.get("roms_dir", SCRIPT_DIR)
         else:
             path = SCRIPT_DIR
 
@@ -2307,6 +2440,19 @@ class ConsoleUtilitiesApp:
         elif selection_type == "retroarch_thumbnails":
             self.settings["retroarch_thumbnails_path"] = path
             save_settings(self.settings)
+        elif selection_type == "we_patcher_rom":
+            self.state.we_patcher.rom_path = path
+            try:
+                from services.we_patcher import RomReader
+
+                reader = RomReader(path)
+                self.state.we_patcher.rom_info = reader.get_rom_info()
+                self.state.we_patcher.rom_valid = reader.validate_rom()
+            except Exception:
+                self.state.we_patcher.rom_valid = False
+                self.state.we_patcher.rom_info = None
+            # Reset slot mapping when ROM changes
+            self.state.we_patcher.slot_mapping = []
 
         # Close the modal
         self.state.folder_browser.show = False
@@ -4265,6 +4411,17 @@ class ConsoleUtilitiesApp:
         self.state.mode = "scraper_downloads"
         self.state.scraper_queue.highlighted = 0
 
+    def _show_preferred_system_input(self):
+        """Show preferred system text input modal."""
+        self.state.scraper_login.show = True
+        self.state.scraper_login.provider = "preferred_system"
+        self.state.scraper_login.step = "api_key"
+        self.state.scraper_login.api_key = self.settings.get(
+            "scraper_preferred_system", ""
+        )
+        self.state.scraper_login.cursor_position = 0
+        self.state.scraper_login.error_message = ""
+
     def _show_screenscraper_login(self):
         """Show ScreenScraper login modal."""
         self.state.scraper_login.show = True
@@ -4274,6 +4431,15 @@ class ConsoleUtilitiesApp:
             "screenscraper_username", ""
         )
         self.state.scraper_login.password = ""
+        self.state.scraper_login.cursor_position = 0
+        self.state.scraper_login.error_message = ""
+
+    def _show_api_football_key_input(self):
+        """Show API-Football key input modal."""
+        self.state.scraper_login.show = True
+        self.state.scraper_login.provider = "api_football"
+        self.state.scraper_login.step = "api_key"
+        self.state.scraper_login.api_key = self.settings.get("api_football_key", "")
         self.state.scraper_login.cursor_position = 0
         self.state.scraper_login.error_message = ""
 
@@ -4382,6 +4548,33 @@ class ConsoleUtilitiesApp:
                 login.password = ""
                 login.cursor_position = 0
                 login.error_message = ""
+
+        elif provider == "api_football":
+            if step == "api_key":
+                if self.state.input_mode == "keyboard":
+                    self.settings["api_football_key"] = login.api_key
+                    save_settings(self.settings)
+                    self._close_scraper_login()
+                else:
+                    from ui.screens.modals.scraper_login_modal import ScraperLoginModal
+
+                    modal = ScraperLoginModal()
+                    new_text, is_done, toggle_shift = modal.handle_selection(
+                        provider,
+                        step,
+                        login.cursor_position,
+                        login.api_key,
+                        shift_active=self.state.scraper_login.shift_active,
+                    )
+                    if toggle_shift:
+                        self.state.scraper_login.shift_active = (
+                            not self.state.scraper_login.shift_active
+                        )
+                    login.api_key = new_text
+                    if is_done and new_text:
+                        self.settings["api_football_key"] = new_text
+                        save_settings(self.settings)
+                        self._close_scraper_login()
 
         elif provider == "thegamesdb":
             if step == "api_key":
@@ -4504,6 +4697,34 @@ class ConsoleUtilitiesApp:
                 login.password = ""
                 login.cursor_position = 0
                 login.error_message = ""
+
+        elif provider == "preferred_system":
+            if step == "api_key":
+                if self.state.input_mode == "keyboard":
+                    # Keyboard mode - save value directly (even empty to clear)
+                    self.settings["scraper_preferred_system"] = login.api_key
+                    save_settings(self.settings)
+                    self._close_scraper_login()
+                else:
+                    from ui.screens.modals.scraper_login_modal import ScraperLoginModal
+
+                    modal = ScraperLoginModal()
+                    new_text, is_done, toggle_shift = modal.handle_selection(
+                        provider,
+                        step,
+                        login.cursor_position,
+                        login.api_key,
+                        shift_active=self.state.scraper_login.shift_active,
+                    )
+                    if toggle_shift:
+                        self.state.scraper_login.shift_active = (
+                            not self.state.scraper_login.shift_active
+                        )
+                    login.api_key = new_text
+                    if is_done:
+                        self.settings["scraper_preferred_system"] = new_text
+                        save_settings(self.settings)
+                        self._close_scraper_login()
 
     def _test_screenscraper_credentials(self):
         """Test ScreenScraper credentials in background thread."""
@@ -5086,6 +5307,171 @@ class ConsoleUtilitiesApp:
 
         thread = Thread(target=clean, daemon=True)
         thread.start()
+
+    # ------------------------------------------------------------------ #
+    #  WE Patcher methods
+    # ------------------------------------------------------------------ #
+
+    def _handle_we_patcher_selection(self):
+        """Handle item selection on the we_patcher main menu."""
+        we = self.state.we_patcher
+
+        # If a modal is active, route to modal selection
+        if we.active_modal == "league_browser":
+            self._handle_league_browser_selection()
+            return
+        if we.active_modal == "roster_preview":
+            # No action on select in roster preview — just browsing
+            return
+        if we.active_modal == "slot_mapping":
+            # Confirm and close
+            we.active_modal = None
+            return
+        if we.active_modal == "patch_progress":
+            # Close if complete or errored
+            if we.patch_complete or we.patch_error:
+                we.active_modal = None
+            return
+
+        from ui.screens.we_patcher_screen import we_patcher_screen
+
+        action = we_patcher_screen.get_action(
+            self.state.highlighted, self.state, self.settings
+        )
+
+        if action == "select_league":
+            we.active_modal = "league_browser"
+            self._start_league_fetch()
+        elif action == "preview_rosters":
+            we.active_modal = "roster_preview"
+            we.roster_preview_team_index = 0
+            we.roster_preview_player_index = 0
+        elif action == "select_rom":
+            self._open_folder_browser("we_patcher_rom")
+        elif action == "map_slots":
+            if not we.slot_mapping and we.league_data and we.rom_info:
+                from services.we_patcher import WePatcher
+                from constants import WE_PATCHER_CACHE_DIR
+
+                api_key = self.settings.get("api_football_key", "")
+                patcher = WePatcher(api_key, WE_PATCHER_CACHE_DIR)
+                we.slot_mapping = patcher.create_slot_mapping(
+                    we.league_data, we.rom_info
+                )
+            we.slot_mapping_highlighted = 0
+            we.active_modal = "slot_mapping"
+        elif action == "patch_rom":
+            we.active_modal = "patch_progress"
+            self._start_patching()
+        elif action == "needs_api_key":
+            self.state.confirm_modal.show = True
+            self.state.confirm_modal.title = "API Key Required"
+            self.state.confirm_modal.message_lines = [
+                "Set your API-Football key in",
+                "Settings > Sports Roster first.",
+            ]
+            self.state.confirm_modal.ok_label = "OK"
+            self.state.confirm_modal.cancel_label = ""
+            self.state.confirm_modal.button_index = 0
+            self.state.confirm_modal.context = ""
+        # "locked" and "unknown" are silently ignored
+
+    def _handle_league_browser_selection(self):
+        """Handle league selection from the league browser modal."""
+        we = self.state.we_patcher
+        from ui.screens.modals.league_browser_modal import league_browser_modal
+
+        filtered = league_browser_modal.get_filtered_leagues(self.state)
+        if not filtered or we.leagues_highlighted >= len(filtered):
+            return
+
+        selected = filtered[we.leagues_highlighted]
+        we.selected_league = selected
+        we.active_modal = None
+
+        league_id = selected.id if hasattr(selected, "id") else None
+        if league_id:
+            self._start_league_fetch(league_id, we.selected_season)
+
+    def _start_league_fetch(self, league_id=None, season=None):
+        """Start background thread to fetch league data from API-Football."""
+        import threading
+        from constants import WE_PATCHER_CACHE_DIR
+
+        api_key = self.settings.get("api_football_key", "")
+        if not api_key:
+            return
+
+        state = self.state
+        state.we_patcher.is_fetching = True
+        state.we_patcher.fetch_error = ""
+
+        def _fetch():
+            try:
+                from services.we_patcher import ApiFootballClient, WePatcher
+
+                client = ApiFootballClient(api_key, WE_PATCHER_CACHE_DIR)
+                if not state.we_patcher.available_leagues:
+                    state.we_patcher.fetch_status = "Fetching leagues..."
+                    leagues = client.get_leagues()
+                    state.we_patcher.available_leagues = leagues
+                if league_id and season:
+                    patcher = WePatcher(api_key, WE_PATCHER_CACHE_DIR)
+
+                    def progress(p, msg):
+                        state.we_patcher.fetch_progress = p
+                        state.we_patcher.fetch_status = msg
+
+                    league_data = patcher.fetch_league(league_id, season, progress)
+                    state.we_patcher.league_data = league_data
+            except Exception as e:
+                state.we_patcher.fetch_error = str(e)
+            finally:
+                state.we_patcher.is_fetching = False
+
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def _start_patching(self):
+        """Start background patching thread."""
+        import threading
+        import os
+        from constants import WE_PATCHER_CACHE_DIR
+
+        we = self.state.we_patcher
+        api_key = self.settings.get("api_football_key", "")
+
+        if not we.league_data or not we.rom_path or not we.slot_mapping:
+            return
+
+        we.is_patching = True
+        we.patch_error = ""
+        we.patch_complete = False
+
+        input_path = we.rom_path
+        base, ext = os.path.splitext(input_path)
+        output_path = base + "_patched" + ext
+
+        def _patch():
+            try:
+                from services.we_patcher import WePatcher
+
+                patcher = WePatcher(api_key, WE_PATCHER_CACHE_DIR)
+
+                def progress(p, msg):
+                    we.patch_progress = p
+                    we.patch_status = msg
+
+                patcher.patch_rom(
+                    input_path, output_path, we.league_data, we.slot_mapping, progress
+                )
+                we.patch_output_path = output_path
+                we.patch_complete = True
+            except Exception as e:
+                we.patch_error = str(e)
+            finally:
+                we.is_patching = False
+
+        threading.Thread(target=_patch, daemon=True).start()
 
 
 def main():

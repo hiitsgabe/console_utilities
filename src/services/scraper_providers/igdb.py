@@ -191,7 +191,9 @@ class IGDBProvider(BaseProvider):
         size_prefix = self.IMAGE_SIZES.get(size, "t_cover_big")
         return f"{self.IMAGE_BASE_URL}/{size_prefix}/{image_id}.jpg"
 
-    def search_game(self, name: str) -> Tuple[bool, List[GameSearchResult], str]:
+    def search_game(
+        self, name: str, system_id: str = ""
+    ) -> Tuple[bool, List[GameSearchResult], str]:
         """Search for a game by name."""
         if not self.is_configured():
             return False, [], "IGDB credentials not configured"
