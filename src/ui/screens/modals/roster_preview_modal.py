@@ -6,6 +6,7 @@ from typing import List, Tuple, Optional, Any
 from ui.theme import Theme, default_theme
 from ui.organisms.modal_frame import ModalFrame
 from ui.atoms.text import Text
+from ui.atoms.progress import ProgressBar
 
 
 class RosterPreviewModal:
@@ -13,6 +14,7 @@ class RosterPreviewModal:
         self.theme = theme
         self.modal_frame = ModalFrame(theme)
         self.text = Text(theme)
+        self.progress_bar = ProgressBar(theme)
 
     def render(
         self,
@@ -44,19 +46,47 @@ class RosterPreviewModal:
         item_rects = []
 
         if not league_data or not hasattr(league_data, "teams"):
-            msg = (
-                "Loading roster data..."
-                if state.we_patcher.is_fetching
-                else "No league data loaded"
-            )
-            self.text.render(
-                screen,
-                msg,
-                (content_rect.centerx, content_rect.centery),
-                color=self.theme.text_disabled,
-                size=self.theme.font_size_lg,
-                align="center",
-            )
+            if state.we_patcher.is_fetching:
+                center_y = content_rect.centery - 30
+                status = state.we_patcher.fetch_status or "Loading roster data..."
+                self.text.render(
+                    screen,
+                    status,
+                    (content_rect.centerx, center_y),
+                    color=self.theme.text_primary,
+                    size=self.theme.font_size_lg,
+                    align="center",
+                )
+                progress = state.we_patcher.fetch_progress
+                bar_width = min(400, content_rect.width - 80)
+                bar_rect = pygame.Rect(
+                    content_rect.centerx - bar_width // 2,
+                    center_y + 50,
+                    bar_width,
+                    20,
+                )
+                self.progress_bar.render(screen, bar_rect, progress)
+                league_name = ""
+                if state.we_patcher.selected_league and hasattr(state.we_patcher.selected_league, "name"):
+                    league_name = state.we_patcher.selected_league.name
+                if league_name:
+                    self.text.render(
+                        screen,
+                        league_name,
+                        (content_rect.centerx, center_y - 30),
+                        color=self.theme.text_secondary,
+                        size=self.theme.font_size_md,
+                        align="center",
+                    )
+            else:
+                self.text.render(
+                    screen,
+                    "No league data loaded",
+                    (content_rect.centerx, content_rect.centery),
+                    color=self.theme.text_disabled,
+                    size=self.theme.font_size_lg,
+                    align="center",
+                )
             return modal_rect, content_rect, close_rect, item_rects
 
         teams = league_data.teams

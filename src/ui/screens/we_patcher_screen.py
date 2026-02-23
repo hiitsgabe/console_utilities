@@ -89,7 +89,7 @@ class WePatcherScreen:
         api_key = (settings or {}).get("api_football_key", "")
         actions = {
             0: "select_league" if api_key else "needs_api_key",
-            1: "preview_rosters" if we.league_data else "locked",
+            1: "preview_rosters" if (we.league_data or (we.is_fetching and we.selected_league)) else "locked",
             2: "select_rom",
             3: "map_slots" if (we.league_data and we.rom_valid) else "locked",
             4: (
