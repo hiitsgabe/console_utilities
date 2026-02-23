@@ -129,7 +129,7 @@ class LeagueBrowserModal:
                 label,
                 (rect.left + 8, rect.centery - self.theme.font_size_sm // 2),
                 color=(
-                    self.theme.text_primary
+                    self.theme.background
                     if is_highlighted
                     else self.theme.text_secondary
                 ),

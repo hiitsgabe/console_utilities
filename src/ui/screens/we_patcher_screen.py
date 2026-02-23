@@ -30,7 +30,12 @@ class WePatcherScreen:
             step1_value = "Not selected"
 
         # Step 2: Preview Rosters (requires step 1)
-        step2_value = "Tap to preview" if we.league_data else "Complete step 1 first"
+        if we.league_data:
+            step2_value = "Tap to preview"
+        elif we.is_fetching and we.selected_league:
+            step2_value = "Loading roster data..."
+        else:
+            step2_value = "Complete step 1 first"
 
         # Step 3: Select ROM (always available)
         if we.rom_path and we.rom_valid:
