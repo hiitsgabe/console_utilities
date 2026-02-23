@@ -307,6 +307,13 @@ class StatMapper:
         if age < 23:
             attrs.speed = min(9, attrs.speed + 1)
             attrs.acceleration = min(9, attrs.acceleration + 1)
+            attrs.stamina = min(9, attrs.stamina + 1)
+            attrs.technique = max(1, attrs.technique - 1)
+        elif 31 <= age <= 33:
+            attrs.speed = max(1, attrs.speed - 1)
+            attrs.acceleration = max(1, attrs.acceleration - 1)
+            attrs.stamina = max(1, attrs.stamina - 1)
+            attrs.technique = min(9, attrs.technique + 1)
         elif age > 33:
             attrs.speed = max(1, attrs.speed - 2)
             attrs.stamina = max(1, attrs.stamina - 2)

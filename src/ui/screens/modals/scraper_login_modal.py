@@ -77,6 +77,19 @@ class ScraperLoginModal:
                 input_label="Preferred System",
                 input_prompt="e.g. psx, snes, gba, genesis",
             )
+        elif provider == "api_football":
+            return self._render_api_key_flow(
+                screen,
+                step,
+                api_key,
+                cursor_position,
+                error_message,
+                input_mode,
+                shift_active,
+                provider_label="API-Football",
+                input_label="API-Football Key",
+                input_prompt="Enter your API-Football key",
+            )
         elif provider == "thegamesdb":
             return self._render_api_key_flow(
                 screen,
