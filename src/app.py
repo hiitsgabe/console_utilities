@@ -1015,7 +1015,9 @@ class ConsoleUtilitiesApp:
             from ui.screens.modals.league_browser_modal import league_browser_modal
 
             filtered = league_browser_modal.get_filtered_leagues(self.state)
-            max_items = len(filtered) or 1
+            # +1 for "Browse all leagues" footer when not all loaded and not searching
+            show_browse_all = not we.all_leagues_loaded and not we.league_search_query and not we.is_fetching
+            max_items = (len(filtered) + (1 if show_browse_all else 0)) or 1
             if direction in ("up", "left"):
                 we.leagues_highlighted = (we.leagues_highlighted - 1) % max_items
             elif direction in ("down", "right"):
@@ -5385,6 +5387,13 @@ class ConsoleUtilitiesApp:
         from ui.screens.modals.league_browser_modal import league_browser_modal
 
         filtered = league_browser_modal.get_filtered_leagues(self.state)
+
+        # "Browse all leagues" is the virtual last item when not all are loaded
+        show_browse_all = not we.all_leagues_loaded and not we.league_search_query and not we.is_fetching
+        if show_browse_all and we.leagues_highlighted == len(filtered):
+            self._load_all_leagues()
+            return
+
         if not filtered or we.leagues_highlighted >= len(filtered):
             return
 
@@ -5393,11 +5402,56 @@ class ConsoleUtilitiesApp:
         we.active_modal = None
 
         league_id = selected.id if hasattr(selected, "id") else None
+        season = selected.season if hasattr(selected, "season") else we.selected_season
         if league_id:
-            self._start_league_fetch(league_id, we.selected_season)
+            self._start_league_fetch(league_id, season)
 
     def _start_league_fetch(self, league_id=None, season=None):
-        """Start background thread to fetch league data from API-Football."""
+        """Populate featured leagues instantly, then optionally fetch a specific league's data."""
+        import threading
+        from constants import WE_PATCHER_CACHE_DIR
+
+        api_key = self.settings.get("api_football_key", "")
+        if not api_key:
+            return
+
+        state = self.state
+
+        # Show featured leagues immediately — no API call needed
+        if not state.we_patcher.available_leagues:
+            from services.we_patcher import ApiFootballClient
+
+            client = ApiFootballClient(api_key, WE_PATCHER_CACHE_DIR)
+            state.we_patcher.available_leagues = client.get_featured_leagues()
+
+        if not league_id or not season:
+            return
+
+        # Background fetch of full roster data for the selected league
+        state.we_patcher.is_fetching = True
+        state.we_patcher.fetch_error = ""
+
+        def _fetch():
+            try:
+                from services.we_patcher import WePatcher
+
+                patcher = WePatcher(api_key, WE_PATCHER_CACHE_DIR)
+
+                def progress(p, msg):
+                    state.we_patcher.fetch_progress = p
+                    state.we_patcher.fetch_status = msg
+
+                league_data = patcher.fetch_league(league_id, season, progress)
+                state.we_patcher.league_data = league_data
+            except Exception as e:
+                state.we_patcher.fetch_error = str(e)
+            finally:
+                state.we_patcher.is_fetching = False
+
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def _load_all_leagues(self):
+        """Background fetch of all leagues from API-Football (~8000 entries)."""
         import threading
         from constants import WE_PATCHER_CACHE_DIR
 
@@ -5407,26 +5461,17 @@ class ConsoleUtilitiesApp:
 
         state = self.state
         state.we_patcher.is_fetching = True
+        state.we_patcher.fetch_status = "Fetching all leagues..."
         state.we_patcher.fetch_error = ""
 
         def _fetch():
             try:
-                from services.we_patcher import ApiFootballClient, WePatcher
+                from services.we_patcher import ApiFootballClient
 
                 client = ApiFootballClient(api_key, WE_PATCHER_CACHE_DIR)
-                if not state.we_patcher.available_leagues:
-                    state.we_patcher.fetch_status = "Fetching leagues..."
-                    leagues = client.get_leagues()
-                    state.we_patcher.available_leagues = leagues
-                if league_id and season:
-                    patcher = WePatcher(api_key, WE_PATCHER_CACHE_DIR)
-
-                    def progress(p, msg):
-                        state.we_patcher.fetch_progress = p
-                        state.we_patcher.fetch_status = msg
-
-                    league_data = patcher.fetch_league(league_id, season, progress)
-                    state.we_patcher.league_data = league_data
+                leagues = client.get_leagues()
+                state.we_patcher.available_leagues = leagues
+                state.we_patcher.all_leagues_loaded = True
             except Exception as e:
                 state.we_patcher.fetch_error = str(e)
             finally:
