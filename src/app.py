@@ -1154,6 +1154,10 @@ class ConsoleUtilitiesApp:
                 self._go_back()
             elif event.key == pygame.K_RETURN:
                 self._handle_league_browser_selection()
+            elif event.key in (pygame.K_UP, pygame.K_LEFT):
+                self._handle_we_patcher_navigation("up")
+            elif event.key in (pygame.K_DOWN, pygame.K_RIGHT):
+                self._handle_we_patcher_navigation("down")
             elif event.key == pygame.K_BACKSPACE:
                 if self.state.we_patcher.league_search_query:
                     self.state.we_patcher.league_search_query = (
@@ -1392,6 +1396,11 @@ class ConsoleUtilitiesApp:
                 actual_index = i + self.state.ui_rects.scroll_offset
                 if self.state.mode == "portmaster":
                     self.state.portmaster.highlighted = actual_index
+                elif (
+                    self.state.mode == "we_patcher"
+                    and self.state.we_patcher.active_modal == "league_browser"
+                ):
+                    self.state.we_patcher.leagues_highlighted = actual_index
                 else:
                     self.state.highlighted = actual_index
                 self._select_item()
@@ -5346,6 +5355,7 @@ class ConsoleUtilitiesApp:
 
         if action == "select_league":
             we.active_modal = "league_browser"
+            we.leagues_highlighted = 0
             self._start_league_fetch()
         elif action == "preview_rosters":
             we.active_modal = "roster_preview"

@@ -44,9 +44,14 @@ class RosterPreviewModal:
         item_rects = []
 
         if not league_data or not hasattr(league_data, "teams"):
+            msg = (
+                "Loading roster data..."
+                if state.we_patcher.is_fetching
+                else "No league data loaded"
+            )
             self.text.render(
                 screen,
-                "No league data loaded",
+                msg,
                 (content_rect.centerx, content_rect.centery),
                 color=self.theme.text_disabled,
                 size=self.theme.font_size_lg,
@@ -93,10 +98,15 @@ class RosterPreviewModal:
             size=self.theme.font_size_md,
         )
 
-        y = team_panel.top + self.theme.font_size_md + self.theme.padding_sm
         item_height = 28
+        team_list_top = team_panel.top + self.theme.font_size_md + self.theme.padding_sm
+        visible_teams = max(1, (team_panel.bottom - team_list_top) // (item_height + 1))
+        team_scroll = max(0, team_idx - visible_teams + 1)
 
+        y = team_list_top
         for i, team_roster in enumerate(teams):
+            if i < team_scroll:
+                continue
             if y + item_height > team_panel.bottom:
                 break
 
@@ -121,7 +131,7 @@ class RosterPreviewModal:
                 team_name,
                 (rect.left + 6, rect.centery - self.theme.font_size_sm // 2),
                 color=(
-                    self.theme.text_primary
+                    self.theme.background
                     if is_selected
                     else self.theme.text_secondary
                 ),
@@ -176,8 +186,12 @@ class RosterPreviewModal:
 
             py += self.theme.font_size_sm + 4
             row_height = 22
+            visible_players = max(1, (player_panel.bottom - py) // row_height)
+            player_scroll = max(0, player_idx - visible_players + 1)
 
             for j, player in enumerate(players):
+                if j < player_scroll:
+                    continue
                 if py + row_height > player_panel.bottom:
                     break
 
