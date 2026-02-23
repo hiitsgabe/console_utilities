@@ -98,9 +98,13 @@ class LeagueBrowserModal:
         list_top = field_rect.bottom + self.theme.padding_md
         list_bottom = content_rect.bottom - self.theme.padding_sm
         item_height = 36
+        visible_count = max(1, (list_bottom - list_top) // (item_height + 2))
+        scroll_start = max(0, we.leagues_highlighted - visible_count + 1)
         y = list_top
 
         for i, league in enumerate(leagues):
+            if i < scroll_start:
+                continue
             if y + item_height > list_bottom:
                 break
 
