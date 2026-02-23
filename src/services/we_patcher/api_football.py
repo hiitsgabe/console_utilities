@@ -13,10 +13,33 @@ class ApiFootballClient:
 
     BASE_URL = "https://v3.football.api-sports.io"
 
+    # Featured leagues shown immediately without an API call
+    FEATURED_LEAGUES = [
+        {"id": 2,   "name": "UEFA Champions League", "country": "World",         "season": 2024},
+        {"id": 13,  "name": "Copa Libertadores",      "country": "South America", "season": 2024},
+        {"id": 71,  "name": "Brasileirao Serie A",    "country": "Brazil",        "season": 2024},
+        {"id": 253, "name": "MLS",                    "country": "USA",           "season": 2024},
+    ]
+
     def __init__(self, api_key: str, cache_dir: str):
         self.api_key = api_key
         self.cache_dir = cache_dir
         os.makedirs(cache_dir, exist_ok=True)
+
+    def get_featured_leagues(self) -> List[League]:
+        """Return hardcoded featured leagues — no API request needed."""
+        return [
+            League(
+                id=item["id"],
+                name=item["name"],
+                country=item["country"],
+                country_code="",
+                logo_url="",
+                season=item["season"],
+                teams_count=0,
+            )
+            for item in self.FEATURED_LEAGUES
+        ]
 
     def get_leagues(self, country: str = None, season: int = None) -> List[League]:
         """Fetch available leagues, optionally filtered by country/season."""

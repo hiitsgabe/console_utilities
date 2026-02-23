@@ -422,6 +422,7 @@ class WePatcherState:
     selected_league: Any = None
     selected_season: int = 2025
     available_leagues: List[Any] = field(default_factory=list)
+    all_leagues_loaded: bool = False
     league_search_query: str = ""
     league_search_cursor: int = 0
     league_search_shift: bool = False

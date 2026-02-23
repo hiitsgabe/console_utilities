@@ -150,6 +150,43 @@ class LeagueBrowserModal:
                 align="center",
             )
 
+        # Footer: "Browse all leagues" or loading indicator
+        if y + item_height <= list_bottom:
+            if we.is_fetching and we.available_leagues:
+                # Loading all leagues in background — show spinner text
+                self.text.render(
+                    screen,
+                    "Loading all leagues...",
+                    (content_rect.left + self.theme.padding_sm + 8, y + item_height // 2 - self.theme.font_size_sm // 2),
+                    color=self.theme.text_disabled,
+                    size=self.theme.font_size_sm,
+                )
+            elif not we.all_leagues_loaded and not we.league_search_query:
+                # "Browse all" item
+                browse_idx = len(leagues)
+                is_highlighted = we.leagues_highlighted == browse_idx
+                rect = pygame.Rect(
+                    content_rect.left + self.theme.padding_sm,
+                    y,
+                    content_rect.width - self.theme.padding_sm * 2,
+                    item_height,
+                )
+                if is_highlighted:
+                    pygame.draw.rect(
+                        screen,
+                        self.theme.surface_hover,
+                        rect,
+                        border_radius=self.theme.radius_sm,
+                    )
+                self.text.render(
+                    screen,
+                    "Browse all leagues...",
+                    (rect.left + 8, rect.centery - self.theme.font_size_sm // 2),
+                    color=self.theme.primary if is_highlighted else self.theme.text_disabled,
+                    size=self.theme.font_size_sm,
+                )
+                item_rects.append(rect)
+
         return modal_rect, content_rect, close_rect, char_rects, item_rects
 
     def get_filtered_leagues(self, state):
