@@ -1372,6 +1372,9 @@ class ConsoleUtilitiesApp:
                     elif self.state.ia_collection_wizard.show:
                         self.state.ia_collection_wizard.cursor_position = char_index
                         self._handle_ia_collection_wizard_selection()
+                    elif self.state.scraper_login.show:
+                        self.state.scraper_login.cursor_position = char_index
+                        self._handle_scraper_login_selection()
                     return
 
         # Check back button
