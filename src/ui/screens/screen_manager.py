@@ -37,6 +37,7 @@ from .modals.patch_progress_modal import PatchProgressModal
 from .portmaster_screen import PortMasterScreen
 from .sports_patcher_screen import SportsPatcherScreen
 from .we_patcher_screen import WePatcherScreen
+from .iss_patcher_screen import ISSPatcherScreen
 from .downloads_screen import DownloadsScreen
 from .scraper_downloads_screen import ScraperDownloadsScreen
 from ui.molecules.status_footer import StatusFooter, StatusFooterItem
@@ -67,6 +68,7 @@ class ScreenManager:
         self.portmaster_screen = PortMasterScreen(theme)
         self.sports_patcher_screen = SportsPatcherScreen(theme)
         self.we_patcher_screen = WePatcherScreen(theme)
+        self.iss_patcher_screen = ISSPatcherScreen(theme)
 
         # Initialize modals
         self.search_modal = SearchModal(theme)
@@ -485,6 +487,35 @@ class ScreenManager:
             rects["item_rects"] = item_rects
             return rects
 
+        # ISS Patcher modals (reuse league_browser, roster_preview, patch_progress)
+        if state.iss_patcher.active_modal == "league_browser":
+            modal_rect, content_rect, close_rect, char_rects, item_rects = (
+                self.league_browser_modal.render(screen, state, settings)
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["char_rects"] = char_rects
+            rects["item_rects"] = item_rects
+            return rects
+
+        if state.iss_patcher.active_modal == "roster_preview":
+            modal_rect, content_rect, close_rect, item_rects = (
+                self.roster_preview_modal.render(screen, state)
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["item_rects"] = item_rects
+            return rects
+
+        if state.iss_patcher.active_modal == "patch_progress":
+            modal_rect, content_rect, close_rect, item_rects = (
+                self.patch_progress_modal.render(screen, state)
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["item_rects"] = item_rects
+            return rects
+
         # Render main screens based on mode
         if state.mode == "systems":
             back_rect, item_rects, scroll_offset = self.systems_screen.render(
@@ -652,6 +683,16 @@ class ScreenManager:
             rects["season_right_arrow"] = self.we_patcher_screen.season_arrow_right
             rects["lang_left_arrow"] = self.we_patcher_screen.lang_arrow_left
             rects["lang_right_arrow"] = self.we_patcher_screen.lang_arrow_right
+
+        elif state.mode == "iss_patcher":
+            back_rect, item_rects, scroll_offset = self.iss_patcher_screen.render(
+                screen, state.highlighted, state, settings
+            )
+            rects["back"] = back_rect
+            rects["item_rects"] = item_rects
+            rects["scroll_offset"] = scroll_offset
+            rects["season_left_arrow"] = self.iss_patcher_screen.season_arrow_left
+            rects["season_right_arrow"] = self.iss_patcher_screen.season_arrow_right
 
         # Render stacked status footers on non-download screens
         if state.mode not in ("downloads", "scraper_downloads"):

@@ -27,7 +27,7 @@ class RosterPreviewModal:
         Returns:
             Tuple of (modal_rect, content_rect, close_rect, item_rects)
         """
-        we = state.we_patcher
+        we = state.active_patcher
         league_data = we.league_data
 
         margin = 30
@@ -46,9 +46,9 @@ class RosterPreviewModal:
         item_rects = []
 
         if not league_data or not hasattr(league_data, "teams"):
-            if state.we_patcher.is_fetching:
+            if state.active_patcher.is_fetching:
                 center_y = content_rect.centery - 30
-                status = state.we_patcher.fetch_status or "Loading roster data..."
+                status = state.active_patcher.fetch_status or "Loading roster data..."
                 self.text.render(
                     screen,
                     status,
@@ -57,7 +57,7 @@ class RosterPreviewModal:
                     size=self.theme.font_size_lg,
                     align="center",
                 )
-                progress = state.we_patcher.fetch_progress
+                progress = state.active_patcher.fetch_progress
                 bar_width = min(400, content_rect.width - 80)
                 bar_rect = pygame.Rect(
                     content_rect.centerx - bar_width // 2,
@@ -67,8 +67,8 @@ class RosterPreviewModal:
                 )
                 self.progress_bar.render(screen, bar_rect, progress)
                 league_name = ""
-                if state.we_patcher.selected_league and hasattr(state.we_patcher.selected_league, "name"):
-                    league_name = state.we_patcher.selected_league.name
+                if state.active_patcher.selected_league and hasattr(state.active_patcher.selected_league, "name"):
+                    league_name = state.active_patcher.selected_league.name
                 if league_name:
                     self.text.render(
                         screen,
@@ -79,7 +79,7 @@ class RosterPreviewModal:
                         align="center",
                     )
             else:
-                fetch_error = state.we_patcher.fetch_error
+                fetch_error = state.active_patcher.fetch_error
                 if fetch_error:
                     self.text.render(
                         screen,

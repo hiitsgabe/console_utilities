@@ -416,6 +416,48 @@ class GhostCleanerWizardState:
 
 
 @dataclass
+class ISSPatcherState:
+    """State for the ISS SNES Patcher feature."""
+
+    # League selection
+    selected_league: Any = None
+    selected_season: int = field(default_factory=lambda: datetime.now().year)
+    available_leagues: List[Any] = field(default_factory=list)
+    all_leagues_loaded: bool = False
+    league_search_query: str = ""
+    league_search_cursor: int = 0
+    league_search_shift: bool = False
+    league_search_active: bool = False
+    # Fetched data
+    league_data: Any = None
+    fetch_progress: float = 0.0
+    fetch_status: str = ""
+    is_fetching: bool = False
+    fetch_error: str = ""
+    # ROM
+    rom_path: str = ""
+    rom_info: Any = None
+    rom_valid: bool = False
+    # Slot mapping
+    slot_mapping: List[Any] = field(default_factory=list)
+    # Patching
+    patch_progress: float = 0.0
+    patch_status: str = ""
+    is_patching: bool = False
+    patch_output_path: str = ""
+    patch_complete: bool = False
+    patch_error: str = ""
+    # Roster preview
+    roster_preview_team_index: int = 0
+    roster_preview_player_index: int = 0
+    # UI navigation
+    active_modal: Optional[str] = None
+    leagues_highlighted: int = 0
+    roster_teams_highlighted: int = 0
+    roster_players_highlighted: int = 0
+
+
+@dataclass
 class WePatcherState:
     """State for the WE Patcher feature."""
 
@@ -564,6 +606,9 @@ class AppState:
         # ---- WE Patcher ---- #
         self.we_patcher = WePatcherState()
 
+        # ---- ISS Patcher ---- #
+        self.iss_patcher = ISSPatcherState()
+
         # ---- UI Rectangles ---- #
         self.ui_rects = UIRects()
 
@@ -573,6 +618,17 @@ class AppState:
         # ---- Runtime Flags ---- #
         self.running: bool = True
         self.movement_occurred: bool = False
+
+    @property
+    def active_patcher(self):
+        """Return the active patcher state based on current mode.
+
+        Both WePatcherState and ISSPatcherState share the same field names
+        so modals can use this generically.
+        """
+        if self.mode == "iss_patcher":
+            return self.iss_patcher
+        return self.we_patcher
 
     def reset_navigation(self):
         """Reset navigation-related state."""

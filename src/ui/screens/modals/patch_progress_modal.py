@@ -27,7 +27,7 @@ class PatchProgressModal:
         Returns:
             Tuple of (modal_rect, content_rect, close_rect, item_rects)
         """
-        we = state.we_patcher
+        we = state.active_patcher
 
         width = 500
         height = 260

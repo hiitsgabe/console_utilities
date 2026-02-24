@@ -32,7 +32,7 @@ class LeagueBrowserModal:
         Returns:
             Tuple of (modal_rect, content_rect, close_rect, char_rects, item_rects)
         """
-        we = state.we_patcher
+        we = state.active_patcher
 
         margin = 30
         width = screen.get_width() - margin * 2
@@ -214,7 +214,7 @@ class LeagueBrowserModal:
 
     def get_filtered_leagues(self, state):
         """Return filtered leagues based on search query."""
-        we = state.we_patcher
+        we = state.active_patcher
         leagues = we.available_leagues or []
         query = we.league_search_query.lower()
         if query:

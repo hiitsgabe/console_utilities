@@ -10,6 +10,7 @@ from ui.templates.list_screen import ListScreenTemplate
 class SportsPatcherScreen:
     GAMES = [
         ("WE2002 - Winning Eleven 2002 (PS1)", "we_patcher"),
+        ("ISS - Int. Superstar Soccer (SNES)", "iss_patcher"),
     ]
 
     def __init__(self, theme: Theme = default_theme):
