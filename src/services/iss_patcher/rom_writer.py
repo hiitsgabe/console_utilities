@@ -64,6 +64,18 @@ _OFS_FLAG_COLORS_RANGE2 = 0x2DE4F  # 9 teams
 # Predominant color byte
 _OFS_PREDOMINANT_COLOR = 0x8DB2    # 1 byte per team, enum order
 
+# In-game team name tiles: pointer table at 0x93CD, P48000/P17000 format
+# Each entry points to Konami-compressed 2bpp tile data (64 bytes decompressed)
+# Displacement: move tile data to 0x17680+ free region, patch code to read from there
+_OFS_NAME_TILES_PTRS = 0x93CD       # 2 bytes per team, 27 entries
+_NAME_TILES_DISPLACED_BASE = 0x17680  # Free 0xFF region in ROM
+_NAME_TILES_DISPLACED_END = 0x18000
+_DISPLACEMENT_PATCH_BYTE = 0x82       # Value to write at patch points
+_DISPLACEMENT_PATCH_POINTS = [
+    0x93C6, 0x93CB, 0x3A7EB, 0x3A7F0, 0x3A7F5,
+    0x3A7FA, 0x3A7FF, 0x3A804, 0x3A809, 0x3A80E,
+]
+
 # Team name text: pointer table in TEAM_ENUM_ORDER, P40000 format
 _OFS_TEAM_NAME_TEXT_PTRS = 0x39DAE  # 2 bytes per team, 27 teams
 _MAX_NAME_TEXT_ADDR = 0x44478  # must not overwrite extra entries at 0x44478+
@@ -327,6 +339,167 @@ def _rgb_to_predominant(r: int, g: int, b: int) -> int:
     if g >= r and g >= b:
         return 4  # Green
     return 1  # Blue
+
+
+# ── In-game team name tile font (5px wide × 8px tall, 2bpp) ──────────────
+# 0=TRANSPARENT, 1=COLOR_1 (white stroke)
+# Row 0 and 7 are top/bottom borders (mostly transparent)
+_TILE_FONT = {c: [] for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789. "}
+
+def _f(s):
+    """Parse a compact font string into rows of pixel values."""
+    return [[int(c) for c in row] for row in s.strip().split("/")]
+
+# 5-wide standard letters
+_TILE_FONT["A"] = _f("01110/10001/10001/11111/10001/10001")
+_TILE_FONT["B"] = _f("11110/10001/11110/10001/10001/11110")
+_TILE_FONT["C"] = _f("01110/10001/10000/10000/10001/01110")
+_TILE_FONT["D"] = _f("11100/10010/10001/10001/10010/11100")
+_TILE_FONT["E"] = _f("11111/10000/11110/10000/10000/11111")
+_TILE_FONT["F"] = _f("11111/10000/11110/10000/10000/10000")
+_TILE_FONT["G"] = _f("01110/10001/10000/10111/10001/01110")
+_TILE_FONT["H"] = _f("10001/10001/11111/10001/10001/10001")
+_TILE_FONT["I"] = _f("111/010/010/010/010/111")
+_TILE_FONT["J"] = _f("00111/00010/00010/00010/10010/01100")
+_TILE_FONT["K"] = _f("10001/10010/11100/10010/10001/10001")
+_TILE_FONT["L"] = _f("10000/10000/10000/10000/10000/11111")
+_TILE_FONT["M"] = _f("10001/11011/10101/10001/10001/10001")
+_TILE_FONT["N"] = _f("10001/11001/10101/10011/10001/10001")
+_TILE_FONT["O"] = _f("01110/10001/10001/10001/10001/01110")
+_TILE_FONT["P"] = _f("11110/10001/11110/10000/10000/10000")
+_TILE_FONT["Q"] = _f("01110/10001/10001/10101/10010/01101")
+_TILE_FONT["R"] = _f("11110/10001/11110/10010/10001/10001")
+_TILE_FONT["S"] = _f("01111/10000/01110/00001/00001/11110")
+_TILE_FONT["T"] = _f("11111/00100/00100/00100/00100/00100")
+_TILE_FONT["U"] = _f("10001/10001/10001/10001/10001/01110")
+_TILE_FONT["V"] = _f("10001/10001/10001/01010/01010/00100")
+_TILE_FONT["W"] = _f("10001/10001/10101/10101/11011/10001")
+_TILE_FONT["X"] = _f("10001/01010/00100/01010/10001/10001")
+_TILE_FONT["Y"] = _f("10001/01010/00100/00100/00100/00100")
+_TILE_FONT["Z"] = _f("11111/00010/00100/01000/10000/11111")
+_TILE_FONT["0"] = _f("01110/10001/10011/10101/11001/01110")
+_TILE_FONT["1"] = _f("010/110/010/010/010/111")
+_TILE_FONT["2"] = _f("01110/10001/00010/00100/01000/11111")
+_TILE_FONT["3"] = _f("11110/00001/01110/00001/00001/11110")
+_TILE_FONT["4"] = _f("10010/10010/11111/00010/00010/00010")
+_TILE_FONT["5"] = _f("11111/10000/11110/00001/00001/11110")
+_TILE_FONT["6"] = _f("01110/10000/11110/10001/10001/01110")
+_TILE_FONT["7"] = _f("11111/00001/00010/00100/01000/01000")
+_TILE_FONT["8"] = _f("01110/10001/01110/10001/10001/01110")
+_TILE_FONT["9"] = _f("01110/10001/01111/00001/00001/01110")
+_TILE_FONT["."] = _f("0/0/0/0/0/1")
+_TILE_FONT[" "] = _f("00/00/00/00/00/00")
+
+_TILE_COLS = 32
+_TILE_ROWS = 8
+# 2bpp color codes
+_TC_TRANSPARENT = 0
+_TC_WHITE = 1      # COLOR_1 (letter stroke)
+_TC_SHADOW = 3     # COLOR_3 (dark background behind text)
+
+
+def _render_name_tiles(name: str) -> list:
+    """Render a team name to an 8×32 pixel grid (2bpp color codes).
+
+    Returns list of 8 rows, each a list of 32 ints (0-3).
+    """
+    clean = _to_ascii(name).upper()
+    # Collect letter bitmaps and widths
+    letters = []
+    for c in clean:
+        glyph = _TILE_FONT.get(c)
+        if glyph is None:
+            continue
+        w = len(glyph[0]) if glyph else 0
+        letters.append((glyph, w))
+
+    # Calculate total width (letters + 1px gap between)
+    if not letters:
+        letters = [(_TILE_FONT["A"], len(_TILE_FONT["A"][0]))]
+    total_w = sum(w for _, w in letters) + max(0, len(letters) - 1)
+
+    # Scale down if too wide
+    gap = 1
+    if total_w > _TILE_COLS:
+        gap = 0
+        total_w = sum(w for _, w in letters)
+
+    # Initialize grid with transparent
+    grid = [[_TC_TRANSPARENT] * _TILE_COLS for _ in range(_TILE_ROWS)]
+
+    # Center horizontally
+    start_x = max(0, (_TILE_COLS - total_w) // 2)
+    x = start_x
+
+    for glyph, w in letters:
+        if x + w > _TILE_COLS:
+            break
+        # Draw shadow background (1px padding around letter area)
+        for row in range(_TILE_ROWS):
+            for col in range(max(0, x - 1), min(_TILE_COLS, x + w + 1)):
+                if grid[row][col] == _TC_TRANSPARENT:
+                    grid[row][col] = _TC_SHADOW
+        # Draw letter strokes (rows 1-6 of the 8-pixel height)
+        for gr, glyph_row in enumerate(glyph[:6]):
+            row = gr + 1  # offset by 1 for top border
+            for gc, pixel in enumerate(glyph_row):
+                col = x + gc
+                if col < _TILE_COLS and pixel:
+                    grid[row][col] = _TC_WHITE
+        x += w + gap
+
+    return grid
+
+
+def _serialize_2bpp(grid: list) -> bytes:
+    """Serialize an 8×32 pixel grid to 64 bytes of SNES 2bpp tile data.
+
+    4 tiles of 8×8 arranged horizontally. Standard SNES 2bpp:
+    each row = 2 bytes (bit plane 0, bit plane 1).
+    """
+    data = bytearray(64)
+    for b in range(32):
+        # Map linear column sweep to tile-interleaved byte index
+        i = 16 * (b // 8) + (b % 8) * 2
+        for j in range(8):
+            row = b % 8
+            col = (b // 8) * 8 + j
+            color = grid[row][col] if col < len(grid[row]) else 0
+            bit0 = color & 1
+            bit1 = (color >> 1) & 1
+            data[i] |= bit0 << (7 - j)
+            data[i + 1] |= bit1 << (7 - j)
+    return bytes(data)
+
+
+def _konami_compress_literal(raw: bytes) -> bytes:
+    """Wrap raw data in Konami literal-only compression format.
+
+    Format: [2-byte LE size header] [0x80|count] [data...] ...
+    RAW command: control byte 0x80|count, followed by count literal bytes (max 31).
+    Size header = total compressed stream length including header.
+    """
+    out = bytearray()
+    out.extend([0, 0])  # placeholder for size header
+    pos = 0
+    while pos < len(raw):
+        chunk = min(31, len(raw) - pos)
+        out.append(0x80 | chunk)
+        out.extend(raw[pos:pos + chunk])
+        pos += chunk
+    # Write size header (total length including header)
+    total = len(out)
+    out[0] = total & 0xFF
+    out[1] = (total >> 8) & 0xFF
+    return bytes(out)
+
+
+def _encode_p17000(address: int) -> bytes:
+    """Encode ROM address as P17000 pointer [low, high]."""
+    raw = address - 0x10000
+    b1 = raw & 0xFF
+    b2 = ((raw >> 8) & 0xFF) + 0x80
+    return bytes([b1, b2])
 
 
 class ISSRomWriter:
@@ -605,6 +778,72 @@ class ISSRomWriter:
         color = _rgb_to_predominant(*rgb)
         self._seek(_OFS_PREDOMINANT_COLOR + enum_index)
         self._f.write(bytes([color]))
+
+    def write_name_tiles(self, patched_names: dict):
+        """Write in-game team name tiles using displacement to free ROM region.
+
+        Displaces Konami-compressed 2bpp tile data from 0x48000+ to 0x17680+.
+        Patches 10 ROM code bytes to redirect reads to the new region.
+        For patched teams: renders name → 2bpp tiles → Konami literal compress.
+        For unpatched teams: copies original compressed data as-is.
+
+        patched_names: dict of {slot_index: name_str} for teams to update.
+        """
+        # Step 1: Read original pointer table and compressed data for all 27 teams
+        orig_ptrs = []
+        orig_blobs = []
+        self._seek(_OFS_NAME_TILES_PTRS)
+        raw_ptrs = self._f.read(TOTAL_TEAMS * 2)
+        for i in range(TOTAL_TEAMS):
+            b1 = raw_ptrs[i * 2]
+            b2 = raw_ptrs[i * 2 + 1]
+            # Original pointers use P48000 format (SNES bank $89):
+            # addr = 0x40000 + raw 16-bit LE pointer
+            addr = 0x40000 + b1 + (b2 << 8)
+            orig_ptrs.append(addr)
+            # Read compressed blob (starts with 2-byte LE size)
+            self._seek(addr)
+            size_bytes = self._f.read(2)
+            blob_size = size_bytes[0] | (size_bytes[1] << 8)
+            self._seek(addr)
+            orig_blobs.append(self._f.read(blob_size))
+
+        # Step 2: Build new compressed blobs for each team
+        new_blobs = []
+        for i in range(TOTAL_TEAMS):
+            if i in patched_names:
+                grid = _render_name_tiles(patched_names[i])
+                raw = _serialize_2bpp(grid)
+                new_blobs.append(_konami_compress_literal(raw))
+            else:
+                new_blobs.append(orig_blobs[i])
+
+        # Step 3: Verify total fits in displaced region
+        total_size = sum(len(b) for b in new_blobs)
+        available = _NAME_TILES_DISPLACED_END - _NAME_TILES_DISPLACED_BASE
+        if total_size > available:
+            raise ValueError(
+                f"Name tiles too large: {total_size} bytes > {available} available"
+            )
+
+        # Step 4: Patch displacement code bytes (0x89 → 0x82)
+        for addr in _DISPLACEMENT_PATCH_POINTS:
+            self._seek(addr)
+            self._f.write(bytes([_DISPLACEMENT_PATCH_BYTE]))
+
+        # Step 5: Write all compressed blobs to displaced region
+        current_addr = _NAME_TILES_DISPLACED_BASE
+        new_ptrs = []
+        for blob in new_blobs:
+            new_ptrs.append(current_addr)
+            self._seek(current_addr)
+            self._f.write(blob)
+            current_addr += len(blob)
+
+        # Step 6: Update pointer table with P17000 pointers
+        self._seek(_OFS_NAME_TILES_PTRS)
+        for addr in new_ptrs:
+            self._f.write(_encode_p17000(addr))
 
     def finalize(self):
         """Close the output file."""
