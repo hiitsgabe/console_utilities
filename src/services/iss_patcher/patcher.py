@@ -137,6 +137,7 @@ class ISSPatcher:
 
         # Collect patched team names (only for teams being replaced)
         patched_names = {}
+        patched_tile_names = {}  # Short codes for in-game name tiles (8×32px)
 
         for i, mapping in enumerate(slot_mapping):
             progress = i / max(total, 1)
@@ -177,12 +178,20 @@ class ISSPatcher:
 
             # Collect team name for selection screen
             patched_names[mapping.slot_index] = iss_team.name
+            # Short code for in-game tile (3-letter abbreviation)
+            patched_tile_names[mapping.slot_index] = iss_team.short_name
 
         if on_progress:
-            on_progress(0.90, "Writing team names...")
+            on_progress(0.85, "Writing team names...")
 
         # Write patched team names to selection screen text
         writer.write_team_name_texts(patched_names)
+
+        if on_progress:
+            on_progress(0.90, "Writing in-game name tiles...")
+
+        # Write in-game team name tiles (displayed during matches)
+        writer.write_name_tiles(patched_tile_names)
 
         if on_progress:
             on_progress(0.95, "Finalizing...")
