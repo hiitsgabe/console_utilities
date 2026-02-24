@@ -1008,6 +1008,9 @@ class ConsoleUtilitiesApp:
         elif self.state.mode == "we_patcher":
             self._handle_we_patcher_navigation(direction)
 
+        elif self.state.mode == "iss_patcher":
+            self._handle_iss_patcher_navigation(direction)
+
     def _handle_we_patcher_navigation(self, direction):
         """Handle D-pad navigation for we_patcher mode and its modals."""
         we = self.state.we_patcher
@@ -1201,6 +1204,34 @@ class ConsoleUtilitiesApp:
             elif event.unicode and event.unicode.isprintable():
                 self.state.we_patcher.league_search_query += event.unicode
                 self.state.we_patcher.leagues_highlighted = 0
+            return
+
+        # Handle keyboard text input for ISS Patcher league browser search
+        if (
+            self.state.iss_patcher.active_modal == "league_browser"
+            and self.state.input_mode == "keyboard"
+        ):
+            if event.key == pygame.K_ESCAPE:
+                if self.state.iss_patcher.league_search_active:
+                    self.state.iss_patcher.league_search_active = False
+                    self.state.iss_patcher.league_search_cursor = 0
+                else:
+                    self._go_back()
+            elif event.key == pygame.K_RETURN:
+                self._handle_iss_league_browser_selection()
+            elif event.key in (pygame.K_UP, pygame.K_LEFT):
+                self._handle_iss_patcher_navigation("up")
+            elif event.key in (pygame.K_DOWN, pygame.K_RIGHT):
+                self._handle_iss_patcher_navigation("down")
+            elif event.key == pygame.K_BACKSPACE:
+                if self.state.iss_patcher.league_search_query:
+                    self.state.iss_patcher.league_search_query = (
+                        self.state.iss_patcher.league_search_query[:-1]
+                    )
+                    self.state.iss_patcher.leagues_highlighted = 0
+            elif event.unicode and event.unicode.isprintable():
+                self.state.iss_patcher.league_search_query += event.unicode
+                self.state.iss_patcher.leagues_highlighted = 0
             return
 
         # Handle keyboard text input for IA download wizard
@@ -1422,12 +1453,30 @@ class ConsoleUtilitiesApp:
                     ):
                         self.state.we_patcher.league_search_cursor = char_index
                         self._handle_league_browser_selection()
+                    elif (
+                        self.state.mode == "iss_patcher"
+                        and self.state.iss_patcher.active_modal == "league_browser"
+                        and self.state.iss_patcher.league_search_active
+                    ):
+                        self.state.iss_patcher.league_search_cursor = char_index
+                        self._handle_iss_league_browser_selection()
                     return
 
         # Check back button
         if self.state.ui_rects.back_button:
             if self.state.ui_rects.back_button.collidepoint(x, y):
                 self._go_back()
+                return
+
+        # Check Season arrow buttons (iss_patcher main menu only)
+        if self.state.mode == "iss_patcher" and self.state.iss_patcher.active_modal is None:
+            left_arrow = self.state.ui_rects.rects.get("season_left_arrow")
+            right_arrow = self.state.ui_rects.rects.get("season_right_arrow")
+            if left_arrow and left_arrow.collidepoint(x, y):
+                self._handle_iss_patcher_navigation("left")
+                return
+            if right_arrow and right_arrow.collidepoint(x, y):
+                self._handle_iss_patcher_navigation("right")
                 return
 
         # Check Season / Language arrow buttons (we_patcher main menu only)
@@ -1461,6 +1510,11 @@ class ConsoleUtilitiesApp:
                     and self.state.we_patcher.active_modal == "league_browser"
                 ):
                     self.state.we_patcher.leagues_highlighted = actual_index
+                elif (
+                    self.state.mode == "iss_patcher"
+                    and self.state.iss_patcher.active_modal == "league_browser"
+                ):
+                    self.state.iss_patcher.leagues_highlighted = actual_index
                 else:
                     self.state.highlighted = actual_index
                 self._select_item()
@@ -1563,6 +1617,12 @@ class ConsoleUtilitiesApp:
         elif self.state.mode == "we_patcher":
             if self.state.we_patcher.active_modal:
                 self.state.we_patcher.active_modal = None
+            else:
+                self.state.mode = "sports_patcher"
+                self.state.highlighted = 0
+        elif self.state.mode == "iss_patcher":
+            if self.state.iss_patcher.active_modal:
+                self.state.iss_patcher.active_modal = None
             else:
                 self.state.mode = "sports_patcher"
                 self.state.highlighted = 0
@@ -1758,9 +1818,15 @@ class ConsoleUtilitiesApp:
             if action == "we_patcher":
                 self.state.mode = "we_patcher"
                 self.state.highlighted = 0
+            elif action == "iss_patcher":
+                self.state.mode = "iss_patcher"
+                self.state.highlighted = 0
 
         elif self.state.mode == "we_patcher":
             self._handle_we_patcher_selection()
+
+        elif self.state.mode == "iss_patcher":
+            self._handle_iss_patcher_selection()
 
         elif self.state.mode == "downloads":
             self._handle_downloads_selection()
@@ -2416,6 +2482,8 @@ class ConsoleUtilitiesApp:
             path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "we_patcher_rom":
             path = self.settings.get("roms_dir", SCRIPT_DIR)
+        elif selection_type == "iss_patcher_rom":
+            path = self.settings.get("roms_dir", SCRIPT_DIR)
         else:
             path = SCRIPT_DIR
 
@@ -2424,11 +2492,13 @@ class ConsoleUtilitiesApp:
         else:
             self.state.folder_browser.current_path = SCRIPT_DIR
 
-        loader = (
-            load_psx_rom_folder_contents
-            if selection_type == "we_patcher_rom"
-            else load_folder_contents
-        )
+        if selection_type == "we_patcher_rom":
+            loader = load_psx_rom_folder_contents
+        elif selection_type == "iss_patcher_rom":
+            from services.file_listing import load_snes_rom_folder_contents
+            loader = load_snes_rom_folder_contents
+        else:
+            loader = load_folder_contents
         self.state.folder_browser.items = loader(
             self.state.folder_browser.current_path
         )
@@ -2471,7 +2541,14 @@ class ConsoleUtilitiesApp:
         )
 
         is_psx_context = selection_type == "we_patcher_rom"
-        nav_loader = load_psx_rom_folder_contents if is_psx_context else load_folder_contents
+        is_snes_context = selection_type == "iss_patcher_rom"
+        if is_psx_context:
+            nav_loader = load_psx_rom_folder_contents
+        elif is_snes_context:
+            from services.file_listing import load_snes_rom_folder_contents
+            nav_loader = load_snes_rom_folder_contents
+        else:
+            nav_loader = load_folder_contents
 
         if item_type == "parent":
             # Navigate to parent directory
@@ -2500,6 +2577,7 @@ class ConsoleUtilitiesApp:
             "rar_file",
             "7z_file",
             "psx_rom",
+            "snes_rom",
             "file",
         ):
             # Select the file based on selection type
@@ -2560,6 +2638,18 @@ class ConsoleUtilitiesApp:
                 self.state.we_patcher.rom_info = None
             # Reset slot mapping when ROM changes
             self.state.we_patcher.slot_mapping = []
+        elif selection_type == "iss_patcher_rom":
+            self.state.iss_patcher.rom_path = path
+            try:
+                from services.iss_patcher import ISSRomReader
+
+                reader = ISSRomReader(path)
+                self.state.iss_patcher.rom_info = reader.get_rom_info()
+                self.state.iss_patcher.rom_valid = reader.validate_rom()
+            except Exception:
+                self.state.iss_patcher.rom_valid = False
+                self.state.iss_patcher.rom_info = None
+            self.state.iss_patcher.slot_mapping = []
 
         # Close the modal
         self.state.folder_browser.show = False
@@ -2766,6 +2856,14 @@ class ConsoleUtilitiesApp:
         ):
             self.state.we_patcher.league_search_shift = (
                 not self.state.we_patcher.league_search_shift
+            )
+        elif (
+            self.state.mode == "iss_patcher"
+            and self.state.iss_patcher.active_modal == "league_browser"
+            and self.state.iss_patcher.league_search_active
+        ):
+            self.state.iss_patcher.league_search_shift = (
+                not self.state.iss_patcher.league_search_shift
             )
 
     def _navigate_keyboard_modal(
@@ -3019,6 +3117,14 @@ class ConsoleUtilitiesApp:
             we.league_search_active = not we.league_search_active
             if not we.league_search_active:
                 we.league_search_cursor = 0
+        elif (
+            self.state.mode == "iss_patcher"
+            and self.state.iss_patcher.active_modal == "league_browser"
+        ):
+            iss = self.state.iss_patcher
+            iss.league_search_active = not iss.league_search_active
+            if not iss.league_search_active:
+                iss.league_search_cursor = 0
 
     def _handle_detail_action(self):
         """Handle detail key press."""
@@ -5813,6 +5919,329 @@ class ConsoleUtilitiesApp:
                 we.patch_error = str(e)
             finally:
                 we.is_patching = False
+
+        threading.Thread(target=_patch, daemon=True).start()
+
+    # ------------------------------------------------------------------ #
+    #  ISS Patcher methods
+    # ------------------------------------------------------------------ #
+
+    def _handle_iss_patcher_navigation(self, direction):
+        """Handle D-pad navigation for iss_patcher mode and its modals."""
+        iss = self.state.iss_patcher
+
+        if iss.active_modal == "league_browser":
+            if iss.league_search_active:
+                from ui.organisms.char_keyboard import CharKeyboard
+                keyboard = CharKeyboard()
+                total_chars = keyboard.get_total_chars("default")
+                chars_per_row = 13
+                if direction == "up":
+                    if iss.league_search_cursor >= chars_per_row:
+                        iss.league_search_cursor -= chars_per_row
+                elif direction == "down":
+                    if iss.league_search_cursor + chars_per_row < total_chars:
+                        iss.league_search_cursor += chars_per_row
+                elif direction == "left":
+                    if iss.league_search_cursor > 0:
+                        iss.league_search_cursor -= 1
+                elif direction == "right":
+                    if iss.league_search_cursor < total_chars - 1:
+                        iss.league_search_cursor += 1
+                return
+
+            from ui.screens.modals.league_browser_modal import league_browser_modal
+            filtered = league_browser_modal.get_filtered_leagues(self.state)
+            show_browse_all = not iss.all_leagues_loaded and not iss.league_search_query and not iss.is_fetching
+            max_items = (len(filtered) + (1 if show_browse_all else 0)) or 1
+            if direction in ("up", "left"):
+                iss.leagues_highlighted = (iss.leagues_highlighted - 1) % max_items
+            elif direction in ("down", "right"):
+                iss.leagues_highlighted = (iss.leagues_highlighted + 1) % max_items
+
+        elif iss.active_modal == "roster_preview":
+            league_data = iss.league_data
+            if not league_data or not hasattr(league_data, "teams"):
+                return
+            teams = league_data.teams
+            if direction == "left":
+                iss.roster_preview_team_index = (iss.roster_preview_team_index - 1) % max(len(teams), 1)
+                iss.roster_preview_player_index = 0
+            elif direction == "right":
+                iss.roster_preview_team_index = (iss.roster_preview_team_index + 1) % max(len(teams), 1)
+                iss.roster_preview_player_index = 0
+            elif direction == "up":
+                iss.roster_preview_player_index = max(0, iss.roster_preview_player_index - 1)
+            elif direction == "down":
+                team_idx = iss.roster_preview_team_index
+                if 0 <= team_idx < len(teams):
+                    players = teams[team_idx].players if hasattr(teams[team_idx], "players") else []
+                    iss.roster_preview_player_index = min(
+                        iss.roster_preview_player_index + 1, max(len(players) - 1, 0)
+                    )
+
+        elif iss.active_modal is None:
+            from ui.screens.iss_patcher_screen import iss_patcher_screen
+
+            if direction in ("left", "right"):
+                action = iss_patcher_screen.get_action(self.state.highlighted, self.state, self.settings)
+                if action == "change_season":
+                    provider = self.settings.get("sports_roster_provider", "espn")
+                    if provider == "api_football":
+                        from datetime import datetime as _dt
+                        max_year = _dt.now().year
+                        delta = -1 if direction == "left" else 1
+                        iss.selected_season = max(2010, min(max_year, iss.selected_season + delta))
+                        iss.league_data = None
+                    return
+
+            max_items = iss_patcher_screen.get_count(self.state, self.settings)
+            if direction in ("up", "left"):
+                self.state.highlighted = (self.state.highlighted - 1) % max_items
+            elif direction in ("down", "right"):
+                self.state.highlighted = (self.state.highlighted + 1) % max_items
+
+    def _handle_iss_patcher_selection(self):
+        """Handle item selection on the iss_patcher main menu."""
+        iss = self.state.iss_patcher
+
+        if iss.active_modal == "league_browser":
+            self._handle_iss_league_browser_selection()
+            return
+        if iss.active_modal == "roster_preview":
+            return
+        if iss.active_modal == "patch_progress":
+            if iss.patch_complete or iss.patch_error:
+                iss.active_modal = None
+            return
+
+        from ui.screens.iss_patcher_screen import iss_patcher_screen
+
+        action = iss_patcher_screen.get_action(
+            self.state.highlighted, self.state, self.settings
+        )
+
+        if action == "select_league":
+            iss.active_modal = "league_browser"
+            iss.leagues_highlighted = 0
+            self._start_iss_league_fetch()
+        elif action == "preview_rosters":
+            iss.active_modal = "roster_preview"
+            iss.roster_preview_team_index = 0
+            iss.roster_preview_player_index = 0
+            if iss.selected_league and not iss.league_data and not iss.is_fetching:
+                league_id = iss.selected_league.id if hasattr(iss.selected_league, "id") else None
+                season = iss.selected_season or (
+                    iss.selected_league.season if hasattr(iss.selected_league, "season") else None
+                )
+                if league_id and season:
+                    self._start_iss_league_fetch(league_id, season)
+        elif action == "select_rom":
+            self._open_folder_browser("iss_patcher_rom")
+        elif action == "patch_rom":
+            iss.active_modal = "patch_progress"
+            self._start_iss_patching()
+        elif action == "needs_api_key":
+            self.state.confirm_modal.show = True
+            self.state.confirm_modal.title = "API Key Required"
+            self.state.confirm_modal.message_lines = [
+                "Set your API-Football key in",
+                "Settings > Sports Roster first.",
+            ]
+            self.state.confirm_modal.ok_label = "OK"
+            self.state.confirm_modal.cancel_label = ""
+            self.state.confirm_modal.button_index = 0
+            self.state.confirm_modal.context = ""
+
+    def _handle_iss_league_browser_selection(self):
+        """Handle league selection from the ISS league browser modal."""
+        iss = self.state.iss_patcher
+        from ui.screens.modals.league_browser_modal import league_browser_modal
+
+        if iss.league_search_active:
+            from ui.organisms.char_keyboard import CharKeyboard
+            keyboard = CharKeyboard()
+            new_text, is_done, toggle_shift = keyboard.handle_selection(
+                iss.league_search_cursor,
+                iss.league_search_query,
+                char_set="default",
+                shift_active=iss.league_search_shift,
+            )
+            if toggle_shift:
+                iss.league_search_shift = not iss.league_search_shift
+            iss.league_search_query = new_text
+            iss.leagues_highlighted = 0
+            if is_done:
+                iss.league_search_active = False
+                iss.league_search_cursor = 0
+            return
+
+        filtered = league_browser_modal.get_filtered_leagues(self.state)
+
+        show_browse_all = not iss.all_leagues_loaded and not iss.league_search_query and not iss.is_fetching
+        if show_browse_all and iss.leagues_highlighted == len(filtered):
+            self._load_iss_all_leagues()
+            return
+
+        if not filtered or iss.leagues_highlighted >= len(filtered):
+            return
+
+        selected = filtered[iss.leagues_highlighted]
+        iss.selected_league = selected
+        iss.active_modal = None
+
+        league_id = selected.id if hasattr(selected, "id") else None
+        if league_id:
+            self._start_iss_league_fetch(league_id, iss.selected_season)
+
+    def _start_iss_league_fetch(self, league_id=None, season=None):
+        """Populate featured leagues, then optionally fetch a specific league for ISS."""
+        import threading
+        from constants import WE_PATCHER_CACHE_DIR
+
+        provider = self.settings.get("sports_roster_provider", "espn")
+        api_key = self.settings.get("api_football_key", "")
+        if provider == "api_football" and not api_key:
+            return
+
+        state = self.state
+
+        if not state.iss_patcher.available_leagues:
+            if provider == "espn":
+                from services.sports_api.espn_client import EspnClient
+                client = EspnClient(WE_PATCHER_CACHE_DIR)
+            else:
+                from services.sports_api.api_football import ApiFootballClient
+                client = ApiFootballClient(api_key, WE_PATCHER_CACHE_DIR)
+            state.iss_patcher.available_leagues = client.get_featured_leagues()
+
+        if not league_id or not season:
+            return
+
+        state.iss_patcher.is_fetching = True
+        state.iss_patcher.fetch_error = ""
+        state.iss_patcher.league_data = None
+
+        def _fetch():
+            try:
+                from services.iss_patcher import ISSPatcher
+
+                def on_status(msg):
+                    state.iss_patcher.fetch_status = msg
+
+                if provider == "espn":
+                    from services.sports_api.espn_client import EspnClient
+                    espn_client = EspnClient(WE_PATCHER_CACHE_DIR, on_status=on_status)
+                    patcher = ISSPatcher(api_key, WE_PATCHER_CACHE_DIR, on_status=on_status, client=espn_client)
+                else:
+                    patcher = ISSPatcher(api_key, WE_PATCHER_CACHE_DIR, on_status=on_status)
+
+                def progress(p, msg):
+                    state.iss_patcher.fetch_progress = p
+                    state.iss_patcher.fetch_status = msg
+
+                def on_partial_data(partial):
+                    state.iss_patcher.league_data = partial
+
+                league_data = patcher.fetch_league(
+                    league_id, season, progress, on_partial_data=on_partial_data
+                )
+                state.iss_patcher.league_data = league_data
+            except Exception as e:
+                state.iss_patcher.fetch_error = str(e)
+            finally:
+                state.iss_patcher.is_fetching = False
+
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def _load_iss_all_leagues(self):
+        """Background fetch of all leagues for ISS patcher."""
+        import threading
+        from constants import WE_PATCHER_CACHE_DIR
+
+        provider = self.settings.get("sports_roster_provider", "espn")
+        api_key = self.settings.get("api_football_key", "")
+        if provider == "api_football" and not api_key:
+            return
+
+        state = self.state
+        state.iss_patcher.is_fetching = True
+        state.iss_patcher.fetch_status = "Fetching all leagues..."
+        state.iss_patcher.fetch_error = ""
+
+        def _fetch():
+            try:
+                if provider == "espn":
+                    from services.sports_api.espn_client import EspnClient
+                    client = EspnClient(WE_PATCHER_CACHE_DIR)
+                else:
+                    from services.sports_api.api_football import ApiFootballClient
+                    client = ApiFootballClient(api_key, WE_PATCHER_CACHE_DIR)
+                leagues = client.get_leagues()
+                state.iss_patcher.available_leagues = leagues
+                state.iss_patcher.all_leagues_loaded = True
+            except Exception as e:
+                state.iss_patcher.fetch_error = str(e)
+            finally:
+                state.iss_patcher.is_fetching = False
+
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def _start_iss_patching(self):
+        """Start background ISS patching thread."""
+        import threading
+        import os
+        from constants import WE_PATCHER_CACHE_DIR
+
+        iss = self.state.iss_patcher
+        api_key = self.settings.get("api_football_key", "")
+
+        if not iss.league_data or not iss.rom_path:
+            return
+
+        if not iss.slot_mapping and iss.rom_info:
+            from services.iss_patcher import ISSPatcher
+            patcher = ISSPatcher(api_key, WE_PATCHER_CACHE_DIR)
+            iss.slot_mapping = patcher.create_slot_mapping(iss.league_data, iss.rom_info)
+
+        iss.is_patching = True
+        iss.patch_error = ""
+        iss.patch_complete = False
+
+        input_path = iss.rom_path
+        league_name = (
+            iss.league_data.league.name
+            if hasattr(iss.league_data, "league") and hasattr(iss.league_data.league, "name")
+            else "Unknown League"
+        )
+        import re as _re2
+        safe_league = _re2.sub(r'[\\/:*?"<>|]', "-", league_name)
+        season = iss.selected_season
+        game_dir = os.path.dirname(input_path)
+        base_name = os.path.splitext(os.path.basename(input_path))[0]
+        ext = os.path.splitext(input_path)[1]
+        output_path = os.path.join(game_dir, f"{base_name} - {safe_league} {season}{ext}")
+
+        def _patch():
+            try:
+                from services.iss_patcher import ISSPatcher
+
+                patcher = ISSPatcher(api_key, WE_PATCHER_CACHE_DIR)
+
+                def progress(p, msg):
+                    iss.patch_progress = p
+                    iss.patch_status = msg
+
+                patcher.patch_rom(
+                    input_path, output_path, iss.league_data, iss.slot_mapping, progress
+                )
+
+                iss.patch_output_path = output_path
+                iss.patch_complete = True
+            except Exception as e:
+                iss.patch_error = str(e)
+            finally:
+                iss.is_patching = False
 
         threading.Thread(target=_patch, daemon=True).start()
 
