@@ -23,5 +23,7 @@ debug.log
 download.json
 .DS_Store
 assets/bundled_data.json
+assets/translations/we2002_*.ppf
 .env
 downloads/
+.claude

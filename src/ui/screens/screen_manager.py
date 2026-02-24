@@ -33,7 +33,6 @@ from .modals.ghost_cleaner_modal import GhostCleanerModal
 from .modals.port_details_modal import PortDetailsModal
 from .modals.league_browser_modal import LeagueBrowserModal
 from .modals.roster_preview_modal import RosterPreviewModal
-from .modals.slot_mapping_modal import SlotMappingModal
 from .modals.patch_progress_modal import PatchProgressModal
 from .portmaster_screen import PortMasterScreen
 from .sports_patcher_screen import SportsPatcherScreen
@@ -89,7 +88,6 @@ class ScreenManager:
         self.port_details_modal = PortDetailsModal(theme)
         self.league_browser_modal = LeagueBrowserModal(theme)
         self.roster_preview_modal = RosterPreviewModal(theme)
-        self.slot_mapping_modal = SlotMappingModal(theme)
         self.patch_progress_modal = PatchProgressModal(theme)
 
         # Initialize generic status footer
@@ -478,15 +476,6 @@ class ScreenManager:
             rects["item_rects"] = item_rects
             return rects
 
-        if state.we_patcher.active_modal == "slot_mapping":
-            modal_rect, content_rect, close_rect, item_rects = (
-                self.slot_mapping_modal.render(screen, state)
-            )
-            rects["modal"] = modal_rect
-            rects["close"] = close_rect
-            rects["item_rects"] = item_rects
-            return rects
-
         if state.we_patcher.active_modal == "patch_progress":
             modal_rect, content_rect, close_rect, item_rects = (
                 self.patch_progress_modal.render(screen, state)
@@ -659,6 +648,10 @@ class ScreenManager:
             rects["back"] = back_rect
             rects["item_rects"] = item_rects
             rects["scroll_offset"] = scroll_offset
+            rects["season_left_arrow"] = self.we_patcher_screen.season_arrow_left
+            rects["season_right_arrow"] = self.we_patcher_screen.season_arrow_right
+            rects["lang_left_arrow"] = self.we_patcher_screen.lang_arrow_left
+            rects["lang_right_arrow"] = self.we_patcher_screen.lang_arrow_right
 
         # Render stacked status footers on non-download screens
         if state.mode not in ("downloads", "scraper_downloads"):

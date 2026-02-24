@@ -1,7 +1,7 @@
 """Slot mapping modal for WE Patcher."""
 
 import pygame
-from typing import List, Tuple, Optional, Any
+from typing import List, Tuple, Optional
 
 from ui.theme import Theme, default_theme
 from ui.organisms.modal_frame import ModalFrame
@@ -13,18 +13,13 @@ class SlotMappingModal:
         self.theme = theme
         self.modal_frame = ModalFrame(theme)
         self.text = Text(theme)
+        self.scroll_offset = 0  # Read by screen_manager after render
 
     def render(
         self,
         screen: pygame.Surface,
         state,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[pygame.Rect]]:
-        """
-        Render the slot mapping modal.
-
-        Returns:
-            Tuple of (modal_rect, content_rect, close_rect, item_rects)
-        """
         we = state.we_patcher
 
         margin = 30
@@ -57,65 +52,67 @@ class SlotMappingModal:
             )
             return modal_rect, content_rect, close_rect, item_rects
 
-        # Column headers
+        # Column layout
         col_left = content_rect.left + self.theme.padding_sm
         col_mid = content_rect.centerx
         col_right = content_rect.right - self.theme.padding_sm
 
-        y = content_rect.top + self.theme.padding_sm
+        # Header row
+        header_y = content_rect.top + self.theme.padding_sm
+        self.text.render(screen, "Real Team", (col_left, header_y),
+                         color=self.theme.text_disabled, size=self.theme.font_size_sm)
+        self.text.render(screen, "->", (col_mid - 10, header_y),
+                         color=self.theme.text_disabled, size=self.theme.font_size_sm)
+        self.text.render(screen, "ROM Slot", (col_mid + 20, header_y),
+                         color=self.theme.text_disabled, size=self.theme.font_size_sm)
 
-        # Headers
-        self.text.render(
-            screen,
-            "Real Team",
-            (col_left, y),
-            color=self.theme.text_disabled,
-            size=self.theme.font_size_sm,
-        )
-        self.text.render(
-            screen,
-            "->",
-            (col_mid - 10, y),
-            color=self.theme.text_disabled,
-            size=self.theme.font_size_sm,
-        )
-        self.text.render(
-            screen,
-            "ROM Slot",
-            (col_mid + 20, y),
-            color=self.theme.text_disabled,
-            size=self.theme.font_size_sm,
-        )
+        divider_y = header_y + self.theme.font_size_sm + self.theme.padding_sm
+        pygame.draw.line(screen, self.theme.primary,
+                         (content_rect.left, divider_y), (content_rect.right, divider_y), 1)
 
-        y += self.theme.font_size_sm + self.theme.padding_md
+        # Footer hint
+        hint = "Up/Down: navigate   Left/Right: change slot   OK: confirm"
+        footer_y = content_rect.bottom - self.theme.font_size_sm - self.theme.padding_sm
+        self.text.render(screen, hint, (content_rect.centerx, footer_y),
+                         color=self.theme.text_secondary, size=self.theme.font_size_sm,
+                         align="center")
 
-        # Draw divider line
-        pygame.draw.line(
-            screen,
-            self.theme.primary,
-            (content_rect.left, y - 4),
-            (content_rect.right, y - 4),
-            1,
-        )
+        # List area bounds
+        list_top = divider_y + 4
+        list_bottom = footer_y - self.theme.padding_sm
 
         item_height = 32
+        item_spacing = 1
+        total_item_h = item_height + item_spacing
+        visible_count = max(1, (list_bottom - list_top) // total_item_h)
 
-        for i, mapping in enumerate(we.slot_mapping):
-            if y + item_height > content_rect.bottom - 30:
+        # Scroll offset: keep highlighted item visible
+        hl = we.slot_mapping_highlighted
+        total = len(we.slot_mapping)
+        max_scroll = max(0, total - visible_count)
+        context = 2
+        min_scroll = max(0, hl - visible_count + context + 1)
+        ideal_scroll = max(0, hl - context)
+        scroll = max(0, min(max(min_scroll, ideal_scroll), max_scroll))
+        self.scroll_offset = scroll
+
+        # Render visible items
+        y = list_top
+        for i in range(scroll, min(scroll + visible_count + 1, total)):
+            if y + item_height > list_bottom:
                 break
 
-            rect = pygame.Rect(
-                content_rect.left + 4, y, content_rect.width - 8, item_height
-            )
-            is_highlighted = i == we.slot_mapping_highlighted
+            mapping = we.slot_mapping[i]
+            rect = pygame.Rect(content_rect.left + 4, y, content_rect.width - 8, item_height)
+            is_hl = i == hl
 
-            if is_highlighted:
-                pygame.draw.rect(
-                    screen,
-                    self.theme.primary,
-                    rect,
-                    border_radius=self.theme.radius_sm,
-                )
+            if is_hl:
+                pygame.draw.rect(screen, self.theme.primary, rect,
+                                 border_radius=self.theme.radius_sm)
+
+            # Highlighted: dark text on bright bg. Normal: dim text on dark bg.
+            text_color = self.theme.background if is_hl else self.theme.text_secondary
+            arrow_color = self.theme.background if is_hl else self.theme.text_disabled
 
             real_name = (
                 mapping.real_team.name
@@ -124,46 +121,29 @@ class SlotMappingModal:
             )
             slot_name = mapping.slot_name if hasattr(mapping, "slot_name") else ""
 
-            text_color = (
-                self.theme.text_primary if is_highlighted else self.theme.text_secondary
-            )
-
-            self.text.render(
-                screen,
-                real_name,
-                (col_left, rect.centery - self.theme.font_size_sm // 2),
-                color=text_color,
-                size=self.theme.font_size_sm,
-                max_width=col_mid - col_left - 20,
-            )
-            self.text.render(
-                screen,
-                "->",
-                (col_mid - 10, rect.centery - self.theme.font_size_sm // 2),
-                color=self.theme.text_disabled,
-                size=self.theme.font_size_sm,
-            )
-            self.text.render(
-                screen,
-                slot_name,
-                (col_mid + 20, rect.centery - self.theme.font_size_sm // 2),
-                color=text_color,
-                size=self.theme.font_size_sm,
-                max_width=col_right - col_mid - 30,
-            )
+            text_y = rect.centery - self.theme.font_size_sm // 2
+            self.text.render(screen, real_name, (col_left, text_y),
+                             color=text_color, size=self.theme.font_size_sm,
+                             max_width=col_mid - col_left - 20)
+            self.text.render(screen, "->", (col_mid - 10, text_y),
+                             color=arrow_color, size=self.theme.font_size_sm)
+            self.text.render(screen, slot_name, (col_mid + 20, text_y),
+                             color=text_color, size=self.theme.font_size_sm,
+                             max_width=col_right - col_mid - 30)
 
             item_rects.append(rect)
-            y += item_height + 1
+            y += total_item_h
 
-        # Footer hint
-        self.text.render(
-            screen,
-            "Press B to confirm mapping",
-            (content_rect.centerx, content_rect.bottom - 20),
-            color=self.theme.text_secondary,
-            size=self.theme.font_size_sm,
-            align="center",
-        )
+        # Scroll indicators
+        ind_x = content_rect.right - 8
+        if scroll > 0:
+            pygame.draw.polygon(screen, self.theme.text_secondary, [
+                (ind_x - 4, list_top + 8), (ind_x, list_top + 2), (ind_x + 4, list_top + 8),
+            ])
+        if scroll + visible_count < total:
+            pygame.draw.polygon(screen, self.theme.text_secondary, [
+                (ind_x - 4, list_bottom - 8), (ind_x, list_bottom - 2), (ind_x + 4, list_bottom - 8),
+            ])
 
         return modal_rect, content_rect, close_rect, item_rects
 

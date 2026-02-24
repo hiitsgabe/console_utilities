@@ -29,8 +29,8 @@ class PatchProgressModal:
         """
         we = state.we_patcher
 
-        width = 450
-        height = 200
+        width = 500
+        height = 260
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
             screen, width, height, title="Patching ROM", show_close=not we.is_patching
@@ -81,7 +81,7 @@ class PatchProgressModal:
         )
 
     def _render_complete(self, screen, content_rect, we):
-        center_y = content_rect.centery - 30
+        center_y = content_rect.centery - 40
 
         self.text.render(
             screen,
@@ -92,6 +92,7 @@ class PatchProgressModal:
             align="center",
         )
 
+        y = center_y + 35
         if we.patch_output_path:
             import os
 
@@ -99,16 +100,53 @@ class PatchProgressModal:
             self.text.render(
                 screen,
                 f"Saved: {filename}",
-                (content_rect.centerx, center_y + 40),
+                (content_rect.centerx, y),
                 color=self.theme.text_primary,
                 size=self.theme.font_size_md,
                 align="center",
                 max_width=content_rect.width - 40,
             )
+            y += 25
+
+        # Show verification summary
+        report = getattr(we, "patch_verify_report", "")
+        if report:
+            # Extract the summary line
+            for line in report.split("\n"):
+                if "Regions changed:" in line:
+                    self.text.render(
+                        screen,
+                        line.strip(),
+                        (content_rect.centerx, y),
+                        color=self.theme.text_secondary,
+                        size=self.theme.font_size_sm,
+                        align="center",
+                    )
+                    y += 18
+                elif "NO DATA CHANGED" in line:
+                    self.text.render(
+                        screen,
+                        "WARNING: No bytes changed! Check console log.",
+                        (content_rect.centerx, y),
+                        color=self.theme.error,
+                        size=self.theme.font_size_sm,
+                        align="center",
+                    )
+                    y += 18
+                elif "WRONG FORMAT" in line:
+                    self.text.render(
+                        screen,
+                        "WARNING: ROM not Mode2/2352 format!",
+                        (content_rect.centerx, y),
+                        color=self.theme.error,
+                        size=self.theme.font_size_sm,
+                        align="center",
+                    )
+                    y += 18
 
         self.text.render(
             screen,
-            "Press any button to close",
+            "Press any button to close  (full report in console)",
             (content_rect.centerx, content_rect.bottom - 20),
             color=self.theme.text_secondary,
             size=self.theme.font_size_sm,

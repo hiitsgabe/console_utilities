@@ -50,7 +50,9 @@ class PortMasterLoader:
     - PortMaster-New release ports.json for runtime/utils data (has utils section)
     """
 
-    PORTS_JSON_URL = "https://raw.githubusercontent.com/PortsMaster/PortMaster-Info/main/ports.json"
+    PORTS_JSON_URL = (
+        "https://raw.githubusercontent.com/PortsMaster/PortMaster-Info/main/ports.json"
+    )
     RUNTIMES_JSON_URL = "https://github.com/PortsMaster/PortMaster-New/releases/latest/download/ports.json"
     CACHE_TTL = 3600  # 1 hour
 
@@ -230,9 +232,7 @@ class PortMasterInstaller:
     def work_dir(self) -> str:
         from constants import SCRIPT_DIR
 
-        return self.settings.get(
-            "work_dir", os.path.join(SCRIPT_DIR, "downloads")
-        )
+        return self.settings.get("work_dir", os.path.join(SCRIPT_DIR, "downloads"))
 
     @property
     def roms_dir(self) -> str:
@@ -350,7 +350,10 @@ class PortMasterInstaller:
 
             if result.returncode != 0:
                 stderr = result.stderr.decode("utf-8", errors="replace")[:200]
-                return False, f"Installer exited with code {result.returncode}: {stderr}"
+                return (
+                    False,
+                    f"Installer exited with code {result.returncode}: {stderr}",
+                )
 
             if progress_cb:
                 progress_cb("PortMaster installed!", 1.0)
@@ -505,9 +508,7 @@ class PortMasterInstaller:
                         downloaded += len(chunk)
                         now = time.time()
                         if progress_cb and total > 0 and now - last_update >= 0.3:
-                            progress_cb(
-                                "Downloading...", downloaded / total * 0.5
-                            )
+                            progress_cb("Downloading...", downloaded / total * 0.5)
                             last_update = now
 
             return file_path
@@ -556,9 +557,7 @@ class PortMasterInstaller:
                     # Create directory in ports_dir
                     dir_path = os.path.join(self.ports_dir, entry.filename)
                     os.makedirs(dir_path, exist_ok=True)
-                    if not any(
-                        dir_path.startswith(u) for u in undo_files
-                    ):
+                    if not any(dir_path.startswith(u) for u in undo_files):
                         undo_files.append(dir_path)
                     continue
 
@@ -601,9 +600,7 @@ class PortMasterInstaller:
                     gameinfo_path = dest
 
                 if progress_cb and i % 20 == 0:
-                    progress_cb(
-                        "Installing...", 0.5 + (i / total) * 0.3
-                    )
+                    progress_cb("Installing...", 0.5 + (i / total) * 0.3)
 
         return gameinfo_path
 
@@ -762,9 +759,7 @@ class PortMasterInstaller:
                     actual_md5 = self._compute_md5(tmp_path)
                     if actual_md5 != expected_md5:
                         os.remove(tmp_path)
-                        log_error(
-                            f"Runtime MD5 mismatch for {runtime_name}"
-                        )
+                        log_error(f"Runtime MD5 mismatch for {runtime_name}")
                         continue
 
                 os.rename(tmp_path, runtime_path)
@@ -849,9 +844,7 @@ class PortMasterInstaller:
 
             # Write back
             ET.indent(main_tree, space="  ")
-            main_tree.write(
-                gamelist_path, encoding="utf-8", xml_declaration=True
-            )
+            main_tree.write(gamelist_path, encoding="utf-8", xml_declaration=True)
 
         except Exception as e:
             log_error(f"Failed to update gamelist.xml: {e}")
