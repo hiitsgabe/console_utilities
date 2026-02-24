@@ -281,6 +281,39 @@ def _encode_p40000(address: int) -> bytes:
 
 
 
+def _make_shades(r: int, g: int, b: int, count: int) -> list:
+    """Generate BGR555 shades (dark→light) from a single RGB color.
+
+    For bright colors (near white): base is lightest shade, darker shades generated below.
+    For dark/medium colors: base is darkest shade, lighter shades blend toward white.
+    Spread is ~50% of the available range per channel.
+    """
+    r5 = min(31, r * 31 // 255)
+    g5 = min(31, g * 31 // 255)
+    b5 = min(31, b * 31 // 255)
+
+    brightness = (r5 + g5 + b5) / 3.0
+
+    shades = []
+    if brightness > 22:
+        # Bright color: base is lightest, darken for shadow shades
+        for i in range(count):
+            t = (count - 1 - i) / (count - 1) * 0.5 if count > 1 else 0
+            rv = max(0, round(r5 * (1.0 - t)))
+            gv = max(0, round(g5 * (1.0 - t)))
+            bv = max(0, round(b5 * (1.0 - t)))
+            shades.append(rv | (gv << 5) | (bv << 10))
+    else:
+        # Dark/medium: base is darkest, lighter shades blend toward white
+        for i in range(count):
+            t = i / (count - 1) * 0.5 if count > 1 else 0
+            rv = min(31, round(r5 + t * (31 - r5)))
+            gv = min(31, round(g5 + t * (31 - g5)))
+            bv = min(31, round(b5 + t * (31 - b5)))
+            shades.append(rv | (gv << 5) | (bv << 10))
+    return shades
+
+
 def _rgb_to_predominant(r: int, g: int, b: int) -> int:
     """Map RGB to ISS predominant color (0=White,1=Blue,2=Red,3=Yellow,4=Green)."""
     max_c = max(r, g, b)
@@ -412,37 +445,41 @@ class ISSRomWriter:
             self._write_gk_kit(gk_base + gk_pos * 24, team.kit_gk)
 
     def _write_outfield_kit(self, offset: int, colors: Tuple[Tuple[int, int, int], ...]):
-        """Write 3 shirt + 3 shorts + 2 socks colors from the first few colors."""
+        """Write shirt/shorts/socks with proper shade gradients (dark→light).
+
+        32-byte block: words 0-2 shirt, words 3-5 shorts, words 6-7 socks,
+        words 8-15 hair/skin (untouched).
+        """
         if not colors:
             return
         self._seek(offset)
         existing = bytearray(self._f.read(16))
         self._seek(offset)
 
-        # Use first color for all shirt positions, second for shorts if available
         shirt_color = colors[0] if len(colors) > 0 else (255, 255, 255)
         shorts_color = colors[1] if len(colors) > 1 else shirt_color
         socks_color = colors[2] if len(colors) > 2 else shirt_color
 
-        # Shirt: 3 colors × 2 bytes (bytes 0-5)
-        c = _rgb_to_bgr555(*shirt_color)
-        for i in range(3):
-            struct.pack_into("<H", existing, i * 2, c)
+        # Shirt: 3 shades (bytes 0-5)
+        for i, shade in enumerate(_make_shades(*shirt_color, 3)):
+            struct.pack_into("<H", existing, i * 2, shade)
 
-        # Shorts: 3 colors × 2 bytes (bytes 6-11)
-        c = _rgb_to_bgr555(*shorts_color)
-        for i in range(3):
-            struct.pack_into("<H", existing, 6 + i * 2, c)
+        # Shorts: 3 shades (bytes 6-11)
+        for i, shade in enumerate(_make_shades(*shorts_color, 3)):
+            struct.pack_into("<H", existing, 6 + i * 2, shade)
 
-        # Socks: 2 colors × 2 bytes (bytes 12-15)
-        c = _rgb_to_bgr555(*socks_color)
-        for i in range(2):
-            struct.pack_into("<H", existing, 12 + i * 2, c)
+        # Socks: 2 shades (bytes 12-15)
+        for i, shade in enumerate(_make_shades(*socks_color, 2)):
+            struct.pack_into("<H", existing, 12 + i * 2, shade)
 
         self._f.write(bytes(existing))
 
     def _write_gk_kit(self, offset: int, colors: Tuple[Tuple[int, int, int], ...]):
-        """Write GK kit: 5 shirt + 1 shorts colors."""
+        """Write GK kit with proper shade gradients.
+
+        24-byte block: word 0 specular (always near-white), words 1-4 shirt
+        (4 shades dark→light), word 5 shorts, words 6-11 hair/skin (untouched).
+        """
         if not colors:
             return
         self._seek(offset)
@@ -452,14 +489,15 @@ class ISSRomWriter:
         shirt_color = colors[0] if len(colors) > 0 else (0, 128, 0)
         shorts_color = colors[1] if len(colors) > 1 else shirt_color
 
-        # Shirt: 5 colors × 2 bytes (bytes 0-9)
-        c = _rgb_to_bgr555(*shirt_color)
-        for i in range(5):
-            struct.pack_into("<H", existing, i * 2, c)
+        # Word 0: specular highlight (always near-white)
+        struct.pack_into("<H", existing, 0, 0x7FFE)
 
-        # Shorts: 1 color × 2 bytes (bytes 10-11)
-        c = _rgb_to_bgr555(*shorts_color)
-        struct.pack_into("<H", existing, 10, c)
+        # Words 1-4: 4 shirt shades (bytes 2-9)
+        for i, shade in enumerate(_make_shades(*shirt_color, 4)):
+            struct.pack_into("<H", existing, 2 + i * 2, shade)
+
+        # Word 5: shorts (single color, bytes 10-11)
+        struct.pack_into("<H", existing, 10, _rgb_to_bgr555(*shorts_color))
 
         self._f.write(bytes(existing))
 
