@@ -1,81 +1,17 @@
 """Data models for the WE2002 patcher."""
 
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Tuple
+from typing import Optional, List, Tuple
 
-
-@dataclass
-class League:
-    id: int
-    name: str
-    country: str
-    country_code: str
-    logo_url: str
-    season: int
-    teams_count: int
-
-
-@dataclass
-class Player:
-    id: int
-    name: str
-    first_name: str
-    last_name: str
-    age: int
-    nationality: str
-    position: str  # "Goalkeeper", "Defender", "Midfielder", "Attacker"
-    number: Optional[int]
-    photo_url: str
-
-
-@dataclass
-class PlayerStats:
-    """Detailed per-season stats from API-Football."""
-
-    player_id: int
-    appearances: int
-    minutes: int
-    goals: int
-    assists: int
-    shots_total: int
-    shots_on: int
-    passes_total: int
-    passes_accuracy: float  # percentage
-    tackles_total: int
-    interceptions: int
-    blocks: int
-    duels_total: int
-    duels_won: int
-    dribbles_attempts: int
-    dribbles_success: int
-    fouls_committed: int
-    fouls_drawn: int
-    cards_yellow: int
-    cards_red: int
-    rating: Optional[float]  # API-Football average rating
-
-
-@dataclass
-class Team:
-    id: int
-    name: str
-    short_name: str
-    code: str  # 3-letter abbreviation
-    logo_url: str
-    country: str
-
-
-@dataclass
-class TeamRoster:
-    team: Team
-    players: List[Player]
-    player_stats: Dict[int, PlayerStats]  # player_id -> stats
-
-
-@dataclass
-class LeagueData:
-    league: League
-    teams: List[TeamRoster]
+# Re-export shared sports models so existing imports keep working
+from services.sports_api.models import (  # noqa: F401
+    League,
+    Player,
+    PlayerStats,
+    Team,
+    TeamRoster,
+    LeagueData,
+)
 
 
 @dataclass
@@ -118,9 +54,12 @@ class WETeamRecord:
     short_name: str
     kit_home: Tuple[int, int, int] = (255, 255, 255)  # RGB
     kit_away: Tuple[int, int, int] = (0, 0, 0)  # RGB
+    kit_third: Tuple[int, int, int] = (0, 0, 0)  # RGB tertiary color
     kit_gk: Tuple[int, int, int] = (0, 128, 0)  # RGB
     players: List[WEPlayerRecord] = field(default_factory=list)  # Exactly 22
-    flag_tim: Optional[bytes] = None  # TIM graphic data
+    jersey_data: Optional[bytes] = None  # Raw 64-byte jersey to copy from ROM
+    flag_style: Optional[int] = None  # Geometric pattern byte (0-15); None = solid
+    flag_palette: Optional[List[Tuple[int, int, int]]] = None  # 16 RGB colors; None = auto
 
 
 @dataclass
@@ -139,6 +78,18 @@ class SlotMapping:
     real_team: Team
     slot_index: int
     slot_name: str
+    nat_index: Optional[int] = None  # National slot (0-62)
+
+
+@dataclass
+class SlotPalette:
+    """Jersey palette extracted from a ROM slot."""
+
+    slot_type: str  # "national" or "ml"
+    slot_index: int  # 0-62 for national, 0-31 for ML
+    primary: Tuple[int, int, int] = (0, 0, 0)    # RGB
+    secondary: Tuple[int, int, int] = (0, 0, 0)  # RGB
+    raw_data: bytes = b""  # original 64-byte maglia1+maglia2
 
 
 @dataclass
@@ -149,6 +100,7 @@ class RomInfo:
     size: int
     version: str  # Detected WE2002 variant
     team_slots: List[WETeamSlot] = field(default_factory=list)
+    slot_palettes: List[SlotPalette] = field(default_factory=list)
     is_valid: bool = False
 
 

@@ -298,15 +298,11 @@ class StreamServer:
         y = max(0, min(y, self.height - 1))
 
         if event_type == "touchstart":
-            evt = pygame.event.Event(
-                pygame.MOUSEBUTTONDOWN, button=1, pos=(x, y)
-            )
+            evt = pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=(x, y))
             pygame.event.post(evt)
 
         elif event_type == "touchend":
-            evt = pygame.event.Event(
-                pygame.MOUSEBUTTONUP, button=1, pos=(x, y)
-            )
+            evt = pygame.event.Event(pygame.MOUSEBUTTONUP, button=1, pos=(x, y))
             pygame.event.post(evt)
 
         elif event_type == "touchmove":

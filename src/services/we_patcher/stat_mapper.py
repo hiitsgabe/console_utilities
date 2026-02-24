@@ -120,27 +120,31 @@ class StatMapper:
 
         percentiles = self._compute_percentiles(all_stats)
 
-        # Select best 22 players
-        best_22 = self._select_best_22(team_roster.players)
+        # Select best 22 players, starters first
+        best_22 = self._select_best_22(
+            team_roster.players, team_roster.player_stats
+        )
 
         # Map each player
         we_players = []
         for player in best_22:
             stats = team_roster.player_stats.get(player.id)
             attrs = self.map_player(player, stats, percentiles)
+            rom_last, rom_first = self._format_player_name(player)
             we_players.append(
                 WEPlayerRecord(
-                    last_name=self._truncate_name(player.last_name or player.name, 12),
-                    first_name=self._truncate_name(player.first_name, 8),
+                    last_name=rom_last,
+                    first_name=rom_first,
                     position=self.POSITION_CODES.get(player.position, 2),
                     shirt_number=player.number or 0,
                     attributes=attrs,
                 )
             )
 
+        from .rom_writer import _to_ascii
         return WETeamRecord(
             name=self._truncate_name(team_roster.team.name, 24),
-            short_name=(
+            short_name=_to_ascii(
                 team_roster.team.code[:3]
                 if team_roster.team.code
                 else team_roster.team.name[:3].upper()
@@ -346,39 +350,105 @@ class StatMapper:
         base = {"Goalkeeper": 3, "Defender": 3, "Midfielder": 5, "Attacker": 5}
         return base.get(player.position, 4)
 
-    def _select_best_22(self, players: List[Player]) -> List[Player]:
-        """Select best 22 players: 3 GK, 7 DF, 6 MF, 6 FW."""
-        targets = {
+    def _select_best_22(
+        self,
+        players: List[Player],
+        player_stats: Optional[Dict[int, PlayerStats]] = None,
+    ) -> List[Player]:
+        """Select best 22 players ordered with starting XI first.
+
+        Uses games.lineups (starting XI count) from API stats to sort
+        players by importance within each position.  The first 11 slots
+        form the default starting lineup (1 GK, 4 DF, 4 MF, 2 FW).
+        """
+        stats = player_stats or {}
+
+        def _sort_key(p: Player) -> tuple:
+            """Higher lineups first, then appearances, then minutes."""
+            s = stats.get(p.id)
+            if s:
+                return (-s.lineups, -s.appearances, -s.minutes)
+            return (0, 0, 0)
+
+        # Squad targets: total roster composition
+        squad_targets = {
             "Goalkeeper": 3,
             "Defender": 7,
             "Midfielder": 6,
             "Attacker": 6,
         }
 
+        # Sort players by lineups within each position
         by_position = {}
         for p in players:
             by_position.setdefault(p.position, []).append(p)
+        for pos in by_position:
+            by_position[pos].sort(key=_sort_key)
 
-        selected = []
-        for pos, count in targets.items():
+        # Pick the full 22-man squad (sorted by importance within position)
+        squad = []
+        for pos, count in squad_targets.items():
             available = by_position.get(pos, [])
-            selected.extend(available[:count])
+            squad.extend(available[:count])
 
-        # If we have fewer than 22, fill from any position
-        remaining = [p for p in players if p not in selected]
-        while len(selected) < 22 and remaining:
-            selected.append(remaining.pop(0))
+        # Fill if under 22
+        remaining = [p for p in players if p not in squad]
+        remaining.sort(key=_sort_key)
+        while len(squad) < 22 and remaining:
+            squad.append(remaining.pop(0))
 
-        # If we have more than 22 (shouldn't happen with targets), trim
-        return selected[:22]
+        # Now split into starting XI (first 11) and bench (rest 11)
+        # Starting XI: 1 GK, 4 DF, 4 MF, 2 FW (default 4-4-2)
+        xi_targets = {"Goalkeeper": 1, "Defender": 4, "Midfielder": 4, "Attacker": 2}
+        squad_by_pos = {}
+        for p in squad:
+            squad_by_pos.setdefault(p.position, []).append(p)
+
+        starting = []
+        for pos in ["Goalkeeper", "Defender", "Midfielder", "Attacker"]:
+            available = squad_by_pos.get(pos, [])
+            count = xi_targets[pos]
+            starting.extend(available[:count])
+
+        bench = [p for p in squad if p not in starting]
+        return (starting + bench)[:22]
+
+    def _format_player_name(self, player: Player) -> tuple:
+        """Build ROM-friendly (last_name, first_name) from a Player.
+
+        Always uses displayName (the player's preferred/known name).
+        The game displays at most 8 characters for player names.
+        Rules:
+        - Single word (mononym): use as-is → "HULK", "NEYMAR"
+        - Two+ words: "F. Surname" → "V. Hugo", "G. Pique", "R. Veiga"
+        """
+        from .rom_writer import _to_ascii
+
+        display = _to_ascii(player.name) if player.name else ""
+        first = _to_ascii(player.first_name) if player.first_name else ""
+
+        if not display:
+            last = _to_ascii(player.last_name) if player.last_name else ""
+            return (last or "")[:8], first[:8]
+
+        words = display.split()
+
+        if len(words) == 1:
+            # Mononym: "HULK", "NEYMAR", "ENDRICK"
+            return display[:8], ""
+
+        # Multi-word: "F. Surname" — e.g. "V. Hugo", "G. Pique"
+        surname = words[-1]
+        initial = words[0][0]
+        jersey = f"{initial}. {surname}"
+        return jersey[:8], (first or words[0])[:8]
 
     def _truncate_name(self, name: str, max_bytes: int) -> str:
-        """Smart truncation: abbreviate if too long."""
+        """Smart truncation: strip diacritics and abbreviate if too long."""
         if not name:
             return ""
-        encoded = name.encode("ascii", errors="replace")
-        if len(encoded) <= max_bytes:
-            return name
-        # Simple truncation
-        result = name[:max_bytes]
-        return result
+        from .rom_writer import _to_ascii
+        ascii_name = _to_ascii(name)
+        if len(ascii_name) <= max_bytes:
+            return ascii_name
+        return ascii_name[:max_bytes]

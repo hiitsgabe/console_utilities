@@ -367,6 +367,62 @@ def filter_games_by_search(games: List[Any], query: str) -> List[Any]:
     return filtered
 
 
+def load_psx_rom_folder_contents(path: str) -> List[Dict[str, Any]]:
+    """
+    Load folder contents for PSX ROM selection.
+
+    Groups multi-bin/cue sets into a single entry per game.
+    Only shows folders, .cue files, and .bin files not covered by a .cue.
+    """
+    path = os.path.abspath(path)
+    items = []
+
+    if path != "/" and path != os.path.dirname(path):
+        items.append({"name": "..", "type": "parent", "path": os.path.dirname(path)})
+
+    try:
+        entries = os.listdir(path)
+    except PermissionError:
+        return items
+
+    dirs = []
+    cue_map = {}  # base_name -> full_path
+    bin_map = {}  # base_name -> full_path
+
+    for entry in sorted(entries):
+        if entry.startswith("."):
+            continue
+        full_path = os.path.join(path, entry)
+        if os.path.isdir(full_path):
+            dirs.append({"name": entry, "type": "folder", "path": full_path})
+        else:
+            ext = os.path.splitext(entry)[1].lower()
+            base = os.path.splitext(entry)[0]
+            if ext == ".cue":
+                cue_map[base] = full_path
+            elif ext == ".bin":
+                bin_map[base] = full_path
+
+    # Build game entries: .cue files as primary entries
+    games = {}
+    for base, cue_path in cue_map.items():
+        games[base.lower()] = {"name": base, "type": "psx_rom", "path": cue_path}
+
+    # Include .bin files not covered by any .cue (i.e. no .cue base is a prefix)
+    cue_bases = list(cue_map.keys())
+    for base, bin_path in bin_map.items():
+        covered = any(base.lower().startswith(cb.lower()) for cb in cue_bases)
+        if not covered and base.lower() not in games:
+            games[base.lower()] = {"name": base, "type": "psx_rom", "path": bin_path}
+
+    dirs.sort(key=lambda x: x["name"].lower())
+    game_list = sorted(games.values(), key=lambda x: x["name"].lower())
+
+    items.extend(dirs)
+    items.extend(game_list)
+    return items
+
+
 def load_folder_contents(path: str) -> List[Dict[str, Any]]:
     """
     Load folder contents for browser.
@@ -428,6 +484,8 @@ def load_folder_contents(path: str) -> List[Dict[str, Any]]:
                     file_type = "rar_file"
                 elif ext == ".7z":
                     file_type = "7z_file"
+                elif ext == ".cue":
+                    file_type = "cue_file"
                 else:
                     file_type = "file"
 

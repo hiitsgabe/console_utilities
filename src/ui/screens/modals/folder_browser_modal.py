@@ -84,7 +84,9 @@ class FolderBrowserModal:
 
         # List area (below path, above buttons)
         button_height = 44
-        button_area_height = button_height + self.theme.padding_lg + self.theme.padding_sm
+        button_area_height = (
+            button_height + self.theme.padding_lg + self.theme.padding_sm
+        )
         list_rect = pygame.Rect(
             content_rect.left,
             path_y + self.theme.font_size_sm + self.theme.padding_sm,
@@ -167,6 +169,8 @@ class FolderBrowserModal:
             "zip_file": ".zip",
             "rar_file": ".rar",
             "7z_file": ".7z",
+            "cue_file": ".cue",
+            "psx_rom": "PS1",
             "file": "File",
         }
         return type_labels.get(item_type, "")

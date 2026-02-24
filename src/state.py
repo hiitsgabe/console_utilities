@@ -4,6 +4,7 @@ Centralizes all global state into a single AppState class for better maintainabi
 """
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import List, Set, Dict, Optional, Any, Tuple
 import pygame
 
@@ -420,12 +421,13 @@ class WePatcherState:
 
     # League selection
     selected_league: Any = None
-    selected_season: int = 2025
+    selected_season: int = field(default_factory=lambda: datetime.now().year)
     available_leagues: List[Any] = field(default_factory=list)
     all_leagues_loaded: bool = False
     league_search_query: str = ""
     league_search_cursor: int = 0
     league_search_shift: bool = False
+    league_search_active: bool = False
     # Fetched data
     league_data: Any = None
     fetch_progress: float = 0.0
@@ -438,7 +440,6 @@ class WePatcherState:
     rom_valid: bool = False
     # Slot mapping
     slot_mapping: List[Any] = field(default_factory=list)
-    slot_mapping_highlighted: int = 0
     # Patching
     patch_progress: float = 0.0
     patch_status: str = ""
@@ -446,6 +447,7 @@ class WePatcherState:
     patch_output_path: str = ""
     patch_complete: bool = False
     patch_error: str = ""
+    patch_verify_report: str = ""
     # Roster preview
     roster_preview_team_index: int = 0
     roster_preview_player_index: int = 0

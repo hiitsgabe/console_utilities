@@ -57,9 +57,7 @@ class ConfirmModal:
         text_height = len(message_lines) * line_height
         button_height = 44
         button_footer = button_height + self.theme.padding_lg * 2  # gap above + button
-        content_height = (
-            text_height + self.theme.padding_sm + button_footer
-        )
+        content_height = text_height + self.theme.padding_sm + button_footer
         height = min(
             content_height + 120, screen.get_height() - 60
         )  # 120 for title + padding

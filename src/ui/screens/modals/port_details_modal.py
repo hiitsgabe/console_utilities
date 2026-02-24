@@ -116,9 +116,7 @@ class PortDetailsModal:
         image_size = max(image_size, 80)
 
         # Screenshot image (centered)
-        image_rect = pygame.Rect(
-            center_x - image_size // 2, y, image_size, image_size
-        )
+        image_rect = pygame.Rect(center_x - image_size // 2, y, image_size, image_size)
         placeholder = self.thumbnail.get_placeholder_initials(port_title)
         self.thumbnail.render(
             screen, image_rect, image=hires_image, placeholder_text=placeholder

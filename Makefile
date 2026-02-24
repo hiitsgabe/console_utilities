@@ -9,7 +9,7 @@ run:
 
 # Stream to phone browser for touch testing (open the printed URL on your phone)
 stream:
-	DEV_MODE=true $(CONDA_ACTIVATE) python src/stream_server.py
+	DEV_MODE=true $(CONDA_ACTIVATE)  watchmedo auto-restart --patterns="*.py;download.json" --recursive --signal SIGTERM python src/stream_server.py
 
 # Run without auto-restart to see full error logs
 debug:

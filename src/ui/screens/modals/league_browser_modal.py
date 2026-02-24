@@ -62,18 +62,13 @@ class LeagueBrowserModal:
             content_rect.width - self.theme.padding_sm * 2,
             30,
         )
-        pygame.draw.rect(
-            screen,
-            self.theme.surface_hover,
-            field_rect,
-            border_radius=self.theme.radius_sm,
-        )
-        display_text = we.league_search_query or "Search leagues..."
-        text_color = (
-            self.theme.text_primary
-            if we.league_search_query
-            else self.theme.text_disabled
-        )
+        search_active = we.league_search_active
+        field_bg = self.theme.surface_selected if search_active else self.theme.surface_hover
+        pygame.draw.rect(screen, field_bg, field_rect, border_radius=self.theme.radius_sm)
+        if search_active:
+            pygame.draw.rect(screen, self.theme.primary, field_rect, 1, border_radius=self.theme.radius_sm)
+        display_text = we.league_search_query or ("Type to search..." if search_active else "Search leagues... [X to search]")
+        text_color = self.theme.text_primary if we.league_search_query else self.theme.text_disabled
         self.text.render(
             screen,
             display_text,
@@ -82,6 +77,30 @@ class LeagueBrowserModal:
             size=self.theme.font_size_sm,
             max_width=field_rect.width - 16,
         )
+
+        # On-screen keyboard when search is active (gamepad/touch mode)
+        if search_active:
+            kb_height = 200
+            kb_rect = pygame.Rect(
+                content_rect.left,
+                field_rect.bottom + self.theme.padding_sm,
+                content_rect.width,
+                kb_height,
+            )
+            char_rects, _ = self.char_keyboard.render(
+                screen,
+                kb_rect,
+                current_text=we.league_search_query,
+                selected_index=we.league_search_cursor,
+                chars_per_row=13,
+                char_set="default",
+                show_input_field=False,
+                shift_active=we.league_search_shift,
+            )
+            list_area_top = kb_rect.bottom + self.theme.padding_sm
+        else:
+            char_rects = []
+            list_area_top = field_rect.bottom + self.theme.padding_md
 
         # Filter leagues by search query
         leagues = we.available_leagues or []
@@ -95,7 +114,7 @@ class LeagueBrowserModal:
             ]
 
         # League list area
-        list_top = field_rect.bottom + self.theme.padding_md
+        list_top = list_area_top
         list_bottom = content_rect.bottom - self.theme.padding_sm
         item_height = 36
         visible_count = max(1, (list_bottom - list_top) // (item_height + 2))

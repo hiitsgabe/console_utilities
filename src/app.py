@@ -52,6 +52,7 @@ from services.file_listing import (
     list_files,
     filter_games_by_search,
     load_folder_contents,
+    load_psx_rom_folder_contents,
     get_file_size,
     get_roms_folder_for_system,
 )
@@ -1012,6 +1013,25 @@ class ConsoleUtilitiesApp:
         we = self.state.we_patcher
 
         if we.active_modal == "league_browser":
+            if we.league_search_active:
+                from ui.organisms.char_keyboard import CharKeyboard
+                keyboard = CharKeyboard()
+                total_chars = keyboard.get_total_chars("default")
+                chars_per_row = 13
+                if direction == "up":
+                    if we.league_search_cursor >= chars_per_row:
+                        we.league_search_cursor -= chars_per_row
+                elif direction == "down":
+                    if we.league_search_cursor + chars_per_row < total_chars:
+                        we.league_search_cursor += chars_per_row
+                elif direction == "left":
+                    if we.league_search_cursor > 0:
+                        we.league_search_cursor -= 1
+                elif direction == "right":
+                    if we.league_search_cursor < total_chars - 1:
+                        we.league_search_cursor += 1
+                return
+
             from ui.screens.modals.league_browser_modal import league_browser_modal
 
             filtered = league_browser_modal.get_filtered_leagues(self.state)
@@ -1055,22 +1075,32 @@ class ConsoleUtilitiesApp:
                         max(len(players) - 1, 0),
                     )
 
-        elif we.active_modal == "slot_mapping":
-            max_items = len(we.slot_mapping) or 1
-            if direction in ("up", "left"):
-                we.slot_mapping_highlighted = (
-                    we.slot_mapping_highlighted - 1
-                ) % max_items
-            elif direction in ("down", "right"):
-                we.slot_mapping_highlighted = (
-                    we.slot_mapping_highlighted + 1
-                ) % max_items
-
         elif we.active_modal is None:
             # Main we_patcher menu
             from ui.screens.we_patcher_screen import we_patcher_screen
 
-            max_items = we_patcher_screen.get_count()
+            # Left/Right on the Season row changes year (API-Football only)
+            if direction in ("left", "right"):
+                action = we_patcher_screen.get_action(
+                    self.state.highlighted, self.state, self.settings
+                )
+                if action == "change_season":
+                    provider = self.settings.get("sports_roster_provider", "espn")
+                    if provider == "api_football":
+                        from datetime import datetime as _dt
+                        max_year = _dt.now().year
+                        delta = -1 if direction == "left" else 1
+                        we.selected_season = max(
+                            2010, min(max_year, we.selected_season + delta)
+                        )
+                        we.league_data = None  # force re-fetch on next preview
+                    return
+                if action == "change_language":
+                    delta = -1 if direction == "left" else 1
+                    self._cycle_we_patcher_language(delta)
+                    return
+
+            max_items = we_patcher_screen.get_count(self.state, self.settings)
             if direction in ("up", "left"):
                 self.state.highlighted = (self.state.highlighted - 1) % max_items
             elif direction in ("down", "right"):
@@ -1151,7 +1181,11 @@ class ConsoleUtilitiesApp:
             and self.state.input_mode == "keyboard"
         ):
             if event.key == pygame.K_ESCAPE:
-                self._go_back()
+                if self.state.we_patcher.league_search_active:
+                    self.state.we_patcher.league_search_active = False
+                    self.state.we_patcher.league_search_cursor = 0
+                else:
+                    self._go_back()
             elif event.key == pygame.K_RETURN:
                 self._handle_league_browser_selection()
             elif event.key in (pygame.K_UP, pygame.K_LEFT):
@@ -1381,12 +1415,38 @@ class ConsoleUtilitiesApp:
                     elif self.state.scraper_login.show:
                         self.state.scraper_login.cursor_position = char_index
                         self._handle_scraper_login_selection()
+                    elif (
+                        self.state.mode == "we_patcher"
+                        and self.state.we_patcher.active_modal == "league_browser"
+                        and self.state.we_patcher.league_search_active
+                    ):
+                        self.state.we_patcher.league_search_cursor = char_index
+                        self._handle_league_browser_selection()
                     return
 
         # Check back button
         if self.state.ui_rects.back_button:
             if self.state.ui_rects.back_button.collidepoint(x, y):
                 self._go_back()
+                return
+
+        # Check Season / Language arrow buttons (we_patcher main menu only)
+        if self.state.mode == "we_patcher" and self.state.we_patcher.active_modal is None:
+            left_arrow = self.state.ui_rects.rects.get("season_left_arrow")
+            right_arrow = self.state.ui_rects.rects.get("season_right_arrow")
+            if left_arrow and left_arrow.collidepoint(x, y):
+                self._handle_we_patcher_navigation("left")
+                return
+            if right_arrow and right_arrow.collidepoint(x, y):
+                self._handle_we_patcher_navigation("right")
+                return
+            lang_left = self.state.ui_rects.rects.get("lang_left_arrow")
+            lang_right = self.state.ui_rects.rects.get("lang_right_arrow")
+            if lang_left and lang_left.collidepoint(x, y):
+                self._cycle_we_patcher_language(-1)
+                return
+            if lang_right and lang_right.collidepoint(x, y):
+                self._cycle_we_patcher_language(1)
                 return
 
         # Check menu items (account for scroll offset)
@@ -1419,6 +1479,14 @@ class ConsoleUtilitiesApp:
 
     def _go_back(self):
         """Handle back navigation."""
+        if (
+            self.state.mode == "we_patcher"
+            and self.state.we_patcher.active_modal == "league_browser"
+            and self.state.we_patcher.league_search_active
+        ):
+            self.state.we_patcher.league_search_active = False
+            self.state.we_patcher.league_search_cursor = 0
+            return
         if self.state.show_search_input:
             # Reset search state when closing search modal
             self.state.show_search_input = False
@@ -1789,7 +1857,6 @@ class ConsoleUtilitiesApp:
         elif context == "apply_update" and data:
             self._apply_update(data)
             return  # Don't close modal yet - _apply_update manages its own UI
-
         # Close the modal
         self._handle_confirm_modal_cancel()
 
@@ -1885,6 +1952,20 @@ class ConsoleUtilitiesApp:
                 "sports_roster_enabled", False
             )
             save_settings(self.settings)
+        elif action == "toggle_roster_provider":
+            providers = ["espn", "api_football"]
+            current = self.settings.get("sports_roster_provider", "espn")
+            idx = providers.index(current) if current in providers else 0
+            new_provider = providers[(idx + 1) % len(providers)]
+            self.settings["sports_roster_provider"] = new_provider
+            save_settings(self.settings)
+            # Reset cached leagues so they reload from the new provider
+            self.state.we_patcher.available_leagues = []
+            self.state.we_patcher.all_leagues_loaded = False
+            # ESPN only supports the current year — reset season when switching to it
+            if new_provider == "espn":
+                from datetime import datetime as _dt
+                self.state.we_patcher.selected_season = _dt.now().year
         elif action == "edit_api_football_key":
             self._show_api_football_key_input()
         elif action == "toggle_ia_enabled":
@@ -2343,7 +2424,12 @@ class ConsoleUtilitiesApp:
         else:
             self.state.folder_browser.current_path = SCRIPT_DIR
 
-        self.state.folder_browser.items = load_folder_contents(
+        loader = (
+            load_psx_rom_folder_contents
+            if selection_type == "we_patcher_rom"
+            else load_folder_contents
+        )
+        self.state.folder_browser.items = loader(
             self.state.folder_browser.current_path
         )
 
@@ -2384,10 +2470,13 @@ class ConsoleUtilitiesApp:
             "type", "folder"
         )
 
+        is_psx_context = selection_type == "we_patcher_rom"
+        nav_loader = load_psx_rom_folder_contents if is_psx_context else load_folder_contents
+
         if item_type == "parent":
             # Navigate to parent directory
             self.state.folder_browser.current_path = item_path
-            self.state.folder_browser.items = load_folder_contents(item_path)
+            self.state.folder_browser.items = nav_loader(item_path)
             self.state.folder_browser.highlighted = 0
             self.state.folder_browser.focus_area = "list"
 
@@ -2400,7 +2489,7 @@ class ConsoleUtilitiesApp:
         elif item_type == "folder":
             # Navigate into the folder
             self.state.folder_browser.current_path = item_path
-            self.state.folder_browser.items = load_folder_contents(item_path)
+            self.state.folder_browser.items = nav_loader(item_path)
             self.state.folder_browser.highlighted = 0
             self.state.folder_browser.focus_area = "list"
 
@@ -2410,6 +2499,7 @@ class ConsoleUtilitiesApp:
             "zip_file",
             "rar_file",
             "7z_file",
+            "psx_rom",
             "file",
         ):
             # Select the file based on selection type
@@ -2455,6 +2545,9 @@ class ConsoleUtilitiesApp:
             self.settings["retroarch_thumbnails_path"] = path
             save_settings(self.settings)
         elif selection_type == "we_patcher_rom":
+            # If user picked a .cue file, resolve the data track binary from it
+            if path.lower().endswith(".cue"):
+                path = self._resolve_cue_data_track(path) or path
             self.state.we_patcher.rom_path = path
             try:
                 from services.we_patcher import RomReader
@@ -2665,6 +2758,14 @@ class ConsoleUtilitiesApp:
         ):
             self.state.scraper_login.shift_active = (
                 not self.state.scraper_login.shift_active
+            )
+        elif (
+            self.state.mode == "we_patcher"
+            and self.state.we_patcher.active_modal == "league_browser"
+            and self.state.we_patcher.league_search_active
+        ):
+            self.state.we_patcher.league_search_shift = (
+                not self.state.we_patcher.league_search_shift
             )
 
     def _navigate_keyboard_modal(
@@ -2910,6 +3011,14 @@ class ConsoleUtilitiesApp:
             self.state.show_search_input = True
             self.state.search.mode = True
             self.state.search.query = ""
+        elif (
+            self.state.mode == "we_patcher"
+            and self.state.we_patcher.active_modal == "league_browser"
+        ):
+            we = self.state.we_patcher
+            we.league_search_active = not we.league_search_active
+            if not we.league_search_active:
+                we.league_search_cursor = 0
 
     def _handle_detail_action(self):
         """Handle detail key press."""
@@ -5326,6 +5435,16 @@ class ConsoleUtilitiesApp:
     #  WE Patcher methods
     # ------------------------------------------------------------------ #
 
+    def _cycle_we_patcher_language(self, delta: int):
+        """Cycle the WE patcher language setting by delta (+1 or -1)."""
+        from services.we_patcher.translations.we2002 import LANGUAGE_CODES
+        cur = self.settings.get("we_patcher_language", "en")
+        idx = LANGUAGE_CODES.index(cur) if cur in LANGUAGE_CODES else 0
+        idx = (idx + delta) % len(LANGUAGE_CODES)
+        self.settings["we_patcher_language"] = LANGUAGE_CODES[idx]
+        from config.settings import save_settings
+        save_settings(self.settings)
+
     def _handle_we_patcher_selection(self):
         """Handle item selection on the we_patcher main menu."""
         we = self.state.we_patcher
@@ -5336,10 +5455,6 @@ class ConsoleUtilitiesApp:
             return
         if we.active_modal == "roster_preview":
             # No action on select in roster preview — just browsing
-            return
-        if we.active_modal == "slot_mapping":
-            # Confirm and close
-            we.active_modal = None
             return
         if we.active_modal == "patch_progress":
             # Close if complete or errored
@@ -5361,20 +5476,16 @@ class ConsoleUtilitiesApp:
             we.active_modal = "roster_preview"
             we.roster_preview_team_index = 0
             we.roster_preview_player_index = 0
+            # Auto-fetch if league selected but data missing
+            if we.selected_league and not we.league_data and not we.is_fetching:
+                league_id = we.selected_league.id if hasattr(we.selected_league, "id") else None
+                season = we.selected_season or (
+                    we.selected_league.season if hasattr(we.selected_league, "season") else None
+                )
+                if league_id and season:
+                    self._start_league_fetch(league_id, season)
         elif action == "select_rom":
             self._open_folder_browser("we_patcher_rom")
-        elif action == "map_slots":
-            if not we.slot_mapping and we.league_data and we.rom_info:
-                from services.we_patcher import WePatcher
-                from constants import WE_PATCHER_CACHE_DIR
-
-                api_key = self.settings.get("api_football_key", "")
-                patcher = WePatcher(api_key, WE_PATCHER_CACHE_DIR)
-                we.slot_mapping = patcher.create_slot_mapping(
-                    we.league_data, we.rom_info
-                )
-            we.slot_mapping_highlighted = 0
-            we.active_modal = "slot_mapping"
         elif action == "patch_rom":
             we.active_modal = "patch_progress"
             self._start_patching()
@@ -5396,6 +5507,25 @@ class ConsoleUtilitiesApp:
         we = self.state.we_patcher
         from ui.screens.modals.league_browser_modal import league_browser_modal
 
+        # If on-screen keyboard is active, handle char input
+        if we.league_search_active:
+            from ui.organisms.char_keyboard import CharKeyboard
+            keyboard = CharKeyboard()
+            new_text, is_done, toggle_shift = keyboard.handle_selection(
+                we.league_search_cursor,
+                we.league_search_query,
+                char_set="default",
+                shift_active=we.league_search_shift,
+            )
+            if toggle_shift:
+                we.league_search_shift = not we.league_search_shift
+            we.league_search_query = new_text
+            we.leagues_highlighted = 0
+            if is_done:
+                we.league_search_active = False
+                we.league_search_cursor = 0
+            return
+
         filtered = league_browser_modal.get_filtered_leagues(self.state)
 
         # "Browse all leagues" is the virtual last item when not all are loaded
@@ -5412,26 +5542,52 @@ class ConsoleUtilitiesApp:
         we.active_modal = None
 
         league_id = selected.id if hasattr(selected, "id") else None
-        season = selected.season if hasattr(selected, "season") else we.selected_season
         if league_id:
-            self._start_league_fetch(league_id, season)
+            self._start_league_fetch(league_id, we.selected_season)
+
+    def _resolve_cue_data_track(self, cue_path: str):
+        """Parse a .cue file and return the path of the first data track .bin file."""
+        cue_dir = os.path.dirname(cue_path)
+        current_file = None
+        try:
+            with open(cue_path, "r", errors="replace") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.upper().startswith("FILE "):
+                        # FILE "name.bin" BINARY
+                        parts = line.split('"')
+                        if len(parts) >= 2:
+                            current_file = parts[1]
+                    elif line.upper().startswith("TRACK ") and current_file:
+                        # TRACK 01 MODE1/2048 or MODE2/2352 — data track
+                        if "MODE" in line.upper():
+                            candidate = os.path.join(cue_dir, current_file)
+                            if os.path.exists(candidate):
+                                return candidate
+        except Exception:
+            pass
+        return None
 
     def _start_league_fetch(self, league_id=None, season=None):
         """Populate featured leagues instantly, then optionally fetch a specific league's data."""
         import threading
         from constants import WE_PATCHER_CACHE_DIR
 
+        provider = self.settings.get("sports_roster_provider", "espn")
         api_key = self.settings.get("api_football_key", "")
-        if not api_key:
+        if provider == "api_football" and not api_key:
             return
 
         state = self.state
 
         # Show featured leagues immediately — no API call needed
         if not state.we_patcher.available_leagues:
-            from services.we_patcher import ApiFootballClient
-
-            client = ApiFootballClient(api_key, WE_PATCHER_CACHE_DIR)
+            if provider == "espn":
+                from services.we_patcher import EspnClient
+                client = EspnClient(WE_PATCHER_CACHE_DIR)
+            else:
+                from services.we_patcher import ApiFootballClient
+                client = ApiFootballClient(api_key, WE_PATCHER_CACHE_DIR)
             state.we_patcher.available_leagues = client.get_featured_leagues()
 
         if not league_id or not season:
@@ -5440,33 +5596,61 @@ class ConsoleUtilitiesApp:
         # Background fetch of full roster data for the selected league
         state.we_patcher.is_fetching = True
         state.we_patcher.fetch_error = ""
+        state.we_patcher.league_data = None
 
         def _fetch():
             try:
                 from services.we_patcher import WePatcher
 
-                patcher = WePatcher(api_key, WE_PATCHER_CACHE_DIR)
+                def on_status(msg):
+                    state.we_patcher.fetch_status = msg
+
+                if provider == "espn":
+                    from services.we_patcher import EspnClient
+                    espn_client = EspnClient(WE_PATCHER_CACHE_DIR, on_status=on_status)
+                    patcher = WePatcher(api_key, WE_PATCHER_CACHE_DIR, on_status=on_status, client=espn_client)
+                else:
+                    patcher = WePatcher(api_key, WE_PATCHER_CACHE_DIR, on_status=on_status)
 
                 def progress(p, msg):
                     state.we_patcher.fetch_progress = p
                     state.we_patcher.fetch_status = msg
 
-                league_data = patcher.fetch_league(league_id, season, progress)
+                def on_partial_data(partial):
+                    # Set league_data as soon as team list is known so UI renders immediately
+                    state.we_patcher.league_data = partial
+
+                league_data = patcher.fetch_league(
+                    league_id, season, progress, on_partial_data=on_partial_data
+                )
                 state.we_patcher.league_data = league_data
             except Exception as e:
-                state.we_patcher.fetch_error = str(e)
+                from services.we_patcher.api_football import SeasonNotAvailableError
+                if isinstance(e, SeasonNotAvailableError):
+                    import re as _re
+                    match = _re.search(r'(\d{4})\s+to\s+(\d{4})', e.api_message)
+                    if match:
+                        available = f"Available: {match.group(1)}–{match.group(2)}"
+                    else:
+                        available = "Use the Season row to pick a different year."
+                    state.we_patcher.fetch_error = (
+                        f"Season {season} is not available. {available}"
+                    )
+                else:
+                    state.we_patcher.fetch_error = str(e)
             finally:
                 state.we_patcher.is_fetching = False
 
         threading.Thread(target=_fetch, daemon=True).start()
 
     def _load_all_leagues(self):
-        """Background fetch of all leagues from API-Football (~8000 entries)."""
+        """Background fetch of all leagues from the active roster provider."""
         import threading
         from constants import WE_PATCHER_CACHE_DIR
 
+        provider = self.settings.get("sports_roster_provider", "espn")
         api_key = self.settings.get("api_football_key", "")
-        if not api_key:
+        if provider == "api_football" and not api_key:
             return
 
         state = self.state
@@ -5476,9 +5660,12 @@ class ConsoleUtilitiesApp:
 
         def _fetch():
             try:
-                from services.we_patcher import ApiFootballClient
-
-                client = ApiFootballClient(api_key, WE_PATCHER_CACHE_DIR)
+                if provider == "espn":
+                    from services.we_patcher import EspnClient
+                    client = EspnClient(WE_PATCHER_CACHE_DIR)
+                else:
+                    from services.we_patcher import ApiFootballClient
+                    client = ApiFootballClient(api_key, WE_PATCHER_CACHE_DIR)
                 leagues = client.get_leagues()
                 state.we_patcher.available_leagues = leagues
                 state.we_patcher.all_leagues_loaded = True
@@ -5489,6 +5676,45 @@ class ConsoleUtilitiesApp:
 
         threading.Thread(target=_fetch, daemon=True).start()
 
+    def _get_game_files(self, data_track_path: str, exclude_prefix: str = ""):
+        """Return (game_base_name, [list of all .bin/.cue files for this game]).
+
+        Finds all files in the same directory whose name starts with the game's
+        base name (i.e. the name with any ' (Track XX)' suffix stripped).
+
+        Args:
+            data_track_path: Path to the data track BIN file.
+            exclude_prefix: If set, skip files starting with this prefix to
+                avoid picking up previous output files on re-runs.
+        """
+        import re as _re_gf
+        directory = os.path.dirname(data_track_path)
+        basename = os.path.splitext(os.path.basename(data_track_path))[0]
+        # Strip " (Track XX)" or " - Track XX" suffix to get bare game name
+        game_base = _re_gf.sub(
+            r'\s*[\(\-]\s*[Tt]rack\s*\d+\)?.*$', '', basename
+        ).strip()
+
+        files = []
+        try:
+            for entry in os.listdir(directory):
+                ext = os.path.splitext(entry)[1].lower()
+                if ext not in ('.bin', '.cue'):
+                    continue
+                if not entry.lower().startswith(game_base.lower()):
+                    continue
+                # Skip previous output files on re-runs
+                if exclude_prefix and entry.startswith(exclude_prefix):
+                    continue
+                files.append(os.path.join(directory, entry))
+        except OSError:
+            files = [data_track_path]
+
+        if not files:
+            files = [data_track_path]
+
+        return game_base, files
+
     def _start_patching(self):
         """Start background patching thread."""
         import threading
@@ -5497,22 +5723,54 @@ class ConsoleUtilitiesApp:
 
         we = self.state.we_patcher
         api_key = self.settings.get("api_football_key", "")
+        language = self.settings.get("we_patcher_language", "en")
 
-        if not we.league_data or not we.rom_path or not we.slot_mapping:
+        if not we.league_data or not we.rom_path:
             return
+
+        # Auto-generate slot mapping if not already present
+        if not we.slot_mapping and we.rom_info:
+            from services.we_patcher import WePatcher
+            patcher = WePatcher(api_key, WE_PATCHER_CACHE_DIR)
+            we.slot_mapping = patcher.create_slot_mapping(
+                we.league_data, we.rom_info
+            )
 
         we.is_patching = True
         we.patch_error = ""
         we.patch_complete = False
 
-        input_path = we.rom_path
-        base, ext = os.path.splitext(input_path)
-        output_path = base + "_patched" + ext
+        input_path = we.rom_path  # data track .bin
+
+        # Build new file prefix: "[game] - [League] [Season]"
+        league_name = (
+            we.league_data.league.name
+            if hasattr(we.league_data, "league") and hasattr(we.league_data.league, "name")
+            else "Unknown League"
+        )
+        import re as _re2
+        safe_league = _re2.sub(r'[\\/:*?"<>|]', "-", league_name)
+        season = we.selected_season
+        game_dir = os.path.dirname(input_path)
+
+        # Get game files, excluding previous output files
+        game_base, game_files = self._get_game_files(input_path)
+        new_prefix = f"{game_base} - {safe_league} {season}"
+        # Re-scan excluding any files from a previous run with this prefix
+        game_base, game_files = self._get_game_files(
+            input_path, exclude_prefix=new_prefix
+        )
+
+        # Data track output path (same folder, renamed)
+        data_basename = os.path.basename(input_path)
+        output_bin = os.path.join(game_dir, new_prefix + data_basename[len(game_base):])
 
         def _patch():
             try:
+                import shutil
                 from services.we_patcher import WePatcher
 
+                # Patch the data track first (RomWriter copies input to output)
                 patcher = WePatcher(api_key, WE_PATCHER_CACHE_DIR)
 
                 def progress(p, msg):
@@ -5520,9 +5778,36 @@ class ConsoleUtilitiesApp:
                     we.patch_status = msg
 
                 patcher.patch_rom(
-                    input_path, output_path, we.league_data, we.slot_mapping, progress
+                    input_path, output_bin, we.league_data, we.slot_mapping,
+                    progress, language=language,
                 )
-                we.patch_output_path = output_path
+
+                # Copy companion files AFTER patching succeeds
+                for src in game_files:
+                    src_basename = os.path.basename(src)
+                    new_name = new_prefix + src_basename[len(game_base):]
+                    dst = os.path.join(game_dir, new_name)
+                    ext = os.path.splitext(src_basename)[1].lower()
+                    if src == input_path:
+                        continue  # data track already handled by RomWriter
+                    if ext == ".cue":
+                        # Update FILE references inside the cue sheet
+                        with open(src, "r", errors="replace") as f:
+                            content = f.read()
+                        content = content.replace(game_base, new_prefix)
+                        with open(dst, "w") as f:
+                            f.write(content)
+                    else:
+                        shutil.copy2(src, dst)
+
+                we.patch_output_path = output_bin
+
+                # Capture verification report
+                report = getattr(patcher, "_last_verify_report", "")
+                we.patch_verify_report = report
+                if report:
+                    print(report)  # Always print to console for debugging
+
                 we.patch_complete = True
             except Exception as e:
                 we.patch_error = str(e)

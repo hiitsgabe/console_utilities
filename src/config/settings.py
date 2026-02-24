@@ -37,7 +37,9 @@ class Settings:
     ia_secret_key: str = ""  # S3 secret key (base64 encoded for minimal obfuscation)
     # Sports Roster settings
     sports_roster_enabled: bool = False
+    sports_roster_provider: str = "espn"  # espn, api_football
     api_football_key: str = ""
+    we_patcher_language: str = "en"  # en, es, fr, pt
     # Scraper settings
     scraper_frontend: str = (
         "emulationstation_base"  # emulationstation_base, esde_android, retroarch, pegasus

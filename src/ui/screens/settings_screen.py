@@ -86,6 +86,7 @@ class SettingsScreen:
     SPORTS_ROSTER_SECTION = [
         "--- SPORTS ROSTER ---",
         "Enable Sports Roster",
+        "Roster Soccer Data Source",
         "API-Football Key",
     ]
 
@@ -198,7 +199,9 @@ class SettingsScreen:
         items.append(self.SPORTS_ROSTER_SECTION[0])
         items.append(self.SPORTS_ROSTER_SECTION[1])
         if sports_roster_enabled:
-            items.append(self.SPORTS_ROSTER_SECTION[2])
+            items.append(self.SPORTS_ROSTER_SECTION[2])  # Roster Data Source
+            if settings.get("sports_roster_provider", "espn") == "api_football":
+                items.append(self.SPORTS_ROSTER_SECTION[3])  # API-Football Key
 
         # Add NSZ section
         nsz_enabled = settings.get("nsz_enabled", False)
@@ -294,6 +297,13 @@ class SettingsScreen:
             elif item == "Enable Sports Roster":
                 value = "ON" if settings.get("sports_roster_enabled", False) else "OFF"
                 items.append((item, value))
+            elif item == "Roster Soccer Data Source":
+                provider = settings.get("sports_roster_provider", "espn")
+                provider_labels = {
+                    "espn": "ESPN (Free)",
+                    "api_football": "API-Football",
+                }
+                items.append((item, provider_labels.get(provider, provider)))
             elif item == "API-Football Key":
                 key = settings.get("api_football_key", "")
                 if key:
@@ -503,6 +513,7 @@ class SettingsScreen:
                 "Show Download All Button": "toggle_download_all",
                 "Skip Installed Games": "toggle_exclude_installed",
                 "Enable Sports Roster": "toggle_sports_roster_enabled",
+                "Roster Soccer Data Source": "toggle_roster_provider",
                 "API-Football Key": "edit_api_football_key",
                 "Enable NSZ": "toggle_nsz_enabled",
                 "Scraper Frontend": "toggle_scraper_frontend",

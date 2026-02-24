@@ -1062,9 +1062,7 @@ class ScraperWizardModal:
         visible_items = (content_rect.height - 90) // item_height
         scroll_offset = max(0, highlighted - visible_items + 2)
 
-        for i in range(
-            scroll_offset, min(len(items), scroll_offset + visible_items)
-        ):
+        for i in range(scroll_offset, min(len(items), scroll_offset + visible_items)):
             item = items[i]
             is_selected = i == highlighted
 
