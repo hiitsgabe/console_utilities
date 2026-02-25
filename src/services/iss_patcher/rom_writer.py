@@ -57,9 +57,23 @@ _OFS_HAIR_SKIN1_RANGE2 = 0x2F0DF   # = 0x2F0EB - 12
 _OFS_HAIR_SKIN2_RANGE1 = 0x2ECAF   # = 0x2ECBB - 12
 _OFS_HAIR_SKIN2_RANGE2 = 0x2F1DF   # = 0x2F1EB - 12
 
-# Flag colors: 10 bytes per team (4 colors × 2 bytes + 2 padding)
-_OFS_FLAG_COLORS_RANGE1 = 0x2DD91  # 18 teams
-_OFS_FLAG_COLORS_RANGE2 = 0x2DE4F  # 9 teams
+# Flag tile pointer table: 4 bytes per team (2 pointers × 2 bytes), P48000 format
+_OFS_FLAG_TILE_PTRS = 0x941A       # 27 entries, 4 bytes each
+_OFS_FLAG_TILE_DATA = 0x48000      # Start of flag tile data region
+
+# Flag colors: direct address lookup per team (variable spacing in ROM)
+# Each entry: 4 colors × 2 bytes BGR555 (shirt_number, flag_color1, flag_color2, flag_color3)
+_FLAG_COLOR_ADDRS = {
+    "Germany": 0x2DD91, "England": 0x2DD9D, "Italy": 0x2DDA5,
+    "Holland": 0x2DDAF, "France": 0x2DDB9, "Spain": 0x2DDC5,
+    "Belgium": 0x2DDCD, "Ireland": 0x2DDD9, "Colombia": 0x2DDE1,
+    "Brazil": 0x2DDEB, "Argentina": 0x2DDF7, "Mexico": 0x2DDFF,
+    "Nigeria": 0x2DE09, "Cameroon": 0x2DE13, "U.S.A.": 0x2DE1D,
+    "Bulgaria": 0x2DE27, "Romania": 0x2DE31, "Sweden": 0x2DE3B,
+    "Scotland": 0x2DE4F, "S.Korea": 0x2DE59, "Russia": 0x2DE6F,
+    "Switz": 0x2DE77, "Denmark": 0x2DE81, "Austria": 0x2DE8B,
+    "Wales": 0x2DE95, "Norway": 0x2DE9F,
+}
 
 # Predominant color byte
 _OFS_PREDOMINANT_COLOR = 0x8DB2    # 1 byte per team, enum order
@@ -95,17 +109,6 @@ _KIT_RANGE2_TEAMS = [
 # GK range 1 is same as kit range 1 but without Super Star (18 teams)
 _GK_RANGE1_TEAMS = _KIT_RANGE1_TEAMS[:18]
 
-# Flag color team orderings
-_FLAG_RANGE1_TEAMS = [
-    "Germany", "England", "Italy", "Holland", "France", "Spain", "Belgium",
-    "Ireland", "Colombia", "Brazil", "Argentina", "Mexico", "Nigeria",
-    "Cameroon", "U.S.A.", "Bulgaria", "Romania", "Sweden",
-]
-
-_FLAG_RANGE2_TEAMS = [
-    "Scotland", "S.Korea", "Super Star", "Russia", "Switz", "Denmark",
-    "Austria", "Wales", "Norway",
-]
 
 # ── Team name text character widths (pixels) ──────────────────────────────
 _NAME_CHAR_WIDTHS = {"I": 7, ".": 7, "M": 8, "N": 8, "T": 8, "W": 8}
@@ -502,6 +505,45 @@ def _encode_p17000(address: int) -> bytes:
     return bytes([b1, b2])
 
 
+def _encode_p48000(address: int) -> bytes:
+    """Encode ROM address as P48000 pointer [low, high] (bank $09/$89)."""
+    raw = address - 0x40000
+    b1 = raw & 0xFF
+    b2 = (raw >> 8) & 0xFF
+    return bytes([b1, b2])
+
+
+def _make_solid_4bpp_tile(color_code: int) -> bytes:
+    """Create a solid 8×8 4bpp SNES tile (32 bytes) filled with one color.
+
+    4bpp interleaved: bytes 0-15 = bitplanes 0,1; bytes 16-31 = bitplanes 2,3.
+    Each row = 2 bytes per bitplane pair.
+    """
+    bp0 = 0xFF if (color_code & 1) else 0x00
+    bp1 = 0xFF if (color_code & 2) else 0x00
+    bp2 = 0xFF if (color_code & 4) else 0x00
+    bp3 = 0xFF if (color_code & 8) else 0x00
+
+    data = bytearray(32)
+    for row in range(8):
+        data[row * 2] = bp0        # bitplane 0
+        data[row * 2 + 1] = bp1    # bitplane 1
+        data[16 + row * 2] = bp2   # bitplane 2
+        data[16 + row * 2 + 1] = bp3  # bitplane 3
+    return bytes(data)
+
+
+# 4bpp color codes for flag tiles (SNES palette indices)
+_FLAG_COLOR_1 = 0x0C  # Palette index 12 → flag_color_1 (primary)
+_FLAG_COLOR_2 = 0x0D  # Palette index 13 → flag_color_2 (alternate)
+
+
+def _make_flag_half(color_code: int) -> bytes:
+    """Create one flag half: 2 solid tiles side by side (64 bytes decompressed)."""
+    tile = _make_solid_4bpp_tile(color_code)
+    return tile + tile
+
+
 class ISSRomWriter:
     def __init__(self, rom_path: str, output_path: str, header_offset: int = 0):
         _init_encoding()
@@ -674,31 +716,55 @@ class ISSRomWriter:
 
         self._f.write(bytes(existing))
 
-    def write_flag_colors(self, enum_index: int, team: ISSTeamRecord):
-        """Write flag colors for a team.
+    def write_flag_tiles_and_colors(
+        self,
+        patched_colors: dict,
+    ):
+        """Write simple two-band flag tiles and team colors for all patched teams.
 
-        4 colors per flag, 10 bytes per team (4 × 2 bytes + 2 padding).
+        Creates a simple rectangular flag design (top=primary, bottom=alternate)
+        and writes it once. Points all patched team flag entries to this design.
+        Sets each team's flag palette to its primary/alternate colors.
+
+        patched_colors: dict of {slot_index: (primary_rgb, alt_rgb)} for teams.
         """
-        if not team.flag_colors:
-            return
+        # Step 1: Create simple two-band flag tile data
+        # Top half: all COLOR_1 (primary), Bottom half: all COLOR_2 (alternate)
+        top_raw = _make_flag_half(_FLAG_COLOR_1)
+        bot_raw = _make_flag_half(_FLAG_COLOR_2)
+        top_compressed = _konami_compress_literal(top_raw)
+        bot_compressed = _konami_compress_literal(bot_raw)
 
-        enum_name = TEAM_ENUM_ORDER[enum_index]
+        # Step 2: Write both compressed halves at start of flag data region
+        top_addr = _OFS_FLAG_TILE_DATA
+        bot_addr = top_addr + len(top_compressed)
+        self._seek(top_addr)
+        self._f.write(top_compressed)
+        self._seek(bot_addr)
+        self._f.write(bot_compressed)
 
-        if enum_name in _FLAG_RANGE1_TEAMS:
-            base = _OFS_FLAG_COLORS_RANGE1
-            pos = _FLAG_RANGE1_TEAMS.index(enum_name)
-        elif enum_name in _FLAG_RANGE2_TEAMS:
-            base = _OFS_FLAG_COLORS_RANGE2
-            pos = _FLAG_RANGE2_TEAMS.index(enum_name)
-        else:
-            return
+        # Build P48000 pointer entry for our flag (4 bytes: top_ptr + bot_ptr)
+        flag_entry = _encode_p48000(top_addr) + _encode_p48000(bot_addr)
 
-        self._seek(base + pos * 10)
-        data = bytearray(10)
-        for i, color in enumerate(team.flag_colors[:4]):
-            c = _rgb_to_bgr555(*color)
-            struct.pack_into("<H", data, i * 2, c)
-        self._f.write(bytes(data))
+        # Step 3: Update flag pointer table for patched teams
+        for slot_index in patched_colors:
+            self._seek(_OFS_FLAG_TILE_PTRS + slot_index * 4)
+            self._f.write(flag_entry)
+
+        # Step 4: Write flag colors for each patched team
+        for slot_index, (primary, alt) in patched_colors.items():
+            enum_name = TEAM_ENUM_ORDER[slot_index]
+            addr = _FLAG_COLOR_ADDRS.get(enum_name)
+            if addr is None:
+                continue
+            # 8 bytes: shirt_number(white), flag_color1(primary), flag_color2(alt), flag_color3(primary)
+            data = bytearray(8)
+            struct.pack_into("<H", data, 0, _rgb_to_bgr555(255, 255, 255))  # shirt number
+            struct.pack_into("<H", data, 2, _rgb_to_bgr555(*primary))       # COLOR_1
+            struct.pack_into("<H", data, 4, _rgb_to_bgr555(*alt))           # COLOR_2
+            struct.pack_into("<H", data, 6, _rgb_to_bgr555(*primary))       # COLOR_3
+            self._seek(addr)
+            self._f.write(bytes(data))
 
     def write_team_name_texts(self, patched_names: dict):
         """Write team names to the selection-screen text data.

@@ -138,6 +138,7 @@ class ISSPatcher:
         # Collect patched team names (only for teams being replaced)
         patched_names = {}
         patched_tile_names = {}  # Short codes for in-game name tiles (8×32px)
+        patched_flag_colors = {}  # {slot_index: (primary_rgb, alt_rgb)}
 
         for i, mapping in enumerate(slot_mapping):
             progress = i / max(total, 1)
@@ -180,6 +181,17 @@ class ISSPatcher:
             patched_names[mapping.slot_index] = iss_team.name
             # Short code for in-game tile (3-letter abbreviation)
             patched_tile_names[mapping.slot_index] = iss_team.short_name
+            # Flag colors: primary and alternate
+            if primary and alt:
+                patched_flag_colors[mapping.slot_index] = (primary, alt)
+            elif primary:
+                patched_flag_colors[mapping.slot_index] = (primary, primary)
+
+        if on_progress:
+            on_progress(0.80, "Writing flags...")
+
+        # Write simple two-band flag tiles and colors
+        writer.write_flag_tiles_and_colors(patched_flag_colors)
 
         if on_progress:
             on_progress(0.85, "Writing team names...")
