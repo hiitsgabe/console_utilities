@@ -199,6 +199,9 @@ class ISSPatcher:
         # Write patched team names to selection screen text
         writer.write_team_name_texts(patched_names)
 
+        # Replace team descriptions with full team names
+        writer.write_team_descriptions(patched_names)
+
         if on_progress:
             on_progress(0.90, "Writing in-game name tiles...")
 
