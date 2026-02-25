@@ -1078,6 +1078,9 @@ class ConsoleUtilitiesApp:
                         max(len(players) - 1, 0),
                     )
 
+        elif we.active_modal == "color_picker":
+            self._handle_color_picker_navigation(direction)
+
         elif we.active_modal is None:
             # Main we_patcher menu
             from ui.screens.we_patcher_screen import we_patcher_screen
@@ -1355,6 +1358,14 @@ class ConsoleUtilitiesApp:
                 self._go_back()
                 return
 
+        # Check color picker clicks (team rows + color swatches)
+        if (
+            (self.state.mode == "we_patcher" and self.state.we_patcher.active_modal == "color_picker")
+            or (self.state.mode == "iss_patcher" and self.state.iss_patcher.active_modal == "color_picker")
+        ):
+            self._handle_color_picker_click(x, y)
+            return
+
         # Check confirm modal buttons
         if self.state.confirm_modal.show:
             if self.state.ui_rects.confirm_ok_button:
@@ -1618,12 +1629,16 @@ class ConsoleUtilitiesApp:
             if self.state.we_patcher.active_modal:
                 self.state.we_patcher.active_modal = None
             else:
+                from state import WePatcherState
+                self.state.we_patcher = WePatcherState()
                 self.state.mode = "sports_patcher"
                 self.state.highlighted = 0
         elif self.state.mode == "iss_patcher":
             if self.state.iss_patcher.active_modal:
                 self.state.iss_patcher.active_modal = None
             else:
+                from state import ISSPatcherState
+                self.state.iss_patcher = ISSPatcherState()
                 self.state.mode = "sports_patcher"
                 self.state.highlighted = 0
         elif self.state.mode == "system_settings":
@@ -3238,6 +3253,12 @@ class ConsoleUtilitiesApp:
             ):
                 self._process_renames()
             return
+
+        # Handle patcher modals — Start should not navigate away
+        if self.state.mode in ("we_patcher", "iss_patcher"):
+            patcher = self.state.active_patcher
+            if patcher.active_modal:
+                return
 
         # Close any open modals
         self.state.show_search_input = False
@@ -5567,6 +5588,9 @@ class ConsoleUtilitiesApp:
             if we.patch_complete or we.patch_error:
                 we.active_modal = None
             return
+        if we.active_modal == "color_picker":
+            self._handle_color_picker_selection()
+            return
 
         from ui.screens.we_patcher_screen import we_patcher_screen
 
@@ -5590,6 +5614,8 @@ class ConsoleUtilitiesApp:
                 )
                 if league_id and season:
                     self._start_league_fetch(league_id, season)
+        elif action == "set_colors":
+            self._open_color_picker()
         elif action == "select_rom":
             self._open_folder_browser("we_patcher_rom")
         elif action == "patch_rom":
@@ -5834,6 +5860,12 @@ class ConsoleUtilitiesApp:
         if not we.league_data or not we.rom_path:
             return
 
+        # Apply cached team colors (for API-Football which lacks color data)
+        provider = self.settings.get("sports_roster_provider", "espn")
+        if provider == "api_football":
+            from services.team_color_cache import apply_cached_colors
+            apply_cached_colors(WE_PATCHER_CACHE_DIR, we.league_data)
+
         # Auto-generate slot mapping if not already present
         if not we.slot_mapping and we.rom_info:
             from services.we_patcher import WePatcher
@@ -5980,6 +6012,9 @@ class ConsoleUtilitiesApp:
                         iss.roster_preview_player_index + 1, max(len(players) - 1, 0)
                     )
 
+        elif iss.active_modal == "color_picker":
+            self._handle_color_picker_navigation(direction)
+
         elif iss.active_modal is None:
             from ui.screens.iss_patcher_screen import iss_patcher_screen
 
@@ -6014,6 +6049,9 @@ class ConsoleUtilitiesApp:
             if iss.patch_complete or iss.patch_error:
                 iss.active_modal = None
             return
+        if iss.active_modal == "color_picker":
+            self._handle_color_picker_selection()
+            return
 
         from ui.screens.iss_patcher_screen import iss_patcher_screen
 
@@ -6036,6 +6074,8 @@ class ConsoleUtilitiesApp:
                 )
                 if league_id and season:
                     self._start_iss_league_fetch(league_id, season)
+        elif action == "set_colors":
+            self._open_color_picker()
         elif action == "select_rom":
             self._open_folder_browser("iss_patcher_rom")
         elif action == "patch_rom":
@@ -6199,6 +6239,12 @@ class ConsoleUtilitiesApp:
         if not iss.league_data or not iss.rom_path:
             return
 
+        # Apply cached team colors (for API-Football which lacks color data)
+        provider = self.settings.get("sports_roster_provider", "espn")
+        if provider == "api_football":
+            from services.team_color_cache import apply_cached_colors
+            apply_cached_colors(WE_PATCHER_CACHE_DIR, iss.league_data)
+
         if not iss.slot_mapping and iss.rom_info:
             from services.iss_patcher import ISSPatcher
             patcher = ISSPatcher(api_key, WE_PATCHER_CACHE_DIR)
@@ -6244,6 +6290,126 @@ class ConsoleUtilitiesApp:
                 iss.is_patching = False
 
         threading.Thread(target=_patch, daemon=True).start()
+
+    # ── Color Picker (shared by WE + ISS patchers) ──────────────── #
+
+    def _open_color_picker(self):
+        """Open the team color picker modal and apply any cached colors."""
+        from constants import WE_PATCHER_CACHE_DIR
+        from services.team_color_cache import apply_cached_colors
+
+        patcher = self.state.active_patcher
+        # Apply any previously cached colors first
+        apply_cached_colors(WE_PATCHER_CACHE_DIR, patcher.league_data)
+        patcher.color_picker.team_index = 0
+        patcher.color_picker.color_index = 0
+        patcher.color_picker.picking = "primary"
+        patcher.active_modal = "color_picker"
+
+    def _handle_color_picker_click(self, x, y):
+        """Handle click/tap in the color picker modal."""
+        from constants import WE_PATCHER_CACHE_DIR
+        from services.team_color_cache import COLOR_PALETTE, set_team_color
+
+        rects = self.state.ui_rects.rects
+        patcher = self.state.active_patcher
+        cp = patcher.color_picker
+        league_data = patcher.league_data
+        if not league_data or not hasattr(league_data, "teams"):
+            return
+
+        teams = league_data.teams
+
+        # Check team row clicks
+        for rect, team_idx in rects.get("color_picker_teams", []):
+            if rect.collidepoint(x, y):
+                cp.team_index = team_idx
+                cp.picking = "primary"
+                cp.color_index = 0
+                return
+
+        # Check primary swatch clicks
+        for rect, color_idx in rects.get("color_picker_primary", []):
+            if rect.collidepoint(x, y):
+                team = teams[cp.team_index].team
+                _, hex_color = COLOR_PALETTE[color_idx]
+                team.color = hex_color
+                set_team_color(WE_PATCHER_CACHE_DIR, team.id, team.color, team.alternate_color or "")
+                cp.picking = "secondary"
+                cp.color_index = color_idx
+                return
+
+        # Check secondary swatch clicks
+        for rect, color_idx in rects.get("color_picker_secondary", []):
+            if rect.collidepoint(x, y):
+                team = teams[cp.team_index].team
+                _, hex_color = COLOR_PALETTE[color_idx]
+                team.alternate_color = hex_color
+                set_team_color(WE_PATCHER_CACHE_DIR, team.id, team.color or "", team.alternate_color)
+                # Advance to next team
+                cp.picking = "primary"
+                cp.color_index = 0
+                if cp.team_index < len(teams) - 1:
+                    cp.team_index += 1
+                return
+
+    def _handle_color_picker_selection(self):
+        """Handle select press in the color picker modal."""
+        from constants import WE_PATCHER_CACHE_DIR
+        from services.team_color_cache import COLOR_PALETTE, set_team_color
+
+        patcher = self.state.active_patcher
+        cp = patcher.color_picker
+        league_data = patcher.league_data
+        if not league_data or not hasattr(league_data, "teams"):
+            return
+
+        teams = league_data.teams
+        if cp.team_index < 0 or cp.team_index >= len(teams):
+            return
+
+        team = teams[cp.team_index].team
+        _, hex_color = COLOR_PALETTE[cp.color_index]
+
+        if cp.picking == "primary":
+            team.color = hex_color
+            set_team_color(WE_PATCHER_CACHE_DIR, team.id, team.color, team.alternate_color or "")
+            # Advance to secondary — keep color_index so user can confirm or change
+            cp.picking = "secondary"
+        else:
+            team.alternate_color = hex_color
+            set_team_color(WE_PATCHER_CACHE_DIR, team.id, team.color or "", team.alternate_color)
+            # Advance to next team
+            cp.picking = "primary"
+            cp.color_index = 0
+            if cp.team_index < len(teams) - 1:
+                cp.team_index += 1
+
+    def _handle_color_picker_navigation(self, direction):
+        """Handle D-pad navigation in the color picker modal."""
+        from services.team_color_cache import COLOR_PALETTE
+
+        patcher = self.state.active_patcher
+        cp = patcher.color_picker
+        league_data = patcher.league_data
+        if not league_data or not hasattr(league_data, "teams"):
+            return
+
+        num_teams = len(league_data.teams)
+        num_colors = len(COLOR_PALETTE)
+
+        if direction == "up":
+            cp.team_index = (cp.team_index - 1) % num_teams
+            cp.picking = "primary"
+            cp.color_index = 0
+        elif direction == "down":
+            cp.team_index = (cp.team_index + 1) % num_teams
+            cp.picking = "primary"
+            cp.color_index = 0
+        elif direction == "left":
+            cp.color_index = (cp.color_index - 1) % num_colors
+        elif direction == "right":
+            cp.color_index = (cp.color_index + 1) % num_colors
 
 
 def main():

@@ -34,6 +34,7 @@ from .modals.port_details_modal import PortDetailsModal
 from .modals.league_browser_modal import LeagueBrowserModal
 from .modals.roster_preview_modal import RosterPreviewModal
 from .modals.patch_progress_modal import PatchProgressModal
+from .modals.color_picker_modal import ColorPickerModal
 from .portmaster_screen import PortMasterScreen
 from .sports_patcher_screen import SportsPatcherScreen
 from .we_patcher_screen import WePatcherScreen
@@ -91,6 +92,7 @@ class ScreenManager:
         self.league_browser_modal = LeagueBrowserModal(theme)
         self.roster_preview_modal = RosterPreviewModal(theme)
         self.patch_progress_modal = PatchProgressModal(theme)
+        self.color_picker_modal = ColorPickerModal(theme)
 
         # Initialize generic status footer
         self.status_footer = StatusFooter(theme)
@@ -487,6 +489,15 @@ class ScreenManager:
             rects["item_rects"] = item_rects
             return rects
 
+        if state.we_patcher.active_modal == "color_picker":
+            cp_rects = self.color_picker_modal.render(screen, state)
+            rects["modal"] = cp_rects["modal_rect"]
+            rects["close"] = cp_rects["close_rect"]
+            rects["color_picker_teams"] = cp_rects["team_rects"]
+            rects["color_picker_primary"] = cp_rects["primary_rects"]
+            rects["color_picker_secondary"] = cp_rects["secondary_rects"]
+            return rects
+
         # ISS Patcher modals (reuse league_browser, roster_preview, patch_progress)
         if state.iss_patcher.active_modal == "league_browser":
             modal_rect, content_rect, close_rect, char_rects, item_rects = (
@@ -514,6 +525,15 @@ class ScreenManager:
             rects["modal"] = modal_rect
             rects["close"] = close_rect
             rects["item_rects"] = item_rects
+            return rects
+
+        if state.iss_patcher.active_modal == "color_picker":
+            cp_rects = self.color_picker_modal.render(screen, state)
+            rects["modal"] = cp_rects["modal_rect"]
+            rects["close"] = cp_rects["close_rect"]
+            rects["color_picker_teams"] = cp_rects["team_rects"]
+            rects["color_picker_primary"] = cp_rects["primary_rects"]
+            rects["color_picker_secondary"] = cp_rects["secondary_rects"]
             return rects
 
         # Render main screens based on mode

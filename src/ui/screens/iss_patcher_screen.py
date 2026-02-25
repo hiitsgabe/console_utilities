@@ -68,28 +68,50 @@ class ISSPatcherScreen:
             "preview_rosters" if (iss.league_data or iss.selected_league) else "locked",
         ))
 
-        # ── Select ROM ────────────────────────────────────────────────────
-        if iss.rom_path and iss.rom_valid:
-            step3_value = os.path.basename(iss.rom_path)
-        elif iss.rom_path:
-            step3_value = "Invalid ROM"
-        else:
-            step3_value = "Not selected"
+        # ── Set Team Colors (API-Football only) ──────────────────────────
+        if provider == "api_football":
+            from services.team_color_cache import all_teams_have_colors
+            if iss.league_data and all_teams_have_colors(iss.league_data):
+                colors_value = "All colors set"
+            elif iss.league_data:
+                colors_value = "Colors required"
+            else:
+                colors_value = "Complete step 2 first"
+            items.append((
+                "3. Set Team Colors",
+                colors_value,
+                "set_colors" if iss.league_data else "locked",
+            ))
 
-        items.append(("3. Select ROM (.sfc)", step3_value, "select_rom"))
+        # ── Select ROM ────────────────────────────────────────────────────
+        step_rom = "4" if provider == "api_football" else "3"
+        if iss.rom_path and iss.rom_valid:
+            rom_value = os.path.basename(iss.rom_path)
+        elif iss.rom_path:
+            rom_value = "Invalid ROM"
+        else:
+            rom_value = "Not selected"
+        items.append((f"{step_rom}. Select ROM (.sfc)", rom_value, "select_rom"))
 
         # ── Patch ROM ─────────────────────────────────────────────────────
-        if iss.patch_complete:
-            step4_value = "Complete"
-        elif iss.league_data and iss.rom_valid:
-            step4_value = "Ready to patch"
+        step_patch = "5" if provider == "api_football" else "4"
+        if provider == "api_football":
+            from services.team_color_cache import all_teams_have_colors as _athc
+            colors_ok = iss.league_data and _athc(iss.league_data)
         else:
-            step4_value = "Complete steps 1+3 first"
+            colors_ok = True
+
+        if iss.patch_complete:
+            patch_value = "Complete"
+        elif iss.league_data and iss.rom_valid and colors_ok:
+            patch_value = "Ready to patch"
+        else:
+            patch_value = f"Complete steps 1+{step_rom} first"
 
         items.append((
-            "4. Patch ROM",
-            step4_value,
-            "patch_rom" if (iss.league_data and iss.rom_valid) else "locked",
+            f"{step_patch}. Patch ROM",
+            patch_value,
+            "patch_rom" if (iss.league_data and iss.rom_valid and colors_ok) else "locked",
         ))
 
         return items
