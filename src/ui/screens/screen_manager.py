@@ -36,6 +36,7 @@ from .modals.roster_preview_modal import RosterPreviewModal
 from .modals.patch_progress_modal import PatchProgressModal
 from .modals.color_picker_modal import ColorPickerModal
 from .portmaster_screen import PortMasterScreen
+from .scraper_menu_screen import ScraperMenuScreen
 from .sports_patcher_screen import SportsPatcherScreen
 from .we_patcher_screen import WePatcherScreen
 from .iss_patcher_screen import ISSPatcherScreen
@@ -67,6 +68,7 @@ class ScreenManager:
         self.downloads_screen = DownloadsScreen(theme)
         self.scraper_downloads_screen = ScraperDownloadsScreen(theme)
         self.portmaster_screen = PortMasterScreen(theme)
+        self.scraper_menu_screen = ScraperMenuScreen(theme)
         self.sports_patcher_screen = SportsPatcherScreen(theme)
         self.we_patcher_screen = WePatcherScreen(theme)
         self.iss_patcher_screen = ISSPatcherScreen(theme)
@@ -679,6 +681,14 @@ class ScreenManager:
                 search_query=pm.search_query,
                 get_thumbnail=get_thumbnail,
                 text_scroll_offset=state.text_scroll_offset,
+            )
+            rects["back"] = back_rect
+            rects["item_rects"] = item_rects
+            rects["scroll_offset"] = scroll_offset
+
+        elif state.mode == "scraper_menu":
+            back_rect, item_rects, scroll_offset = self.scraper_menu_screen.render(
+                screen, state.highlighted, settings
             )
             rects["back"] = back_rect
             rects["item_rects"] = item_rects

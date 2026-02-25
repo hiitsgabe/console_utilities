@@ -881,7 +881,7 @@ class ConsoleUtilitiesApp:
                 self.state.highlighted = (self.state.highlighted + 1) % max_items
                 self.state.text_scroll_offset = 0
 
-        elif self.state.mode in ("settings", "utils"):
+        elif self.state.mode in ("settings", "utils", "scraper_menu"):
             if self.state.mode == "settings":
                 from ui.screens.settings_screen import settings_screen
 
@@ -889,6 +889,11 @@ class ConsoleUtilitiesApp:
                 _, divider_indices = settings_screen._get_settings_items(
                     self.settings, self.data
                 )
+            elif self.state.mode == "scraper_menu":
+                from ui.screens.scraper_menu_screen import scraper_menu_screen
+
+                max_items = scraper_menu_screen.get_max_items(self.settings)
+                _, divider_indices = scraper_menu_screen._get_items(self.settings)
             else:
                 from ui.screens.utils_screen import utils_screen
 
@@ -1479,7 +1484,7 @@ class ConsoleUtilitiesApp:
                 self._go_back()
                 return
 
-        # Check Season arrow buttons (iss_patcher main menu only)
+        # Check Season / Language arrow buttons (iss_patcher main menu only)
         if self.state.mode == "iss_patcher" and self.state.iss_patcher.active_modal is None:
             left_arrow = self.state.ui_rects.rects.get("season_left_arrow")
             right_arrow = self.state.ui_rects.rects.get("season_right_arrow")
@@ -1489,7 +1494,6 @@ class ConsoleUtilitiesApp:
             if right_arrow and right_arrow.collidepoint(x, y):
                 self._handle_iss_patcher_navigation("right")
                 return
-
         # Check Season / Language arrow buttons (we_patcher main menu only)
         if self.state.mode == "we_patcher" and self.state.we_patcher.active_modal is None:
             left_arrow = self.state.ui_rects.rects.get("season_left_arrow")
@@ -1668,10 +1672,10 @@ class ConsoleUtilitiesApp:
                 self.state.mode = "systems_list"
             self.state.highlighted = 0
         elif self.state.mode == "scraper_downloads":
-            # Go back to utils; scraping continues in background
-            self.state.mode = "utils"
+            # Go back to scraper menu; scraping continues in background
+            self.state.mode = "scraper_menu"
             self.state.highlighted = 0
-        elif self.state.mode in ("settings", "utils", "credits"):
+        elif self.state.mode in ("settings", "utils", "credits", "scraper_menu"):
             self.state.mode = "systems"
             self.state.highlighted = 0
 
@@ -1757,6 +1761,9 @@ class ConsoleUtilitiesApp:
                 # Don't reset systems_list_highlighted to preserve position
             elif action == "portmaster":
                 self._enter_portmaster()
+            elif action == "scraper_menu":
+                self.state.mode = "scraper_menu"
+                self.state.highlighted = 0
             elif action == "sports_patcher":
                 self.state.mode = "sports_patcher"
                 self.state.highlighted = 0
@@ -1813,6 +1820,9 @@ class ConsoleUtilitiesApp:
 
         elif self.state.mode == "utils":
             self._handle_utils_selection()
+
+        elif self.state.mode == "scraper_menu":
+            self._handle_scraper_menu_selection()
 
         elif self.state.mode == "add_systems":
             self._handle_add_systems_selection()
@@ -2049,14 +2059,14 @@ class ConsoleUtilitiesApp:
                 self.state.we_patcher.selected_season = _dt.now().year
         elif action == "edit_api_football_key":
             self._show_api_football_key_input()
-        elif action == "toggle_ia_enabled":
-            self.settings["ia_enabled"] = not self.settings.get("ia_enabled", False)
+        elif action == "toggle_scraper_enabled":
+            self.settings["scraper_enabled"] = not self.settings.get(
+                "scraper_enabled", False
+            )
             save_settings(self.settings)
-        elif action == "ia_login":
-            self._show_ia_login()
-        elif action == "toggle_nsz_enabled":
-            self.settings["nsz_enabled"] = not self.settings.get("nsz_enabled", False)
-            save_settings(self.settings)
+            # Reset highlight if disabling scraper to avoid out of bounds
+            if not self.settings.get("scraper_enabled", False):
+                self.state.highlighted = 0
         elif action == "toggle_scraper_frontend":
             frontends = [
                 "emulationstation_base",
@@ -2068,52 +2078,14 @@ class ConsoleUtilitiesApp:
             idx = frontends.index(current) if current in frontends else 0
             self.settings["scraper_frontend"] = frontends[(idx + 1) % len(frontends)]
             save_settings(self.settings)
-        elif action == "toggle_scraper_provider":
-            providers = [
-                "libretro",
-                "screenscraper",
-                "thegamesdb",
-                "rawg",
-                "igdb",
-            ]
-            current = self.settings.get("scraper_provider", "libretro")
-            idx = providers.index(current) if current in providers else 0
-            self.settings["scraper_provider"] = providers[(idx + 1) % len(providers)]
+        elif action == "toggle_ia_enabled":
+            self.settings["ia_enabled"] = not self.settings.get("ia_enabled", False)
             save_settings(self.settings)
-        elif action == "toggle_scraper_fallback":
-            current = self.settings.get("scraper_fallback_enabled", True)
-            self.settings["scraper_fallback_enabled"] = not current
+        elif action == "ia_login":
+            self._show_ia_login()
+        elif action == "toggle_nsz_enabled":
+            self.settings["nsz_enabled"] = not self.settings.get("nsz_enabled", False)
             save_settings(self.settings)
-        elif action == "toggle_mixed_images":
-            current = self.settings.get("scraper_mixed_images", False)
-            self.settings["scraper_mixed_images"] = not current
-            save_settings(self.settings)
-        elif action == "cycle_parallel_downloads":
-            options = [1, 2, 3, 4, 5]
-            current = self.settings.get("scraper_parallel_downloads", 1)
-            idx = options.index(current) if current in options else 0
-            self.settings["scraper_parallel_downloads"] = options[
-                (idx + 1) % len(options)
-            ]
-            save_settings(self.settings)
-        elif action == "edit_scraper_preferred_system":
-            self._show_preferred_system_input()
-        elif action == "screenscraper_login":
-            self._show_screenscraper_login()
-        elif action == "thegamesdb_api_key":
-            self._show_thegamesdb_api_key_input()
-        elif action == "rawg_api_key":
-            self._show_rawg_api_key_input()
-        elif action == "igdb_login":
-            self._show_igdb_login()
-        elif action == "select_esde_media_path":
-            self._open_folder_browser("esde_media_path")
-        elif action == "select_esde_gamelists_path":
-            self._open_folder_browser("esde_gamelists_path")
-        elif action == "select_retroarch_thumbnails":
-            self._open_folder_browser("retroarch_thumbnails")
-        elif action == "add_to_frontend":
-            self._add_to_frontend()
         elif action == "check_for_updates":
             self._check_for_updates()
 
@@ -2426,16 +2398,71 @@ class ConsoleUtilitiesApp:
             self._open_folder_browser("extract_7z")
         elif action == "nsz_converter":
             self._open_folder_browser("nsz_converter")
-        elif action == "scrape_images":
-            self._show_scraper_wizard(batch_mode=False)
-        elif action == "batch_scrape":
-            self._show_scraper_wizard(batch_mode=True)
         elif action == "dedupe_games":
             self._show_dedupe_wizard()
         elif action == "clean_filenames":
             self._show_rename_wizard()
         elif action == "ghost_cleaner":
             self._show_ghost_cleaner()
+
+    def _handle_scraper_menu_selection(self):
+        """Handle scraper menu item selection."""
+        from ui.screens.scraper_menu_screen import scraper_menu_screen
+
+        action = scraper_menu_screen.get_action(self.state.highlighted, self.settings)
+
+        if action == "divider":
+            return
+        elif action == "scrape_images":
+            self._show_scraper_wizard(batch_mode=False)
+        elif action == "batch_scrape":
+            self._show_scraper_wizard(batch_mode=True)
+        elif action == "toggle_scraper_provider":
+            providers = [
+                "libretro",
+                "screenscraper",
+                "thegamesdb",
+                "rawg",
+                "igdb",
+            ]
+            current = self.settings.get("scraper_provider", "libretro")
+            idx = providers.index(current) if current in providers else 0
+            self.settings["scraper_provider"] = providers[(idx + 1) % len(providers)]
+            save_settings(self.settings)
+        elif action == "toggle_scraper_fallback":
+            current = self.settings.get("scraper_fallback_enabled", True)
+            self.settings["scraper_fallback_enabled"] = not current
+            save_settings(self.settings)
+        elif action == "toggle_mixed_images":
+            current = self.settings.get("scraper_mixed_images", False)
+            self.settings["scraper_mixed_images"] = not current
+            save_settings(self.settings)
+        elif action == "cycle_parallel_downloads":
+            options = [1, 2, 3, 4, 5]
+            current = self.settings.get("scraper_parallel_downloads", 1)
+            idx = options.index(current) if current in options else 0
+            self.settings["scraper_parallel_downloads"] = options[
+                (idx + 1) % len(options)
+            ]
+            save_settings(self.settings)
+        elif action == "edit_scraper_preferred_system":
+            self._show_preferred_system_input()
+        elif action == "screenscraper_login":
+            self._show_screenscraper_login()
+        elif action == "thegamesdb_api_key":
+            self._show_thegamesdb_api_key_input()
+        elif action == "rawg_api_key":
+            self._show_rawg_api_key_input()
+        elif action == "igdb_login":
+            self._show_igdb_login()
+        elif action == "select_esde_media_path":
+            self._open_folder_browser("esde_media_path")
+        elif action == "select_esde_gamelists_path":
+            self._open_folder_browser("esde_gamelists_path")
+        elif action == "select_retroarch_thumbnails":
+            self._open_folder_browser("retroarch_thumbnails")
+        elif action == "add_to_frontend":
+            self._add_to_frontend()
 
     def _show_dedupe_wizard(self):
         """Show the dedupe games wizard."""
@@ -6029,7 +6056,6 @@ class ConsoleUtilitiesApp:
                         iss.selected_season = max(2010, min(max_year, iss.selected_season + delta))
                         iss.league_data = None
                     return
-
             max_items = iss_patcher_screen.get_count(self.state, self.settings)
             if direction in ("up", "left"):
                 self.state.highlighted = (self.state.highlighted - 1) % max_items
@@ -6279,7 +6305,8 @@ class ConsoleUtilitiesApp:
                     iss.patch_status = msg
 
                 patcher.patch_rom(
-                    input_path, output_path, iss.league_data, iss.slot_mapping, progress
+                    input_path, output_path, iss.league_data, iss.slot_mapping,
+                    progress,
                 )
 
                 iss.patch_output_path = output_path

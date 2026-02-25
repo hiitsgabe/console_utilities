@@ -37,13 +37,6 @@ class UtilsScreen:
         "Extract RAR File",
     ]
 
-    # Scraper section items
-    SCRAPER_SECTION_ITEMS = [
-        "--- SCRAPER ---",  # Divider
-        "Scrape Game Images",
-        "Batch Scrape Folder",
-    ]
-
     # File management section items
     FILE_MANAGEMENT_SECTION_ITEMS = [
         "--- FILE MANAGEMENT ---",  # Divider
@@ -87,10 +80,6 @@ class UtilsScreen:
         # Add extraction section
         divider_indices.add(len(items))
         items.extend(self.EXTRACTION_SECTION_ITEMS)
-
-        # Add scraper section
-        divider_indices.add(len(items))
-        items.extend(self.SCRAPER_SECTION_ITEMS)
 
         # Add file management section
         divider_indices.add(len(items))
@@ -155,8 +144,6 @@ class UtilsScreen:
                 "Extract ZIP File": "extract_zip",
                 "Extract RAR File": "extract_rar",
                 "Extract 7z File": "extract_7z",
-                "Scrape Game Images": "scrape_images",
-                "Batch Scrape Folder": "batch_scrape",
                 "Dedupe Games": "dedupe_games",
                 "Clean File Names": "clean_filenames",
                 "Ghost File Cleaner": "ghost_cleaner",

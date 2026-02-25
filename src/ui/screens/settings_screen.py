@@ -2,14 +2,12 @@
 Settings screen - Application settings menu.
 """
 
-import os
 import pygame
 from typing import List, Dict, Any, Tuple, Optional, Set
-from xml.etree import ElementTree as ET
 
 from ui.theme import Theme, default_theme
 from ui.templates.list_screen import ListScreenTemplate
-from constants import APP_VERSION, BUILD_TARGET, SCRIPT_DIR
+from constants import APP_VERSION, BUILD_TARGET
 
 
 class SettingsScreen:
@@ -30,9 +28,9 @@ class SettingsScreen:
     # Systems section
     SYSTEMS_SECTION = [
         "--- GAME BACKUP ---",
-        "Select Backup Map Json",
-        "Add Game System from Backup",
-        "Games Backup Settings",
+        "Remote Games Bkp File",
+        "Add Game System",
+        "Games Systems Preference",
     ]
 
     # View options section
@@ -63,31 +61,19 @@ class SettingsScreen:
         "Internet Archive Login",  # Only shown when IA is enabled
     ]
 
-    # Scraper section
-    SCRAPER_SECTION = [
-        "--- SCRAPER ---",
-        "Scraper Frontend",
-        "Scraper Provider",
-        "Provider Fallback",  # Toggle fallback chain
-        "Preferred System",  # e.g. "psx", "snes" — filter scraper results by system
-        "Parallel Downloads",  # Number of parallel scraper workers (1-5)
-        "Mixed Images",  # Only shown when provider = screenscraper
-        "ScreenScraper Login",  # Only shown when provider = screenscraper
-        "TheGamesDB API Key",  # Only shown when provider = thegamesdb
-        "RAWG API Key",  # Only shown when provider = rawg
-        "IGDB Login",  # Only shown when provider = igdb
-        "ES-DE Media Path",  # Only shown when frontend = esde_android
-        "ES-DE Gamelists Path",  # Only shown when frontend = esde_android
-        "RetroArch Thumbnails",  # Only shown when frontend = retroarch
-        "Link App to Frontend",  # Register app in frontend gamelist
-    ]
-
     # Sports Roster section
     SPORTS_ROSTER_SECTION = [
         "--- SPORTS ROSTER ---",
-        "Enable Sports Roster",
+        "Enable Sports Updater",
         "Roster Soccer Data Source",
         "API-Football Key",
+    ]
+
+    # Scraper section
+    SCRAPER_SECTION = [
+        "--- ARTBOX GAMES SCRAPER ---",
+        "Enable Scraper",
+        "Scraper Frontend",
     ]
 
     # NSZ section
@@ -128,6 +114,10 @@ class SettingsScreen:
         # Check if data has a list_systems entry (backup list available)
         has_backup_list = data and any(d.get("list_systems") is True for d in data)
 
+        # Add Input section first (Remap Controller)
+        divider_indices.add(len(items))
+        items.extend(self.INPUT_SECTION)
+
         # Add Directories section
         divider_indices.add(len(items))
         items.extend(self.DIRECTORIES_SECTION)
@@ -135,11 +125,11 @@ class SettingsScreen:
         # Add Systems section
         divider_indices.add(len(items))
         items.append(self.SYSTEMS_SECTION[0])  # Divider
-        items.append(self.SYSTEMS_SECTION[1])  # Select Backup Map Json
-        # Only show "Add Game System from Backup" when data has a list_systems entry
+        items.append(self.SYSTEMS_SECTION[1])  # Remote Games Bkp File
+        # Only show "Add Game System" when data has a list_systems entry
         if has_backup_list:
-            items.append(self.SYSTEMS_SECTION[2])  # Add Game System from Backup
-        items.append(self.SYSTEMS_SECTION[3])  # Games Backup Settings
+            items.append(self.SYSTEMS_SECTION[2])  # Add Game System
+        items.append(self.SYSTEMS_SECTION[3])  # Games Systems Preference
 
         # Add View Options section
         divider_indices.add(len(items))
@@ -150,10 +140,6 @@ class SettingsScreen:
             divider_indices.add(len(items))
             items.extend(self.PORTMASTER_SECTION)
 
-        # Add Input section
-        divider_indices.add(len(items))
-        items.extend(self.INPUT_SECTION)
-
         # Add Internet Archive section
         ia_enabled = settings.get("ia_enabled", False)
         divider_indices.add(len(items))
@@ -162,36 +148,6 @@ class SettingsScreen:
         # Only show login if IA is enabled
         if ia_enabled:
             items.append(self.IA_SECTION[2])  # Login
-
-        # Add Scraper section
-        scraper_frontend = settings.get("scraper_frontend", "emulationstation_base")
-        scraper_provider = settings.get("scraper_provider", "libretro")
-        divider_indices.add(len(items))
-        items.append(self.SCRAPER_SECTION[0])  # Divider
-        items.append(self.SCRAPER_SECTION[1])  # Frontend
-        items.append(self.SCRAPER_SECTION[2])  # Provider
-        items.append(self.SCRAPER_SECTION[3])  # Fallback
-        items.append(self.SCRAPER_SECTION[4])  # Preferred System
-        items.append(self.SCRAPER_SECTION[5])  # Parallel Downloads
-        # Show provider-specific settings
-        if scraper_provider == "screenscraper":
-            items.append(self.SCRAPER_SECTION[6])  # Mixed Images
-            items.append(self.SCRAPER_SECTION[7])  # SS Login
-        elif scraper_provider == "thegamesdb":
-            items.append(self.SCRAPER_SECTION[8])  # TGDB Key
-        elif scraper_provider == "rawg":
-            items.append(self.SCRAPER_SECTION[9])  # RAWG Key
-        elif scraper_provider == "igdb":
-            items.append(self.SCRAPER_SECTION[10])  # IGDB Login
-        # Show frontend-specific paths
-        if scraper_frontend == "esde_android":
-            items.append(self.SCRAPER_SECTION[11])  # ES-DE Media Path
-            items.append(self.SCRAPER_SECTION[12])  # ES-DE Gamelists Path
-        elif scraper_frontend == "retroarch":
-            items.append(self.SCRAPER_SECTION[13])  # RetroArch Thumbnails
-        # Only show "Link App to Frontend" if not already in gamelist.xml
-        if not self._is_linked_to_frontend(settings):
-            items.append(self.SCRAPER_SECTION[14])  # Link App to Frontend
 
         # Add Sports Roster section
         sports_roster_enabled = settings.get("sports_roster_enabled", False)
@@ -202,6 +158,14 @@ class SettingsScreen:
             items.append(self.SPORTS_ROSTER_SECTION[2])  # Roster Data Source
             if settings.get("sports_roster_provider", "espn") == "api_football":
                 items.append(self.SPORTS_ROSTER_SECTION[3])  # API-Football Key
+
+        # Add Scraper section
+        scraper_enabled = settings.get("scraper_enabled", False)
+        divider_indices.add(len(items))
+        items.append(self.SCRAPER_SECTION[0])
+        items.append(self.SCRAPER_SECTION[1])
+        if scraper_enabled:
+            items.append(self.SCRAPER_SECTION[2])  # Scraper Frontend
 
         # Add NSZ section
         nsz_enabled = settings.get("nsz_enabled", False)
@@ -273,7 +237,7 @@ class SettingsScreen:
                 path = settings.get("nsz_keys_path", "")
                 value = "Set" if path else "Not Set"
                 items.append((item, value))
-            elif item == "Select Backup Map Json":
+            elif item == "Remote Games Bkp File":
                 path = settings.get("archive_json_path", "")
                 value = "Set" if path else "Not Set"
                 items.append((item, value))
@@ -294,7 +258,7 @@ class SettingsScreen:
                 else:
                     value = "Not logged in"
                 items.append((item, value))
-            elif item == "Enable Sports Roster":
+            elif item == "Enable Sports Updater":
                 value = "ON" if settings.get("sports_roster_enabled", False) else "OFF"
                 items.append((item, value))
             elif item == "Roster Soccer Data Source":
@@ -311,8 +275,8 @@ class SettingsScreen:
                 else:
                     value = "Not set"
                 items.append((item, value))
-            elif item == "Enable NSZ":
-                value = "ON" if settings.get("nsz_enabled", False) else "OFF"
+            elif item == "Enable Scraper":
+                value = "ON" if settings.get("scraper_enabled", False) else "OFF"
                 items.append((item, value))
             elif item == "Scraper Frontend":
                 frontend = settings.get("scraper_frontend", "emulationstation_base")
@@ -323,77 +287,9 @@ class SettingsScreen:
                     "pegasus": "Pegasus",
                 }
                 items.append((item, frontend_labels.get(frontend, frontend)))
-            elif item == "Scraper Provider":
-                provider = settings.get("scraper_provider", "libretro")
-                provider_labels = {
-                    "libretro": "Libretro Thumbnails",
-                    "screenscraper": "ScreenScraper",
-                    "thegamesdb": "TheGamesDB",
-                    "rawg": "RAWG",
-                    "igdb": "IGDB (Twitch)",
-                }
-                items.append(
-                    (
-                        item,
-                        provider_labels.get(provider, provider),
-                    )
-                )
-            elif item == "Provider Fallback":
-                enabled = settings.get("scraper_fallback_enabled", True)
-                value = "Enabled" if enabled else "Disabled"
+            elif item == "Enable NSZ":
+                value = "ON" if settings.get("nsz_enabled", False) else "OFF"
                 items.append((item, value))
-            elif item == "Preferred System":
-                sys_name = settings.get("scraper_preferred_system", "")
-                value = sys_name if sys_name else "Not Set"
-                items.append((item, value))
-            elif item == "Parallel Downloads":
-                value = str(settings.get("scraper_parallel_downloads", 1))
-                items.append((item, value))
-            elif item == "Mixed Images":
-                value = "ON" if settings.get("scraper_mixed_images", False) else "OFF"
-                items.append((item, value))
-            elif item == "ScreenScraper Login":
-                username = settings.get("screenscraper_username", "")
-                if username:
-                    if len(username) > 15:
-                        value = username[:12] + "..."
-                    else:
-                        value = username
-                else:
-                    value = "Not logged in"
-                items.append((item, value))
-            elif item == "TheGamesDB API Key":
-                api_key = settings.get("thegamesdb_api_key", "")
-                value = "Set" if api_key else "Not Set"
-                items.append((item, value))
-            elif item == "RAWG API Key":
-                api_key = settings.get("rawg_api_key", "")
-                value = "Set" if api_key else "Not Set"
-                items.append((item, value))
-            elif item == "IGDB Login":
-                client_id = settings.get("igdb_client_id", "")
-                if client_id:
-                    if len(client_id) > 15:
-                        value = client_id[:12] + "..."
-                    else:
-                        value = client_id
-                else:
-                    value = "Not configured"
-                items.append((item, value))
-            elif item == "ES-DE Media Path":
-                path = settings.get("esde_media_path", "")
-                value = self._shorten_path(path) if path else "Not Set"
-                items.append((item, value))
-            elif item == "ES-DE Gamelists Path":
-                path = settings.get("esde_gamelists_path", "")
-                value = self._shorten_path(path) if path else "Not Set"
-                items.append((item, value))
-            elif item == "RetroArch Thumbnails":
-                path = settings.get("retroarch_thumbnails_path", "")
-                value = self._shorten_path(path) if path else "Not Set"
-                items.append((item, value))
-            elif item == "Link App to Frontend":
-                items.append((item, ""))
             elif item == "Check for Updates":
                 items.append((item, APP_VERSION))
             else:
@@ -412,47 +308,6 @@ class SettingsScreen:
             divider_indices=divider_indices,
             item_spacing=8,
         )
-
-    def _is_linked_to_frontend(self, settings: dict) -> bool:
-        """Check if the app is already registered in the frontend gamelist.xml."""
-        from constants import BUILD_TARGET
-
-        roms_dir = settings.get("roms_dir", "")
-        if not roms_dir:
-            return False
-
-        build_folder = BUILD_TARGET if BUILD_TARGET != "source" else "pygame"
-        gamelist_path = os.path.join(roms_dir, build_folder, "gamelist.xml")
-
-        if not os.path.exists(gamelist_path):
-            return False
-
-        # Find the .pygame file name
-        pygame_file = None
-        try:
-            for f in os.listdir(SCRIPT_DIR):
-                if f.endswith(".pygame"):
-                    pygame_file = f
-                    break
-        except OSError:
-            pass
-
-        if not pygame_file:
-            pygame_file = "console_utils.pygame"
-
-        game_path = f"./{pygame_file}"
-
-        try:
-            tree = ET.parse(gamelist_path)
-            root = tree.getroot()
-            for game in root.findall("game"):
-                path_elem = game.find("path")
-                if path_elem is not None and path_elem.text == game_path:
-                    return True
-        except (ET.ParseError, OSError):
-            pass
-
-        return False
 
     def _shorten_path(self, path: str, max_length: int = 25) -> str:
         """Shorten a path for display."""
@@ -498,13 +353,13 @@ class SettingsScreen:
         if index < len(settings_items):
             item = settings_items[index]
             actions = {
-                "Select Backup Map Json": "select_archive_json",
+                "Remote Games Bkp File": "select_archive_json",
                 "Work Directory": "select_work_dir",
                 "ROMs Directory": "select_roms_dir",
                 "NSZ Keys": "select_nsz_keys",
                 "Remap Controller": "remap_controller",
-                "Add Game System from Backup": "add_systems",
-                "Games Backup Settings": "systems_settings",
+                "Add Game System": "add_systems",
+                "Games Systems Preference": "systems_settings",
                 "Enable PortMaster (beta)": "toggle_portmaster_enabled",
                 "Enable Internet Archive": "toggle_ia_enabled",
                 "Internet Archive Login": "ia_login",
@@ -512,24 +367,12 @@ class SettingsScreen:
                 "USA Games Only": "toggle_usa_only",
                 "Show Download All Button": "toggle_download_all",
                 "Skip Installed Games": "toggle_exclude_installed",
-                "Enable Sports Roster": "toggle_sports_roster_enabled",
+                "Enable Sports Updater": "toggle_sports_roster_enabled",
                 "Roster Soccer Data Source": "toggle_roster_provider",
                 "API-Football Key": "edit_api_football_key",
-                "Enable NSZ": "toggle_nsz_enabled",
+                "Enable Scraper": "toggle_scraper_enabled",
                 "Scraper Frontend": "toggle_scraper_frontend",
-                "Scraper Provider": "toggle_scraper_provider",
-                "Provider Fallback": "toggle_scraper_fallback",
-                "Preferred System": "edit_scraper_preferred_system",
-                "Parallel Downloads": "cycle_parallel_downloads",
-                "Mixed Images": "toggle_mixed_images",
-                "ScreenScraper Login": "screenscraper_login",
-                "TheGamesDB API Key": "thegamesdb_api_key",
-                "RAWG API Key": "rawg_api_key",
-                "IGDB Login": "igdb_login",
-                "ES-DE Media Path": "select_esde_media_path",
-                "ES-DE Gamelists Path": "select_esde_gamelists_path",
-                "RetroArch Thumbnails": "select_retroarch_thumbnails",
-                "Link App to Frontend": "add_to_frontend",
+                "Enable NSZ": "toggle_nsz_enabled",
                 "Check for Updates": "check_for_updates",
             }
             return actions.get(item, "unknown")

@@ -28,7 +28,7 @@ class SportsPatcherScreen:
         hint = None if api_key else "Set your API-Football key in Settings → Sports Roster"
         return self.template.render(
             screen,
-            title="Sports Game Patcher",
+            title="Sports Game Updater",
             items=items,
             highlighted=highlighted,
             selected=set(),
