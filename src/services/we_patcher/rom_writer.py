@@ -476,15 +476,24 @@ def _rgb_to_ps1_color(r: int, g: int, b: int) -> int:
 def _build_flag_data(team: "WETeamRecord") -> Tuple[int, bytes]:
     """Build (style_byte, color_data_32bytes) for a team's flag.
 
+    Flag style byte selects the pattern rendered in-game:
+        0 = solid colour
+        1 = 3 vertical stripes
+        2 = solid colour
+        3 = animal print pattern
+        4 = star pattern
+        5 = ball pattern
+    Each style reads from the 16-colour palette differently.
+
     If team.flag_style / team.flag_palette are set, uses those directly.
-    Otherwise falls back to style 4 (vertical halves) with 8×primary +
+    Otherwise falls back to style 1 (3 vertical stripes) with 8×primary +
     8×secondary from ESPN colors.
     """
     if team.flag_style is not None and team.flag_palette and len(team.flag_palette) == 16:
         style = team.flag_style
         palette = [_rgb_to_ps1_color(*c) for c in team.flag_palette]
     else:
-        style = 4  # vertical halves: left = primary, right = secondary
+        style = 1  # 3 vertical stripes (see flag style table above)
         primary = _rgb_to_ps1_color(*team.kit_home)
         secondary = _rgb_to_ps1_color(*team.kit_away)
         palette = [primary] * 8 + [secondary] * 8
@@ -1313,8 +1322,8 @@ class RomWriter:
         in the ROM due to historical PS1 CD sector constraints.
 
         If team.flag_style and team.flag_palette are set (from flag_analyzer),
-        uses those directly.  Otherwise falls back to style 0 (solid) with
-        the 3 kit colors distributed as 8x primary + 5x secondary + 3x tertiary.
+        uses those directly.  Otherwise falls back to style 1 (3 vertical
+        stripes) with 8×primary + 8×secondary from team colors.
         """
         if not os.path.exists(self.output_path):
             return
