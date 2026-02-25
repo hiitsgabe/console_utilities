@@ -12,7 +12,8 @@ from ui.templates.list_screen import ListScreenTemplate
 _ALL_ROOT_ENTRIES = [
     ("Backup Games", "systems_list"),
     ("PortMaster (beta)", "portmaster"),
-    ("Sports Game Patcher", "sports_patcher"),
+    ("Artbox Games Scraper", "scraper_menu"),
+    ("Sports Game Updater", "sports_patcher"),
     ("Utils", "utils"),
     ("Settings", "settings"),
     ("Credits", "credits"),
@@ -33,6 +34,9 @@ def _build_root_menu(settings: Dict[str, Any]) -> Tuple[List[str], List[str]]:
                 continue
         if action == "sports_patcher":
             if not settings.get("sports_roster_enabled", False):
+                continue
+        if action == "scraper_menu":
+            if not settings.get("scraper_enabled", False):
                 continue
         labels.append(label)
         actions.append(action)
