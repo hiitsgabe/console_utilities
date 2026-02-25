@@ -94,6 +94,13 @@ _DISPLACEMENT_PATCH_POINTS = [
     0x3A7FA, 0x3A7FF, 0x3A804, 0x3A809, 0x3A80E,
 ]
 
+# Team description text: pointer table at 0x38000, SNES LoROM pointers
+# Each entry is 2 bytes (16-bit SNES address within bank $02)
+# Points to FE + formation_line(16B) + FE + ' ' + FD + description_text
+# Description is plain ASCII, 15-char line wrapping, variable length (46-90 bytes)
+_OFS_DESC_PTRS = 0x38000  # 2 bytes per team, 27 entries, TEAM_ENUM_ORDER
+_DESC_LINE_WIDTH = 15      # Characters per line in the description text box
+
 # Team name text: pointer table in TEAM_ENUM_ORDER, P40000 format
 _OFS_TEAM_NAME_TEXT_PTRS = 0x39DAE  # 2 bytes per team, 27 teams
 _MAX_NAME_TEXT_ADDR = 0x44478  # must not overwrite extra entries at 0x44478+
@@ -927,6 +934,85 @@ class ISSRomWriter:
         self._seek(_OFS_NAME_TILES_PTRS)
         for addr in new_ptrs:
             self._f.write(_encode_p17000(addr))
+
+    def write_team_descriptions(self, patched_names: dict):
+        """Replace team description text with the full team name.
+
+        The team selection screen shows a description blurb for each team.
+        For patched teams, replace it with the real team name centered in
+        the text box (15-char wide lines, plain ASCII).
+
+        patched_names: dict of {slot_index: team_name_str}.
+        """
+        for slot_index, name in patched_names.items():
+            # Read this team's description pointer from the table
+            self._seek(_OFS_DESC_PTRS + slot_index * 2)
+            raw = self._f.read(2)
+            snes_addr = raw[0] | (raw[1] << 8)
+            # LoROM bank $02: ROM offset = 0x10000 + (snes_addr - 0x8000)
+            rom_addr = 0x10000 + (snes_addr - 0x8000)
+
+            # Find the FD control byte that starts the description text
+            desc_start = None
+            self._seek(rom_addr)
+            header = self._f.read(25)
+            for j in range(len(header)):
+                if header[j] == 0xFD:
+                    desc_start = rom_addr + j + 1
+                    break
+            if desc_start is None:
+                continue
+
+            # Find the end of this description block (next FE+formation or FF)
+            self._seek(desc_start)
+            block = self._f.read(120)
+            desc_end = desc_start
+            for j in range(len(block)):
+                b = block[j]
+                if b == 0xFF:
+                    desc_end = desc_start + j
+                    break
+                if b == 0xFE and j + 1 < len(block) and block[j + 1] in (0x24, 0x2C):
+                    desc_end = desc_start + j
+                    break
+            else:
+                desc_end = desc_start + len(block)
+
+            available = desc_end - desc_start
+
+            # Format the team name centered in 15-char lines
+            clean = _to_ascii(name).strip()
+            lines = []
+            # Word-wrap the name across lines
+            words = clean.split()
+            current_line = ""
+            for word in words:
+                if current_line and len(current_line) + 1 + len(word) > _DESC_LINE_WIDTH:
+                    lines.append(current_line)
+                    current_line = word
+                else:
+                    current_line = (current_line + " " + word).strip()
+            if current_line:
+                lines.append(current_line)
+
+            # Center each line and pad to 15 chars
+            padded_lines = []
+            for line in lines:
+                if len(line) > _DESC_LINE_WIDTH:
+                    line = line[:_DESC_LINE_WIDTH]
+                pad_total = _DESC_LINE_WIDTH - len(line)
+                pad_left = pad_total // 2
+                pad_right = pad_total - pad_left
+                padded_lines.append(" " * pad_left + line + " " * pad_right)
+
+            text = "".join(padded_lines)
+            # Pad remaining space with spaces
+            if len(text) < available:
+                text += " " * (available - len(text))
+            text = text[:available]
+
+            self._seek(desc_start)
+            self._f.write(text.encode("ascii", errors="replace"))
 
     def finalize(self):
         """Close the output file."""

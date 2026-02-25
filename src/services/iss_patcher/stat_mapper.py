@@ -110,7 +110,7 @@ class ISSStatMapper:
             )
 
         return ISSTeamRecord(
-            name=self._truncate_name(team_roster.team.name, 12),
+            name=_to_ascii(team_roster.team.name),
             short_name=_to_ascii(
                 team_roster.team.code[:3]
                 if team_roster.team.code
