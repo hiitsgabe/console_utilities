@@ -462,6 +462,45 @@ def load_snes_rom_folder_contents(path: str) -> List[Dict[str, Any]]:
     return items
 
 
+def load_genesis_rom_folder_contents(path: str) -> List[Dict[str, Any]]:
+    """
+    Load folder contents for Genesis ROM selection.
+
+    Shows folders and .bin/.md/.gen ROM files.
+    """
+    path = os.path.abspath(path)
+    items = []
+
+    if path != "/" and path != os.path.dirname(path):
+        items.append({"name": "..", "type": "parent", "path": os.path.dirname(path)})
+
+    try:
+        entries = os.listdir(path)
+    except PermissionError:
+        return items
+
+    dirs = []
+    roms = []
+
+    for entry in sorted(entries):
+        if entry.startswith("."):
+            continue
+        full_path = os.path.join(path, entry)
+        if os.path.isdir(full_path):
+            dirs.append({"name": entry, "type": "folder", "path": full_path})
+        else:
+            ext = os.path.splitext(entry)[1].lower()
+            if ext in (".bin", ".md", ".gen"):
+                roms.append({"name": entry, "type": "genesis_rom", "path": full_path})
+
+    dirs.sort(key=lambda x: x["name"].lower())
+    roms.sort(key=lambda x: x["name"].lower())
+
+    items.extend(dirs)
+    items.extend(roms)
+    return items
+
+
 def load_folder_contents(path: str) -> List[Dict[str, Any]]:
     """
     Load folder contents for browser.

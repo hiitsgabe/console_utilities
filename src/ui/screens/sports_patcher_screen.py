@@ -11,6 +11,8 @@ class SportsPatcherScreen:
     GAMES = [
         ("WE2002 - Winning Eleven 2002 (PS1)", "we_patcher"),
         ("ISS - Int. Superstar Soccer (SNES)", "iss_patcher"),
+        ("NHL 94 - NHL Hockey '94 (SNES)", "nhl94_patcher"),
+        ("NHL 94 - NHL Hockey '94 (Genesis)", "nhl94_gen_patcher"),
     ]
 
     def __init__(self, theme: Theme = default_theme):

@@ -1,9 +1,9 @@
-"""ESPN public API client for soccer roster data — no API key required."""
+"""ESPN public API client for soccer and hockey roster data — no API key required."""
 
 import os
 import json
 import requests
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 from services.sports_api.models import League, Team, Player, PlayerStats
 
@@ -29,14 +29,55 @@ ESPN_LEAGUES = [
     {"id": 2016, "code": "chi.1",               "name": "Primera División",      "country": "Chile"},
 ]
 
+# NHL team abbreviations mapping to ROM slots (28 teams: 26 NHL + 2 All-Star)
+# Based on NHL 94 SNES team order (1993-94 season)
+NHL_TEAM_MAP = {
+    "ANA": 0,   # Mighty Ducks (expansion - will use San Jose)
+    "BOS": 1,   # Boston Bruins
+    "BUF": 2,   # Buffalo Sabres
+    "CGY": 3,   # Calgary Flames
+    "CHI": 4,   # Chicago Blackhawks
+    "DAL": 5,   # Dallas Stars
+    "DET": 6,   # Detroit Red Wings
+    "EDM": 7,   # Edmonton Oilers
+    "FLA": 8,   # Florida Panthers
+    "CAR": 9,   # Carolina Hurricanes (was Hartford Whalers)
+    "LAK": 10,  # Los Angeles Kings
+    "LA": 10,   # ESPN abbreviation
+    "MTL": 11,  # Montreal Canadiens
+    "NJD": 12,  # New Jersey Devils
+    "NJ": 12,   # ESPN abbreviation
+    "NYI": 13,  # New York Islanders
+    "NYR": 14,  # New York Rangers
+    "OTT": 15,  # Ottawa Senators
+    "PHI": 16,  # Philadelphia Flyers
+    "PIT": 17,  # Pittsburgh Penguins
+    "COL": 18,  # Colorado Avalanche (was Quebec Nordiques)
+    "SJS": 19,  # San Jose Sharks
+    "SJ": 19,   # ESPN abbreviation
+    "STL": 20,  # St. Louis Blues
+    "TBL": 21,  # Tampa Bay Lightning
+    "TB": 21,   # ESPN abbreviation
+    "TOR": 22,  # Toronto Maple Leafs
+    "VAN": 23,  # Vancouver Canucks
+    "WSH": 24,  # Washington Capitals
+    "WPG": 25,  # Winnipeg Jets
+    "NHL.EAST": 26,  # All-Star East
+    "NHL.WEST": 27,  # All-Star West
+}
+
 _ID_TO_LEAGUE = {item["id"]: item for item in ESPN_LEAGUES}
 _CODE_TO_LEAGUE = {item["code"]: item for item in ESPN_LEAGUES}
 
-BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/soccer"
+SOCCER_BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/soccer"
+HOCKEY_BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/hockey"
+HOCKEY_CORE_URL = (
+    "https://sports.core.api.espn.com/v2/sports/hockey/leagues/nhl"
+)
 
 
 class EspnClient:
-    """Client for ESPN's public soccer API — no key, no rate limits."""
+    """Client for ESPN's public soccer and hockey API — no key, no rate limits."""
 
     def __init__(self, cache_dir: str, on_status=None):
         self.cache_dir = cache_dir
@@ -77,7 +118,7 @@ class EspnClient:
         cached = self._load_cache(cache_key)
         if cached:
             return self._parse_teams(cached)
-        data = self._request(f"/{code}/teams")
+        data = self._request(f"/{code}/teams", sport="soccer")
         if data:
             self._save_cache(cache_key, data)
         return self._parse_teams(data)
@@ -92,7 +133,7 @@ class EspnClient:
         code = league_code or self._find_league_code_for_team(team_id)
         if not code:
             return []
-        data = self._request(f"/{code}/teams/{team_id}/roster")
+        data = self._request(f"/{code}/teams/{team_id}/roster", sport="soccer")
         if data:
             self._save_cache(cache_key, data)
         return self._parse_squad(data)
@@ -100,6 +141,87 @@ class EspnClient:
     def get_player_stats(self, team_id: int, season: int) -> List[PlayerStats]:
         """ESPN doesn't provide historical stats — return empty list."""
         return []
+
+    # ------------------------------------------------------------------
+    # Hockey-specific methods (NHL)
+    # ------------------------------------------------------------------
+
+    def get_nhl_teams(self) -> List[Team]:
+        """Fetch all current NHL teams."""
+        cache_key = "espn_nhl_teams"
+        cached = self._load_cache(cache_key)
+        if cached:
+            return self._parse_teams(cached)
+        data = self._request("/nhl/teams", sport="hockey")
+        if data:
+            self._save_cache(cache_key, data)
+        return self._parse_teams(data)
+
+    def get_hockey_squad(self, team_id: int) -> List[Player]:
+        """Fetch current roster for an NHL team."""
+        cache_key = f"espn_hockey_squad_{team_id}"
+        cached = self._load_cache(cache_key)
+        if cached:
+            return self._parse_hockey_squad(cached)
+        data = self._request(
+            f"/nhl/teams/{team_id}/roster", sport="hockey"
+        )
+        if data:
+            self._save_cache(cache_key, data)
+        return self._parse_hockey_squad(data)
+
+    def get_hockey_team_leaders(
+        self, team_id: int, season: int = 2026
+    ) -> dict:
+        """Fetch per-player stats via team leaders endpoint.
+
+        Returns dict mapping ESPN player ID (str) to stat dict,
+        e.g. {"4024123": {"G": 26, "A": 22, "PTS": 48, ...}}.
+        One API call per team — covers all rostered players.
+        """
+        cache_key = f"espn_hockey_leaders_{team_id}_{season}"
+        cached = self._load_cache(cache_key)
+        if cached:
+            return cached
+
+        url = (
+            f"{HOCKEY_CORE_URL}/seasons/{season}/types/2"
+            f"/teams/{team_id}/leaders"
+        )
+        try:
+            resp = requests.get(url, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception:
+            return {}
+
+        # Parse: categories[].leaders[] → {player_id: {stat: val}}
+        stats = {}
+        for cat in data.get("categories", []):
+            abbrev = cat.get("abbreviation", "")
+            for entry in cat.get("leaders", []):
+                athlete = entry.get("athlete", {})
+                pid = self._extract_pid(athlete)
+                if not pid:
+                    continue
+                if pid not in stats:
+                    stats[pid] = {}
+                val = entry.get("value", 0)
+                stats[pid][abbrev] = val
+
+        if stats:
+            self._save_cache(cache_key, stats)
+        return stats
+
+    def _extract_pid(self, athlete) -> Optional[str]:
+        """Extract player ID from athlete obj or $ref link."""
+        if isinstance(athlete, dict):
+            if "id" in athlete:
+                return str(athlete["id"])
+            ref = athlete.get("$ref", "")
+            if "/athletes/" in ref:
+                return ref.split("/athletes/")[-1].split("?")[0]
+        return None
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -117,11 +239,12 @@ class EspnClient:
             teams_count=0,
         )
 
-    def _request(self, path: str) -> dict:
+    def _request(self, path: str, sport: str = "soccer") -> dict:
+        base = HOCKEY_BASE_URL if sport == "hockey" else SOCCER_BASE_URL
         try:
             if self.on_status:
                 self.on_status(f"Fetching{path}...")
-            response = requests.get(BASE_URL + path, timeout=30)
+            response = requests.get(base + path, timeout=30)
             response.raise_for_status()
             return response.json()
         except Exception:
@@ -225,4 +348,91 @@ class EspnClient:
                 number=number,
                 photo_url="",
             ))
+        return players
+
+    def _parse_hockey_squad(self, data: dict) -> List[Player]:
+        """Parse NHL team roster with hockey-specific positions.
+
+        ESPN hockey roster groups athletes by position:
+        athletes: [{position: "Centers", items: [...]}, ...]
+
+        Preserves exact position abbreviation (C, LW, RW, D, G)
+        and sorts each group by experience (descending) so starters
+        come first.
+        """
+        if not isinstance(data, dict):
+            return []
+
+        # Collect players per group, sort by experience desc
+        groups = []
+        for group in data.get("athletes", []):
+            items = group.get("items", [])
+            # Sort by experience years descending (starters first)
+            items.sort(
+                key=lambda a: (
+                    a.get("experience", {}).get("years", 0)
+                    if isinstance(a.get("experience"), dict)
+                    else 0
+                ),
+                reverse=True,
+            )
+            groups.append(items)
+
+        players = []
+        for items in groups:
+            for athlete in items:
+                pos_info = athlete.get("position", {})
+                pos_abbrev = (
+                    pos_info.get("abbreviation", "C")
+                    if isinstance(pos_info, dict) else "C"
+                ).upper()
+                # Normalize rare variants
+                if pos_abbrev in ("LD", "RD"):
+                    pos_abbrev = "D"
+                elif pos_abbrev == "F":
+                    pos_abbrev = "C"
+
+                jersey = athlete.get("jersey")
+                number = (
+                    int(jersey)
+                    if jersey and str(jersey).isdigit()
+                    else None
+                )
+
+                display_name = athlete.get(
+                    "displayName", athlete.get("fullName", "")
+                )
+                first_name = athlete.get("firstName", "")
+                last_name = athlete.get("lastName", "")
+
+                if not last_name and display_name:
+                    parts = display_name.split()
+                    if len(parts) == 1:
+                        last_name = parts[0]
+                        first_name = ""
+                    else:
+                        last_name = parts[-1]
+                        first_name = " ".join(parts[:-1])
+
+                # Weight and handedness
+                wt = athlete.get("weight", 0) or 0
+                hand_info = athlete.get("hand", {})
+                hand = (
+                    hand_info.get("abbreviation", "")
+                    if isinstance(hand_info, dict) else ""
+                )
+
+                players.append(Player(
+                    id=int(athlete.get("id", 0)),
+                    name=display_name,
+                    first_name=first_name,
+                    last_name=last_name,
+                    age=athlete.get("age", 25) or 25,
+                    nationality=athlete.get("citizenship", ""),
+                    position=pos_abbrev,
+                    number=number,
+                    photo_url="",
+                    weight=float(wt),
+                    handedness=hand,
+                ))
         return players

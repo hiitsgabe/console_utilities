@@ -514,6 +514,93 @@ class WePatcherState:
 
 
 @dataclass
+class NHL94GenesisPatcherState:
+    """State for the NHL94 Genesis Patcher feature."""
+
+    # Season (start year: 2024 = 2024-25 season)
+    selected_season: int = field(
+        default_factory=lambda: (
+            datetime.now().year if datetime.now().month >= 10
+            else datetime.now().year - 1
+        )
+    )
+    selected_league: Any = None  # Not used, but roster_preview_modal accesses it
+
+    # Fetched data
+    rosters: Any = None  # Dict[str, List[Player]]
+    team_stats: Any = None  # Dict[str, dict] — per-player stats keyed by team code
+    league_data: Any = None  # LeagueData (built from rosters for roster preview modal)
+    fetch_progress: float = 0.0
+    fetch_status: str = ""
+    is_fetching: bool = False
+    fetch_error: str = ""
+
+    # ROM
+    rom_path: str = ""
+    rom_info: Any = None
+    rom_valid: bool = False
+
+    # Patching
+    patch_progress: float = 0.0
+    patch_status: str = ""
+    is_patching: bool = False
+    patch_output_path: str = ""
+    patch_complete: bool = False
+    patch_error: str = ""
+
+    # Roster preview
+    roster_preview_team_index: int = 0
+    roster_preview_player_index: int = 0
+
+    # UI navigation
+    active_modal: Optional[str] = None
+
+
+@dataclass
+class NHL94SNESPatcherState:
+    """State for the NHL94 SNES Patcher feature."""
+
+    # Season (start year: 2024 = 2024-25 season)
+    # NHL season runs Oct-Jun; start year = current year if Oct+, else year-1
+    selected_season: int = field(
+        default_factory=lambda: (
+            datetime.now().year if datetime.now().month >= 10
+            else datetime.now().year - 1
+        )
+    )
+    selected_league: Any = None  # Not used, but roster_preview_modal accesses it
+
+    # Fetched data
+    rosters: Any = None  # Dict[str, List[Player]]
+    team_stats: Any = None  # Dict[str, dict] — per-player stats keyed by team code
+    league_data: Any = None  # LeagueData (built from rosters for roster preview modal)
+    fetch_progress: float = 0.0
+    fetch_status: str = ""
+    is_fetching: bool = False
+    fetch_error: str = ""
+
+    # ROM
+    rom_path: str = ""
+    rom_info: Any = None
+    rom_valid: bool = False
+
+    # Patching
+    patch_progress: float = 0.0
+    patch_status: str = ""
+    is_patching: bool = False
+    patch_output_path: str = ""
+    patch_complete: bool = False
+    patch_error: str = ""
+
+    # Roster preview
+    roster_preview_team_index: int = 0
+    roster_preview_player_index: int = 0
+
+    # UI navigation
+    active_modal: Optional[str] = None
+
+
+@dataclass
 class UIRects:
     """Stores rectangles for clickable UI elements."""
 
@@ -622,6 +709,10 @@ class AppState:
         # ---- ISS Patcher ---- #
         self.iss_patcher = ISSPatcherState()
 
+        # ---- NHL94 Patchers ---- #
+        self.nhl94_patcher = NHL94SNESPatcherState()
+        self.nhl94_gen_patcher = NHL94GenesisPatcherState()
+
         # ---- UI Rectangles ---- #
         self.ui_rects = UIRects()
 
@@ -636,11 +727,15 @@ class AppState:
     def active_patcher(self):
         """Return the active patcher state based on current mode.
 
-        Both WePatcherState and ISSPatcherState share the same field names
-        so modals can use this generically.
+        WePatcherState, ISSPatcherState, and NHL94SNESPatcherState share
+        common field names so modals can use this generically.
         """
         if self.mode == "iss_patcher":
             return self.iss_patcher
+        if self.mode == "nhl94_patcher":
+            return self.nhl94_patcher
+        if self.mode == "nhl94_gen_patcher":
+            return self.nhl94_gen_patcher
         return self.we_patcher
 
     def reset_navigation(self):
