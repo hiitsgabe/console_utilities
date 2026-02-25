@@ -416,6 +416,15 @@ class GhostCleanerWizardState:
 
 
 @dataclass
+class ColorPickerState:
+    """State for the team color picker modal."""
+
+    team_index: int = 0
+    color_index: int = 0
+    picking: str = "primary"  # "primary" or "secondary"
+
+
+@dataclass
 class ISSPatcherState:
     """State for the ISS SNES Patcher feature."""
 
@@ -450,6 +459,8 @@ class ISSPatcherState:
     # Roster preview
     roster_preview_team_index: int = 0
     roster_preview_player_index: int = 0
+    # Color picker (API-Football only)
+    color_picker: ColorPickerState = field(default_factory=ColorPickerState)
     # UI navigation
     active_modal: Optional[str] = None
     leagues_highlighted: int = 0
@@ -493,6 +504,8 @@ class WePatcherState:
     # Roster preview
     roster_preview_team_index: int = 0
     roster_preview_player_index: int = 0
+    # Color picker (API-Football only)
+    color_picker: ColorPickerState = field(default_factory=ColorPickerState)
     # UI navigation
     active_modal: Optional[str] = None
     leagues_highlighted: int = 0
