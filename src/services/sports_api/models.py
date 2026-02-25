@@ -23,9 +23,12 @@ class Player:
     last_name: str
     age: int
     nationality: str
-    position: str  # "Goalkeeper", "Defender", "Midfielder", "Attacker"
+    position: str  # Soccer: "Goalkeeper"/"Defender"/etc. Hockey: "C"/"LW"/"RW"/"D"/"G"
     number: Optional[int]
     photo_url: str
+    # Optional hockey fields
+    weight: float = 0.0  # lbs
+    handedness: str = ""  # "L" or "R"
 
 
 @dataclass

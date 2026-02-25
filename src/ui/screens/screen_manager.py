@@ -40,6 +40,8 @@ from .scraper_menu_screen import ScraperMenuScreen
 from .sports_patcher_screen import SportsPatcherScreen
 from .we_patcher_screen import WePatcherScreen
 from .iss_patcher_screen import ISSPatcherScreen
+from .nhl94_snes_patcher_screen import NHL94SNESPatcherScreen
+from .nhl94_genesis_patcher_screen import NHL94GenesisPatcherScreen
 from .downloads_screen import DownloadsScreen
 from .scraper_downloads_screen import ScraperDownloadsScreen
 from ui.molecules.status_footer import StatusFooter, StatusFooterItem
@@ -72,6 +74,8 @@ class ScreenManager:
         self.sports_patcher_screen = SportsPatcherScreen(theme)
         self.we_patcher_screen = WePatcherScreen(theme)
         self.iss_patcher_screen = ISSPatcherScreen(theme)
+        self.nhl94_patcher_screen = NHL94SNESPatcherScreen(theme)
+        self.nhl94_gen_patcher_screen = NHL94GenesisPatcherScreen(theme)
 
         # Initialize modals
         self.search_modal = SearchModal(theme)
@@ -538,6 +542,44 @@ class ScreenManager:
             rects["color_picker_secondary"] = cp_rects["secondary_rects"]
             return rects
 
+        # NHL94 Patcher modals
+        if state.nhl94_patcher.active_modal == "roster_preview":
+            modal_rect, content_rect, close_rect, item_rects = (
+                self.roster_preview_modal.render(screen, state)
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["item_rects"] = item_rects
+            return rects
+
+        if state.nhl94_patcher.active_modal == "patch_progress":
+            modal_rect, content_rect, close_rect, item_rects = (
+                self.patch_progress_modal.render(screen, state)
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["item_rects"] = item_rects
+            return rects
+
+        # NHL94 Genesis Patcher modals
+        if state.nhl94_gen_patcher.active_modal == "roster_preview":
+            modal_rect, content_rect, close_rect, item_rects = (
+                self.roster_preview_modal.render(screen, state)
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["item_rects"] = item_rects
+            return rects
+
+        if state.nhl94_gen_patcher.active_modal == "patch_progress":
+            modal_rect, content_rect, close_rect, item_rects = (
+                self.patch_progress_modal.render(screen, state)
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["item_rects"] = item_rects
+            return rects
+
         # Render main screens based on mode
         if state.mode == "systems":
             back_rect, item_rects, scroll_offset = self.systems_screen.render(
@@ -723,6 +765,26 @@ class ScreenManager:
             rects["scroll_offset"] = scroll_offset
             rects["season_left_arrow"] = self.iss_patcher_screen.season_arrow_left
             rects["season_right_arrow"] = self.iss_patcher_screen.season_arrow_right
+
+        elif state.mode == "nhl94_patcher":
+            back_rect, item_rects, scroll_offset = self.nhl94_patcher_screen.render(
+                screen, state.highlighted, state, settings
+            )
+            rects["back"] = back_rect
+            rects["item_rects"] = item_rects
+            rects["scroll_offset"] = scroll_offset
+            rects["season_left_arrow"] = self.nhl94_patcher_screen.season_arrow_left
+            rects["season_right_arrow"] = self.nhl94_patcher_screen.season_arrow_right
+
+        elif state.mode == "nhl94_gen_patcher":
+            back_rect, item_rects, scroll_offset = self.nhl94_gen_patcher_screen.render(
+                screen, state.highlighted, state, settings
+            )
+            rects["back"] = back_rect
+            rects["item_rects"] = item_rects
+            rects["scroll_offset"] = scroll_offset
+            rects["season_left_arrow"] = self.nhl94_gen_patcher_screen.season_arrow_left
+            rects["season_right_arrow"] = self.nhl94_gen_patcher_screen.season_arrow_right
 
         # Render stacked status footers on non-download screens
         if state.mode not in ("downloads", "scraper_downloads"):

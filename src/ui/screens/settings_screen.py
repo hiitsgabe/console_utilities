@@ -67,6 +67,7 @@ class SettingsScreen:
         "Enable Sports Updater",
         "Roster Soccer Data Source",
         "API-Football Key",
+        "Roster Hockey Data Source",
     ]
 
     # Scraper section
@@ -155,9 +156,10 @@ class SettingsScreen:
         items.append(self.SPORTS_ROSTER_SECTION[0])
         items.append(self.SPORTS_ROSTER_SECTION[1])
         if sports_roster_enabled:
-            items.append(self.SPORTS_ROSTER_SECTION[2])  # Roster Data Source
+            items.append(self.SPORTS_ROSTER_SECTION[2])  # Roster Soccer Data Source
             if settings.get("sports_roster_provider", "espn") == "api_football":
                 items.append(self.SPORTS_ROSTER_SECTION[3])  # API-Football Key
+            items.append(self.SPORTS_ROSTER_SECTION[4])  # Roster Hockey Data Source
 
         # Add Scraper section
         scraper_enabled = settings.get("scraper_enabled", False)
@@ -265,7 +267,7 @@ class SettingsScreen:
                 provider = settings.get("sports_roster_provider", "espn")
                 provider_labels = {
                     "espn": "ESPN (Free)",
-                    "api_football": "API-Football",
+                    "api_football": "API-Football (Paid)",
                 }
                 items.append((item, provider_labels.get(provider, provider)))
             elif item == "API-Football Key":
@@ -275,6 +277,13 @@ class SettingsScreen:
                 else:
                     value = "Not set"
                 items.append((item, value))
+            elif item == "Roster Hockey Data Source":
+                nhl_provider = settings.get("nhl94_provider", "espn")
+                nhl_labels = {
+                    "espn": "ESPN (Current Season)",
+                    "nhl": "NHL API (Historical)",
+                }
+                items.append((item, nhl_labels.get(nhl_provider, nhl_provider)))
             elif item == "Enable Scraper":
                 value = "ON" if settings.get("scraper_enabled", False) else "OFF"
                 items.append((item, value))
@@ -370,6 +379,7 @@ class SettingsScreen:
                 "Enable Sports Updater": "toggle_sports_roster_enabled",
                 "Roster Soccer Data Source": "toggle_roster_provider",
                 "API-Football Key": "edit_api_football_key",
+                "Roster Hockey Data Source": "toggle_nhl94_provider",
                 "Enable Scraper": "toggle_scraper_enabled",
                 "Scraper Frontend": "toggle_scraper_frontend",
                 "Enable NSZ": "toggle_nsz_enabled",

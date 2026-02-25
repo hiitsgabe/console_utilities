@@ -1016,6 +1016,12 @@ class ConsoleUtilitiesApp:
         elif self.state.mode == "iss_patcher":
             self._handle_iss_patcher_navigation(direction)
 
+        elif self.state.mode == "nhl94_patcher":
+            self._handle_nhl94_patcher_navigation(direction)
+
+        elif self.state.mode == "nhl94_gen_patcher":
+            self._handle_nhl94_gen_patcher_navigation(direction)
+
     def _handle_we_patcher_navigation(self, direction):
         """Handle D-pad navigation for we_patcher mode and its modals."""
         we = self.state.we_patcher
@@ -1117,6 +1123,172 @@ class ConsoleUtilitiesApp:
             elif direction in ("down", "right"):
                 self.state.highlighted = (self.state.highlighted + 1) % max_items
 
+    def _handle_nhl94_patcher_navigation(self, direction):
+        """Handle D-pad navigation for nhl94_patcher mode and its modals."""
+        nhl = self.state.nhl94_patcher
+
+        if nhl.active_modal == "roster_preview":
+            league_data = nhl.league_data
+            if not league_data or not hasattr(league_data, "teams"):
+                return
+            teams = league_data.teams
+            if direction == "left":
+                nhl.roster_preview_team_index = (nhl.roster_preview_team_index - 1) % max(
+                    len(teams), 1
+                )
+                nhl.roster_preview_player_index = 0
+            elif direction == "right":
+                nhl.roster_preview_team_index = (nhl.roster_preview_team_index + 1) % max(
+                    len(teams), 1
+                )
+                nhl.roster_preview_player_index = 0
+            elif direction == "up":
+                nhl.roster_preview_player_index = max(
+                    0, nhl.roster_preview_player_index - 1
+                )
+            elif direction == "down":
+                team_idx = nhl.roster_preview_team_index
+                if 0 <= team_idx < len(teams):
+                    players = (
+                        teams[team_idx].players
+                        if hasattr(teams[team_idx], "players")
+                        else []
+                    )
+                    nhl.roster_preview_player_index = min(
+                        nhl.roster_preview_player_index + 1,
+                        max(len(players) - 1, 0),
+                    )
+
+        elif nhl.active_modal is None:
+            # Main nhl94_patcher menu
+            from ui.screens.nhl94_snes_patcher_screen import nhl94_snes_patcher_screen
+
+            # Left/Right on the Season row changes year (NHL API only)
+            if direction in ("left", "right"):
+                action = nhl94_snes_patcher_screen.get_action(
+                    self.state.highlighted, self.state, self.settings
+                )
+                if action == "change_season":
+                    from datetime import datetime as _dt
+                    now = _dt.now()
+                    # NHL season start year: current year if Oct+, else year-1
+                    max_year = now.year if now.month >= 10 else now.year - 1
+                    delta = -1 if direction == "left" else 1
+                    nhl.selected_season = max(
+                        1993, min(max_year, nhl.selected_season + delta)
+                    )
+                    # Invalidate fetched data when season changes
+                    nhl.rosters = None
+                    nhl.league_data = None
+                    return
+
+            max_items = nhl94_snes_patcher_screen.get_count(self.state, self.settings)
+            if direction in ("up", "left"):
+                self.state.highlighted = (self.state.highlighted - 1) % max_items
+            elif direction in ("down", "right"):
+                self.state.highlighted = (self.state.highlighted + 1) % max_items
+
+    def _handle_nhl94_gen_patcher_navigation(self, direction):
+        """Handle D-pad navigation for nhl94_gen_patcher mode and its modals."""
+        nhl = self.state.nhl94_gen_patcher
+
+        if nhl.active_modal == "roster_preview":
+            league_data = nhl.league_data
+            if not league_data or not hasattr(league_data, "teams"):
+                return
+            teams = league_data.teams
+            if direction == "left":
+                nhl.roster_preview_team_index = (nhl.roster_preview_team_index - 1) % max(
+                    len(teams), 1
+                )
+                nhl.roster_preview_player_index = 0
+            elif direction == "right":
+                nhl.roster_preview_team_index = (nhl.roster_preview_team_index + 1) % max(
+                    len(teams), 1
+                )
+                nhl.roster_preview_player_index = 0
+            elif direction == "up":
+                nhl.roster_preview_player_index = max(
+                    0, nhl.roster_preview_player_index - 1
+                )
+            elif direction == "down":
+                team_idx = nhl.roster_preview_team_index
+                if 0 <= team_idx < len(teams):
+                    players = (
+                        teams[team_idx].players
+                        if hasattr(teams[team_idx], "players")
+                        else []
+                    )
+                    nhl.roster_preview_player_index = min(
+                        nhl.roster_preview_player_index + 1,
+                        max(len(players) - 1, 0),
+                    )
+
+        elif nhl.active_modal is None:
+            # Main nhl94_gen_patcher menu
+            from ui.screens.nhl94_genesis_patcher_screen import nhl94_genesis_patcher_screen
+
+            # Left/Right on the Season row changes year (NHL API only)
+            if direction in ("left", "right"):
+                action = nhl94_genesis_patcher_screen.get_action(
+                    self.state.highlighted, self.state, self.settings
+                )
+                if action == "change_season":
+                    from datetime import datetime as _dt
+                    now = _dt.now()
+                    max_year = now.year if now.month >= 10 else now.year - 1
+                    delta = -1 if direction == "left" else 1
+                    nhl.selected_season = max(
+                        1993, min(max_year, nhl.selected_season + delta)
+                    )
+                    nhl.rosters = None
+                    nhl.league_data = None
+                    return
+
+            max_items = nhl94_genesis_patcher_screen.get_count(self.state, self.settings)
+            if direction in ("up", "left"):
+                self.state.highlighted = (self.state.highlighted - 1) % max_items
+            elif direction in ("down", "right"):
+                self.state.highlighted = (self.state.highlighted + 1) % max_items
+
+    def _get_clipboard_text(self) -> str:
+        """Get text from system clipboard, or empty string if unavailable."""
+        try:
+            import subprocess
+            import platform
+
+            if platform.system() == "Darwin":
+                result = subprocess.run(
+                    ["pbpaste"], capture_output=True, text=True, timeout=2
+                )
+                text = result.stdout
+            elif platform.system() == "Windows":
+                result = subprocess.run(
+                    ["powershell", "-command", "Get-Clipboard"],
+                    capture_output=True,
+                    text=True,
+                    timeout=2,
+                )
+                text = result.stdout
+            else:
+                # Linux / console - try xclip, fall back to empty
+                result = subprocess.run(
+                    ["xclip", "-selection", "clipboard", "-o"],
+                    capture_output=True,
+                    text=True,
+                    timeout=2,
+                )
+                text = result.stdout
+            return text.strip() if text else ""
+        except Exception:
+            return ""
+
+    def _is_paste_event(self, event) -> bool:
+        """Check if a key event is Ctrl+V or Cmd+V."""
+        return event.key == pygame.K_v and (
+            event.mod & (pygame.KMOD_CTRL | pygame.KMOD_META)
+        )
+
     def _handle_key_event(self, event: pygame.event.Event):
         """Handle keyboard events."""
         # Handle keyboard text input for search modal
@@ -1129,6 +1301,11 @@ class ConsoleUtilitiesApp:
                 # Delete last character
                 if self.state.search.input_text:
                     self.state.search.input_text = self.state.search.input_text[:-1]
+                    self.state.search.query = self.state.search.input_text
+            elif self._is_paste_event(event):
+                clip = self._get_clipboard_text()
+                if clip:
+                    self.state.search.input_text += clip
                     self.state.search.query = self.state.search.input_text
             elif event.unicode and event.unicode.isprintable():
                 # Add typed character
@@ -1149,6 +1326,13 @@ class ConsoleUtilitiesApp:
                         self.state.ia_login.email = self.state.ia_login.email[:-1]
                     elif step == "password" and self.state.ia_login.password:
                         self.state.ia_login.password = self.state.ia_login.password[:-1]
+                elif self._is_paste_event(event):
+                    clip = self._get_clipboard_text()
+                    if clip:
+                        if step == "email":
+                            self.state.ia_login.email += clip
+                        elif step == "password":
+                            self.state.ia_login.password += clip
                 elif event.unicode and event.unicode.isprintable():
                     if step == "email":
                         self.state.ia_login.email += event.unicode
@@ -1177,6 +1361,15 @@ class ConsoleUtilitiesApp:
                         self.state.scraper_login.api_key = (
                             self.state.scraper_login.api_key[:-1]
                         )
+                elif self._is_paste_event(event):
+                    clip = self._get_clipboard_text()
+                    if clip:
+                        if step == "username":
+                            self.state.scraper_login.username += clip
+                        elif step == "password":
+                            self.state.scraper_login.password += clip
+                        elif step == "api_key":
+                            self.state.scraper_login.api_key += clip
                 elif event.unicode and event.unicode.isprintable():
                     if step == "username":
                         self.state.scraper_login.username += event.unicode
@@ -1209,6 +1402,11 @@ class ConsoleUtilitiesApp:
                         self.state.we_patcher.league_search_query[:-1]
                     )
                     self.state.we_patcher.leagues_highlighted = 0
+            elif self._is_paste_event(event):
+                clip = self._get_clipboard_text()
+                if clip:
+                    self.state.we_patcher.league_search_query += clip
+                    self.state.we_patcher.leagues_highlighted = 0
             elif event.unicode and event.unicode.isprintable():
                 self.state.we_patcher.league_search_query += event.unicode
                 self.state.we_patcher.leagues_highlighted = 0
@@ -1237,6 +1435,11 @@ class ConsoleUtilitiesApp:
                         self.state.iss_patcher.league_search_query[:-1]
                     )
                     self.state.iss_patcher.leagues_highlighted = 0
+            elif self._is_paste_event(event):
+                clip = self._get_clipboard_text()
+                if clip:
+                    self.state.iss_patcher.league_search_query += clip
+                    self.state.iss_patcher.leagues_highlighted = 0
             elif event.unicode and event.unicode.isprintable():
                 self.state.iss_patcher.league_search_query += event.unicode
                 self.state.iss_patcher.leagues_highlighted = 0
@@ -1255,6 +1458,10 @@ class ConsoleUtilitiesApp:
                         self.state.ia_download_wizard.url = (
                             self.state.ia_download_wizard.url[:-1]
                         )
+                elif self._is_paste_event(event):
+                    clip = self._get_clipboard_text()
+                    if clip:
+                        self.state.ia_download_wizard.url += clip
                 elif event.unicode and event.unicode.isprintable():
                     self.state.ia_download_wizard.url += event.unicode
                 return
@@ -1279,6 +1486,10 @@ class ConsoleUtilitiesApp:
                 elif event.key == pygame.K_BACKSPACE:
                     if wizard.custom_format_input:
                         wizard.custom_format_input = wizard.custom_format_input[:-1]
+                elif self._is_paste_event(event):
+                    clip = self._get_clipboard_text()
+                    if clip:
+                        wizard.custom_format_input += clip
                 elif event.unicode and event.unicode.isprintable():
                     wizard.custom_format_input += event.unicode
                 return
@@ -1294,6 +1505,13 @@ class ConsoleUtilitiesApp:
                         wizard.url = wizard.url[:-1]
                     elif step == "name" and wizard.collection_name:
                         wizard.collection_name = wizard.collection_name[:-1]
+                elif self._is_paste_event(event):
+                    clip = self._get_clipboard_text()
+                    if clip:
+                        if step == "url":
+                            wizard.url += clip
+                        elif step == "name":
+                            wizard.collection_name += clip
                 elif event.unicode and event.unicode.isprintable():
                     if step == "url":
                         wizard.url += event.unicode
@@ -1494,6 +1712,30 @@ class ConsoleUtilitiesApp:
             if right_arrow and right_arrow.collidepoint(x, y):
                 self._handle_iss_patcher_navigation("right")
                 return
+        # Check Season arrow buttons (nhl94_patcher main menu only)
+        if self.state.mode == "nhl94_patcher" and self.state.nhl94_patcher.active_modal is None:
+            left_arrow = self.state.ui_rects.rects.get("season_left_arrow")
+            right_arrow = self.state.ui_rects.rects.get("season_right_arrow")
+            if left_arrow and left_arrow.collidepoint(x, y):
+                self.state.highlighted = 0  # Season row
+                self._handle_nhl94_patcher_navigation("left")
+                return
+            if right_arrow and right_arrow.collidepoint(x, y):
+                self.state.highlighted = 0  # Season row
+                self._handle_nhl94_patcher_navigation("right")
+                return
+        # Check Season arrow buttons (nhl94_gen_patcher main menu only)
+        if self.state.mode == "nhl94_gen_patcher" and self.state.nhl94_gen_patcher.active_modal is None:
+            left_arrow = self.state.ui_rects.rects.get("season_left_arrow")
+            right_arrow = self.state.ui_rects.rects.get("season_right_arrow")
+            if left_arrow and left_arrow.collidepoint(x, y):
+                self.state.highlighted = 0  # Season row
+                self._handle_nhl94_gen_patcher_navigation("left")
+                return
+            if right_arrow and right_arrow.collidepoint(x, y):
+                self.state.highlighted = 0  # Season row
+                self._handle_nhl94_gen_patcher_navigation("right")
+                return
         # Check Season / Language arrow buttons (we_patcher main menu only)
         if self.state.mode == "we_patcher" and self.state.we_patcher.active_modal is None:
             left_arrow = self.state.ui_rects.rects.get("season_left_arrow")
@@ -1520,6 +1762,14 @@ class ConsoleUtilitiesApp:
                 actual_index = i + self.state.ui_rects.scroll_offset
                 if self.state.mode == "portmaster":
                     self.state.portmaster.highlighted = actual_index
+                elif self.state.mode == "systems_list":
+                    self.state.systems_list_highlighted = actual_index
+                elif self.state.mode == "add_systems":
+                    self.state.add_systems_highlighted = actual_index
+                elif self.state.mode == "systems_settings":
+                    self.state.systems_settings_highlighted = actual_index
+                elif self.state.mode == "system_settings":
+                    self.state.system_settings_highlighted = actual_index
                 elif (
                     self.state.mode == "we_patcher"
                     and self.state.we_patcher.active_modal == "league_browser"
@@ -1643,6 +1893,22 @@ class ConsoleUtilitiesApp:
             else:
                 from state import ISSPatcherState
                 self.state.iss_patcher = ISSPatcherState()
+                self.state.mode = "sports_patcher"
+                self.state.highlighted = 0
+        elif self.state.mode == "nhl94_patcher":
+            if self.state.nhl94_patcher.active_modal:
+                self.state.nhl94_patcher.active_modal = None
+            else:
+                from state import NHL94SNESPatcherState
+                self.state.nhl94_patcher = NHL94SNESPatcherState()
+                self.state.mode = "sports_patcher"
+                self.state.highlighted = 0
+        elif self.state.mode == "nhl94_gen_patcher":
+            if self.state.nhl94_gen_patcher.active_modal:
+                self.state.nhl94_gen_patcher.active_modal = None
+            else:
+                from state import NHL94GenesisPatcherState
+                self.state.nhl94_gen_patcher = NHL94GenesisPatcherState()
                 self.state.mode = "sports_patcher"
                 self.state.highlighted = 0
         elif self.state.mode == "system_settings":
@@ -1846,12 +2112,24 @@ class ConsoleUtilitiesApp:
             elif action == "iss_patcher":
                 self.state.mode = "iss_patcher"
                 self.state.highlighted = 0
+            elif action == "nhl94_patcher":
+                self.state.mode = "nhl94_patcher"
+                self.state.highlighted = 0
+            elif action == "nhl94_gen_patcher":
+                self.state.mode = "nhl94_gen_patcher"
+                self.state.highlighted = 0
 
         elif self.state.mode == "we_patcher":
             self._handle_we_patcher_selection()
 
         elif self.state.mode == "iss_patcher":
             self._handle_iss_patcher_selection()
+
+        elif self.state.mode == "nhl94_patcher":
+            self._handle_nhl94_patcher_selection()
+
+        elif self.state.mode == "nhl94_gen_patcher":
+            self._handle_nhl94_gen_patcher_selection()
 
         elif self.state.mode == "downloads":
             self._handle_downloads_selection()
@@ -2057,6 +2335,20 @@ class ConsoleUtilitiesApp:
             if new_provider == "espn":
                 from datetime import datetime as _dt
                 self.state.we_patcher.selected_season = _dt.now().year
+        elif action == "toggle_nhl94_provider":
+            providers = ["espn", "nhl"]
+            current = self.settings.get("nhl94_provider", "espn")
+            idx = providers.index(current) if current in providers else 0
+            new_provider = providers[(idx + 1) % len(providers)]
+            self.settings["nhl94_provider"] = new_provider
+            save_settings(self.settings)
+            # ESPN only supports current season — reset when switching to it
+            if new_provider == "espn":
+                from datetime import datetime as _dt
+                now = _dt.now()
+                self.state.nhl94_patcher.selected_season = (
+                    now.year if now.month >= 10 else now.year - 1
+                )
         elif action == "edit_api_football_key":
             self._show_api_football_key_input()
         elif action == "toggle_scraper_enabled":
@@ -2526,6 +2818,10 @@ class ConsoleUtilitiesApp:
             path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "iss_patcher_rom":
             path = self.settings.get("roms_dir", SCRIPT_DIR)
+        elif selection_type == "nhl94_patcher_rom":
+            path = self.settings.get("roms_dir", SCRIPT_DIR)
+        elif selection_type == "nhl94_gen_patcher_rom":
+            path = self.settings.get("roms_dir", SCRIPT_DIR)
         else:
             path = SCRIPT_DIR
 
@@ -2539,6 +2835,12 @@ class ConsoleUtilitiesApp:
         elif selection_type == "iss_patcher_rom":
             from services.file_listing import load_snes_rom_folder_contents
             loader = load_snes_rom_folder_contents
+        elif selection_type == "nhl94_patcher_rom":
+            from services.file_listing import load_snes_rom_folder_contents
+            loader = load_snes_rom_folder_contents
+        elif selection_type == "nhl94_gen_patcher_rom":
+            from services.file_listing import load_genesis_rom_folder_contents
+            loader = load_genesis_rom_folder_contents
         else:
             loader = load_folder_contents
         self.state.folder_browser.items = loader(
@@ -2583,12 +2885,16 @@ class ConsoleUtilitiesApp:
         )
 
         is_psx_context = selection_type == "we_patcher_rom"
-        is_snes_context = selection_type == "iss_patcher_rom"
+        is_snes_context = selection_type in ("iss_patcher_rom", "nhl94_patcher_rom")
+        is_genesis_context = selection_type == "nhl94_gen_patcher_rom"
         if is_psx_context:
             nav_loader = load_psx_rom_folder_contents
         elif is_snes_context:
             from services.file_listing import load_snes_rom_folder_contents
             nav_loader = load_snes_rom_folder_contents
+        elif is_genesis_context:
+            from services.file_listing import load_genesis_rom_folder_contents
+            nav_loader = load_genesis_rom_folder_contents
         else:
             nav_loader = load_folder_contents
 
@@ -2620,6 +2926,7 @@ class ConsoleUtilitiesApp:
             "7z_file",
             "psx_rom",
             "snes_rom",
+            "genesis_rom",
             "file",
         ):
             # Select the file based on selection type
@@ -2692,6 +2999,32 @@ class ConsoleUtilitiesApp:
                 self.state.iss_patcher.rom_valid = False
                 self.state.iss_patcher.rom_info = None
             self.state.iss_patcher.slot_mapping = []
+        elif selection_type == "nhl94_patcher_rom":
+            self.state.nhl94_patcher.rom_path = path
+            try:
+                from services.nhl94_snes_patcher import NHL94SNESPatcher
+                cache_dir = self.settings.get("work_dir", "workdir")
+                cache_dir = os.path.join(cache_dir, "nhl_cache")
+                patcher = NHL94SNESPatcher(cache_dir)
+                rom_info = patcher.analyze_rom(path)
+                self.state.nhl94_patcher.rom_info = rom_info
+                self.state.nhl94_patcher.rom_valid = rom_info.is_valid
+            except Exception:
+                self.state.nhl94_patcher.rom_valid = False
+                self.state.nhl94_patcher.rom_info = None
+        elif selection_type == "nhl94_gen_patcher_rom":
+            self.state.nhl94_gen_patcher.rom_path = path
+            try:
+                from services.nhl94_genesis_patcher import NHL94GenesisPatcher
+                cache_dir = self.settings.get("work_dir", "workdir")
+                cache_dir = os.path.join(cache_dir, "nhl_cache")
+                patcher = NHL94GenesisPatcher(cache_dir)
+                rom_info = patcher.analyze_rom(path)
+                self.state.nhl94_gen_patcher.rom_info = rom_info
+                self.state.nhl94_gen_patcher.rom_valid = rom_info.is_valid
+            except Exception:
+                self.state.nhl94_gen_patcher.rom_valid = False
+                self.state.nhl94_gen_patcher.rom_info = None
 
         # Close the modal
         self.state.folder_browser.show = False
@@ -2774,6 +3107,15 @@ class ConsoleUtilitiesApp:
         extract_contents = parent.get("extract_contents", True) if parent else True
         boxarts_url = parent.get("boxarts", "") if parent else ""
         auth = parent.get("auth") if parent else None
+
+        # Auto-generate LibRetro boxarts URL for Myrient systems
+        if not boxarts_url and "myrient.erista.me" in system.get("url", ""):
+            from urllib.parse import urlparse
+
+            path_parts = urlparse(system["url"]).path.rstrip("/").split("/")
+            if path_parts:
+                system_dir = path_parts[-1]
+                boxarts_url = f"https://thumbnails.libretro.com/{system_dir}/Named_Boxarts/"
 
         # Inherit extra fields from parent (download_url, regex, auth config, etc.)
         inherit_keys = {
@@ -6119,6 +6461,41 @@ class ConsoleUtilitiesApp:
             self.state.confirm_modal.button_index = 0
             self.state.confirm_modal.context = ""
 
+    def _handle_nhl94_patcher_selection(self):
+        """Handle item selection on the nhl94_patcher main menu."""
+        nhl = self.state.nhl94_patcher
+
+        # If a modal is active, route to modal selection
+        if nhl.active_modal == "roster_preview":
+            # No action on select in roster preview — just browsing
+            return
+        if nhl.active_modal == "patch_progress":
+            # Close if complete or errored
+            if nhl.patch_complete or nhl.patch_error:
+                nhl.active_modal = None
+            return
+
+        from ui.screens.nhl94_snes_patcher_screen import nhl94_snes_patcher_screen
+
+        action = nhl94_snes_patcher_screen.get_action(
+            self.state.highlighted, self.state, self.settings
+        )
+
+        if action == "fetch_rosters":
+            self._start_nhl94_roster_fetch()
+        elif action == "preview_rosters":
+            nhl.active_modal = "roster_preview"
+            nhl.roster_preview_team_index = 0
+            nhl.roster_preview_player_index = 0
+            # Auto-fetch if rosters not loaded yet
+            if not nhl.rosters and not nhl.is_fetching:
+                self._start_nhl94_roster_fetch()
+        elif action == "select_rom":
+            self._open_folder_browser("nhl94_patcher_rom")
+        elif action == "patch_rom":
+            nhl.active_modal = "patch_progress"
+            self._start_nhl94_patching()
+
     def _handle_iss_league_browser_selection(self):
         """Handle league selection from the ISS league browser modal."""
         iss = self.state.iss_patcher
@@ -6252,6 +6629,306 @@ class ConsoleUtilitiesApp:
                 state.iss_patcher.is_fetching = False
 
         threading.Thread(target=_fetch, daemon=True).start()
+
+    def _start_nhl94_roster_fetch(self):
+        """Start background NHL94 roster fetch thread."""
+        import threading
+
+        nhl = self.state.nhl94_patcher
+
+        if nhl.is_fetching:
+            return
+
+        nhl.is_fetching = True
+        nhl.fetch_error = ""
+        nhl.rosters = None
+        nhl.league_data = None
+
+        cache_dir = self.settings.get("work_dir", "workdir")
+        cache_dir = os.path.join(cache_dir, "nhl_cache")
+        provider = self.settings.get("nhl94_provider", "espn")
+        season = nhl.selected_season
+
+        def _fetch():
+            from services.nhl94_snes_patcher import NHL94SNESPatcher
+            from services.sports_api.models import League, Team, TeamRoster, LeagueData
+
+            try:
+                def on_status(msg):
+                    nhl.fetch_status = msg
+
+                patcher = NHL94SNESPatcher(
+                    cache_dir, on_status=on_status, provider=provider,
+                )
+
+                def progress(p, msg):
+                    nhl.fetch_progress = p
+                    nhl.fetch_status = msg
+
+                rosters = patcher.fetch_rosters(
+                    on_progress=progress, season=season,
+                )
+                nhl.rosters = rosters
+                nhl.team_stats = getattr(patcher, "team_stats", {})
+
+                # Build LeagueData so roster preview modal works
+                team_rosters = []
+                for team_code, players in sorted(rosters.items()):
+                    team_name = team_code
+                    # Use first player's team info if available
+                    if players and hasattr(players[0], "team") and players[0].team:
+                        team_name = players[0].team
+                    team = Team(
+                        id=0, name=team_name, short_name=team_code,
+                        code=team_code, logo_url="", country="",
+                    )
+                    team_rosters.append(TeamRoster(
+                        team=team,
+                        players=players,
+                        player_stats={},
+                    ))
+                nhl.league_data = LeagueData(
+                    league=League(
+                        id=0, name="NHL", country="USA",
+                        country_code="US", logo_url="",
+                        season=season, teams_count=len(team_rosters),
+                    ),
+                    teams=team_rosters,
+                )
+            except Exception as e:
+                nhl.fetch_error = str(e)
+            finally:
+                nhl.is_fetching = False
+
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def _start_nhl94_patching(self):
+        """Start background NHL94 patching thread."""
+        import threading
+        import os
+
+        nhl = self.state.nhl94_patcher
+
+        if not nhl.rosters or not nhl.rom_path:
+            nhl.patch_error = "Missing rosters or ROM"
+            return
+
+        if not nhl.rom_valid:
+            nhl.patch_error = "Invalid ROM"
+            return
+
+        nhl.is_patching = True
+        nhl.patch_error = ""
+        nhl.patch_complete = False
+        nhl.patch_output_path = ""
+
+        input_path = nhl.rom_path
+        game_dir = os.path.dirname(input_path)
+        base_name = os.path.splitext(os.path.basename(input_path))[0]
+        ext = os.path.splitext(input_path)[1]
+        season = nhl.selected_season
+        season_label = f"{season}-{season + 1}"
+        output_path = os.path.join(
+            game_dir, f"{base_name} - NHL {season_label}{ext}"
+        )
+
+        cache_dir = self.settings.get("work_dir", "workdir")
+        cache_dir = os.path.join(cache_dir, "nhl_cache")
+        provider = self.settings.get("nhl94_provider", "espn")
+
+        def _patch():
+            try:
+                from services.nhl94_snes_patcher import NHL94SNESPatcher
+
+                patcher = NHL94SNESPatcher(
+                    cache_dir, provider=provider,
+                )
+                # Restore team_stats from fetch phase so sorting works
+                patcher.team_stats = nhl.team_stats or {}
+
+                def progress(p, msg):
+                    nhl.patch_progress = p
+                    nhl.patch_status = msg
+
+                result = patcher.patch_rom(
+                    input_path, output_path, nhl.rosters,
+                    on_progress=progress,
+                )
+                nhl.patch_complete = result.success
+                nhl.patch_error = result.error if not result.success else ""
+                nhl.patch_output_path = result.output_path if result.success else ""
+            except Exception as e:
+                nhl.patch_error = str(e)
+                nhl.patch_complete = False
+            finally:
+                nhl.is_patching = False
+
+        threading.Thread(target=_patch, daemon=True).start()
+
+    def _handle_nhl94_gen_patcher_selection(self):
+        """Handle item selection on the nhl94_gen_patcher main menu."""
+        nhl = self.state.nhl94_gen_patcher
+
+        # If a modal is active, route to modal selection
+        if nhl.active_modal == "roster_preview":
+            return
+        if nhl.active_modal == "patch_progress":
+            if nhl.patch_complete or nhl.patch_error:
+                nhl.active_modal = None
+            return
+
+        from ui.screens.nhl94_genesis_patcher_screen import nhl94_genesis_patcher_screen
+
+        action = nhl94_genesis_patcher_screen.get_action(
+            self.state.highlighted, self.state, self.settings
+        )
+
+        if action == "fetch_rosters":
+            self._start_nhl94_gen_roster_fetch()
+        elif action == "preview_rosters":
+            nhl.active_modal = "roster_preview"
+            nhl.roster_preview_team_index = 0
+            nhl.roster_preview_player_index = 0
+            if not nhl.rosters and not nhl.is_fetching:
+                self._start_nhl94_gen_roster_fetch()
+        elif action == "select_rom":
+            self._open_folder_browser("nhl94_gen_patcher_rom")
+        elif action == "patch_rom":
+            nhl.active_modal = "patch_progress"
+            self._start_nhl94_gen_patching()
+
+    def _start_nhl94_gen_roster_fetch(self):
+        """Start background NHL94 Genesis roster fetch thread."""
+        import threading
+
+        nhl = self.state.nhl94_gen_patcher
+
+        if nhl.is_fetching:
+            return
+
+        nhl.is_fetching = True
+        nhl.fetch_error = ""
+        nhl.rosters = None
+
+        cache_dir = self.settings.get("work_dir", "workdir")
+        cache_dir = os.path.join(cache_dir, "nhl_cache")
+        provider = self.settings.get("nhl94_gen_provider", "espn")
+        season = nhl.selected_season
+
+        def _fetch():
+            from services.nhl94_genesis_patcher import NHL94GenesisPatcher
+            from services.sports_api.models import League, Team, TeamRoster, LeagueData
+
+            try:
+                def on_status(msg):
+                    nhl.fetch_status = msg
+
+                patcher = NHL94GenesisPatcher(
+                    cache_dir, on_status=on_status, provider=provider,
+                )
+
+                def progress(p, msg):
+                    nhl.fetch_progress = p
+                    nhl.fetch_status = msg
+
+                rosters = patcher.fetch_rosters(
+                    on_progress=progress, season=season,
+                )
+                nhl.rosters = rosters
+                nhl.team_stats = getattr(patcher, "team_stats", {})
+
+                # Build LeagueData so roster preview modal works
+                team_rosters = []
+                for team_code, players in sorted(rosters.items()):
+                    team_name = team_code
+                    if players and hasattr(players[0], "team") and players[0].team:
+                        team_name = players[0].team
+                    team = Team(
+                        id=0, name=team_name, short_name=team_code,
+                        code=team_code, logo_url="", country="",
+                    )
+                    team_rosters.append(TeamRoster(
+                        team=team,
+                        players=players,
+                        player_stats={},
+                    ))
+                nhl.league_data = LeagueData(
+                    league=League(
+                        id=0, name="NHL", country="USA",
+                        country_code="US", logo_url="",
+                        season=season, teams_count=len(team_rosters),
+                    ),
+                    teams=team_rosters,
+                )
+            except Exception as e:
+                nhl.fetch_error = str(e)
+            finally:
+                nhl.is_fetching = False
+
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def _start_nhl94_gen_patching(self):
+        """Start background NHL94 Genesis patching thread."""
+        import threading
+        import os
+
+        nhl = self.state.nhl94_gen_patcher
+
+        if not nhl.rosters or not nhl.rom_path:
+            nhl.patch_error = "Missing rosters or ROM"
+            return
+
+        if not nhl.rom_valid:
+            nhl.patch_error = "Invalid ROM"
+            return
+
+        nhl.is_patching = True
+        nhl.patch_error = ""
+        nhl.patch_complete = False
+        nhl.patch_output_path = ""
+
+        input_path = nhl.rom_path
+        game_dir = os.path.dirname(input_path)
+        base_name = os.path.splitext(os.path.basename(input_path))[0]
+        ext = os.path.splitext(input_path)[1]
+        season = nhl.selected_season
+        season_label = f"{season}-{season + 1}"
+        output_path = os.path.join(
+            game_dir, f"{base_name} - NHL {season_label}{ext}"
+        )
+
+        cache_dir = self.settings.get("work_dir", "workdir")
+        cache_dir = os.path.join(cache_dir, "nhl_cache")
+        provider = self.settings.get("nhl94_gen_provider", "espn")
+
+        def _patch():
+            try:
+                from services.nhl94_genesis_patcher import NHL94GenesisPatcher
+
+                patcher = NHL94GenesisPatcher(
+                    cache_dir, provider=provider,
+                )
+                # Restore team_stats from fetch phase so sorting works
+                patcher.team_stats = nhl.team_stats or {}
+
+                def progress(p, msg):
+                    nhl.patch_progress = p
+                    nhl.patch_status = msg
+
+                result = patcher.patch_rom(
+                    input_path, output_path, nhl.rosters,
+                    on_progress=progress,
+                )
+                nhl.patch_complete = result.success
+                nhl.patch_error = result.error if not result.success else ""
+                nhl.patch_output_path = result.output_path if result.success else ""
+            except Exception as e:
+                nhl.patch_error = str(e)
+                nhl.patch_complete = False
+            finally:
+                nhl.is_patching = False
+
+        threading.Thread(target=_patch, daemon=True).start()
 
     def _start_iss_patching(self):
         """Start background ISS patching thread."""
