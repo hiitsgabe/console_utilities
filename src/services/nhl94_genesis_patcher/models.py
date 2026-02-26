@@ -128,6 +128,7 @@ class NHL94GenPlayerRecord:
     """
 
     name: str
+    position: str = "C"          # C, LW, RW, D, G
     jersey_number: int = 1       # 1-99
     weight_class: int = 7        # 0-14 (140 + class*8 = lbs)
     handedness: int = 0          # 0=L (even nibble), 1=R (odd nibble)

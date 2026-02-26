@@ -261,6 +261,10 @@ class NHL94SNESPatcher:
             if team.players:
                 success = writer.write_team_roster(i, team.players)
                 if success:
+                    # Also update header: player count + lines
+                    counts = team_counts.get(i, (2, 14, 7))
+                    _, nf, nd = counts
+                    writer.write_team_header(i, nf, nd)
                     teams_patched += 1
                     players_patched += len(team.players)
 

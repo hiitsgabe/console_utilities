@@ -31,7 +31,7 @@ ROM layout (Motorola 68000, big-endian):
 """
 
 import os
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict
 
 from services.nhl94_genesis_patcher.models import (
     NHL94GenRomInfo,
@@ -158,6 +158,28 @@ class NHL94GenesisRomReader:
                 display_name=display,
             ))
         return slots
+
+    def get_team_section_offsets(
+        self, team_index: int
+    ) -> Optional[Dict[str, int]]:
+        """Get absolute offsets of all team data sections.
+
+        Returns dict with keys: players, palettes, strings, lines,
+        ratings, goalies. All values are absolute file offsets.
+        """
+        if not self.data or team_index >= TEAM_COUNT:
+            return None
+        team_base = self._read_team_pointer(team_index)
+        if team_base is None:
+            return None
+        return {
+            "players": team_base + self._read_u16_be(team_base),
+            "palettes": team_base + self._read_u16_be(team_base + 2),
+            "strings": team_base + self._read_u16_be(team_base + 4),
+            "lines": team_base + self._read_u16_be(team_base + 6),
+            "ratings": team_base + self._read_u16_be(team_base + 8),
+            "goalies": team_base + self._read_u16_be(team_base + 0xA),
+        }
 
     def _get_player_records_offset(self, team_base: int) -> int:
         """Get absolute offset of player records for a team.

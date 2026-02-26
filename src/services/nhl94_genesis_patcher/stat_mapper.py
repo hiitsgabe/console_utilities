@@ -95,6 +95,7 @@ class NHL94GenStatMapper:
 
         return NHL94GenPlayerRecord(
             name=player.name[:14],
+            position=pos,
             jersey_number=jersey,
             weight_class=weight_class,
             handedness=hand,
@@ -229,7 +230,8 @@ class NHL94GenStatMapper:
         # Goalies: sorted by SV%, take 2
         goalies = goalies[:2]
 
-        selected = forwards + defense + goalies
+        # ROM order: goalies first, then forwards, then defense
+        selected = goalies + forwards + defense
 
         # Fill remaining slots
         all_used = set(id(p) for p in selected)

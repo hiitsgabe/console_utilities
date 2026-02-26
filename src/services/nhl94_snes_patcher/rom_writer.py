@@ -19,7 +19,15 @@ from services.nhl94_snes_patcher.models import (
 from services.nhl94_snes_patcher.rom_reader import (
     NHL94SNESRomReader,
     STATS_SIZE,
+    PLAYER_COUNT_OFFSET,
 )
+
+# Line assignment offset within team data header.
+# Byte 17 = player count, Byte 18 = team overall,
+# Bytes 19..74 = 8 lines × 7 slots = 56 bytes.
+LINE_ASSIGN_OFFSET = 19
+LINE_SLOTS = 7   # G, LD, RD, LW, C, RW, EA
+LINE_COUNT = 8   # SC1, SC2, CHK, PP1, PP2, PK1, PK2, EA
 
 
 def encode_nibble(high: int, low: int) -> int:
@@ -145,6 +153,92 @@ class NHL94SNESRomWriter:
             offset += 1
 
         return True
+
+    def write_team_header(
+        self,
+        team_index: int,
+        num_forwards: int,
+        num_defensemen: int,
+    ) -> bool:
+        """Write player count + line assignments into header.
+
+        Updates byte 17 (player count nibble) and bytes 19-74
+        (8 lines × 7 slots) so the game's line display matches
+        the G+F+D player order we wrote.
+        """
+        if not self.data or team_index >= TEAM_COUNT:
+            return False
+
+        file_off = self.reader._read_team_pointer(team_index)
+        if file_off is None:
+            return False
+
+        # ── Write player count byte (byte 17) ──────────
+        pc_off = file_off + PLAYER_COUNT_OFFSET
+        if pc_off >= len(self.data):
+            return False
+        nf = min(15, max(0, num_forwards))
+        nd = min(15, max(0, num_defensemen))
+        self.data[pc_off] = (nf << 4) | nd
+
+        # ── Build line assignments ──────────────────────
+        # Player indices:
+        #   G:  0, 1
+        #   F:  2  .. 2+nf-1    (LW,C,RW per line)
+        #   D:  2+nf .. 2+nf+nd-1
+        g1, g2 = 0, min(1, 1)
+        f_base = 2
+        d_base = 2 + nf
+
+        # Clamp helper
+        def fi(i):
+            return min(f_base + i, f_base + nf - 1)
+
+        def di(i):
+            return min(d_base + i, d_base + nd - 1)
+
+        # Forward lines (groups of 3: LW, C, RW)
+        # Defense pairs (groups of 2)
+        lines = self._build_lines(
+            g1, g2, f_base, nf, d_base, nd, fi, di,
+        )
+
+        # ── Write 56 bytes starting at byte 19 ─────────
+        la_off = file_off + LINE_ASSIGN_OFFSET
+        if la_off + LINE_COUNT * LINE_SLOTS > len(self.data):
+            return False
+
+        for line_bytes in lines:
+            for b in line_bytes:
+                self.data[la_off] = b & 0xFF
+                la_off += 1
+
+        return True
+
+    @staticmethod
+    def _build_lines(g1, g2, fb, nf, db, nd, fi, di):
+        """Build 8 line configs: SC1 SC2 CHK PP1 PP2 PK1 PK2 EA.
+
+        Each line = [G, LD, RD, LW, C, RW, EA].
+        """
+        # SC1 – best line
+        sc1 = [g1, di(0), di(1), fi(0), fi(1), fi(2), fi(0)]
+        # SC2 – second line
+        sc2 = [g1, di(2), di(3), fi(3), fi(4), fi(5), fi(3)]
+        # CHK – checking / third line
+        sc3 = [g1, di(4), di(5), fi(6), fi(7), fi(8), fi(6)]
+        # PP1 – power play 1 (top scorers + top D)
+        pp1 = [g1, di(0), di(1), fi(0), fi(1), fi(2), fi(3)]
+        # PP2 – power play 2
+        pp2 = [g1, di(2), di(3), fi(3), fi(4), fi(5), fi(6)]
+        # PK1 – penalty kill 1 (checking fwds + top D)
+        pk1 = [g1, di(0), di(1), fi(6), fi(7), fi(8), fi(6)]
+        # PK2 – penalty kill 2
+        pk2 = [g1, di(2), di(3), fi(3), fi(4), fi(5), fi(3)]
+        # EA – extra attacker (backup G, pull for extra F)
+        ea = [g2, di(0), di(1), fi(0), fi(1), fi(2), fi(3)]
+
+        return [sc1, sc2, sc3, pp1, pp2, pk1, pk2, ea]
 
     def _write_player_stats(self, player: NHL94PlayerRecord, offset: int) -> int:
         """Write 8 stat bytes for a player. Returns new offset."""

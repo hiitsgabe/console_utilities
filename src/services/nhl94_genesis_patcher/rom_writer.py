@@ -100,20 +100,22 @@ class NHL94GenesisRomWriter:
         self,
         team_index: int,
         players: List[NHL94GenPlayerRecord],
-    ) -> bool:
+    ) -> int:
         """Write player records for a team, fitting within existing space.
 
         Names are truncated if they don't fit. Excess space is zero-filled.
+        Returns the number of players actually written, or -1 on error.
         """
         if not self.data or team_index >= TEAM_COUNT:
-            return False
+            return -1
 
         start, region_size = self.reader.get_team_player_region(team_index)
         if region_size == 0:
-            return False
+            return -1
 
         offset = start
         end = start + region_size
+        written = 0
 
         for player in players:
             # Space needed: 2 (length) + name_len + 8 (stats) + 2 (sentinel)
@@ -138,6 +140,7 @@ class NHL94GenesisRomWriter:
 
             # Write 8 stat bytes
             offset = self._write_player_stats(player, offset)
+            written += 1
 
         # Write end-of-roster sentinel (0x0000)
         if offset + 2 <= end:
@@ -150,7 +153,7 @@ class NHL94GenesisRomWriter:
             self.data[offset] = 0x00
             offset += 1
 
-        return True
+        return written
 
     def _write_player_stats(
         self, player: NHL94GenPlayerRecord, offset: int
@@ -214,6 +217,142 @@ class NHL94GenesisRomWriter:
         offset += 1
 
         return offset
+
+    def write_team_header(
+        self,
+        team_index: int,
+        players: List[NHL94GenPlayerRecord],
+        actual_count: int = -1,
+    ) -> bool:
+        """Write count byte, goalie bytes, and line assignments.
+
+        Must be called AFTER write_team_roster() for the same team.
+        Analyzes the player list to determine position counts and
+        generates proper line assignments with correct roster indices.
+
+        ROM roster order: goalies first, then forwards, then defense.
+        The count byte tells the game how many F and D there are;
+        goalies = total - F - D (always at the start of the roster).
+
+        If actual_count is provided, only the first actual_count players
+        are considered (matching what actually fit in ROM).
+        """
+        if not self.data or team_index >= TEAM_COUNT or not players:
+            return False
+
+        offsets = self.reader.get_team_section_offsets(team_index)
+        if offsets is None:
+            return False
+
+        # Slice to only the players that actually fit in ROM
+        if actual_count >= 0:
+            players = players[:actual_count]
+        if not players:
+            return False
+
+        # Count positions
+        goalie_count = sum(1 for p in players if p.is_goalie)
+        defense_count = sum(
+            1 for p in players if p.position == "D"
+        )
+        forward_count = len(players) - goalie_count - defense_count
+
+        # Write count byte at ratings + 3
+        # High nibble = forward count, low nibble = defense count
+        f_nibble = min(15, forward_count)
+        d_nibble = min(15, defense_count)
+        self.data[offsets["ratings"] + 3] = (
+            (f_nibble << 4) | d_nibble
+        )
+
+        # Write goalie byte 1 only — preserve original byte 0 (per-team value)
+        self.data[offsets["goalies"] + 1] = (
+            0x00 if goalie_count <= 2 else 0x10
+        )
+
+        # Generate and write lines (8 lines × 8 bytes = 64 bytes)
+        lines = self._generate_lines(
+            goalie_count, forward_count, defense_count,
+        )
+        lines_off = offsets["lines"]
+        for i, line in enumerate(lines):
+            for j, val in enumerate(line):
+                self.data[lines_off + i * 8 + j] = val
+
+        return True
+
+    def _generate_lines(
+        self,
+        goalie_count: int,
+        forward_count: int,
+        defense_count: int,
+    ) -> List[List[int]]:
+        """Generate 8 lines of 8 bytes each for team line assignments.
+
+        Line format: [01, LD, RD, LW, C, RW, EA, G]
+        Roster layout: [G1,G2,..., C1,LW1,RW1, C2,LW2,RW2,..., D1,D2,...]
+
+        Lines 0-3: Even strength (4 forward lines + 3 D pairs rotating)
+        Lines 4-5: Power play (top players)
+        Lines 6-7: Penalty kill (3rd/4th line forwards, top D)
+        """
+        g_start = 0
+        f_start = goalie_count
+        d_start = goalie_count + forward_count
+
+        starter = g_start if goalie_count > 0 else 0
+
+        def f(i: int) -> int:
+            """Get forward roster index, clamped to valid range."""
+            if forward_count == 0:
+                return starter
+            return f_start + min(i, forward_count - 1)
+
+        def d(i: int) -> int:
+            """Get defense roster index, clamped to valid range."""
+            if defense_count == 0:
+                return f(0)
+            return d_start + min(i, defense_count - 1)
+
+        lines: List[List[int]] = []
+
+        # Even-strength lines 0-3
+        # Forwards in groups of 3: (C, LW, RW) per line
+        # Defense pairs rotate through available pairs
+        d_pairs = max(1, defense_count // 2)
+        for li in range(4):
+            c = f(li * 3)
+            lw = f(li * 3 + 1)
+            rw = f(li * 3 + 2)
+            pair = li % d_pairs
+            ld = d(pair * 2)
+            rd = d(pair * 2 + 1)
+            ea = f(((li + 1) % 4) * 3)  # Next line's center
+            lines.append([0x01, ld, rd, lw, c, rw, ea, starter])
+
+        # Power play lines 4-5 (best offensive players)
+        for pp in range(2):
+            c = f(pp * 3)
+            lw = f(pp * 3 + 1)
+            rw = f(pp * 3 + 2)
+            ld = d(pp * 2)
+            rd = d(pp * 2 + 1)
+            ea = f(((pp + 1) * 3) + 1)  # Another top forward
+            lines.append([0x01, ld, rd, lw, c, rw, ea, starter])
+
+        # Penalty kill lines 6-7 (checking forwards, top D)
+        for pk in range(2):
+            # Use 3rd and 4th line forwards for PK
+            pk_line = pk + 2
+            c = f(pk_line * 3)
+            lw = f(pk_line * 3 + 1)
+            rw = f(pk_line * 3 + 2)
+            ld = d(pk * 2)
+            rd = d(pk * 2 + 1)
+            ea = f(pk * 3)  # Top-line center as EA
+            lines.append([0x01, ld, rd, lw, c, rw, ea, starter])
+
+        return lines
 
     def finalize(self) -> bool:
         """Write the modified ROM to output path."""
