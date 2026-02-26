@@ -214,10 +214,13 @@ class NHL94GenesisPatcher:
                 )
 
             if team.players:
-                success = writer.write_team_roster(i, team.players)
-                if success:
+                written = writer.write_team_roster(i, team.players)
+                if written > 0:
+                    writer.write_team_header(
+                        i, team.players, actual_count=written,
+                    )
                     teams_patched += 1
-                    players_patched += len(team.players)
+                    players_patched += written
 
         if on_progress:
             on_progress(1.0, "Saving patched ROM...")
