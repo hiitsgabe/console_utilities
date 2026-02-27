@@ -84,6 +84,12 @@ class SettingsScreen:
         "NSZ Keys",  # Only shown when NSZ is enabled
     ]
 
+    # Web Companion section
+    WEB_COMPANION_SECTION = [
+        "--- WEB COMPANION ---",
+        "Web Companion",
+    ]
+
     # App section (last)
     APP_SECTION = [
         "--- APP ---",
@@ -177,6 +183,10 @@ class SettingsScreen:
         # Only show NSZ Keys if NSZ is enabled
         if nsz_enabled:
             items.append(self.NSZ_SECTION[2])  # NSZ Keys
+
+        # Add Web Companion section
+        divider_indices.add(len(items))
+        items.extend(self.WEB_COMPANION_SECTION)
 
         # Add App section (last)
         divider_indices.add(len(items))
@@ -299,6 +309,9 @@ class SettingsScreen:
             elif item == "Enable NSZ":
                 value = "ON" if settings.get("nsz_enabled", False) else "OFF"
                 items.append((item, value))
+            elif item == "Web Companion":
+                value = "ON" if settings.get("web_companion_enabled", False) else "OFF"
+                items.append((item, value))
             elif item == "Check for Updates":
                 items.append((item, APP_VERSION))
             else:
@@ -383,6 +396,7 @@ class SettingsScreen:
                 "Enable Scraper": "toggle_scraper_enabled",
                 "Scraper Frontend": "toggle_scraper_frontend",
                 "Enable NSZ": "toggle_nsz_enabled",
+                "Web Companion": "toggle_web_companion",
                 "Check for Updates": "check_for_updates",
             }
             return actions.get(item, "unknown")

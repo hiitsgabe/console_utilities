@@ -117,6 +117,8 @@ NAVIGATION_ACCELERATION = 0.90  # Acceleration factor per repeat
 # **************************************************************** #
 #                       Touch/Mouse Settings                         #
 # **************************************************************** #
+WEB_COMPANION_PORT = 7655  # Port for the web companion server
+
 SCROLL_THRESHOLD = 5  # Pixels to move before it's considered scrolling
 TAP_TIME_THRESHOLD = 250  # Max ms for a tap vs scroll
 SCROLL_SENSITIVITY = 0.08  # Touch scroll sensitivity (lower = more sensitive)

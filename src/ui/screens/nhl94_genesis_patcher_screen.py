@@ -37,7 +37,7 @@ class NHL94GenesisPatcherScreen:
         if provider == "espn":
             now = datetime.now()
             start = now.year if now.month >= 10 else now.year - 1
-            season_value = str(start)
+            season_value = f"{start}-{start + 1}"
             season_action = "locked"
         else:
             season_value = ""  # Drawn by _draw_arrow_control

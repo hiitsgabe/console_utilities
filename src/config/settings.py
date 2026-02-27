@@ -39,6 +39,7 @@ class Settings:
     sports_roster_enabled: bool = False
     sports_roster_provider: str = "espn"  # espn, api_football
     nhl94_provider: str = "espn"  # espn, nhl
+    nhl07_provider: str = "espn"  # espn, nhl
     api_football_key: str = ""
     we_patcher_language: str = "en"  # en, es, fr, pt
     # Scraper settings
@@ -56,6 +57,8 @@ class Settings:
     rawg_api_key: str = ""
     igdb_client_id: str = ""
     igdb_client_secret: str = ""  # base64 encoded
+    # Web Companion
+    web_companion_enabled: bool = False
     # Frontend-specific paths
     esde_media_path: str = ""
     esde_gamelists_path: str = ""

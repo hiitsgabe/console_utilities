@@ -1,6 +1,6 @@
-"""NHL94 SNES Patcher screen — NHL Hockey '94 roster update.
+"""NHL 07 PSP Patcher screen — NHL 07 (PSP) roster update.
 
-Mirrors the WE2002 patcher UI pattern: step-by-step list with
+Mirrors the NHL94 Genesis patcher UI pattern: step-by-step list with
 (label, secondary_text) pairs and action-based dispatch.
 """
 
@@ -13,8 +13,8 @@ from ui.templates.list_screen import ListScreenTemplate
 from ui.atoms.text import Text
 
 
-class NHL94SNESPatcherScreen:
-    """NHL94 SNES roster patcher UI."""
+class NHL07PSPPatcherScreen:
+    """NHL 07 PSP roster patcher UI."""
 
     def __init__(self, theme: Theme = default_theme):
         self.theme = theme
@@ -26,14 +26,14 @@ class NHL94SNESPatcherScreen:
     def _get_items(self, state, settings):
         """Build the menu items as (label, value, action) tuples.
 
-        Order: Season → Fetch Rosters → Preview Rosters → Select ROM → Patch ROM
+        Order: Season -> Fetch Rosters -> Preview Rosters -> Select ISO -> Patch ROM
         """
-        nhl = state.nhl94_patcher
-        provider = (settings or {}).get("nhl94_provider", "espn")
+        nhl = state.nhl07_psp_patcher
+        provider = (settings or {}).get("nhl07_provider", "espn")
 
         items = []
 
-        # ── Season ──────────────────────────────────────────────────────
+        # -- Season --
         if provider == "espn":
             now = datetime.now()
             start = now.year if now.month >= 10 else now.year - 1
@@ -44,7 +44,7 @@ class NHL94SNESPatcherScreen:
             season_action = "change_season"
         items.append(("Season", season_value, season_action))
 
-        # ── 1. Fetch Rosters ─────────────────────────────────────────────
+        # -- 1. Fetch Rosters --
         if nhl.is_fetching:
             fetch_value = f"Fetching... {int(nhl.fetch_progress * 100)}%"
         elif nhl.rosters:
@@ -56,44 +56,38 @@ class NHL94SNESPatcherScreen:
             fetch_value = "Not fetched"
         items.append(("1. Fetch Rosters", fetch_value, "fetch_rosters"))
 
-        # ── 2. Preview Rosters ───────────────────────────────────────────
-        if nhl.league_data:
+        # -- 2. Preview Rosters --
+        if nhl.league_data or nhl.rosters or nhl.is_fetching:
             preview_value = "Tap to preview"
-        elif nhl.is_fetching:
-            preview_value = "Tap to preview"
-        elif nhl.rosters:
-            preview_value = "Tap to preview"
+            preview_action = "preview_rosters"
         else:
             preview_value = "Complete step 1 first"
-        items.append((
-            "2. Preview Rosters",
-            preview_value,
-            "preview_rosters" if (
-                nhl.league_data or nhl.rosters or nhl.is_fetching
-            ) else "locked",
-        ))
+            preview_action = "locked"
+        items.append(("2. Preview Rosters", preview_value, preview_action))
 
-        # ── 3. Select ROM ────────────────────────────────────────────────
+        # -- 3. Select ISO --
         if nhl.rom_path and nhl.rom_valid:
             rom_value = os.path.basename(nhl.rom_path)
         elif nhl.rom_path:
-            rom_value = "Invalid ROM"
+            rom_value = "Invalid ISO"
         else:
             rom_value = "Not selected"
-        items.append(("3. Select ROM (.sfc/.smc)", rom_value, "select_rom"))
+        items.append(("3. Select ISO (.iso)", rom_value, "select_rom"))
 
-        # ── 4. Patch ROM ─────────────────────────────────────────────────
+        # -- 4. Patch ROM --
         if nhl.patch_complete:
             patch_value = "Complete"
         elif nhl.rosters and nhl.rom_valid:
             patch_value = "Ready to patch"
         else:
             patch_value = "Complete steps 1+3 first"
-        items.append((
-            "4. Patch ROM",
-            patch_value,
-            "patch_rom" if (nhl.rosters and nhl.rom_valid) else "locked",
-        ))
+        items.append(
+            (
+                "4. Patch ROM",
+                patch_value,
+                "patch_rom" if (nhl.rosters and nhl.rom_valid) else "locked",
+            )
+        )
 
         return items
 
@@ -103,16 +97,14 @@ class NHL94SNESPatcherScreen:
 
         back_rect, item_rects, scroll_offset = self.template.render(
             screen,
-            title="NHL 94 (SNES) Patcher",
+            title="NHL 07 (PSP) Patcher",
             items=display_items,
             highlighted=highlighted,
             selected=set(),
             show_back=True,
             item_height=48,
             get_label=lambda x: x[0] if isinstance(x, tuple) else x,
-            get_secondary=lambda x: (
-                x[1] if isinstance(x, tuple) else None
-            ),
+            get_secondary=lambda x: (x[1] if isinstance(x, tuple) else None),
             item_spacing=8,
         )
 
@@ -120,27 +112,22 @@ class NHL94SNESPatcherScreen:
         self.season_arrow_left = None
         self.season_arrow_right = None
 
-        provider = (settings or {}).get("nhl94_provider", "espn")
+        provider = (settings or {}).get("nhl07_provider", "espn")
         if provider == "nhl":
             season_idx = next(
-                (i for i, (_, _, a) in enumerate(items)
-                 if a == "change_season"), None
+                (i for i, (_, _, a) in enumerate(items) if a == "change_season"), None
             )
             if season_idx is not None:
                 visible_idx = season_idx - scroll_offset
                 if 0 <= visible_idx < len(item_rects):
                     row = item_rects[visible_idx]
-                    season = state.nhl94_patcher.selected_season
+                    season = state.nhl07_psp_patcher.selected_season
                     is_hl = highlighted == season_idx
-                    self._draw_arrow_control(
-                        screen, row, str(season), is_hl
-                    )
+                    self._draw_arrow_control(screen, row, str(season), is_hl)
 
         return back_rect, item_rects, scroll_offset
 
-    def _draw_arrow_control(
-        self, screen, row: pygame.Rect, label: str, is_highlighted: bool
-    ):
+    def _draw_arrow_control(self, screen, row: pygame.Rect, label: str, is_highlighted: bool):
         """Draw < value > control on the right side of a row."""
         btn_w, btn_h = 32, 30
         value_w = 56
@@ -148,40 +135,41 @@ class NHL94SNESPatcherScreen:
         gap = 6
 
         rx = row.right - margin
-        right_btn = pygame.Rect(
-            rx - btn_w, row.centery - btn_h // 2, btn_w, btn_h
-        )
+        right_btn = pygame.Rect(rx - btn_w, row.centery - btn_h // 2, btn_w, btn_h)
         value_cx = right_btn.left - gap - value_w // 2
         left_btn = pygame.Rect(
             value_cx - value_w // 2 - gap - btn_w,
-            row.centery - btn_h // 2, btn_w, btn_h,
+            row.centery - btn_h // 2,
+            btn_w,
+            btn_h,
         )
 
-        arrow_color = (
-            self.theme.primary if is_highlighted
-            else self.theme.text_secondary
-        )
-        value_color = (
-            self.theme.primary if is_highlighted
-            else self.theme.text_primary
-        )
+        arrow_color = self.theme.primary if is_highlighted else self.theme.text_secondary
+        value_color = self.theme.primary if is_highlighted else self.theme.text_primary
 
         self.text.render(
-            screen, "<",
-            (left_btn.centerx,
-             left_btn.centery - self.theme.font_size_sm // 2),
-            color=arrow_color, size=self.theme.font_size_sm, align="center",
+            screen,
+            "<",
+            (left_btn.centerx, left_btn.centery - self.theme.font_size_sm // 2),
+            color=arrow_color,
+            size=self.theme.font_size_sm,
+            align="center",
         )
         self.text.render(
-            screen, label,
+            screen,
+            label,
             (value_cx, row.centery - self.theme.font_size_md // 2),
-            color=value_color, size=self.theme.font_size_md, align="center",
+            color=value_color,
+            size=self.theme.font_size_md,
+            align="center",
         )
         self.text.render(
-            screen, ">",
-            (right_btn.centerx,
-             right_btn.centery - self.theme.font_size_sm // 2),
-            color=arrow_color, size=self.theme.font_size_sm, align="center",
+            screen,
+            ">",
+            (right_btn.centerx, right_btn.centery - self.theme.font_size_sm // 2),
+            color=arrow_color,
+            size=self.theme.font_size_sm,
+            align="center",
         )
 
         self.season_arrow_left = left_btn
@@ -199,4 +187,4 @@ class NHL94SNESPatcherScreen:
         return len(self._get_items(state, settings))
 
 
-nhl94_snes_patcher_screen = NHL94SNESPatcherScreen()
+nhl07_psp_patcher_screen = NHL07PSPPatcherScreen()

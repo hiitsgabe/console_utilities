@@ -514,6 +514,49 @@ class WePatcherState:
 
 
 @dataclass
+class NHL07PSPPatcherState:
+    """State for the NHL 07 PSP Patcher feature."""
+
+    # Season (start year: 2024 = 2024-25 season)
+    selected_season: int = field(
+        default_factory=lambda: (
+            datetime.now().year if datetime.now().month >= 10
+            else datetime.now().year - 1
+        )
+    )
+    selected_league: Any = None  # Not used, but roster_preview_modal accesses it
+
+    # Fetched data
+    rosters: Any = None  # Dict[str, List[Player]]
+    team_stats: Any = None  # Dict[str, dict] — per-player stats keyed by team code
+    league_data: Any = None  # LeagueData (built from rosters for roster preview modal)
+    fetch_progress: float = 0.0
+    fetch_status: str = ""
+    is_fetching: bool = False
+    fetch_error: str = ""
+
+    # ROM
+    rom_path: str = ""
+    rom_info: Any = None
+    rom_valid: bool = False
+
+    # Patching
+    patch_progress: float = 0.0
+    patch_status: str = ""
+    is_patching: bool = False
+    patch_output_path: str = ""
+    patch_complete: bool = False
+    patch_error: str = ""
+
+    # Roster preview
+    roster_preview_team_index: int = 0
+    roster_preview_player_index: int = 0
+
+    # UI navigation
+    active_modal: Optional[str] = None
+
+
+@dataclass
 class NHL94GenesisPatcherState:
     """State for the NHL94 Genesis Patcher feature."""
 
@@ -713,6 +756,9 @@ class AppState:
         self.nhl94_patcher = NHL94SNESPatcherState()
         self.nhl94_gen_patcher = NHL94GenesisPatcherState()
 
+        # ---- NHL 07 PSP Patcher ---- #
+        self.nhl07_psp_patcher = NHL07PSPPatcherState()
+
         # ---- UI Rectangles ---- #
         self.ui_rects = UIRects()
 
@@ -736,6 +782,8 @@ class AppState:
             return self.nhl94_patcher
         if self.mode == "nhl94_gen_patcher":
             return self.nhl94_gen_patcher
+        if self.mode == "nhl07_patcher":
+            return self.nhl07_psp_patcher
         return self.we_patcher
 
     def reset_navigation(self):
