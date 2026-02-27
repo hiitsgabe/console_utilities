@@ -42,6 +42,7 @@ from .we_patcher_screen import WePatcherScreen
 from .iss_patcher_screen import ISSPatcherScreen
 from .nhl94_snes_patcher_screen import NHL94SNESPatcherScreen
 from .nhl94_genesis_patcher_screen import NHL94GenesisPatcherScreen
+from .nhl07_psp_patcher_screen import NHL07PSPPatcherScreen
 from .downloads_screen import DownloadsScreen
 from .scraper_downloads_screen import ScraperDownloadsScreen
 from ui.molecules.status_footer import StatusFooter, StatusFooterItem
@@ -76,6 +77,7 @@ class ScreenManager:
         self.iss_patcher_screen = ISSPatcherScreen(theme)
         self.nhl94_patcher_screen = NHL94SNESPatcherScreen(theme)
         self.nhl94_gen_patcher_screen = NHL94GenesisPatcherScreen(theme)
+        self.nhl07_psp_patcher_screen = NHL07PSPPatcherScreen(theme)
 
         # Initialize modals
         self.search_modal = SearchModal(theme)
@@ -166,6 +168,21 @@ class ScreenManager:
             rects["char_rects"] = char_rects
             return rects
 
+        if state.folder_name_input.show:
+            modal_rect, content_rect, close_rect, char_rects = (
+                self.folder_name_modal.render(
+                    screen,
+                    state.folder_name_input.input_text,
+                    state.folder_name_input.cursor_position,
+                    input_mode=state.input_mode,
+                    shift_active=state.folder_name_input.shift_active,
+                )
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["char_rects"] = char_rects
+            return rects
+
         if state.folder_browser.show:
             modal_rect, item_rects, select_rect, cancel_rect, close_rect = (
                 self.folder_browser_modal.render(
@@ -220,21 +237,6 @@ class ScreenManager:
                     state.url_input.context,
                     input_mode=state.input_mode,
                     shift_active=state.url_input.shift_active,
-                )
-            )
-            rects["modal"] = modal_rect
-            rects["close"] = close_rect
-            rects["char_rects"] = char_rects
-            return rects
-
-        if state.folder_name_input.show:
-            modal_rect, content_rect, close_rect, char_rects = (
-                self.folder_name_modal.render(
-                    screen,
-                    state.folder_name_input.input_text,
-                    state.folder_name_input.cursor_position,
-                    input_mode=state.input_mode,
-                    shift_active=state.folder_name_input.shift_active,
                 )
             )
             rects["modal"] = modal_rect
@@ -580,6 +582,25 @@ class ScreenManager:
             rects["item_rects"] = item_rects
             return rects
 
+        # NHL 07 PSP Patcher modals
+        if state.nhl07_psp_patcher.active_modal == "roster_preview":
+            modal_rect, content_rect, close_rect, item_rects = (
+                self.roster_preview_modal.render(screen, state)
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["item_rects"] = item_rects
+            return rects
+
+        if state.nhl07_psp_patcher.active_modal == "patch_progress":
+            modal_rect, content_rect, close_rect, item_rects = (
+                self.patch_progress_modal.render(screen, state)
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["item_rects"] = item_rects
+            return rects
+
         # Render main screens based on mode
         if state.mode == "systems":
             back_rect, item_rects, scroll_offset = self.systems_screen.render(
@@ -785,6 +806,16 @@ class ScreenManager:
             rects["scroll_offset"] = scroll_offset
             rects["season_left_arrow"] = self.nhl94_gen_patcher_screen.season_arrow_left
             rects["season_right_arrow"] = self.nhl94_gen_patcher_screen.season_arrow_right
+
+        elif state.mode == "nhl07_patcher":
+            back_rect, item_rects, scroll_offset = self.nhl07_psp_patcher_screen.render(
+                screen, state.highlighted, state, settings
+            )
+            rects["back"] = back_rect
+            rects["item_rects"] = item_rects
+            rects["scroll_offset"] = scroll_offset
+            rects["season_left_arrow"] = self.nhl07_psp_patcher_screen.season_arrow_left
+            rects["season_right_arrow"] = self.nhl07_psp_patcher_screen.season_arrow_right
 
         # Render stacked status footers on non-download screens
         if state.mode not in ("downloads", "scraper_downloads"):

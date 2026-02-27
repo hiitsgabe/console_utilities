@@ -13,6 +13,7 @@ class SportsPatcherScreen:
         ("ISS - Int. Superstar Soccer (SNES)", "iss_patcher"),
         ("NHL 94 - NHL Hockey '94 (SNES)", "nhl94_patcher"),
         ("NHL 94 - NHL Hockey '94 (Genesis)", "nhl94_gen_patcher"),
+        ("NHL 07 - NHL 07 (PSP)", "nhl07_patcher"),
     ]
 
     def __init__(self, theme: Theme = default_theme):
