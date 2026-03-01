@@ -1687,12 +1687,26 @@ class ConsoleUtilitiesApp:
         elif action == "detail":
             self._handle_detail_action()
         elif action == "left_shoulder":
-            if self.state.mode == "portmaster" and not self._any_modal_open():
+            wizard = self.state.scraper_wizard
+            if (
+                wizard.show
+                and wizard.step == "batch_options"
+                and wizard.image_highlighted == 0
+            ):
+                self._cycle_batch_system(reverse=True)
+            elif self.state.mode == "portmaster" and not self._any_modal_open():
                 self._portmaster_cycle_genre(-1)
             else:
                 self._toggle_keyboard_shift()
         elif action == "right_shoulder":
-            if self.state.mode == "portmaster" and not self._any_modal_open():
+            wizard = self.state.scraper_wizard
+            if (
+                wizard.show
+                and wizard.step == "batch_options"
+                and wizard.image_highlighted == 0
+            ):
+                self._cycle_batch_system()
+            elif self.state.mode == "portmaster" and not self._any_modal_open():
                 self._portmaster_cycle_genre(1)
         elif action == "start":
             self._handle_start_action()
@@ -1743,6 +1757,53 @@ class ConsoleUtilitiesApp:
                 if rect.collidepoint(x, y):
                     self.state.folder_browser.highlighted = i
                     self._handle_folder_browser_selection()
+                    return
+            return
+
+        # Check scraper wizard clicks
+        if self.state.scraper_wizard.show:
+            rects = self.state.ui_rects.rects
+            # Action buttons
+            select_btn = rects.get("select_button")
+            start_btn = rects.get("start_button")
+            done_btn = rects.get("done_button")
+            retry_btn = rects.get("retry_button")
+            if select_btn and select_btn.collidepoint(x, y):
+                self._select_batch_folder()
+                return
+            if start_btn and start_btn.collidepoint(x, y):
+                self._handle_start_action()
+                return
+            if done_btn and done_btn.collidepoint(x, y):
+                self._close_scraper_wizard()
+                return
+            if retry_btn and retry_btn.collidepoint(x, y):
+                self._handle_scraper_wizard_selection()
+                return
+            # List item clicks
+            wizard = self.state.scraper_wizard
+            step = wizard.step
+            for i, rect in enumerate(self.state.ui_rects.menu_items):
+                if rect.collidepoint(x, y):
+                    idx = i + self.state.ui_rects.scroll_offset
+                    if step in ("rom_select", "folder_select"):
+                        wizard.folder_highlighted = idx
+                        if step == "rom_select":
+                            self._handle_scraper_rom_selection()
+                        else:
+                            self._handle_scraper_folder_selection()
+                    elif step == "game_select":
+                        wizard.selected_game_index = idx
+                        self._handle_scraper_wizard_selection()
+                    elif step == "rom_list":
+                        wizard.batch_current_index = idx
+                        self._handle_scraper_wizard_selection()
+                    elif step in ("batch_options", "image_select"):
+                        wizard.image_highlighted = idx
+                        self._handle_scraper_wizard_selection()
+                    elif step == "video_select":
+                        wizard.video_highlighted = idx
+                        self._handle_scraper_wizard_selection()
                     return
             return
 
@@ -2914,8 +2975,6 @@ class ConsoleUtilitiesApp:
                 (idx + 1) % len(options)
             ]
             save_settings(self.settings)
-        elif action == "edit_scraper_preferred_system":
-            self._show_preferred_system_input()
         elif action == "screenscraper_login":
             self._show_screenscraper_login()
         elif action == "thegamesdb_api_key":
@@ -3820,9 +3879,21 @@ class ConsoleUtilitiesApp:
                 self._select_batch_folder()
                 return
             elif step == "rom_list":
-                # Continue to batch options
-                self.state.scraper_wizard.step = "batch_options"
-                self.state.scraper_wizard.image_highlighted = 0
+                # Continue to batch options — auto-detect system from folder
+                wizard = self.state.scraper_wizard
+                wizard.step = "batch_options"
+                wizard.image_highlighted = 0
+                if not wizard.batch_system:
+                    from services.scraper_providers.screenscraper import (
+                        ScreenScraperProvider,
+                    )
+
+                    folder_name = os.path.basename(wizard.folder_current_path)
+                    normalized = (
+                        folder_name.lower().replace("-", "").replace("_", "")
+                    )
+                    if normalized in ScreenScraperProvider.SYSTEM_ID_MAP:
+                        wizard.batch_system = folder_name.lower()
                 return
             elif step == "batch_options":
                 # Start batch processing
@@ -4803,8 +4874,8 @@ class ConsoleUtilitiesApp:
                 self.settings.get("scraper_mixed_images", False)
                 and self.settings.get("scraper_provider", "libretro") == "screenscraper"
             )
-            # Auto-select + image types + Download Video toggle
-            max_items = (8 if mixed else 6) + 1
+            # System + Auto-select + image types + Download Video toggle
+            max_items = (9 if mixed else 7) + 1
             if direction in ("up", "left"):
                 wizard.image_highlighted = max(0, wizard.image_highlighted - 1)
             elif direction in ("down", "right"):
@@ -4978,6 +5049,9 @@ class ConsoleUtilitiesApp:
         highlighted = wizard.image_highlighted
 
         if highlighted == 0:
+            # Cycle through known systems
+            self._cycle_batch_system()
+        elif highlighted == 1:
             # Toggle auto-select
             wizard.batch_auto_select = not wizard.batch_auto_select
         else:
@@ -4998,7 +5072,7 @@ class ConsoleUtilitiesApp:
             else:
                 all_types = ["box-2D", "boxart", "screenshot", "wheel", "fanart"]
 
-            img_index = highlighted - 1
+            img_index = highlighted - 2
             if img_index < len(all_types):
                 img_type = all_types[img_index]
                 if img_type in wizard.batch_default_images:
@@ -5246,6 +5320,7 @@ class ConsoleUtilitiesApp:
             default_images=list(wizard.batch_default_images),
             auto_select=wizard.batch_auto_select,
             download_video=self.state.scraper_queue.download_video,
+            system=wizard.batch_system,
         )
 
         # Close wizard and navigate to scraper downloads screen
@@ -5253,16 +5328,26 @@ class ConsoleUtilitiesApp:
         self.state.mode = "scraper_downloads"
         self.state.scraper_queue.highlighted = 0
 
-    def _show_preferred_system_input(self):
-        """Show preferred system text input modal."""
-        self.state.scraper_login.show = True
-        self.state.scraper_login.provider = "preferred_system"
-        self.state.scraper_login.step = "api_key"
-        self.state.scraper_login.api_key = self.settings.get(
-            "scraper_preferred_system", ""
-        )
-        self.state.scraper_login.cursor_position = 0
-        self.state.scraper_login.error_message = ""
+    # Deduplicated system list for batch scraper (short name per system ID)
+    _BATCH_SYSTEMS = [
+        "", "nes", "snes", "n64", "gb", "gbc", "gba", "nds",
+        "psx", "ps2", "psp", "genesis", "sega32x", "gamegear",
+        "mastersystem", "saturn", "dreamcast", "atari2600",
+        "atari7800", "lynx", "neogeo", "arcade", "pcengine",
+        "pcfx", "3do", "jaguar", "gamecube", "wii", "pico8",
+    ]
+
+    def _cycle_batch_system(self, reverse=False):
+        """Cycle batch system to the next/previous known platform."""
+        wizard = self.state.scraper_wizard
+        systems = self._BATCH_SYSTEMS
+        current = wizard.batch_system
+        try:
+            idx = systems.index(current)
+        except ValueError:
+            idx = 0
+        step = -1 if reverse else 1
+        wizard.batch_system = systems[(idx + step) % len(systems)]
 
     def _show_screenscraper_login(self):
         """Show ScreenScraper login modal."""
@@ -5539,34 +5624,6 @@ class ConsoleUtilitiesApp:
                 login.password = ""
                 login.cursor_position = 0
                 login.error_message = ""
-
-        elif provider == "preferred_system":
-            if step == "api_key":
-                if self.state.input_mode == "keyboard":
-                    # Keyboard mode - save value directly (even empty to clear)
-                    self.settings["scraper_preferred_system"] = login.api_key
-                    save_settings(self.settings)
-                    self._close_scraper_login()
-                else:
-                    from ui.screens.modals.scraper_login_modal import ScraperLoginModal
-
-                    modal = ScraperLoginModal()
-                    new_text, is_done, toggle_shift = modal.handle_selection(
-                        provider,
-                        step,
-                        login.cursor_position,
-                        login.api_key,
-                        shift_active=self.state.scraper_login.shift_active,
-                    )
-                    if toggle_shift:
-                        self.state.scraper_login.shift_active = (
-                            not self.state.scraper_login.shift_active
-                        )
-                    login.api_key = new_text
-                    if is_done:
-                        self.settings["scraper_preferred_system"] = new_text
-                        save_settings(self.settings)
-                        self._close_scraper_login()
 
     def _test_screenscraper_credentials(self):
         """Test ScreenScraper credentials in background thread."""

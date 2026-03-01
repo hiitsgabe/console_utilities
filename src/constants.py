@@ -11,7 +11,7 @@ import os
 # These are overwritten at build time by CI/CD or make targets.
 # See .github/workflows/release.yml and Makefile bundle targets.
 APP_VERSION = "dev"
-BUILD_TARGET = "source"  # source, pygame, macos, windows, android
+BUILD_TARGET = "android"
 
 # **************************************************************** #
 #                       Environment Detection                        #

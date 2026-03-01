@@ -370,11 +370,22 @@ class ScreenManager:
                         == "screenscraper"
                     ),
                     download_video=state.scraper_queue.download_video,
+                    batch_system=state.scraper_wizard.batch_system,
                 )
             )
             rects["modal"] = modal_rect
             rects["close"] = close_rect
             rects["item_rects"] = item_rects
+            rects["scroll_offset"] = self.scraper_wizard_modal._scroll_offset
+            wm = self.scraper_wizard_modal
+            if wm.select_button_rect:
+                rects["select_button"] = wm.select_button_rect
+            if wm.start_button_rect:
+                rects["start_button"] = wm.start_button_rect
+            if wm.done_button_rect:
+                rects["done_button"] = wm.done_button_rect
+            if wm.retry_button_rect:
+                rects["retry_button"] = wm.retry_button_rect
             return rects
 
         if state.dedupe_wizard.show:

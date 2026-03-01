@@ -86,6 +86,7 @@ class ScraperManager:
         default_images: List[str],
         auto_select: bool = True,
         download_video: bool = False,
+        system: str = "",
     ):
         """
         Start a background batch scraping job.
@@ -96,6 +97,7 @@ class ScraperManager:
             default_images: Image types to download
             auto_select: Auto-select first search result
             download_video: Download video for each ROM
+            system: Platform override for this batch (e.g. "psx", "snes")
         """
         if self.queue.active:
             return  # Already running
@@ -109,6 +111,7 @@ class ScraperManager:
         self.queue.auto_select = auto_select
         self.queue.default_images = list(default_images)
         self.queue.download_video = download_video
+        self.queue.system = system
         self.queue.active = True
 
         self._stop_requested = False
@@ -149,6 +152,10 @@ class ScraperManager:
                 # Each worker gets its own ScraperService to avoid shared state races
                 worker_settings = dict(self.settings)
                 worker_settings["current_system_folder"] = batch_dir
+                if self.queue.system:
+                    worker_settings["scraper_preferred_system"] = self.queue.system
+                else:
+                    worker_settings.pop("scraper_preferred_system", None)
                 service = ScraperService(worker_settings)
 
                 # Skip if already has images

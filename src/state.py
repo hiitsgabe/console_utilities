@@ -288,6 +288,7 @@ class ScraperWizardState:
     batch_default_images: List[str] = field(
         default_factory=lambda: ["box-2D", "boxart"]
     )
+    batch_system: str = ""  # per-batch platform override (e.g. "psx", "snes")
 
 
 @dataclass
@@ -369,6 +370,7 @@ class ScraperQueueState:
     parallel_workers: int = 1
     highlighted: int = 0  # Currently highlighted item in scraper downloads screen
     download_video: bool = False  # Download video for each ROM during batch
+    system: str = ""  # Per-batch platform override (e.g. "psx", "snes")
 
 
 @dataclass
