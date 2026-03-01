@@ -4,6 +4,9 @@ This project is an exercise to test Vibe Coding's capabilities. (CLAUDE)
 
 <div align="center">
   <img src="assets/images/logo_big.png" alt="Console Utilities Logo" width="200"/>
+  <br><br>
+  <a href="https://hiitsgabe.github.io/console_utilities/">Website</a> &middot;
+  <a href="https://github.com/hiitsgabe/console_utilities/releases">Downloads</a>
 </div>
 
 ![Screenshot](assets/images/screenshot.png)
