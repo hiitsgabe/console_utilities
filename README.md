@@ -26,6 +26,18 @@ A PyGame-based utility suite for handheld gaming consoles, with a retro CRT-them
 - **Region Filtering**: USA-only filter with configurable regex per system
 - **Installed Detection**: Optionally hide games already downloaded
 
+### Sports ROM Patcher
+- **Live Roster Updates**: Fetch current or historical season rosters from public sports APIs and patch them into your legally owned game ROMs
+- **Multi-Platform Support**: Patchers for retro soccer and hockey titles across PS1, SNES, Genesis, and PSP
+- **Step-by-Step Workflow**: Guided process — select season, fetch rosters, preview teams, pick your ROM, and patch
+- **Roster Preview**: View fetched teams and players before committing changes
+- **Player Attributes**: Maps real-world stats (goals, assists, speed, etc.) to in-game attribute scales
+- **Team Customization**: Update team names, kit/jersey colors, and flag designs where supported
+- **Historical Seasons**: Access roster data from past seasons via public APIs (availability varies by provider)
+- **Non-Destructive**: Saves patched output to a new file, leaving your original ROM untouched
+
+See the [Sports ROM Patcher Guide](docs/sports-rom-patcher.md) for detailed usage instructions.
+
 ### Utilities
 - **Direct URL Download**: Download a file from any URL
 - **Internet Archive Integration**: Download individual files or add entire IA collections as systems
@@ -144,7 +156,12 @@ console_utilities/
 │   │   ├── installed_checker.py      # Local file detection
 │   │   ├── internet_archive.py       # Internet Archive API integration
 │   │   ├── scraper_manager.py        # Image scraper orchestration
-│   │   └── scraper_providers/        # Libretro, ScreenScraper, etc.
+│   │   ├── scraper_providers/        # Libretro, ScreenScraper, etc.
+│   │   ├── we_patcher/              # PS1 soccer ROM patcher
+│   │   ├── iss_patcher/             # SNES soccer ROM patcher
+│   │   ├── nhl94_genesis_patcher/   # Genesis hockey ROM patcher
+│   │   ├── nhl94_snes_patcher/      # SNES hockey ROM patcher
+│   │   └── nhl07_psp_patcher/       # PSP hockey ISO patcher
 │   ├── input/
 │   │   ├── controller.py             # Controller/gamepad input
 │   │   ├── navigation.py             # D-pad navigation with acceleration
@@ -165,6 +182,7 @@ console_utilities/
 │   ├── fonts/                        # VT323 retro font
 │   └── images/                       # Logo and screenshots
 ├── docs/                              # User documentation
+│   ├── sports-rom-patcher.md        # Sports ROM patcher guide
 │   ├── server-response-format.md     # Server response format guide
 │   └── adding-a-system.md           # Adding custom systems guide
 ├── workdir/                           # Development runtime data
@@ -196,6 +214,7 @@ console_utilities/
 
 ## Documentation
 
+- [Sports ROM Patcher Guide](docs/sports-rom-patcher.md) - How the sports roster patcher works
 - [Server Response Format](docs/server-response-format.md) - How your server needs to respond for the app to detect and list files
 - [Adding a System](docs/adding-a-system.md) - How to add custom gaming systems
 - [PyGame Bundle Guide](assets/docs/pygame.md) - Deploying to Batocera/Knulli consoles
@@ -207,21 +226,28 @@ console_utilities/
 
 **IMPORTANT LEGAL DISCLAIMER:**
 
-- **No ROM Data Storage**: This system does not host, store, or distribute any ROM files, game data, or copyrighted content. It is purely a download management tool.
+- **No ROM Data Storage**: This system does not host, store, or distribute any ROM files, game data, or copyrighted content. It is purely a download management and ROM patching tool.
 
-- **No Game Copies**: This application contains no copies of games, ROMs, or any copyrighted gaming content whatsoever.
+- **No Game Copies**: This application contains no copies of games, ROMs, ISOs, or any copyrighted gaming content whatsoever.
+
+- **ROM Patching — Original Copies Only**: The sports ROM patcher feature requires users to provide their own legally obtained ROM or ISO files dumped from original game media they own. This project does not provide, link to, or facilitate the acquisition of any game files. Any ROM or ISO used with the patcher must come from an original copy of the game that you legally own.
+
+- **No Affiliation**: This project is not affiliated with, endorsed by, or associated with any game publishers, developers, sports leagues, or rights holders.
 
 - **Example Configuration**: Any included configuration files serve as examples only. They demonstrate how the system works but do not endorse or recommend any specific download sources.
 
 - **Legal Responsibility**: Users are solely responsible for:
   - Ensuring they have legal rights to download any content
+  - Providing only legally owned ROM/ISO files for patching
   - Complying with copyright laws in their jurisdiction
   - Verifying the legality of any download sources they configure
   - Understanding that downloading copyrighted content without permission may be illegal
 
 - **Third-Party Sources**: Any websites or download sources referenced in configuration examples are third-party services. Users should research and evaluate the legal status of such sources independently.
 
-- **Legal Use Only**: This tool is intended exclusively for downloading legally owned content, homebrew games, or content explicitly permitted for distribution.
+- **Legal Use Only**: This tool is intended exclusively for downloading legally owned content, homebrew games, or content explicitly permitted for distribution. The ROM patching features are intended solely for personal use with games you legally own.
+
+- **No Liability**: The developers and contributors of this project assume no responsibility or liability for any misuse of this software. Users bear full responsibility for how they use this tool and must ensure compliance with all applicable laws.
 
 **By using this software, you acknowledge that you understand these legal responsibilities and agree to use it only for lawful purposes.**
 
