@@ -413,59 +413,85 @@ class NHL07StatMapper:
         """Get NHL 07 ROM slot for a modern NHL team."""
         return MODERN_NHL_TO_NHL07.get(team_abbrev.upper())
 
-    def generate_line_flags(
+    def generate_team_line_flags(
         self,
-        roster_index: int,
-        position: str,
-        is_goalie: bool,
-        goalie_count: int,
-        forward_count: int,
-    ) -> Dict[str, int]:
-        """Generate line assignment flags for a player based on roster position.
+        players: list,
+    ) -> List[Dict[str, int]]:
+        """Generate line flags for an entire team, position-aware.
 
-        Roster layout: [G1, G2, F1..F14, D1..D7]
+        Returns a list of flag dicts, one per player (same order as input).
+        Builds complete lines by assigning players to their natural
+        position first, then filling gaps with excess centers on wing.
+
+        Flags set: G1/G2, L1-L4 (C/LW/RW), 31-33 (LD/RD),
+                   H1-H5 (PP unit), S1-S5 (PK unit).
         """
-        flags: Dict[str, int] = {}
+        result = [{} for _ in players]
 
-        if is_goalie:
-            g_idx = roster_index
-            if g_idx == 0:
-                flags["G1__"] = 1
-            elif g_idx == 1:
-                flags["G2__"] = 1
-            return flags
+        # Separate by position, keeping original index
+        goalies = [(i, p) for i, p in enumerate(players) if p.is_goalie]
+        centers = [(i, p) for i, p in enumerate(players) if p.position == "C"]
+        left_w = [(i, p) for i, p in enumerate(players) if p.position == "LW"]
+        right_w = [(i, p) for i, p in enumerate(players) if p.position == "RW"]
+        defense = [(i, p) for i, p in enumerate(players) if p.position == "D"]
 
-        # Forward index (0-based, relative to first forward)
-        f_start = goalie_count
-        d_start = goalie_count + forward_count
+        # Goalies
+        for gi, (idx, _) in enumerate(goalies[:2]):
+            result[idx][f"G{gi + 1}__"] = 1
 
-        if roster_index >= d_start:
-            # Defenseman
-            d_idx = roster_index - d_start
-            pair = d_idx // 2
-            side = d_idx % 2  # 0=LD, 1=RD
-            if pair < 3:
-                ld_flag = f"3{pair + 1}LD"
-                rd_flag = f"3{pair + 1}RD"
-                if side == 0:
-                    flags[ld_flag] = 1
-                else:
-                    flags[rd_flag] = 1
-            return flags
+        # Build 4 forward lines: C, LW, RW per line
+        # When LW/RW run out, use excess centers on wing
+        c_pool = list(centers)
+        lw_pool = list(left_w)
+        rw_pool = list(right_w)
 
-        if roster_index >= f_start:
-            # Forward
-            f_idx = roster_index - f_start
-            line = f_idx // 3
-            slot = f_idx % 3  # 0=C, 1=LW, 2=RW
+        fwd_line_indices = []  # track indices assigned to fwd lines
 
-            if line < 4:
-                line_num = line + 1
-                if slot == 0:
-                    flags[f"L{line_num}C_"] = 1
-                elif slot == 1:
-                    flags[f"L{line_num}LW"] = 1
-                elif slot == 2:
-                    flags[f"L{line_num}RW"] = 1
+        for line in range(4):
+            line_num = line + 1
 
-        return flags
+            # Center
+            if c_pool:
+                idx, _ = c_pool.pop(0)
+                result[idx][f"L{line_num}C_"] = 1
+                fwd_line_indices.append(idx)
+
+            # Left wing — use natural LW first, then spare centers
+            if lw_pool:
+                idx, _ = lw_pool.pop(0)
+                result[idx][f"L{line_num}LW"] = 1
+                fwd_line_indices.append(idx)
+            elif c_pool:
+                idx, _ = c_pool.pop(0)
+                result[idx][f"L{line_num}LW"] = 1
+                fwd_line_indices.append(idx)
+
+            # Right wing — use natural RW first, then spare centers
+            if rw_pool:
+                idx, _ = rw_pool.pop(0)
+                result[idx][f"L{line_num}RW"] = 1
+                fwd_line_indices.append(idx)
+            elif c_pool:
+                idx, _ = c_pool.pop(0)
+                result[idx][f"L{line_num}RW"] = 1
+                fwd_line_indices.append(idx)
+
+        # Defense: 3 pairs, alternating LD/RD
+        d_line_indices = []
+        for di, (idx, _) in enumerate(defense[:6]):
+            pair = di // 2 + 1
+            side = "LD" if di % 2 == 0 else "RD"
+            result[idx][f"3{pair}{side}"] = 1
+            d_line_indices.append(idx)
+
+        # PP unit (H1-H5): Line 1 forwards + top 2 defensemen
+        pp_candidates = fwd_line_indices[:3] + d_line_indices[:2]
+        for hi, idx in enumerate(pp_candidates[:5]):
+            result[idx][f"H{hi + 1}__"] = 1
+
+        # PK unit (S1-S5): Line 2 forwards + next 2 defensemen
+        pk_candidates = fwd_line_indices[3:6] + d_line_indices[2:4]
+        for si, idx in enumerate(pk_candidates[:5]):
+            result[idx][f"S{si + 1}__"] = 1
+
+        return result

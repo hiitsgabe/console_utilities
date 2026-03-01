@@ -336,40 +336,63 @@ class NHL07PSPPatcher:
             # the roster slots and their cross-references via PLAY table
             team_rost_indices = rost.find_records("TEAM", team_idx)
 
-            # Count position types for line assignment
-            goalie_count = sum(1 for p in players if p.is_goalie)
-            forward_count = sum(
-                1 for p in players if p.position in ("C", "LW", "RW")
-            )
-
-            # Patch up to min(players, rost_slots) — can't exceed existing
-            # roster slots without adding PLAY table entries
-            patch_count = min(len(players), len(team_rost_indices))
-
-            for pi in range(patch_count):
-                player = players[pi]
-                rost_idx = team_rost_indices[pi]
+            # Classify each ROST slot as goalie or skater based on
+            # whether its player_id has an SGAI entry (goalie attrs).
+            # Players MUST be mapped to compatible slots — a goalie
+            # player needs a goalie slot (one whose player_id is in
+            # SGAI) so its attrs can be written to the correct table.
+            goalie_slots = []  # (rost_idx, play_rec, player_id, bio_idx)
+            skater_slots = []
+            for rost_idx in team_rost_indices:
                 rost_rec = rost.read_record(rost_idx)
                 rost_indx = rost_rec.get("INDX", 0)
-
-                # Follow chain: ROST.INDX → PLAY → SPBT/SPAI/SGAI
                 play_rec = play_by_indx.get(rost_indx)
                 if not play_rec:
                     continue
                 player_id = play_rec.get("ID__", 0)
-                is_goalie_slot = play_rec.get("TBLE", 0) == 1
-
-                # Find SPBT record via PLAY.ID__
                 bio_idx = spbt_idx_map.get(player_id, -1)
                 if bio_idx < 0:
                     continue
+                slot_info = (rost_idx, play_rec, player_id, bio_idx)
+                if sgai_idx_map.get(player_id, -1) >= 0:
+                    goalie_slots.append(slot_info)
+                else:
+                    skater_slots.append(slot_info)
+
+            # Split incoming players by type
+            new_goalies = [p for p in players if p.is_goalie]
+            new_skaters = [p for p in players if not p.is_goalie]
+
+            # Build ordered (player, slot_info) pairs:
+            # goalies → goalie slots, skaters → skater slots
+            pairs = []
+            for i, player in enumerate(new_goalies):
+                if i < len(goalie_slots):
+                    pairs.append((player, goalie_slots[i]))
+            for i, player in enumerate(new_skaters):
+                if i < len(skater_slots):
+                    pairs.append((player, skater_slots[i]))
+
+            # Track which slots are used so we can undress the rest
+            used_rost_indices = set()
+
+            # Generate line flags for the whole team at once
+            # (position-aware: fills lines properly, sets PP/PK)
+            team_players = [p for p, _ in pairs]
+            all_line_flags = self.mapper.generate_team_line_flags(
+                team_players
+            )
+
+            for pi, (player, slot_info) in enumerate(pairs):
+                rost_idx, play_rec, player_id, bio_idx = slot_info
+                used_rost_indices.add(rost_idx)
 
                 # Write bio to SPBT (name, jersey, etc.) — preserves INDX
                 writer.write_player_bio(master_tdb, bio_idx, player)
                 if split_spbt and bio_idx < split_spbt.capacity:
                     writer.write_player_bio(bioatt_tdb, bio_idx, player)
 
-                # Write attributes to SPAI or SGAI via same player_id
+                # Write attributes to the matching table (SGAI or SPAI)
                 if player.is_goalie and player.goalie_attrs and sgai:
                     sgai_idx = sgai_idx_map.get(player_id, -1)
                     if sgai_idx >= 0:
@@ -392,13 +415,7 @@ class NHL07PSPPatcher:
                             )
 
                 # Update ROST: jersey, line flags, captain — but NOT INDX
-                line_flags = self.mapper.generate_line_flags(
-                    pi,
-                    player.position,
-                    player.is_goalie,
-                    goalie_count,
-                    forward_count,
-                )
+                line_flags = all_line_flags[pi] if pi < len(all_line_flags) else {}
                 rost_values = {
                     "JERS": player.jersey_number,
                     "CAPT": 2 if pi == 0 else (1 if pi in (1, 2) else 0),
@@ -419,13 +436,13 @@ class NHL07PSPPatcher:
                 players_patched += 1
 
             # Mark remaining old roster entries as undressed
-            for ri in range(patch_count, len(team_rost_indices)):
-                rost_idx = team_rost_indices[ri]
-                rost.write_record(rost_idx, {"DRES": 0})
-                if split_rost and rost_idx < split_rost.capacity:
-                    split_rost_t = roster_tdb.get_table("ROST")
-                    if split_rost_t:
-                        split_rost_t.write_record(rost_idx, {"DRES": 0})
+            for rost_idx in team_rost_indices:
+                if rost_idx not in used_rost_indices:
+                    rost.write_record(rost_idx, {"DRES": 0})
+                    if split_rost and rost_idx < split_rost.capacity:
+                        split_rost_t = roster_tdb.get_table("ROST")
+                        if split_rost_t:
+                            split_rost_t.write_record(rost_idx, {"DRES": 0})
 
             teams_patched += 1
 

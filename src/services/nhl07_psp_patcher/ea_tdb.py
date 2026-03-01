@@ -486,6 +486,33 @@ TDB_TYPE_FLOAT = 4
 TDB_MAGIC = b"DB\x00\x08"
 
 
+# CRC-32/MPEG-2 (big-endian) — EA's TDB checksum algorithm
+def _build_crc_table() -> list:
+    POLY = 0x04C11DB7
+    table = [0] * 16
+    crc = 0x80000000
+    i = 1
+    while i < 16:
+        crc = ((crc << 1) ^ (POLY if (crc & 0x80000000) else 0)) & 0xFFFFFFFF
+        for j in range(i):
+            table[i + j] = crc ^ table[j]
+        i <<= 1
+    return table
+
+
+_CRC_TABLE = _build_crc_table()
+
+
+def tdb_crc(data: bytes) -> int:
+    """Compute EA TDB CRC (CRC-32/MPEG-2 raw accumulator, no final XOR)."""
+    crc = 0xFFFFFFFF
+    for byte in data:
+        crc = (crc ^ (byte << 24)) & 0xFFFFFFFF
+        crc = (((crc << 4) & 0xFFFFFFFF) ^ _CRC_TABLE[crc >> 28])
+        crc = (((crc << 4) & 0xFFFFFFFF) ^ _CRC_TABLE[crc >> 28])
+    return crc
+
+
 @dataclass
 class TDBField:
     """A field definition in a TDB table."""
@@ -800,31 +827,50 @@ class TDBFile:
         """Serialize TDB file back to bytes.
 
         Writes modified record data back into the raw buffer.
-        Updates both maxRecords (capacity) and currentRecords (num_records)
-        in the table header.
+        Updates record counts and recalculates the CRC chain.
+
+        CRC chain (CRC-32/MPEG-2):
+          table[0].priorCrc = CRC(directory)  — unchanged
+          table[i+1].priorCrc = CRC(table[i].field_defs + table[i].data)
+          eofCrc (last 4B) = CRC(last_table.field_defs + last_table.data)
         """
         out = bytearray(self._raw)
 
         for table in self.tables.values():
-            # Write full record data back at original offset (capacity * record_size)
+            # Write full record data back at original offset
             rec_end = table.data_offset + table.capacity * table.record_size
             if rec_end <= len(out):
                 out[table.data_offset : rec_end] = table._raw_data[
                     : table.capacity * table.record_size
                 ]
-            # Update record counts in table header
-            # Layout: header(20) + rec_info(16) + field_hash(4) + fields(N*16)
+            # Update record counts in 40-byte table header
             #   header_offset + 20 = maxRecords (2B LE)
             #   header_offset + 22 = currentRecords (2B LE)
             header_offset = (
-                table.data_offset
-                - 4  # field_hash
-                - len(table.fields) * 16  # field defs
-                - 16  # rec_info
-                - 20  # table header
+                table.data_offset - len(table.fields) * 16 - 40
             )
             if header_offset >= 0:
                 struct.pack_into("<H", out, header_offset + 20, table.capacity)
                 struct.pack_into("<H", out, header_offset + 22, table.num_records)
+
+        # Recalculate CRC chain
+        ordered = [
+            self.tables[n] for n in self._table_order if n in self.tables
+        ]
+        for i, table in enumerate(ordered):
+            hdr_off = table.data_offset - len(table.fields) * 16 - 40
+            # CRC over field definitions + record data (after the 40B header)
+            crc_start = hdr_off + 40
+            crc_end = table.data_offset + table.capacity * table.record_size
+            crc = tdb_crc(bytes(out[crc_start:crc_end]))
+
+            if i + 1 < len(ordered):
+                # Store as next table's priorCrc (first 4B of its header)
+                next_t = ordered[i + 1]
+                next_hdr = next_t.data_offset - len(next_t.fields) * 16 - 40
+                struct.pack_into("<I", out, next_hdr, crc)
+            else:
+                # Last table: store as EOF CRC (last 4 bytes of file)
+                struct.pack_into("<I", out, len(out) - 4, crc)
 
         return bytes(out)
