@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Console Utilities</title>
+  <link rel="icon" type="image/png" href="assets/images/logo.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+  <style>
+    /* ── Reset ── */
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    /* ── Palette (from theme.py) ── */
+    :root {
+      --bg:              #001400;
+      --surface:         #001E00;
+      --surface-hover:   #002800;
+      --surface-selected:#003205;
+      --primary:         #00FF41;
+      --primary-dark:    #00B42D;
+      --primary-light:   #00FF64;
+      --secondary:       #C8C800;
+      --secondary-dark:  #A0A000;
+      --text-primary:    #00FF41;
+      --text-secondary:  #00B42D;
+      --text-disabled:   #005014;
+      --error:           #FF321E;
+      --glow:            rgba(0,255,65,0.15);
+      --glow-strong:     rgba(0,255,65,0.35);
+      --bezel:           #8B7D6B;
+      --bezel-light:     #A09080;
+      --bezel-dark:      #6B5D4B;
+    }
+
+    /* ── Base ── */
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'VT323', monospace;
+      background: #000;
+      color: var(--text-primary);
+      overflow-x: hidden;
+      line-height: 1.5;
+    }
+
+    /* ── CRT Wrapper ── */
+    .crt {
+      position: relative;
+      min-height: 100vh;
+      background: var(--bg);
+    }
+
+    /* Scanlines */
+    .crt::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        to bottom,
+        transparent 0px,
+        transparent 2px,
+        rgba(0,0,0,0.15) 2px,
+        rgba(0,0,0,0.15) 4px
+      );
+      pointer-events: none;
+      z-index: 1000;
+    }
+
+    /* Vignette */
+    .crt::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.6) 100%);
+      pointer-events: none;
+      z-index: 999;
+    }
+
+    /* ── Utility ── */
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    a { color: var(--primary); text-decoration: none; }
+    a:hover { color: var(--primary-light); text-shadow: 0 0 8px var(--glow-strong); }
+
+    /* ── Header / Hero ── */
+    .hero {
+      text-align: center;
+      padding: 80px 24px 48px;
+    }
+    .hero-logo {
+      width: 100px;
+      height: auto;
+      margin-bottom: 16px;
+      filter: drop-shadow(0 0 12px var(--glow-strong));
+    }
+    .hero h1 {
+      font-size: 64px;
+      letter-spacing: 4px;
+      color: var(--secondary);
+      text-shadow: 0 0 20px rgba(200,200,0,0.4);
+      margin-bottom: 8px;
+    }
+    .hero .tagline {
+      font-size: 26px;
+      color: var(--text-secondary);
+      max-width: 640px;
+      margin: 0 auto 32px;
+    }
+
+    /* Badge row */
+    .badges {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 12px;
+      margin-bottom: 40px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 6px 16px;
+      border: 1px solid var(--primary-dark);
+      color: var(--text-primary);
+      font-size: 20px;
+      background: var(--surface);
+    }
+
+    /* CTA */
+    .cta-row {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 48px;
+    }
+    .btn {
+      display: inline-block;
+      padding: 12px 32px;
+      font-family: 'VT323', monospace;
+      font-size: 24px;
+      border: 2px solid var(--primary);
+      color: var(--bg);
+      background: var(--primary);
+      cursor: pointer;
+      transition: all 0.15s;
+      text-decoration: none;
+    }
+    .btn:hover {
+      background: var(--primary-light);
+      box-shadow: 0 0 16px var(--glow-strong);
+      color: var(--bg);
+    }
+    .btn-outline {
+      background: transparent;
+      color: var(--primary);
+    }
+    .btn-outline:hover {
+      background: var(--surface-hover);
+      color: var(--primary-light);
+    }
+
+    /* ── Screenshot ── */
+    .screenshot-wrap {
+      text-align: center;
+      margin-bottom: 80px;
+    }
+    .screenshot-frame {
+      display: inline-block;
+      background: var(--bezel);
+      padding: 20px;
+      border: 3px solid var(--bezel-dark);
+      border-top-color: var(--bezel-light);
+      border-left-color: var(--bezel-light);
+      box-shadow:
+        inset 0 0 12px rgba(0,0,0,0.4),
+        0 8px 32px rgba(0,0,0,0.6);
+      max-width: 720px;
+      width: 100%;
+    }
+    .screenshot-frame img {
+      width: 100%;
+      display: block;
+      image-rendering: auto;
+      border: 2px solid var(--bezel-dark);
+    }
+
+    /* ── Section ── */
+    section {
+      padding: 64px 0;
+    }
+    section + section {
+      border-top: 1px solid var(--surface-hover);
+    }
+    .section-title {
+      font-size: 40px;
+      color: var(--secondary);
+      margin-bottom: 8px;
+      text-shadow: 0 0 10px rgba(200,200,0,0.3);
+    }
+    .section-subtitle {
+      font-size: 22px;
+      color: var(--text-secondary);
+      margin-bottom: 40px;
+    }
+
+    /* ── Feature grid ── */
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 24px;
+    }
+    .feature-card {
+      background: var(--surface);
+      border: 1px solid var(--surface-hover);
+      padding: 24px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .feature-card:hover {
+      border-color: var(--primary-dark);
+      box-shadow: 0 0 12px var(--glow);
+    }
+    .feature-card .icon {
+      font-size: 32px;
+      margin-bottom: 8px;
+      display: block;
+      color: var(--primary);
+    }
+    .feature-card h3 {
+      font-size: 26px;
+      color: var(--primary);
+      margin-bottom: 8px;
+    }
+    .feature-card p {
+      font-size: 20px;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+
+    /* ── Patcher section ── */
+    .patcher-platforms {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+    .platform-card {
+      background: var(--surface);
+      border: 1px solid var(--surface-hover);
+      padding: 20px;
+      text-align: center;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .platform-card:hover {
+      border-color: var(--primary-dark);
+      box-shadow: 0 0 12px var(--glow);
+    }
+    .platform-card .platform-name {
+      font-size: 26px;
+      color: var(--primary);
+      margin-bottom: 4px;
+    }
+    .platform-card .platform-sport {
+      font-size: 20px;
+      color: var(--text-secondary);
+    }
+
+    /* Steps */
+    .steps {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-top: 24px;
+    }
+    .step {
+      flex: 1;
+      min-width: 130px;
+      text-align: center;
+      padding: 16px 8px;
+      background: var(--surface);
+      border: 1px solid var(--surface-hover);
+    }
+    .step .step-num {
+      font-size: 32px;
+      color: var(--secondary);
+      display: block;
+      margin-bottom: 4px;
+    }
+    .step .step-label {
+      font-size: 20px;
+      color: var(--text-primary);
+    }
+
+    /* ── Compatibility ── */
+    .compat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+    }
+    .compat-card {
+      background: var(--surface);
+      border: 1px solid var(--surface-hover);
+      padding: 20px;
+    }
+    .compat-card h3 {
+      font-size: 24px;
+      color: var(--primary);
+      margin-bottom: 8px;
+    }
+    .compat-card p {
+      font-size: 20px;
+      color: var(--text-secondary);
+    }
+
+    /* ── Install ── */
+    .code-block {
+      background: var(--surface);
+      border: 1px solid var(--surface-hover);
+      padding: 20px 24px;
+      font-family: 'VT323', monospace;
+      font-size: 22px;
+      color: var(--text-primary);
+      overflow-x: auto;
+      margin-bottom: 16px;
+    }
+    .code-block .comment {
+      color: var(--text-disabled);
+    }
+    .code-block .prompt {
+      color: var(--secondary);
+      user-select: none;
+    }
+
+    /* ── Disclaimer ── */
+    .disclaimer {
+      background: var(--surface);
+      border: 1px solid var(--surface-hover);
+      border-left: 3px solid var(--secondary);
+      padding: 24px;
+      margin-top: 24px;
+    }
+    .disclaimer h3 {
+      font-size: 24px;
+      color: var(--secondary);
+      margin-bottom: 12px;
+    }
+    .disclaimer p, .disclaimer li {
+      font-size: 20px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+    .disclaimer ul {
+      list-style: none;
+      padding: 0;
+    }
+    .disclaimer li::before {
+      content: '> ';
+      color: var(--primary-dark);
+    }
+    .disclaimer li {
+      margin-bottom: 6px;
+    }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid var(--surface-hover);
+      padding: 40px 0;
+      text-align: center;
+    }
+    footer p {
+      font-size: 20px;
+      color: var(--text-disabled);
+    }
+    footer a {
+      color: var(--text-secondary);
+    }
+    footer a:hover {
+      color: var(--primary);
+    }
+
+    /* ── Cursor blink ── */
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+    .cursor {
+      display: inline-block;
+      width: 12px;
+      height: 28px;
+      background: var(--primary);
+      vertical-align: text-bottom;
+      animation: blink 1s step-end infinite;
+      margin-left: 4px;
+    }
+
+    /* ── Flicker (subtle) ── */
+    @keyframes flicker {
+      0%   { opacity: 0.98; }
+      5%   { opacity: 1; }
+      10%  { opacity: 0.97; }
+      15%  { opacity: 1; }
+      100% { opacity: 1; }
+    }
+    .crt {
+      animation: flicker 8s infinite;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 640px) {
+      .hero h1 { font-size: 40px; letter-spacing: 2px; }
+      .hero .tagline { font-size: 22px; }
+      .section-title { font-size: 32px; }
+      .screenshot-frame { padding: 12px; }
+      .step { min-width: 100px; }
+      .steps { gap: 8px; }
+    }
+  </style>
+</head>
+<body>
+<div class="crt">
+
+  <!-- ════════ HERO ════════ -->
+  <header class="hero">
+    <img src="assets/images/logo.png" alt="Console Utilities" class="hero-logo">
+    <h1>Console Utilities</h1>
+    <p class="tagline">
+      A retro utility suite for handheld gaming consoles. Download, organize, patch, and manage your game library from a CRT-themed interface.<span class="cursor"></span>
+    </p>
+    <div class="badges">
+      <span class="badge">Batocera / Knulli</span>
+      <span class="badge">macOS</span>
+      <span class="badge">Windows</span>
+      <span class="badge">Linux</span>
+      <span class="badge">Android</span>
+    </div>
+    <div class="cta-row">
+      <a href="https://github.com/hiitsgabe/console_utilities/releases" class="btn">Download</a>
+      <a href="https://github.com/hiitsgabe/console_utilities" class="btn btn-outline">View Source</a>
+    </div>
+  </header>
+
+  <!-- ════════ SCREENSHOT ════════ -->
+  <div class="screenshot-wrap container">
+    <div class="screenshot-frame">
+      <img src="assets/images/screenshot.png" alt="Console Utilities screenshot showing the CRT-themed main menu">
+    </div>
+  </div>
+
+  <!-- ════════ FEATURES ════════ -->
+  <section id="features">
+    <div class="container">
+      <h2 class="section-title">> Features</h2>
+      <p class="section-subtitle">Everything you need to manage your retro game library</p>
+      <div class="features">
+        <div class="feature-card">
+          <span class="icon">[DL]</span>
+          <h3>Batch Downloads</h3>
+          <p>Queue multiple games with real-time progress, speed display, and ETA. Resume interrupted downloads automatically.</p>
+        </div>
+        <div class="feature-card">
+          <span class="icon">[ARC]</span>
+          <h3>Auto Extraction</h3>
+          <p>ZIP and RAR archives are extracted and organized into the correct system folder. Built-in NSZ to NSP conversion for Switch files.</p>
+        </div>
+        <div class="feature-card">
+          <span class="icon">[IA]</span>
+          <h3>Internet Archive</h3>
+          <p>Download individual files or add entire IA collections as browsable systems with full metadata support.</p>
+        </div>
+        <div class="feature-card">
+          <span class="icon">[IMG]</span>
+          <h3>Image Scraping</h3>
+          <p>Scrape game artwork from Libretro, ScreenScraper, TheGamesDB, RAWG, and IGDB. Batch mode for entire libraries.</p>
+        </div>
+        <div class="feature-card">
+          <span class="icon">[VIEW]</span>
+          <h3>Multiple Views</h3>
+          <p>Switch between list and grid layouts with box art thumbnails. Search and filter by name, region, or installed status.</p>
+        </div>
+        <div class="feature-card">
+          <span class="icon">[UTIL]</span>
+          <h3>File Utilities</h3>
+          <p>Deduplicate files, clean up filenames, remove ghost archives, and extract compressed files from the built-in browser.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════ SPORTS ROM PATCHER ════════ -->
+  <section id="patcher">
+    <div class="container">
+      <h2 class="section-title">> Sports ROM Patcher</h2>
+      <p class="section-subtitle">Update rosters in retro sports games with real-world data from public APIs</p>
+
+      <div class="patcher-platforms">
+        <div class="platform-card">
+          <div class="platform-name">PS1</div>
+          <div class="platform-sport">Soccer</div>
+        </div>
+        <div class="platform-card">
+          <div class="platform-name">SNES</div>
+          <div class="platform-sport">Soccer</div>
+        </div>
+        <div class="platform-card">
+          <div class="platform-name">Genesis</div>
+          <div class="platform-sport">Hockey</div>
+        </div>
+        <div class="platform-card">
+          <div class="platform-name">SNES</div>
+          <div class="platform-sport">Hockey</div>
+        </div>
+        <div class="platform-card">
+          <div class="platform-name">PSP</div>
+          <div class="platform-sport">Hockey</div>
+        </div>
+      </div>
+
+      <div class="features" style="margin-bottom:32px;">
+        <div class="feature-card">
+          <h3>Live Rosters</h3>
+          <p>Fetch current or historical season data from public sports APIs. Player names, stats, positions, and jersey numbers.</p>
+        </div>
+        <div class="feature-card">
+          <h3>Attribute Mapping</h3>
+          <p>Real-world stats are mapped to each game's internal attribute scale for balanced, realistic in-game ratings.</p>
+        </div>
+        <div class="feature-card">
+          <h3>Team Customization</h3>
+          <p>Update team names, kit and jersey colors, flag designs, line assignments, and roster ordering.</p>
+        </div>
+      </div>
+
+      <h3 style="font-size:24px; color:var(--text-secondary); margin-bottom:12px;">Guided Workflow</h3>
+      <div class="steps">
+        <div class="step">
+          <span class="step-num">1</span>
+          <span class="step-label">Season</span>
+        </div>
+        <div class="step">
+          <span class="step-num">2</span>
+          <span class="step-label">Fetch</span>
+        </div>
+        <div class="step">
+          <span class="step-num">3</span>
+          <span class="step-label">Preview</span>
+        </div>
+        <div class="step">
+          <span class="step-num">4</span>
+          <span class="step-label">Colors</span>
+        </div>
+        <div class="step">
+          <span class="step-num">5</span>
+          <span class="step-label">Select ROM</span>
+        </div>
+        <div class="step">
+          <span class="step-num">6</span>
+          <span class="step-label">Patch</span>
+        </div>
+      </div>
+
+      <div class="disclaimer" style="margin-top:32px;">
+        <h3>Important</h3>
+        <p>The patcher saves to a new file &mdash; your original ROM is never modified. You must provide your own ROM or ISO dumped from an original game copy that you legally own.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════ COMPATIBILITY ════════ -->
+  <section id="platforms">
+    <div class="container">
+      <h2 class="section-title">> Compatibility</h2>
+      <p class="section-subtitle">Runs everywhere retro gaming lives</p>
+      <div class="compat-grid">
+        <div class="compat-card">
+          <h3>Handheld Consoles</h3>
+          <p>Knulli RG35xxSP and other Batocera-based devices. Controller and D-pad optimized.</p>
+        </div>
+        <div class="compat-card">
+          <h3>macOS</h3>
+          <p>Standalone .app bundle. No Python installation required.</p>
+        </div>
+        <div class="compat-card">
+          <h3>Windows</h3>
+          <p>Standalone .exe bundle. Download and run.</p>
+        </div>
+        <div class="compat-card">
+          <h3>Linux</h3>
+          <p>Run from source with Python 3.11+ and pygame.</p>
+        </div>
+        <div class="compat-card">
+          <h3>Android</h3>
+          <p>APK built with Buildozer. Touch-optimized interface.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════ INSTALL ════════ -->
+  <section id="install">
+    <div class="container">
+      <h2 class="section-title">> Quick Start</h2>
+      <p class="section-subtitle">Get up and running in minutes</p>
+
+      <div class="code-block">
+        <span class="comment"># Setup conda environment and install dependencies</span><br>
+        <span class="prompt">$ </span>make setup<br><br>
+        <span class="comment"># Run with auto-restart on file changes</span><br>
+        <span class="prompt">$ </span>make run<br><br>
+        <span class="comment"># Build for your platform</span><br>
+        <span class="prompt">$ </span>make bundle-macos<br>
+        <span class="prompt">$ </span>make bundle-windows<br>
+        <span class="prompt">$ </span>make build-android
+      </div>
+
+      <p style="font-size:22px; color:var(--text-secondary);">
+        For console deployment, see the <a href="https://github.com/hiitsgabe/console_utilities/blob/main/assets/docs/pygame.md">PyGame Bundle Guide</a>.
+      </p>
+    </div>
+  </section>
+
+  <!-- ════════ DISCLAIMER ════════ -->
+  <section id="legal">
+    <div class="container">
+      <h2 class="section-title">> Legal Notice</h2>
+      <div class="disclaimer">
+        <h3>Disclaimer</h3>
+        <ul>
+          <li>This application does not host, store, or distribute any ROM files, game data, or copyrighted content</li>
+          <li>ROM patching requires your own legally obtained files dumped from original game media you own</li>
+          <li>This project is not affiliated with any game publishers, developers, or sports leagues</li>
+          <li>Users are solely responsible for complying with copyright laws in their jurisdiction</li>
+          <li>The developers assume no responsibility or liability for any misuse of this software</li>
+          <li>This tool is intended for personal use only with content you legally own</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════ FOOTER ════════ -->
+  <footer>
+    <div class="container">
+      <p>
+        <a href="https://github.com/hiitsgabe/console_utilities">GitHub</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://github.com/hiitsgabe/console_utilities/releases">Releases</a>
+        &nbsp;&middot;&nbsp;
+        <a href="docs/sports-rom-patcher.md">Patcher Docs</a>
+      </p>
+      <p style="margin-top:12px;">Console Utilities</p>
+    </div>
+  </footer>
+
+</div>
+</body>
+</html>
