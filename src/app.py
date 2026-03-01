@@ -11,6 +11,7 @@ import sys
 from typing import Optional, Dict, Any
 
 from constants import (
+    BUILD_TARGET,
     DEV_MODE,
     FPS,
     SCREEN_WIDTH,
@@ -169,8 +170,11 @@ class ConsoleUtilitiesApp:
         )
 
         # Initialize web companion (lazy — started via settings toggle)
+        # Not available on standalone desktop builds (macos/windows)
         self.web_companion = None
-        if self.settings.get("web_companion_enabled", False):
+        if BUILD_TARGET not in ("macos", "windows") and self.settings.get(
+            "web_companion_enabled", False
+        ):
             self._start_web_companion()
 
         # CRT vignette overlay (edge darkening)
