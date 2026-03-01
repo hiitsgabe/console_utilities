@@ -184,9 +184,10 @@ class SettingsScreen:
         if nsz_enabled:
             items.append(self.NSZ_SECTION[2])  # NSZ Keys
 
-        # Add Web Companion section
-        divider_indices.add(len(items))
-        items.extend(self.WEB_COMPANION_SECTION)
+        # Add Web Companion section (not available on standalone desktop builds)
+        if BUILD_TARGET not in ("macos", "windows"):
+            divider_indices.add(len(items))
+            items.extend(self.WEB_COMPANION_SECTION)
 
         # Add App section (last)
         divider_indices.add(len(items))
