@@ -1252,6 +1252,9 @@ def _serialize_scraper_wizard(wizard):
 def _build_batch_options(wizard):
     """Build batch scraper options list."""
     items = []
+    batch_system = getattr(wizard, "batch_system", "")
+    system_display = batch_system if batch_system else "Auto"
+    items.append({"name": f"System: {system_display}", "selected": False})
     auto_select = getattr(wizard, "auto_select", True)
     items.append({"name": f"Auto-select: {'ON' if auto_select else 'OFF'}", "selected": False})
     default_images = getattr(wizard, "default_images", [])

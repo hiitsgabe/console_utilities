@@ -31,6 +31,7 @@ from ui.theme import Theme, default_theme
 from ui.organisms.modal_frame import ModalFrame
 from ui.atoms.text import Text
 from ui.atoms.progress import ProgressBar
+from ui.molecules.action_button import ActionButton
 from utils.button_hints import get_combined_hints
 
 THUMB_SIZE = (64, 64)
@@ -51,6 +52,12 @@ class ScraperWizardModal:
         self.progress_bar = ProgressBar(theme)
         self._thumb_cache: Dict[str, Any] = {}
         self._thumb_queue: Queue = Queue()
+        self.action_button = ActionButton(theme)
+        self.select_button_rect: Optional[pygame.Rect] = None
+        self.start_button_rect: Optional[pygame.Rect] = None
+        self.done_button_rect: Optional[pygame.Rect] = None
+        self.retry_button_rect: Optional[pygame.Rect] = None
+        self._scroll_offset: int = 0
 
     def render(
         self,
@@ -80,6 +87,7 @@ class ScraperWizardModal:
         batch_default_images: List[str] = None,
         mixed_images_enabled: bool = False,
         download_video: bool = False,
+        batch_system: str = "",
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[pygame.Rect]]:
         """
         Render the scraper wizard modal.
@@ -90,6 +98,11 @@ class ScraperWizardModal:
         available_videos = available_videos or []
         batch_roms = batch_roms or []
         batch_default_images = batch_default_images or []
+        self.select_button_rect = None
+        self.start_button_rect = None
+        self.done_button_rect = None
+        self.retry_button_rect = None
+        self._scroll_offset = 0
 
         if step == "rom_select":
             return self._render_rom_select(
@@ -151,6 +164,7 @@ class ScraperWizardModal:
                 input_mode,
                 mixed_images_enabled,
                 download_video,
+                batch_system,
             )
         elif step == "batch_processing":
             return self._render_batch_processing(
@@ -254,18 +268,7 @@ class ScraperWizardModal:
 
             y += item_height
 
-        # Hints
-        hints = get_combined_hints(
-            [("select", "Select"), ("back", "Cancel")], input_mode
-        )
-        self.text.render(
-            screen,
-            hints,
-            (content_rect.centerx, content_rect.bottom - padding - 10),
-            color=self.theme.text_secondary,
-            size=self.theme.font_size_sm,
-            align="center",
-        )
+        self._scroll_offset = scroll_offset
 
         return modal_rect, content_rect, close_rect, item_rects
 
@@ -438,17 +441,7 @@ class ScraperWizardModal:
 
             y += item_height
 
-        hints = get_combined_hints(
-            [("select", "Select"), ("back", "Cancel")], input_mode
-        )
-        self.text.render(
-            screen,
-            hints,
-            (content_rect.centerx, content_rect.bottom - padding - 10),
-            color=self.theme.text_secondary,
-            size=self.theme.font_size_sm,
-            align="center",
-        )
+        self._scroll_offset = scroll_offset
 
         return modal_rect, content_rect, close_rect, item_rects
 
@@ -540,18 +533,10 @@ class ScraperWizardModal:
 
             y += item_height
 
-        # Hints
-        hints = get_combined_hints(
-            [("select", "Toggle"), ("start", "Download"), ("back", "Cancel")],
-            input_mode,
-        )
-        self.text.render(
-            screen,
-            hints,
-            (content_rect.centerx, content_rect.bottom - padding - 10),
-            color=self.theme.text_secondary,
-            size=self.theme.font_size_sm,
-            align="center",
+        self._scroll_offset = scroll_offset
+        self._render_action_buttons(
+            screen, content_rect,
+            [("Download", "start")],
         )
 
         return modal_rect, content_rect, close_rect, item_rects
@@ -655,18 +640,9 @@ class ScraperWizardModal:
             )
             y += item_height
 
-        # Hints
-        hints = get_combined_hints(
-            [("select", "Toggle"), ("start", "Download"), ("back", "Cancel")],
-            input_mode,
-        )
-        self.text.render(
-            screen,
-            hints,
-            (content_rect.centerx, content_rect.bottom - padding - 10),
-            color=self.theme.text_secondary,
-            size=self.theme.font_size_sm,
-            align="center",
+        self._render_action_buttons(
+            screen, content_rect,
+            [("Download", "start")],
         )
 
         return modal_rect, content_rect, close_rect, item_rects
@@ -744,10 +720,8 @@ class ScraperWizardModal:
         height = 180
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Complete", show_close=False
+            screen, width, height, title="Complete", show_close=True
         )
-
-        padding = self.theme.padding_sm
 
         self.text.render(
             screen,
@@ -758,17 +732,11 @@ class ScraperWizardModal:
             align="center",
         )
 
-        hints = get_combined_hints([("select", "Done")], input_mode)
-        self.text.render(
-            screen,
-            hints,
-            (content_rect.centerx, content_rect.bottom - padding - 15),
-            color=self.theme.text_secondary,
-            size=self.theme.font_size_sm,
-            align="center",
+        self._render_action_buttons(
+            screen, content_rect, [("Done", "done")]
         )
 
-        return modal_rect, content_rect, None, []
+        return modal_rect, content_rect, close_rect, []
 
     def _render_error(
         self, screen: pygame.Surface, error_message: str, input_mode: str
@@ -778,7 +746,7 @@ class ScraperWizardModal:
         height = 200
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Error", show_close=False
+            screen, width, height, title="Error", show_close=True
         )
 
         padding = self.theme.padding_sm
@@ -793,19 +761,11 @@ class ScraperWizardModal:
             max_width=content_rect.width - padding * 2,
         )
 
-        hints = get_combined_hints(
-            [("select", "Try Again"), ("back", "Cancel")], input_mode
-        )
-        self.text.render(
-            screen,
-            hints,
-            (content_rect.centerx, content_rect.bottom - padding - 15),
-            color=self.theme.text_secondary,
-            size=self.theme.font_size_sm,
-            align="center",
+        self._render_action_buttons(
+            screen, content_rect, [("Try Again", "retry")]
         )
 
-        return modal_rect, content_rect, None, []
+        return modal_rect, content_rect, close_rect, []
 
     # Batch mode rendering methods
 
@@ -885,17 +845,10 @@ class ScraperWizardModal:
 
             y += item_height
 
-        hints = get_combined_hints(
-            [("start", "Select Folder"), ("select", "Open"), ("back", "Cancel")],
-            input_mode,
-        )
-        self.text.render(
-            screen,
-            hints,
-            (content_rect.centerx, content_rect.bottom - padding - 10),
-            color=self.theme.text_secondary,
-            size=self.theme.font_size_sm,
-            align="center",
+        self._scroll_offset = scroll_offset
+        self._render_action_buttons(
+            screen, content_rect,
+            [("Select Folder", "select_folder")],
         )
 
         return modal_rect, content_rect, close_rect, item_rects
@@ -980,17 +933,10 @@ class ScraperWizardModal:
 
             y += item_height
 
-        hints = get_combined_hints(
-            [("select", "Toggle"), ("start", "Continue"), ("back", "Cancel")],
-            input_mode,
-        )
-        self.text.render(
-            screen,
-            hints,
-            (content_rect.centerx, content_rect.bottom - padding - 10),
-            color=self.theme.text_secondary,
-            size=self.theme.font_size_sm,
-            align="center",
+        self._scroll_offset = scroll_offset
+        self._render_action_buttons(
+            screen, content_rect,
+            [("Continue", "start")],
         )
 
         return modal_rect, content_rect, close_rect, item_rects
@@ -1004,6 +950,7 @@ class ScraperWizardModal:
         input_mode: str,
         mixed_images_enabled: bool = False,
         download_video: bool = False,
+        batch_system: str = "",
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[pygame.Rect]]:
         """Render batch options selection."""
         width = min(500, screen.get_width() - 40)
@@ -1030,12 +977,19 @@ class ScraperWizardModal:
         else:
             all_image_types = ["box-2D", "boxart", "screenshot", "wheel", "fanart"]
 
-        # Build flat items list: auto-select, image types, video
+        # Build flat items list: system, auto-select, image types, video
         type_labels = {
             "mixrbv1": "Mix V1",
             "mixrbv2": "Mix V2",
         }
         items = []
+        system_display = batch_system if batch_system else "Auto"
+        items.append(
+            {
+                "label": f"System: {system_display}",
+                "checked": None,  # Not a checkbox item
+            }
+        )
         items.append(
             {
                 "label": "Auto-select first result",
@@ -1079,10 +1033,14 @@ class ScraperWizardModal:
                 screen, bg_color, item_rect, border_radius=self.theme.radius_sm
             )
 
-            checkbox = "[X]" if item["checked"] else "[ ]"
+            if item["checked"] is None:
+                # Non-checkbox item (e.g. System selector)
+                prefix = ">"
+            else:
+                prefix = "[X]" if item["checked"] else "[ ]"
             self.text.render(
                 screen,
-                f"{checkbox} {item['label']}",
+                f"{prefix} {item['label']}",
                 (
                     item_rect.left + padding,
                     item_rect.centery - self.theme.font_size_sm // 2,
@@ -1095,17 +1053,10 @@ class ScraperWizardModal:
 
             y += item_height
 
-        hints = get_combined_hints(
-            [("select", "Toggle"), ("start", "Start Batch"), ("back", "Cancel")],
-            input_mode,
-        )
-        self.text.render(
-            screen,
-            hints,
-            (content_rect.centerx, content_rect.bottom - padding - 10),
-            color=self.theme.text_secondary,
-            size=self.theme.font_size_sm,
-            align="center",
+        self._scroll_offset = scroll_offset
+        self._render_action_buttons(
+            screen, content_rect,
+            [("Start Batch", "start")],
         )
 
         return modal_rect, content_rect, close_rect, item_rects
@@ -1203,7 +1154,7 @@ class ScraperWizardModal:
         )
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Batch Complete", show_close=False
+            screen, width, height, title="Batch Complete", show_close=True
         )
 
         padding = self.theme.padding_sm
@@ -1251,17 +1202,58 @@ class ScraperWizardModal:
                 align="center",
             )
 
-        hints = get_combined_hints([("select", "Done")], input_mode)
-        self.text.render(
-            screen,
-            hints,
-            (content_rect.centerx, content_rect.bottom - padding - 15),
-            color=self.theme.text_secondary,
-            size=self.theme.font_size_sm,
-            align="center",
+        self._render_action_buttons(
+            screen, content_rect, [("Done", "done")]
         )
 
-        return modal_rect, content_rect, None, []
+        return modal_rect, content_rect, close_rect, []
+
+    # Button helpers
+
+    def _render_action_buttons(
+        self, screen: pygame.Surface, content_rect: pygame.Rect,
+        buttons: List[Tuple[str, str]],
+    ):
+        """Render action buttons at the bottom of a modal.
+
+        Args:
+            buttons: List of (label, button_type) tuples.
+                     button_type: "start", "done", "retry", "select_folder"
+        """
+        padding = self.theme.padding_sm
+        btn_height = 32
+        btn_y = content_rect.bottom - padding - btn_height - 2
+        total_width = sum(
+            min(160, len(b[0]) * 10 + 30) for b in buttons
+        )
+        spacing = 10
+        total_width += spacing * (len(buttons) - 1)
+        x = content_rect.centerx - total_width // 2
+
+        for label, btn_type in buttons:
+            btn_width = min(160, len(label) * 10 + 30)
+            btn_rect = pygame.Rect(x, btn_y, btn_width, btn_height)
+            if btn_type == "retry":
+                self.action_button.render_secondary(
+                    screen, btn_rect, label
+                )
+                self.retry_button_rect = btn_rect
+            elif btn_type == "done":
+                self.action_button.render_success(
+                    screen, btn_rect, label
+                )
+                self.done_button_rect = btn_rect
+            elif btn_type == "start":
+                self.action_button.render_success(
+                    screen, btn_rect, label
+                )
+                self.start_button_rect = btn_rect
+            elif btn_type == "select_folder":
+                self.action_button.render_success(
+                    screen, btn_rect, label
+                )
+                self.select_button_rect = btn_rect
+            x += btn_width + spacing
 
     # Thumbnail helpers
 

@@ -27,3 +27,9 @@ assets/translations/we2002_*.ppf
 .env
 downloads/
 .claude
+.knownPackages
+emulator
+licenses
+platform-tools
+platforms
+system-images

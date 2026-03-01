@@ -51,6 +51,9 @@ def handle_action(state, action_data):
     elif action == "back":
         _post_key(pygame.K_ESCAPE)
 
+    elif action == "start":
+        _post_key(pygame.K_SPACE)
+
     elif action == "navigate":
         direction = action_data.get("direction", "")
         key = KEY_MAP.get(direction)
@@ -63,7 +66,9 @@ def handle_action(state, action_data):
             state.folder_browser.focus_area = "list"
             state.folder_browser.highlighted = index
             _post_key(pygame.K_RETURN)
-        elif state.scraper_wizard.show and state.scraper_wizard.step == "rom_select":
+        elif state.scraper_wizard.show and state.scraper_wizard.step in (
+            "rom_select", "folder_select",
+        ):
             state.scraper_wizard.folder_highlighted = index
             _post_key(pygame.K_RETURN)
 
@@ -73,6 +78,9 @@ def handle_action(state, action_data):
             state.folder_browser.focus_area = "buttons"
             state.folder_browser.button_index = 0  # Select
             _post_key(pygame.K_RETURN)
+        elif state.scraper_wizard.show and state.scraper_wizard.step == "folder_select":
+            # Trigger Start action to select folder for batch scraping
+            _post_key(pygame.K_SPACE)
 
     elif action == "cycle_field":
         # Cycle a patcher form field left/right (season, language, etc.)

@@ -33,7 +33,6 @@ class ScraperMenuScreen:
         items.append("--- SETTINGS ---")
         items.append("Scraper Provider")
         items.append("Provider Fallback")
-        items.append("Preferred System")
         items.append("Parallel Downloads")
 
         # Provider-specific settings
@@ -84,9 +83,6 @@ class ScraperMenuScreen:
             elif item == "Provider Fallback":
                 enabled = settings.get("scraper_fallback_enabled", True)
                 items.append((item, "Enabled" if enabled else "Disabled"))
-            elif item == "Preferred System":
-                sys_name = settings.get("scraper_preferred_system", "")
-                items.append((item, sys_name if sys_name else "Not Set"))
             elif item == "Parallel Downloads":
                 items.append((item, str(settings.get("scraper_parallel_downloads", 1))))
             elif item == "Mixed Images":
@@ -146,7 +142,6 @@ class ScraperMenuScreen:
                 "Batch Scrape Folder": "batch_scrape",
                 "Scraper Provider": "toggle_scraper_provider",
                 "Provider Fallback": "toggle_scraper_fallback",
-                "Preferred System": "edit_scraper_preferred_system",
                 "Parallel Downloads": "cycle_parallel_downloads",
                 "Mixed Images": "toggle_mixed_images",
                 "ScreenScraper Login": "screenscraper_login",

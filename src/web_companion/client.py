@@ -1234,7 +1234,10 @@ function renderList(state) {
             html += `<button class="btn" onclick="sendAction({action:'back'})">Cancel</button>`;
         } else if (state.wizard_action === 'scraper_rom_list') {
             html += `<button class="btn primary" onclick="sendAction({action:'select'})">Toggle</button>`;
-            html += `<button class="btn" onclick="sendAction({action:'back'})">Start Scraping</button>`;
+            html += `<button class="btn" onclick="sendAction({action:'start'})">Continue</button>`;
+        } else if (state.wizard_action === 'scraper_batch_options') {
+            html += `<button class="btn primary" onclick="sendAction({action:'select'})">Toggle</button>`;
+            html += `<button class="btn" onclick="sendAction({action:'start'})">Start Batch</button>`;
         } else {
             html += `<button class="btn primary" onclick="sendAction({action:'select'})">Select</button>`;
             html += `<button class="btn" onclick="sendAction({action:'back'})">Back</button>`;
