@@ -269,6 +269,8 @@ class ConsoleUtilitiesApp:
         mapping = {}
         current_index = 0
         last_input_time = 0
+        pad = self.theme.padding_md
+        line_h = self.theme.font_size_md + 4
 
         while current_index < len(essential_buttons):
             current_time = pygame.time.get_ticks()
@@ -277,27 +279,43 @@ class ConsoleUtilitiesApp:
             self._draw_background()
 
             title_surf = self.font.render("Controller Setup", True, TEXT_PRIMARY)
-            self.screen.blit(title_surf, (20, 20))
+            self.screen.blit(title_surf, (pad, pad))
 
             button_key, button_desc = essential_buttons[current_index]
             instruction_surf = self.font.render(
                 f"Press the {button_desc}", True, TEXT_PRIMARY
             )
-            self.screen.blit(instruction_surf, (20, 80))
+            self.screen.blit(instruction_surf, (pad, pad + line_h * 2))
 
             progress_surf = self.font.render(
                 f"Button {current_index + 1} of {len(essential_buttons)}",
                 True,
                 TEXT_SECONDARY,
             )
-            self.screen.blit(progress_surf, (20, 120))
+            self.screen.blit(progress_surf, (pad, pad + line_h * 3))
 
             # Show already mapped buttons
-            y_offset = 160
+            y_offset = pad + line_h * 5
             for i, (mapped_key, _) in enumerate(essential_buttons[:current_index]):
                 val = mapping.get(mapped_key, "?")
                 mapped_surf = self.font.render(f"{mapped_key}: {val}", True, SUCCESS)
-                self.screen.blit(mapped_surf, (20, y_offset + i * 25))
+                self.screen.blit(mapped_surf, (pad, y_offset + i * line_h))
+
+            # Draw "Use Touch - Skip Map" button
+            skip_text = "Use Touch - Skip Map"
+            skip_font = pygame.font.Font(self.theme.font_path, self.theme.font_size_md)
+            skip_surf = skip_font.render(skip_text, True, self.theme.background)
+            btn_w = skip_surf.get_width() + pad * 2
+            btn_h = skip_surf.get_height() + pad
+            sw, sh = self.screen.get_size()
+            skip_btn_rect = pygame.Rect(
+                sw - pad - btn_w, sh - pad - btn_h, btn_w, btn_h
+            )
+            pygame.draw.rect(self.screen, self.theme.primary, skip_btn_rect)
+            self.screen.blit(
+                skip_surf,
+                (skip_btn_rect.x + pad, skip_btn_rect.y + pad // 2),
+            )
 
             if self.scanline_surface:
                 self.screen.blit(self.scanline_surface, (0, 0))
@@ -343,10 +361,11 @@ class ConsoleUtilitiesApp:
                             last_input_time = current_time
 
                 elif event.type == pygame.MOUSEBUTTONDOWN:
-                    # Touchscreen mode: skip mapping
-                    mapping = {"touchscreen_mode": True}
-                    save_controller_mapping(mapping)
-                    return True
+                    pos = event.pos
+                    if skip_btn_rect.collidepoint(pos):
+                        mapping = {"touchscreen_mode": True}
+                        save_controller_mapping(mapping)
+                        return True
 
             pygame.time.wait(16)
 

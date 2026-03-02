@@ -60,7 +60,7 @@ class GridScreenTemplate:
             Tuple of (back_button_rect, item_rects, scroll_offset)
         """
         # Draw header
-        header_height = 60
+        header_height = self.theme.header_height
         header_rect, back_button_rect = self.header.render(
             screen, title, show_back=show_back, subtitle=subtitle
         )

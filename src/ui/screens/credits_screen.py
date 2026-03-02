@@ -46,7 +46,7 @@ class CreditsScreen:
             Tuple of (back_button_rect, max_scroll)
         """
         # Draw header
-        header_height = 60
+        header_height = self.theme.header_height
         _, back_button_rect = self.header.render(
             screen, title="Credits", show_back=True
         )
