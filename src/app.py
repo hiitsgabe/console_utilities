@@ -96,7 +96,10 @@ class ConsoleUtilitiesApp:
                 pygame.FULLSCREEN,
             )
         self.clock = pygame.time.Clock()
-        self.font = pygame.font.Font("assets/fonts/VT323-Regular.ttf", FONT_SIZE)
+        font_path = os.path.join(SCRIPT_DIR, "assets", "fonts", "VT323-Regular.ttf")
+        if not os.path.exists(font_path):
+            font_path = os.path.normpath(os.path.join(SCRIPT_DIR, "..", "assets", "fonts", "VT323-Regular.ttf"))
+        self.font = pygame.font.Font(font_path, FONT_SIZE)
 
         # Initialize joystick
         pygame.joystick.init()

@@ -3,8 +3,11 @@ Theme and design tokens for Console Utilities.
 Centralizes all visual constants for consistent styling.
 """
 
+import os
 from dataclasses import dataclass
 from typing import Tuple, Optional
+
+from constants import SCRIPT_DIR
 
 # Type alias for colors
 Color = Tuple[int, int, int]
@@ -63,7 +66,11 @@ class Theme:
     font_size_md: int = 28
     font_size_lg: int = 36
     font_size_xl: int = 48
-    font_path: Optional[str] = "assets/fonts/VT323-Regular.ttf"
+    font_path: Optional[str] = (
+        os.path.join(SCRIPT_DIR, "assets", "fonts", "VT323-Regular.ttf")
+        if os.path.exists(os.path.join(SCRIPT_DIR, "assets", "fonts", "VT323-Regular.ttf"))
+        else os.path.normpath(os.path.join(SCRIPT_DIR, "..", "assets", "fonts", "VT323-Regular.ttf"))
+    )
 
     # ---- Border Radius ---- #
     radius_sm: int = 0
