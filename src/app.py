@@ -65,7 +65,7 @@ from services.portmaster_loader import PortMasterLoader, PortMasterInstaller
 from input.navigation import NavigationHandler
 from input.controller import ControllerHandler
 from input.touch import TouchHandler
-from ui.theme import Theme
+from ui.theme import Theme, create_scaled_theme
 from ui.screens.screen_manager import ScreenManager
 from utils.logging import log_error, init_log_file
 
@@ -89,6 +89,12 @@ class ConsoleUtilitiesApp:
         # Create display - auto-detect native resolution on console
         if DEV_MODE:
             self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        elif BUILD_TARGET == "android":
+            display_info = pygame.display.Info()
+            self.screen = pygame.display.set_mode(
+                (display_info.current_w, display_info.current_h),
+                pygame.RESIZABLE,
+            )
         else:
             display_info = pygame.display.Info()
             self.screen = pygame.display.set_mode(
@@ -111,8 +117,9 @@ class ConsoleUtilitiesApp:
         else:
             print("No joystick detected, using keyboard")
 
-        # Initialize theme
-        self.theme = Theme()
+        # Initialize theme (scale fonts/spacing on Android)
+        sw, sh = self.screen.get_size()
+        self.theme = create_scaled_theme(sw, sh)
 
         # CRT scanline overlay (use actual screen size)
         sw, sh = self.screen.get_size()
@@ -467,6 +474,39 @@ class ConsoleUtilitiesApp:
 
         return bezel
 
+    def _handle_resize(self, new_w: int, new_h: int):
+        """Handle screen resize (Android orientation change)."""
+        self.screen = pygame.display.set_mode(
+            (new_w, new_h), pygame.RESIZABLE
+        )
+
+        # Recreate theme with new scale
+        self.theme = create_scaled_theme(new_w, new_h)
+
+        # Recreate scanline overlay
+        self.scanline_surface = None
+        if self.theme.crt_scanlines:
+            self.scanline_surface = pygame.Surface(
+                (new_w, new_h), pygame.SRCALPHA
+            )
+            for y in range(0, new_h, 3):
+                pygame.draw.line(
+                    self.scanline_surface,
+                    (0, 0, 0, 40),
+                    (0, y),
+                    (new_w, y),
+                )
+
+        # Recreate bezel overlay
+        self.bezel_surface = self._create_crt_bezel()
+
+        # Recreate screen manager so all screens pick up new theme
+        self.screen_manager = ScreenManager(self.theme)
+
+        # Recreate font for controller mapping screen
+        font_path = self.theme.font_path
+        self.font = pygame.font.Font(font_path, self.theme.font_size_md)
+
     def _get_thumbnail(
         self, game: Any, system_data: Optional[dict] = None
     ) -> Optional[pygame.Surface]:
@@ -698,6 +738,9 @@ class ConsoleUtilitiesApp:
 
                 elif event.type == pygame.MOUSEMOTION:
                     self.touch.handle_mouse_motion(event, on_scroll=self._handle_scroll)
+
+                elif event.type == pygame.VIDEORESIZE:
+                    self._handle_resize(event.w, event.h)
 
             # Update image cache (process loaded images from background threads)
             self.image_cache.update()

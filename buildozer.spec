@@ -7,7 +7,7 @@ source.include_exts = py,png,jpg,kv,atlas,json,ttf
 source.include_patterns = src/**/*.py,assets/**/*,recipes/**/*
 version = 0.1
 requirements = python3==3.10.12,kivy==2.3.0,pyjnius==1.5.0,hostpython3==3.10.12,pygame,requests,rarfile,zstandard==0.21.0,pycryptodome,jnius,android
-orientation = landscape
+orientation = landscape, portrait
 osx.python_version = 3
 osx.kivy_version = 1.9.1
 fullscreen = 0

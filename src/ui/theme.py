@@ -7,7 +7,7 @@ import os
 from dataclasses import dataclass
 from typing import Tuple, Optional
 
-from constants import SCRIPT_DIR
+from constants import BUILD_TARGET, SCRIPT_DIR
 
 # Type alias for colors
 Color = Tuple[int, int, int]
@@ -114,3 +114,40 @@ class Theme:
 
 # Default theme instance
 default_theme = Theme()
+
+
+def create_scaled_theme(screen_w: int, screen_h: int) -> Theme:
+    """Create a theme with font/spacing scaled to screen size (Android only).
+
+    Uses the shorter screen dimension relative to 800x600 baseline so that
+    portrait mode doesn't over-scale. On non-Android targets, returns default.
+    """
+    if BUILD_TARGET != "android":
+        return Theme()
+
+    short_side = min(screen_w, screen_h)
+    scale = max(1.0, short_side / 600.0)
+
+    def s(base: int) -> int:
+        return round(base * scale)
+
+    is_portrait = screen_h > screen_w
+
+    return Theme(
+        font_size_xs=s(16),
+        font_size_sm=s(20),
+        font_size_md=s(28),
+        font_size_lg=s(36),
+        font_size_xl=s(48),
+        padding_xs=s(4),
+        padding_sm=s(8),
+        padding_md=s(16),
+        padding_lg=s(24),
+        padding_xl=s(32),
+        button_height=s(40),
+        menu_item_height=s(50),
+        thumbnail_size=(s(96), s(96)),
+        hires_image_size=(s(400), s(400)),
+        char_button_size=s(40),
+        grid_columns=3 if is_portrait else 4,
+    )
