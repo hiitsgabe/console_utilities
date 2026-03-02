@@ -61,7 +61,7 @@ class DownloadsScreen:
         )
 
         # Calculate content area (inset from bezel on all sides)
-        header_height = 60
+        header_height = self.theme.header_height
         footer_height = 40
         inset = BEZEL_INSET
         content_rect = pygame.Rect(

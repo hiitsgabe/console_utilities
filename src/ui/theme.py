@@ -79,6 +79,7 @@ class Theme:
     radius_xl: int = 0
 
     # ---- Component Sizes ---- #
+    header_height: int = 60
     button_height: int = 40
     menu_item_height: int = 50
     thumbnail_size: Tuple[int, int] = (96, 96)
@@ -126,7 +127,7 @@ def create_scaled_theme(screen_w: int, screen_h: int) -> Theme:
         return Theme()
 
     short_side = min(screen_w, screen_h)
-    scale = max(1.0, short_side / 600.0)
+    scale = max(1.0, short_side / 480.0)
 
     def s(base: int) -> int:
         return round(base * scale)
@@ -144,6 +145,7 @@ def create_scaled_theme(screen_w: int, screen_h: int) -> Theme:
         padding_md=s(16),
         padding_lg=s(24),
         padding_xl=s(32),
+        header_height=s(60),
         button_height=s(40),
         menu_item_height=s(50),
         thumbnail_size=(s(96), s(96)),

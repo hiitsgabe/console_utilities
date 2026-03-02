@@ -31,7 +31,7 @@ class Header:
         show_back: bool = False,
         subtitle: Optional[str] = None,
         right_text: Optional[str] = None,
-        height: int = 60,
+        height: int = 0,
         rainbow_title: bool = False,
         center_title: bool = False,
     ) -> Tuple[pygame.Rect, Optional[pygame.Rect]]:
@@ -53,6 +53,8 @@ class Header:
         """
         screen_width = screen.get_width()
         inset = BEZEL_INSET
+        if height == 0:
+            height = self.theme.header_height
         header_rect = pygame.Rect(inset, inset, screen_width - inset * 2, height)
 
         # Draw background
@@ -143,7 +145,7 @@ class Header:
         return header_rect, back_button_rect
 
     def get_content_area(
-        self, screen: pygame.Surface, header_height: int = 60
+        self, screen: pygame.Surface, header_height: int = 0
     ) -> pygame.Rect:
         """
         Get the content area below the header.
@@ -156,6 +158,8 @@ class Header:
             Content area rect
         """
         inset = BEZEL_INSET
+        if header_height == 0:
+            header_height = self.theme.header_height
         return pygame.Rect(
             inset,
             inset + header_height,
