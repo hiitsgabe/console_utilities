@@ -11,7 +11,7 @@ import os
 # These are overwritten at build time by CI/CD or make targets.
 # See .github/workflows/release.yml and Makefile bundle targets.
 APP_VERSION = "dev"
-BUILD_TARGET = "android"
+BUILD_TARGET = "source"
 
 # **************************************************************** #
 #                       Environment Detection                        #
