@@ -3,19 +3,172 @@ Image caching service for Console Utilities.
 Handles async image loading, caching, and queue management for thumbnails.
 """
 
+import hashlib
+import json
 import os
+import re
 import traceback
 from io import BytesIO
 from queue import Queue, Empty
-from threading import Thread
-from typing import Dict, Any, Optional, Callable, Tuple
-from urllib.parse import urljoin
+from threading import Thread, Lock, Event
+from typing import Dict, Any, Optional, Tuple
+from urllib.parse import quote, urljoin, unquote
 
 import pygame
 import requests
 
 from utils.logging import log_error
-from constants import THUMBNAIL_SIZE, HIRES_IMAGE_SIZE
+from constants import THUMBNAIL_SIZE, HIRES_IMAGE_SIZE, SYSTEMS_CACHE_DIR
+
+
+def _clean_name_for_matching(name: str) -> str:
+    """Clean a game/thumbnail name for fuzzy matching.
+
+    Strips extension, square brackets, parenthetical tags,
+    normalizes whitespace, and lowercases.
+    """
+    # Remove common file extensions
+    name = re.sub(
+        r"\.(png|jpg|jpeg|gif|bmp|zip|bin|cue|iso|7z|rar)$",
+        "",
+        name,
+        flags=re.IGNORECASE,
+    )
+    # Remove square bracket tags like [!], [b1]
+    name = re.sub(r"\s*\[[^\]]*\]", "", name)
+    # Remove parenthetical tags like (USA), (Rev 1)
+    name = re.sub(r"\s*\([^)]*\)", "", name)
+    # Normalize whitespace
+    name = " ".join(name.split())
+    return name.strip().lower()
+
+
+class _ThumbnailListingCache:
+    """Caches parsed directory listings from thumbnail servers.
+
+    Fetches the HTML listing for a boxart base URL once, parses
+    all available filenames, and builds a cleaned-name lookup dict
+    so game names can be fuzzy-matched to thumbnail filenames.
+    """
+
+    def __init__(self):
+        self._lock = Lock()
+        # boxart_url -> {cleaned_name: original_filename}
+        self._listings: Dict[str, Dict[str, str]] = {}
+        # boxart_url -> Event (set when fetch completes)
+        self._events: Dict[str, Event] = {}
+        # boxart_url -> True if fetch has been started
+        self._started: Dict[str, bool] = {}
+
+    @staticmethod
+    def _get_listing_cache_path(boxart_url: str) -> str:
+        """Return disk cache path for a thumbnail listing URL."""
+        url_hash = hashlib.md5(boxart_url.encode()).hexdigest()
+        return os.path.join(SYSTEMS_CACHE_DIR, "thumbnail_listings", f"{url_hash}.json")
+
+    def get_thumbnail_filename(
+        self, boxart_url: str, game_base_name: str
+    ) -> Optional[str]:
+        """Look up the best matching thumbnail filename.
+
+        If the listing hasn't been fetched yet, kicks off a background
+        fetch and waits up to 10 seconds for it to complete. Called
+        from background image-loading threads, so blocking is fine.
+
+        Returns the original server filename (unencoded) if found,
+        or None if no match.
+        """
+        with self._lock:
+            if boxart_url not in self._started:
+                # Try loading from disk cache first
+                disk_path = self._get_listing_cache_path(boxart_url)
+                if os.path.exists(disk_path):
+                    try:
+                        with open(disk_path, "r", encoding="utf-8") as f:
+                            self._listings[boxart_url] = json.load(f)
+                        self._started[boxart_url] = True
+                        event = Event()
+                        event.set()
+                        self._events[boxart_url] = event
+                    except Exception:
+                        pass
+
+            if boxart_url not in self._started:
+                # First request — start background fetch
+                self._started[boxart_url] = True
+                event = Event()
+                self._events[boxart_url] = event
+                thread = Thread(
+                    target=self._fetch_listing,
+                    args=(boxart_url,),
+                    daemon=True,
+                )
+                thread.start()
+
+        # Wait for the listing to become available (already in bg thread)
+        event = self._events.get(boxart_url)
+        if event:
+            event.wait(timeout=10)
+
+        lookup = self._listings.get(boxart_url, {})
+        cleaned = _clean_name_for_matching(game_base_name)
+        return lookup.get(cleaned)
+
+    def clear(self):
+        """Clear all cached listings."""
+        with self._lock:
+            self._listings.clear()
+            self._started.clear()
+            self._events.clear()
+
+    def _fetch_listing(self, boxart_url: str):
+        """Fetch and parse the directory listing from a thumbnail server."""
+        try:
+            response = requests.get(boxart_url, timeout=15)
+            response.raise_for_status()
+            html = response.text
+
+            # Parse href attributes pointing to image files
+            hrefs = re.findall(
+                r'href="([^"]+\.(?:png|jpg|jpeg))"',
+                html,
+                re.IGNORECASE,
+            )
+
+            lookup: Dict[str, str] = {}
+            for href in hrefs:
+                # Decode URL-encoded filename
+                filename = unquote(href)
+                cleaned = _clean_name_for_matching(filename)
+                if cleaned and cleaned not in lookup:
+                    lookup[cleaned] = filename
+
+            self._listings[boxart_url] = lookup
+
+            # Persist to disk cache
+            try:
+                disk_path = self._get_listing_cache_path(boxart_url)
+                os.makedirs(os.path.dirname(disk_path), exist_ok=True)
+                with open(disk_path, "w", encoding="utf-8") as f:
+                    json.dump(lookup, f, ensure_ascii=False)
+            except Exception:
+                pass
+
+        except Exception as e:
+            log_error(
+                f"Failed to fetch thumbnail listing from {boxart_url}",
+                type(e).__name__,
+                str(e),
+            )
+            self._listings[boxart_url] = {}
+        finally:
+            event = self._events.get(boxart_url)
+            if event:
+                event.set()
+
+
+# Module-level singleton for thumbnail listings
+_listing_cache = _ThumbnailListingCache()
 
 
 class ImageCache:
@@ -86,7 +239,7 @@ class ImageCache:
                 ),
             )
         else:
-            # Standard format - try multiple extensions
+            # Standard format - use listing-based matching
             base_name = os.path.splitext(game_name)[0]
             image_formats = [".png", ".jpg", ".jpeg", ".gif", ".bmp"]
             thread = Thread(
@@ -220,11 +373,22 @@ class ImageCache:
             return cache_key, image_url
         elif boxart_url:
             base_name = os.path.splitext(game_name)[0]
-            image_url = urljoin(boxart_url, f"{base_name}.png")
+            image_url = urljoin(boxart_url, quote(f"{base_name}.png", safe=""))
             cache_key = f"{prefix}{boxart_url}_{game_name}"
             return cache_key, image_url
 
         return None, None
+
+    def _resolve_thumbnail_url(self, base_url: str, base_name: str) -> Optional[str]:
+        """Resolve a thumbnail URL using the listing cache.
+
+        Tries to match the game name against the pre-fetched
+        thumbnail listing. Returns the full image URL if found.
+        """
+        matched = _listing_cache.get_thumbnail_filename(base_url, base_name)
+        if matched:
+            return urljoin(base_url, quote(matched, safe=""))
+        return None
 
     def _load_image_async(
         self,
@@ -263,10 +427,27 @@ class ImageCache:
         target_size: Tuple[int, int],
         queue: Queue,
     ):
-        """Try loading image with different format extensions."""
+        """Try loading image using listing-based matching, then format fallback."""
+        # First try listing-based fuzzy match
+        matched_url = self._resolve_thumbnail_url(base_url, base_name)
+        if matched_url:
+            try:
+                response = requests.get(matched_url, timeout=5)
+                response.raise_for_status()
+
+                image_data = BytesIO(response.content)
+                image = pygame.image.load(image_data).convert_alpha()
+                scaled_image = pygame.transform.smoothscale(image, target_size)
+
+                queue.put((cache_key, scaled_image))
+                return
+            except Exception:
+                pass
+
+        # Fall back to trying exact name with different extensions
         for fmt in formats:
             try:
-                image_url = urljoin(base_url, f"{base_name}{fmt}")
+                image_url = urljoin(base_url, quote(f"{base_name}{fmt}", safe=""))
                 response = requests.get(image_url, timeout=5)
                 response.raise_for_status()
 
@@ -280,7 +461,7 @@ class ImageCache:
             except Exception:
                 continue
 
-        # All formats failed
+        # All attempts failed
         queue.put((cache_key, None))
 
     def _load_hires_with_fallback(
@@ -291,10 +472,42 @@ class ImageCache:
         cache_key: str,
         game_name: str,
     ):
-        """Try loading high-resolution image with different extensions."""
+        """Try loading high-resolution image with listing match then extension fallback."""
+        # First try listing-based fuzzy match
+        matched_url = self._resolve_thumbnail_url(base_url, base_name)
+        if matched_url:
+            try:
+                response = requests.get(matched_url, timeout=10)
+                response.raise_for_status()
+
+                image_data = BytesIO(response.content)
+                image = pygame.image.load(image_data)
+
+                original_size = image.get_size()
+                max_dimension = max(original_size)
+
+                if max_dimension > 800:
+                    scale_factor = 800 / max_dimension
+                    new_width = int(original_size[0] * scale_factor)
+                    new_height = int(original_size[1] * scale_factor)
+                    scaled_image = pygame.transform.smoothscale(
+                        image, (new_width, new_height)
+                    )
+                else:
+                    scaled_image = image
+
+                self._hires_queue.put((cache_key, scaled_image))
+                return
+            except Exception:
+                pass
+
+        # Fall back to exact name with different extensions
         for fmt in formats:
             try:
-                url = f"{base_url}/{base_name}{fmt}"
+                url = urljoin(
+                    base_url if base_url.endswith("/") else base_url + "/",
+                    quote(f"{base_name}{fmt}", safe=""),
+                )
                 response = requests.get(url, timeout=10)
                 response.raise_for_status()
 

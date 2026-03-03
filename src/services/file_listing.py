@@ -3,6 +3,8 @@ File listing services for Console Utilities.
 Handles fetching file lists from various sources and filtering.
 """
 
+import hashlib
+import json
 import os
 import re
 import traceback
@@ -11,6 +13,48 @@ import requests
 
 from utils.logging import log_error
 from utils.formatting import decode_filename
+from constants import SYSTEMS_CACHE_DIR
+
+
+def _get_listing_cache_path(url: str) -> str:
+    """Return disk cache path for a file listing URL."""
+    url_hash = hashlib.md5(url.encode()).hexdigest()
+    return os.path.join(SYSTEMS_CACHE_DIR, "listings", f"{url_hash}.json")
+
+
+def _load_cached_listing(url: str) -> Optional[List[Dict[str, Any]]]:
+    """Load a cached file listing from disk, or None if not cached."""
+    path = _get_listing_cache_path(url)
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return None
+
+
+def _save_listing_cache(url: str, files_list: List[Dict[str, Any]]):
+    """Save a file listing to disk cache."""
+    path = _get_listing_cache_path(url)
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(files_list, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+def _normalize_urls(url):
+    """Normalize url field to a list of strings.
+
+    Returns [url] if string, url if list, [] if empty/missing.
+    """
+    if isinstance(url, list):
+        return url
+    if isinstance(url, str) and url:
+        return [url]
+    return []
 
 
 def get_roms_folder_for_system(
@@ -54,7 +98,7 @@ def _extract_ia_item_id(url: str) -> Optional[str]:
 
 
 def _list_files_archive_org(
-    system_data: Dict[str, Any], formats: List[str]
+    system_data: Dict[str, Any], formats: List[str], url: str = ""
 ) -> List[Dict[str, Any]]:
     """
     List files from Internet Archive using metadata API.
@@ -62,13 +106,16 @@ def _list_files_archive_org(
     Args:
         system_data: System configuration
         formats: Allowed file formats
+        url: Specific URL to list (defaults to system_data["url"] for backwards compat)
 
     Returns:
         List of file dictionaries
     """
     from services.internet_archive import list_ia_files, get_ia_download_url
 
-    url = system_data["url"]
+    if not url:
+        raw = system_data["url"]
+        url = raw[0] if isinstance(raw, list) else raw
     item_id = _extract_ia_item_id(url)
 
     if not item_id:
@@ -131,10 +178,10 @@ def list_files(
         List of files (strings or dictionaries depending on source)
     """
     try:
+        system_name = system_data.get("name", "Unknown")
+
         if progress_callback:
-            progress_callback(
-                f"Loading games for {system_data.get('name', 'Unknown')}..."
-            )
+            progress_callback(f"Loading games for {system_name}...")
 
         formats = system_data.get("file_format", [])
 
@@ -142,15 +189,39 @@ def list_files(
         if "list_url" in system_data:
             return _list_files_json_api(system_data, settings, formats)
 
-        # Check if this is an archive.org URL - use metadata API
-        elif "url" in system_data and _is_archive_org_url(system_data["url"]):
-            return _list_files_archive_org(system_data, formats)
+        urls = _normalize_urls(system_data.get("url"))
+        if not urls:
+            return []
 
-        # Check if this is HTML directory format
-        elif "url" in system_data:
-            return _list_files_html(system_data, settings, formats)
+        all_files = []
+        for i, url in enumerate(urls):
+            if len(urls) > 1 and progress_callback:
+                progress_callback(f"Loading {system_name} ({i + 1}/{len(urls)})...")
 
-        return []
+            # Check disk cache first
+            cached = _load_cached_listing(url)
+            if cached is not None:
+                all_files.extend(cached)
+                continue
+
+            if _is_archive_org_url(url):
+                files = _list_files_archive_org(system_data, formats, url)
+            else:
+                files = _list_files_html_single(system_data, settings, formats, url)
+                # Tag HTML results with their base URL for download resolution
+                for f in files:
+                    f["_base_url"] = url
+
+            _save_listing_cache(url, files)
+            all_files.extend(files)
+
+        # Sort combined list by filename
+        if all_files and isinstance(all_files[0], dict):
+            all_files.sort(key=lambda x: x.get("filename", ""))
+        else:
+            all_files.sort()
+
+        return all_files
 
     except Exception as e:
         log_error(
@@ -243,18 +314,30 @@ def _list_files_json_api(
 def _list_files_html(
     system_data: Dict[str, Any], settings: Dict[str, Any], formats: List[str]
 ) -> List[Dict[str, Any]]:
+    """List files from HTML directory listing (backwards compat wrapper)."""
+    raw = system_data["url"]
+    url = raw[0] if isinstance(raw, list) else raw
+    return _list_files_html_single(system_data, settings, formats, url)
+
+
+def _list_files_html_single(
+    system_data: Dict[str, Any],
+    settings: Dict[str, Any],
+    formats: List[str],
+    url: str,
+) -> List[Dict[str, Any]]:
     """
-    List files from HTML directory listing.
+    List files from a single HTML directory listing URL.
 
     Args:
         system_data: System configuration
         settings: Application settings
         formats: Allowed file formats
+        url: URL to fetch the HTML listing from
 
     Returns:
         List of file dictionaries with filename, href, and optional banner_url
     """
-    url = system_data["url"]
     regex_pattern = system_data.get("regex", '<a href="([^"]+)"[^>]*>([^<]+)</a>')
 
     headers, cookies = _get_request_headers_cookies(system_data)
@@ -692,10 +775,15 @@ def get_file_size(system_data: Dict[str, Any], game: Dict[str, Any]) -> Optional
         if "download_url" in system_data:
             url = game.get("href")
         elif "url" in system_data:
+            # Use per-game base URL (from multi-URL listing) or first URL
+            base_url = game.get("_base_url") if isinstance(game, dict) else None
+            if not base_url:
+                urls = _normalize_urls(system_data["url"])
+                base_url = urls[0] if urls else ""
             if "href" in game:
-                url = urljoin(system_data["url"], game["href"])
+                url = urljoin(base_url, game["href"])
             else:
-                url = urljoin(system_data["url"], filename)
+                url = urljoin(base_url, filename)
         else:
             return None
 

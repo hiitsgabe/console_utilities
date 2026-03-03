@@ -49,6 +49,12 @@ if DEV_MODE:
 else:
     WE_PATCHER_CACHE_DIR = os.path.join(SCRIPT_DIR, "we_patcher_cache")
 
+# Systems cache directory (file listings + thumbnail listings)
+if DEV_MODE:
+    SYSTEMS_CACHE_DIR = os.path.join(SCRIPT_DIR, "..", "workdir", "systems_cache")
+else:
+    SYSTEMS_CACHE_DIR = os.path.join(SCRIPT_DIR, "systems_cache")
+
 # **************************************************************** #
 #                       Display Settings                             #
 # **************************************************************** #

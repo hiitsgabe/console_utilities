@@ -11,6 +11,7 @@ import sys
 from typing import Optional, Dict, Any
 
 from constants import (
+    BEZEL_INSET,
     BUILD_TARGET,
     DEV_MODE,
     FPS,
@@ -59,13 +60,13 @@ from services.file_listing import (
 )
 from services.installed_checker import installed_checker
 from services.image_cache import ImageCache
-from services.download_manager import DownloadManager
+from services.download_manager import DownloadManager as _DesktopDownloadManager
 from services.scraper_manager import ScraperManager
 from services.portmaster_loader import PortMasterLoader, PortMasterInstaller
 from input.navigation import NavigationHandler
 from input.controller import ControllerHandler
 from input.touch import TouchHandler
-from ui.theme import Theme, create_scaled_theme
+from ui.theme import Theme
 from ui.screens.screen_manager import ScreenManager
 from utils.logging import log_error, init_log_file
 
@@ -90,10 +91,9 @@ class ConsoleUtilitiesApp:
         if DEV_MODE:
             self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         elif BUILD_TARGET == "android":
-            display_info = pygame.display.Info()
             self.screen = pygame.display.set_mode(
-                (display_info.current_w, display_info.current_h),
-                pygame.RESIZABLE,
+                (SCREEN_WIDTH, SCREEN_HEIGHT),
+                pygame.SCALED | pygame.FULLSCREEN,
             )
         else:
             display_info = pygame.display.Info()
@@ -104,7 +104,9 @@ class ConsoleUtilitiesApp:
         self.clock = pygame.time.Clock()
         font_path = os.path.join(SCRIPT_DIR, "assets", "fonts", "VT323-Regular.ttf")
         if not os.path.exists(font_path):
-            font_path = os.path.normpath(os.path.join(SCRIPT_DIR, "..", "assets", "fonts", "VT323-Regular.ttf"))
+            font_path = os.path.normpath(
+                os.path.join(SCRIPT_DIR, "..", "assets", "fonts", "VT323-Regular.ttf")
+            )
         self.font = pygame.font.Font(font_path, FONT_SIZE)
 
         # Initialize joystick
@@ -117,9 +119,8 @@ class ConsoleUtilitiesApp:
         else:
             print("No joystick detected, using keyboard")
 
-        # Initialize theme (scale fonts/spacing on Android)
-        sw, sh = self.screen.get_size()
-        self.theme = create_scaled_theme(sw, sh)
+        # Initialize theme
+        self.theme = Theme()
 
         # CRT scanline overlay (use actual screen size)
         sw, sh = self.screen.get_size()
@@ -165,10 +166,17 @@ class ConsoleUtilitiesApp:
         # Initialize image cache service
         self.image_cache = ImageCache()
 
-        # Initialize download manager
-        self.download_manager = DownloadManager(
-            self.settings, self.state.download_queue
-        )
+        # Initialize download manager (Android-native or desktop)
+        if BUILD_TARGET == "android":
+            from droid.download_manager import AndroidDownloadManager
+
+            self.download_manager = AndroidDownloadManager(
+                self.settings, self.state.download_queue
+            )
+        else:
+            self.download_manager = _DesktopDownloadManager(
+                self.settings, self.state.download_queue
+            )
 
         # Initialize scraper manager
         self.scraper_manager = ScraperManager(self.settings, self.state.scraper_queue)
@@ -186,6 +194,13 @@ class ConsoleUtilitiesApp:
             "web_companion_enabled", False
         ):
             self._start_web_companion()
+
+        # Native file/folder picker (Android only)
+        self._file_picker = None
+        if BUILD_TARGET == "android":
+            from droid.file_picker import AndroidFilePicker
+
+            self._file_picker = AndroidFilePicker()
 
         # CRT vignette overlay (edge darkening)
         self.vignette_surface = self._create_vignette()
@@ -269,8 +284,10 @@ class ConsoleUtilitiesApp:
         mapping = {}
         current_index = 0
         last_input_time = 0
-        pad = self.theme.padding_md
+        touch_detected = False
+        pad = max(self.theme.padding_md, BEZEL_INSET + 4)
         line_h = self.theme.font_size_md + 4
+        skip_btn_rect = pygame.Rect(0, 0, 0, 0)
 
         while current_index < len(essential_buttons):
             current_time = pygame.time.get_ticks()
@@ -301,21 +318,24 @@ class ConsoleUtilitiesApp:
                 mapped_surf = self.font.render(f"{mapped_key}: {val}", True, SUCCESS)
                 self.screen.blit(mapped_surf, (pad, y_offset + i * line_h))
 
-            # Draw "Use Touch - Skip Map" button
-            skip_text = "Use Touch - Skip Map"
-            skip_font = pygame.font.Font(self.theme.font_path, self.theme.font_size_md)
-            skip_surf = skip_font.render(skip_text, True, self.theme.background)
-            btn_w = skip_surf.get_width() + pad * 2
-            btn_h = skip_surf.get_height() + pad
-            sw, sh = self.screen.get_size()
-            skip_btn_rect = pygame.Rect(
-                sw - pad - btn_w, sh - pad - btn_h, btn_w, btn_h
-            )
-            pygame.draw.rect(self.screen, self.theme.primary, skip_btn_rect)
-            self.screen.blit(
-                skip_surf,
-                (skip_btn_rect.x + pad, skip_btn_rect.y + pad // 2),
-            )
+            # Only show skip button after a touch/click is detected
+            if touch_detected:
+                skip_text = "Use Touch - Skip Map"
+                skip_font = pygame.font.Font(
+                    self.theme.font_path, self.theme.font_size_md
+                )
+                skip_surf = skip_font.render(skip_text, True, self.theme.background)
+                btn_w = skip_surf.get_width() + pad * 2
+                btn_h = skip_surf.get_height() + pad
+                sw, sh = self.screen.get_size()
+                skip_btn_rect = pygame.Rect(
+                    sw - pad - btn_w, sh - pad - btn_h, btn_w, btn_h
+                )
+                pygame.draw.rect(self.screen, self.theme.primary, skip_btn_rect)
+                self.screen.blit(
+                    skip_surf,
+                    (skip_btn_rect.x + pad, skip_btn_rect.y + pad // 2),
+                )
 
             if self.scanline_surface:
                 self.screen.blit(self.scanline_surface, (0, 0))
@@ -361,11 +381,11 @@ class ConsoleUtilitiesApp:
                             last_input_time = current_time
 
                 elif event.type == pygame.MOUSEBUTTONDOWN:
-                    pos = event.pos
-                    if skip_btn_rect.collidepoint(pos):
+                    if touch_detected and skip_btn_rect.collidepoint(event.pos):
                         mapping = {"touchscreen_mode": True}
                         save_controller_mapping(mapping)
                         return True
+                    touch_detected = True
 
             pygame.time.wait(16)
 
@@ -495,19 +515,15 @@ class ConsoleUtilitiesApp:
 
     def _handle_resize(self, new_w: int, new_h: int):
         """Handle screen resize (Android orientation change)."""
-        self.screen = pygame.display.set_mode(
-            (new_w, new_h), pygame.RESIZABLE
-        )
+        self.screen = pygame.display.set_mode((new_w, new_h), pygame.RESIZABLE)
 
-        # Recreate theme with new scale
-        self.theme = create_scaled_theme(new_w, new_h)
+        # Recreate theme
+        self.theme = Theme()
 
         # Recreate scanline overlay
         self.scanline_surface = None
         if self.theme.crt_scanlines:
-            self.scanline_surface = pygame.Surface(
-                (new_w, new_h), pygame.SRCALPHA
-            )
+            self.scanline_surface = pygame.Surface((new_w, new_h), pygame.SRCALPHA)
             for y in range(0, new_h, 3):
                 pygame.draw.line(
                     self.scanline_surface,
@@ -716,6 +732,16 @@ class ConsoleUtilitiesApp:
             if not self.needs_mapping:
                 self.navigation.handle_continuous(self._on_navigate)
 
+            # Manage Android soft keyboard show/hide
+            if BUILD_TARGET == "android":
+                text_modal_was_open = getattr(self, "_text_modal_open", False)
+                text_modal_is_open = self._is_text_modal_open()
+                if text_modal_is_open and not text_modal_was_open:
+                    pygame.key.start_text_input()
+                elif not text_modal_is_open and text_modal_was_open:
+                    pygame.key.stop_text_input()
+                self._text_modal_open = text_modal_is_open
+
             # Process events
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -726,10 +752,14 @@ class ConsoleUtilitiesApp:
                     # UNLESS tagged as web companion synthetic events.
                     # Some consoles/controllers generate keyboard events alongside joystick events
                     # which causes double input. Joystick takes priority.
-                    if self.joystick is not None and not getattr(event, "web_companion", False):
+                    if self.joystick is not None and not getattr(
+                        event, "web_companion", False
+                    ):
                         continue
                     self.state.input_mode = "keyboard"
-                    self.state._from_web_companion = getattr(event, "web_companion", False)
+                    self.state._from_web_companion = getattr(
+                        event, "web_companion", False
+                    )
                     self._handle_key_event(event)
                     self.state._from_web_companion = False
 
@@ -759,7 +789,15 @@ class ConsoleUtilitiesApp:
                     self.touch.handle_mouse_motion(event, on_scroll=self._handle_scroll)
 
                 elif event.type == pygame.VIDEORESIZE:
-                    self._handle_resize(event.w, event.h)
+                    if BUILD_TARGET != "android":
+                        self._handle_resize(event.w, event.h)
+
+                elif event.type == pygame.TEXTINPUT:
+                    if BUILD_TARGET == "android":
+                        self._handle_text_input_event(event)
+
+                elif BUILD_TARGET == "android" and event.type == pygame.USEREVENT + 1:
+                    self._handle_native_picker_result(event)
 
             # Update image cache (process loaded images from background threads)
             self.image_cache.update()
@@ -1135,6 +1173,7 @@ class ConsoleUtilitiesApp:
         if we.active_modal == "league_browser":
             if we.league_search_active:
                 from ui.organisms.char_keyboard import CharKeyboard
+
                 keyboard = CharKeyboard()
                 total_chars = keyboard.get_total_chars("default")
                 chars_per_row = 13
@@ -1156,7 +1195,11 @@ class ConsoleUtilitiesApp:
 
             filtered = league_browser_modal.get_filtered_leagues(self.state)
             # +1 for "Browse all leagues" footer when not all loaded and not searching
-            show_browse_all = not we.all_leagues_loaded and not we.league_search_query and not we.is_fetching
+            show_browse_all = (
+                not we.all_leagues_loaded
+                and not we.league_search_query
+                and not we.is_fetching
+            )
             max_items = (len(filtered) + (1 if show_browse_all else 0)) or 1
             if direction in ("up", "left"):
                 we.leagues_highlighted = (we.leagues_highlighted - 1) % max_items
@@ -1211,6 +1254,7 @@ class ConsoleUtilitiesApp:
                     provider = self.settings.get("sports_roster_provider", "espn")
                     if provider == "api_football":
                         from datetime import datetime as _dt
+
                         max_year = _dt.now().year
                         delta = -1 if direction == "left" else 1
                         we.selected_season = max(
@@ -1239,14 +1283,14 @@ class ConsoleUtilitiesApp:
                 return
             teams = league_data.teams
             if direction == "left":
-                nhl.roster_preview_team_index = (nhl.roster_preview_team_index - 1) % max(
-                    len(teams), 1
-                )
+                nhl.roster_preview_team_index = (
+                    nhl.roster_preview_team_index - 1
+                ) % max(len(teams), 1)
                 nhl.roster_preview_player_index = 0
             elif direction == "right":
-                nhl.roster_preview_team_index = (nhl.roster_preview_team_index + 1) % max(
-                    len(teams), 1
-                )
+                nhl.roster_preview_team_index = (
+                    nhl.roster_preview_team_index + 1
+                ) % max(len(teams), 1)
                 nhl.roster_preview_player_index = 0
             elif direction == "up":
                 nhl.roster_preview_player_index = max(
@@ -1276,6 +1320,7 @@ class ConsoleUtilitiesApp:
                 )
                 if action == "change_season":
                     from datetime import datetime as _dt
+
                     now = _dt.now()
                     # NHL season start year: current year if Oct+, else year-1
                     max_year = now.year if now.month >= 10 else now.year - 1
@@ -1304,14 +1349,14 @@ class ConsoleUtilitiesApp:
                 return
             teams = league_data.teams
             if direction == "left":
-                nhl.roster_preview_team_index = (nhl.roster_preview_team_index - 1) % max(
-                    len(teams), 1
-                )
+                nhl.roster_preview_team_index = (
+                    nhl.roster_preview_team_index - 1
+                ) % max(len(teams), 1)
                 nhl.roster_preview_player_index = 0
             elif direction == "right":
-                nhl.roster_preview_team_index = (nhl.roster_preview_team_index + 1) % max(
-                    len(teams), 1
-                )
+                nhl.roster_preview_team_index = (
+                    nhl.roster_preview_team_index + 1
+                ) % max(len(teams), 1)
                 nhl.roster_preview_player_index = 0
             elif direction == "up":
                 nhl.roster_preview_player_index = max(
@@ -1332,7 +1377,9 @@ class ConsoleUtilitiesApp:
 
         elif nhl.active_modal is None:
             # Main nhl94_gen_patcher menu
-            from ui.screens.nhl94_genesis_patcher_screen import nhl94_genesis_patcher_screen
+            from ui.screens.nhl94_genesis_patcher_screen import (
+                nhl94_genesis_patcher_screen,
+            )
 
             # Left/Right on the Season row changes year (NHL API only)
             if direction in ("left", "right"):
@@ -1341,6 +1388,7 @@ class ConsoleUtilitiesApp:
                 )
                 if action == "change_season":
                     from datetime import datetime as _dt
+
                     now = _dt.now()
                     max_year = now.year if now.month >= 10 else now.year - 1
                     delta = -1 if direction == "left" else 1
@@ -1351,7 +1399,9 @@ class ConsoleUtilitiesApp:
                     nhl.league_data = None
                     return
 
-            max_items = nhl94_genesis_patcher_screen.get_count(self.state, self.settings)
+            max_items = nhl94_genesis_patcher_screen.get_count(
+                self.state, self.settings
+            )
             if direction in ("up", "left"):
                 self.state.highlighted = (self.state.highlighted - 1) % max_items
             elif direction in ("down", "right"):
@@ -1367,14 +1417,14 @@ class ConsoleUtilitiesApp:
                 return
             teams = league_data.teams
             if direction == "left":
-                nhl.roster_preview_team_index = (nhl.roster_preview_team_index - 1) % max(
-                    len(teams), 1
-                )
+                nhl.roster_preview_team_index = (
+                    nhl.roster_preview_team_index - 1
+                ) % max(len(teams), 1)
                 nhl.roster_preview_player_index = 0
             elif direction == "right":
-                nhl.roster_preview_team_index = (nhl.roster_preview_team_index + 1) % max(
-                    len(teams), 1
-                )
+                nhl.roster_preview_team_index = (
+                    nhl.roster_preview_team_index + 1
+                ) % max(len(teams), 1)
                 nhl.roster_preview_player_index = 0
             elif direction == "up":
                 nhl.roster_preview_player_index = max(
@@ -1404,6 +1454,7 @@ class ConsoleUtilitiesApp:
                 )
                 if action == "change_season":
                     from datetime import datetime as _dt
+
                     now = _dt.now()
                     max_year = now.year if now.month >= 10 else now.year - 1
                     delta = -1 if direction == "left" else 1
@@ -1461,7 +1512,9 @@ class ConsoleUtilitiesApp:
     def _handle_key_event(self, event: pygame.event.Event):
         """Handle keyboard events."""
         # Handle keyboard text input for search modal
-        if self.state.show_search_input and self.state.input_mode == "keyboard":
+        if self.state.show_search_input and (
+            self.state.input_mode == "keyboard" or BUILD_TARGET == "android"
+        ):
             if event.key == pygame.K_ESCAPE:
                 self._go_back()
             elif event.key == pygame.K_RETURN:
@@ -1476,14 +1529,20 @@ class ConsoleUtilitiesApp:
                 if clip:
                     self.state.search.input_text += clip
                     self.state.search.query = self.state.search.input_text
-            elif event.unicode and event.unicode.isprintable():
-                # Add typed character
+            elif (
+                event.unicode
+                and event.unicode.isprintable()
+                and BUILD_TARGET != "android"
+            ):
+                # Add typed character (skip on Android — TEXTINPUT handles it)
                 self.state.search.input_text += event.unicode
                 self.state.search.query = self.state.search.input_text
             return
 
         # Handle keyboard text input for IA login modal
-        if self.state.ia_login.show and self.state.input_mode == "keyboard":
+        if self.state.ia_login.show and (
+            self.state.input_mode == "keyboard" or BUILD_TARGET == "android"
+        ):
             step = self.state.ia_login.step
             if step in ("email", "password"):
                 if event.key == pygame.K_ESCAPE:
@@ -1502,7 +1561,11 @@ class ConsoleUtilitiesApp:
                             self.state.ia_login.email += clip
                         elif step == "password":
                             self.state.ia_login.password += clip
-                elif event.unicode and event.unicode.isprintable():
+                elif (
+                    event.unicode
+                    and event.unicode.isprintable()
+                    and BUILD_TARGET != "android"
+                ):
                     if step == "email":
                         self.state.ia_login.email += event.unicode
                     elif step == "password":
@@ -1510,7 +1573,9 @@ class ConsoleUtilitiesApp:
                 return
 
         # Handle keyboard text input for scraper login modal
-        if self.state.scraper_login.show and self.state.input_mode == "keyboard":
+        if self.state.scraper_login.show and (
+            self.state.input_mode == "keyboard" or BUILD_TARGET == "android"
+        ):
             step = self.state.scraper_login.step
             if step in ("username", "password", "api_key"):
                 if event.key == pygame.K_ESCAPE:
@@ -1539,7 +1604,11 @@ class ConsoleUtilitiesApp:
                             self.state.scraper_login.password += clip
                         elif step == "api_key":
                             self.state.scraper_login.api_key += clip
-                elif event.unicode and event.unicode.isprintable():
+                elif (
+                    event.unicode
+                    and event.unicode.isprintable()
+                    and BUILD_TARGET != "android"
+                ):
                     if step == "username":
                         self.state.scraper_login.username += event.unicode
                     elif step == "password":
@@ -1549,9 +1618,8 @@ class ConsoleUtilitiesApp:
                 return
 
         # Handle keyboard text input for WE Patcher league browser search
-        if (
-            self.state.we_patcher.active_modal == "league_browser"
-            and self.state.input_mode == "keyboard"
+        if self.state.we_patcher.active_modal == "league_browser" and (
+            self.state.input_mode == "keyboard" or BUILD_TARGET == "android"
         ):
             if event.key == pygame.K_ESCAPE:
                 if self.state.we_patcher.league_search_active:
@@ -1576,15 +1644,18 @@ class ConsoleUtilitiesApp:
                 if clip:
                     self.state.we_patcher.league_search_query += clip
                     self.state.we_patcher.leagues_highlighted = 0
-            elif event.unicode and event.unicode.isprintable():
+            elif (
+                event.unicode
+                and event.unicode.isprintable()
+                and BUILD_TARGET != "android"
+            ):
                 self.state.we_patcher.league_search_query += event.unicode
                 self.state.we_patcher.leagues_highlighted = 0
             return
 
         # Handle keyboard text input for ISS Patcher league browser search
-        if (
-            self.state.iss_patcher.active_modal == "league_browser"
-            and self.state.input_mode == "keyboard"
+        if self.state.iss_patcher.active_modal == "league_browser" and (
+            self.state.input_mode == "keyboard" or BUILD_TARGET == "android"
         ):
             if event.key == pygame.K_ESCAPE:
                 if self.state.iss_patcher.league_search_active:
@@ -1609,13 +1680,19 @@ class ConsoleUtilitiesApp:
                 if clip:
                     self.state.iss_patcher.league_search_query += clip
                     self.state.iss_patcher.leagues_highlighted = 0
-            elif event.unicode and event.unicode.isprintable():
+            elif (
+                event.unicode
+                and event.unicode.isprintable()
+                and BUILD_TARGET != "android"
+            ):
                 self.state.iss_patcher.league_search_query += event.unicode
                 self.state.iss_patcher.leagues_highlighted = 0
             return
 
         # Handle keyboard text input for IA download wizard
-        if self.state.ia_download_wizard.show and self.state.input_mode == "keyboard":
+        if self.state.ia_download_wizard.show and (
+            self.state.input_mode == "keyboard" or BUILD_TARGET == "android"
+        ):
             step = self.state.ia_download_wizard.step
             if step == "url":
                 if event.key == pygame.K_ESCAPE:
@@ -1631,7 +1708,11 @@ class ConsoleUtilitiesApp:
                     clip = self._get_clipboard_text()
                     if clip:
                         self.state.ia_download_wizard.url += clip
-                elif event.unicode and event.unicode.isprintable():
+                elif (
+                    event.unicode
+                    and event.unicode.isprintable()
+                    and BUILD_TARGET != "android"
+                ):
                     self.state.ia_download_wizard.url += event.unicode
                 return
 
@@ -1639,7 +1720,7 @@ class ConsoleUtilitiesApp:
         # Skip if folder browser is open (it handles its own input)
         if (
             self.state.ia_collection_wizard.show
-            and self.state.input_mode == "keyboard"
+            and (self.state.input_mode == "keyboard" or BUILD_TARGET == "android")
             and not self.state.folder_browser.show
         ):
             step = self.state.ia_collection_wizard.step
@@ -1659,7 +1740,11 @@ class ConsoleUtilitiesApp:
                     clip = self._get_clipboard_text()
                     if clip:
                         wizard.custom_format_input += clip
-                elif event.unicode and event.unicode.isprintable():
+                elif (
+                    event.unicode
+                    and event.unicode.isprintable()
+                    and BUILD_TARGET != "android"
+                ):
                     wizard.custom_format_input += event.unicode
                 return
 
@@ -1681,16 +1766,48 @@ class ConsoleUtilitiesApp:
                             wizard.url += clip
                         elif step == "name":
                             wizard.collection_name += clip
-                elif event.unicode and event.unicode.isprintable():
+                elif (
+                    event.unicode
+                    and event.unicode.isprintable()
+                    and BUILD_TARGET != "android"
+                ):
                     if step == "url":
                         wizard.url += event.unicode
                     elif step == "name":
                         wizard.collection_name += event.unicode
                 return
 
+        # Handle keyboard/web-companion text input for URL input
+        if self.state.url_input.show and (
+            self.state.input_mode == "keyboard"
+            or BUILD_TARGET == "android"
+            or getattr(event, "web_companion", False)
+        ):
+            if event.key == pygame.K_ESCAPE:
+                self._go_back()
+            elif event.key == pygame.K_RETURN:
+                self._submit_url_input()
+            elif event.key == pygame.K_BACKSPACE:
+                if self.state.url_input.input_text:
+                    self.state.url_input.input_text = self.state.url_input.input_text[
+                        :-1
+                    ]
+            elif self._is_paste_event(event):
+                clip = self._get_clipboard_text()
+                if clip:
+                    self.state.url_input.input_text += clip
+            elif (
+                event.unicode
+                and event.unicode.isprintable()
+                and BUILD_TARGET != "android"
+            ):
+                self.state.url_input.input_text += event.unicode
+            return
+
         # Handle keyboard/web-companion text input for folder name
         if self.state.folder_name_input.show and (
             self.state.input_mode == "keyboard"
+            or BUILD_TARGET == "android"
             or getattr(event, "web_companion", False)
         ):
             if event.key == pygame.K_ESCAPE:
@@ -1706,7 +1823,11 @@ class ConsoleUtilitiesApp:
                 clip = self._get_clipboard_text()
                 if clip:
                     self.state.folder_name_input.input_text += clip
-            elif event.unicode and event.unicode.isprintable():
+            elif (
+                event.unicode
+                and event.unicode.isprintable()
+                and BUILD_TARGET != "android"
+            ):
                 self.state.folder_name_input.input_text += event.unicode
             return
 
@@ -1736,6 +1857,34 @@ class ConsoleUtilitiesApp:
             self._handle_detail_action()
         elif event.key == pygame.K_SPACE:
             self._handle_start_action()
+
+    def _handle_text_input_event(self, event: pygame.event.Event):
+        """Handle TEXTINPUT events from the Android soft keyboard."""
+        text = event.text
+        if not text:
+            return
+
+        if self.state.show_search_input:
+            self.state.search.input_text += text
+            self.state.search.query = self.state.search.input_text
+        elif self.state.ia_login.show:
+            step = self.state.ia_login.step
+            if step == "email":
+                self.state.ia_login.email += text
+            elif step == "password":
+                self.state.ia_login.password += text
+        elif self.state.scraper_login.show:
+            step = self.state.scraper_login.step
+            if step == "username":
+                self.state.scraper_login.username += text
+            elif step == "password":
+                self.state.scraper_login.password += text
+            elif step == "api_key":
+                self.state.scraper_login.api_key += text
+        elif self.state.url_input.show:
+            self.state.url_input.input_text += text
+        elif self.state.folder_name_input.show:
+            self.state.folder_name_input.input_text += text
 
     def _handle_joystick_event(self, event: pygame.event.Event):
         """Handle joystick button events."""
@@ -1788,8 +1937,11 @@ class ConsoleUtilitiesApp:
 
         # Check color picker clicks (team rows + color swatches)
         if (
-            (self.state.mode == "we_patcher" and self.state.we_patcher.active_modal == "color_picker")
-            or (self.state.mode == "iss_patcher" and self.state.iss_patcher.active_modal == "color_picker")
+            self.state.mode == "we_patcher"
+            and self.state.we_patcher.active_modal == "color_picker"
+        ) or (
+            self.state.mode == "iss_patcher"
+            and self.state.iss_patcher.active_modal == "color_picker"
         ):
             self._handle_color_picker_click(x, y)
             return
@@ -1906,6 +2058,16 @@ class ConsoleUtilitiesApp:
                     self._start_download()
                 return
 
+        # Check Android text modal OK/Cancel buttons
+        text_ok = self.state.ui_rects.rects.get("text_ok")
+        text_cancel = self.state.ui_rects.rects.get("text_cancel")
+        if text_ok and text_ok.collidepoint(x, y):
+            self._handle_text_modal_ok_click()
+            return
+        if text_cancel and text_cancel.collidepoint(x, y):
+            self._handle_text_modal_cancel_click()
+            return
+
         # Check modal character buttons (search/url input/IA modals)
         if self.state.ui_rects.modal_char_rects:
             for char_rect, char_index, char in self.state.ui_rects.modal_char_rects:
@@ -1955,7 +2117,10 @@ class ConsoleUtilitiesApp:
                 return
 
         # Check Season / Language arrow buttons (iss_patcher main menu only)
-        if self.state.mode == "iss_patcher" and self.state.iss_patcher.active_modal is None:
+        if (
+            self.state.mode == "iss_patcher"
+            and self.state.iss_patcher.active_modal is None
+        ):
             left_arrow = self.state.ui_rects.rects.get("season_left_arrow")
             right_arrow = self.state.ui_rects.rects.get("season_right_arrow")
             if left_arrow and left_arrow.collidepoint(x, y):
@@ -1965,7 +2130,10 @@ class ConsoleUtilitiesApp:
                 self._handle_iss_patcher_navigation("right")
                 return
         # Check Season arrow buttons (nhl94_patcher main menu only)
-        if self.state.mode == "nhl94_patcher" and self.state.nhl94_patcher.active_modal is None:
+        if (
+            self.state.mode == "nhl94_patcher"
+            and self.state.nhl94_patcher.active_modal is None
+        ):
             left_arrow = self.state.ui_rects.rects.get("season_left_arrow")
             right_arrow = self.state.ui_rects.rects.get("season_right_arrow")
             if left_arrow and left_arrow.collidepoint(x, y):
@@ -1977,7 +2145,10 @@ class ConsoleUtilitiesApp:
                 self._handle_nhl94_patcher_navigation("right")
                 return
         # Check Season arrow buttons (nhl07_patcher main menu only)
-        if self.state.mode == "nhl07_patcher" and self.state.nhl07_psp_patcher.active_modal is None:
+        if (
+            self.state.mode == "nhl07_patcher"
+            and self.state.nhl07_psp_patcher.active_modal is None
+        ):
             left_arrow = self.state.ui_rects.rects.get("season_left_arrow")
             right_arrow = self.state.ui_rects.rects.get("season_right_arrow")
             if left_arrow and left_arrow.collidepoint(x, y):
@@ -1989,7 +2160,10 @@ class ConsoleUtilitiesApp:
                 self._handle_nhl07_patcher_navigation("right")
                 return
         # Check Season arrow buttons (nhl94_gen_patcher main menu only)
-        if self.state.mode == "nhl94_gen_patcher" and self.state.nhl94_gen_patcher.active_modal is None:
+        if (
+            self.state.mode == "nhl94_gen_patcher"
+            and self.state.nhl94_gen_patcher.active_modal is None
+        ):
             left_arrow = self.state.ui_rects.rects.get("season_left_arrow")
             right_arrow = self.state.ui_rects.rects.get("season_right_arrow")
             if left_arrow and left_arrow.collidepoint(x, y):
@@ -2001,7 +2175,10 @@ class ConsoleUtilitiesApp:
                 self._handle_nhl94_gen_patcher_navigation("right")
                 return
         # Check Season / Language arrow buttons (we_patcher main menu only)
-        if self.state.mode == "we_patcher" and self.state.we_patcher.active_modal is None:
+        if (
+            self.state.mode == "we_patcher"
+            and self.state.we_patcher.active_modal is None
+        ):
             left_arrow = self.state.ui_rects.rects.get("season_left_arrow")
             right_arrow = self.state.ui_rects.rects.get("season_right_arrow")
             if left_arrow and left_arrow.collidepoint(x, y):
@@ -2148,6 +2325,7 @@ class ConsoleUtilitiesApp:
                 self.state.we_patcher.active_modal = None
             else:
                 from state import WePatcherState
+
                 self.state.we_patcher = WePatcherState()
                 self.state.mode = "sports_patcher"
                 self.state.highlighted = 0
@@ -2156,6 +2334,7 @@ class ConsoleUtilitiesApp:
                 self.state.iss_patcher.active_modal = None
             else:
                 from state import ISSPatcherState
+
                 self.state.iss_patcher = ISSPatcherState()
                 self.state.mode = "sports_patcher"
                 self.state.highlighted = 0
@@ -2164,6 +2343,7 @@ class ConsoleUtilitiesApp:
                 self.state.nhl94_patcher.active_modal = None
             else:
                 from state import NHL94SNESPatcherState
+
                 self.state.nhl94_patcher = NHL94SNESPatcherState()
                 self.state.mode = "sports_patcher"
                 self.state.highlighted = 0
@@ -2172,6 +2352,7 @@ class ConsoleUtilitiesApp:
                 self.state.nhl94_gen_patcher.active_modal = None
             else:
                 from state import NHL94GenesisPatcherState
+
                 self.state.nhl94_gen_patcher = NHL94GenesisPatcherState()
                 self.state.mode = "sports_patcher"
                 self.state.highlighted = 0
@@ -2180,6 +2361,7 @@ class ConsoleUtilitiesApp:
                 self.state.nhl07_psp_patcher.active_modal = None
             else:
                 from state import NHL07PSPPatcherState
+
                 self.state.nhl07_psp_patcher = NHL07PSPPatcherState()
                 self.state.mode = "sports_patcher"
                 self.state.highlighted = 0
@@ -2322,18 +2504,21 @@ class ConsoleUtilitiesApp:
                     self.data, system["name"]
                 )
 
-                # Show loading while fetching games
+                # Show loading while fetching games (non-blocking)
                 self._show_loading(f"Loading {system['name']}...")
                 system_data = self.data[self.state.selected_system]
-                self.state.game_list = list_files(system_data, self.settings)
 
-                # Set up installed checker for lazy evaluation
-                roms_folder = get_roms_folder_for_system(system_data, self.settings)
-                installed_checker.set_roms_folder(roms_folder)
-                self._hide_loading()
+                import threading
 
-                self.state.mode = "games"
-                self.state.highlighted = 0
+                def _do_load_games(sd=system_data):
+                    self.state.game_list = list_files(sd, self.settings)
+                    roms_folder = get_roms_folder_for_system(sd, self.settings)
+                    installed_checker.set_roms_folder(roms_folder)
+                    self._hide_loading()
+                    self.state.mode = "games"
+                    self.state.highlighted = 0
+
+                threading.Thread(target=_do_load_games, daemon=True).start()
 
         elif self.state.mode == "games":
             game_list = (
@@ -2504,6 +2689,15 @@ class ConsoleUtilitiesApp:
         elif context == "apply_update" and data:
             self._apply_update(data)
             return  # Don't close modal yet - _apply_update manages its own UI
+        elif context == "clear_systems_cache":
+            import shutil
+            from constants import SYSTEMS_CACHE_DIR
+            from services.image_cache import _listing_cache
+
+            shutil.rmtree(SYSTEMS_CACHE_DIR, ignore_errors=True)
+            os.makedirs(SYSTEMS_CACHE_DIR, exist_ok=True)
+            _listing_cache.clear()
+            self.image_cache.clear()
         # Close the modal
         self._handle_confirm_modal_cancel()
 
@@ -2570,7 +2764,7 @@ class ConsoleUtilitiesApp:
             self.state.mode = "systems_settings"
             self.state.systems_settings_highlighted = 0
         elif action == "remap_controller":
-            self._start_controller_mapping()
+            self._collect_controller_mapping()
         elif action == "toggle_portmaster_enabled":
             if self.settings.get("portmaster_enabled", False):
                 # Disabling — just toggle off
@@ -2612,6 +2806,7 @@ class ConsoleUtilitiesApp:
             # ESPN only supports the current year — reset season when switching to it
             if new_provider == "espn":
                 from datetime import datetime as _dt
+
                 self.state.we_patcher.selected_season = _dt.now().year
         elif action == "toggle_nhl94_provider":
             providers = ["espn", "nhl"]
@@ -2623,6 +2818,7 @@ class ConsoleUtilitiesApp:
             # ESPN only supports current season — reset when switching to it
             if new_provider == "espn":
                 from datetime import datetime as _dt
+
                 now = _dt.now()
                 self.state.nhl94_patcher.selected_season = (
                     now.year if now.month >= 10 else now.year - 1
@@ -2666,7 +2862,11 @@ class ConsoleUtilitiesApp:
             if enabled:
                 self._start_web_companion()
                 # Show URL in a confirm modal
-                url = self.web_companion.url if self.web_companion else f"http://localhost:{WEB_COMPANION_PORT}"
+                url = (
+                    self.web_companion.url
+                    if self.web_companion
+                    else f"http://localhost:{WEB_COMPANION_PORT}"
+                )
                 self.state.confirm_modal.show = True
                 self.state.confirm_modal.title = "Web Companion"
                 self.state.confirm_modal.message_lines = [
@@ -2681,6 +2881,20 @@ class ConsoleUtilitiesApp:
                 self.state.confirm_modal.context = ""
             else:
                 self._stop_web_companion()
+        elif action == "clear_systems_cache":
+            self.state.confirm_modal.show = True
+            self.state.confirm_modal.title = "Clear Systems Cache"
+            self.state.confirm_modal.message_lines = [
+                "This will clear cached game listings",
+                "and thumbnail data.",
+                "",
+                "They will be re-downloaded when you",
+                "next browse a system.",
+            ]
+            self.state.confirm_modal.ok_label = "Clear"
+            self.state.confirm_modal.cancel_label = "Cancel"
+            self.state.confirm_modal.button_index = 0
+            self.state.confirm_modal.context = "clear_systems_cache"
         elif action == "check_for_updates":
             self._check_for_updates()
 
@@ -3069,6 +3283,10 @@ class ConsoleUtilitiesApp:
 
     def _open_folder_browser(self, selection_type: str):
         """Open the folder browser modal."""
+        if BUILD_TARGET == "android" and self._file_picker:
+            self._launch_native_picker(selection_type)
+            return
+
         self.state.folder_browser.show = True
         self.state.folder_browser.highlighted = 0
         self.state.folder_browser.focus_area = "list"
@@ -3137,24 +3355,31 @@ class ConsoleUtilitiesApp:
             loader = load_psx_rom_folder_contents
         elif selection_type == "iss_patcher_rom":
             from services.file_listing import load_snes_rom_folder_contents
+
             loader = load_snes_rom_folder_contents
         elif selection_type == "nhl94_patcher_rom":
             from services.file_listing import load_snes_rom_folder_contents
+
             loader = load_snes_rom_folder_contents
         elif selection_type == "nhl94_gen_patcher_rom":
             from services.file_listing import load_genesis_rom_folder_contents
+
             loader = load_genesis_rom_folder_contents
         elif selection_type == "nhl07_patcher_rom":
             from services.file_listing import load_psp_iso_folder_contents
+
             loader = load_psp_iso_folder_contents
         else:
             loader = load_folder_contents
-        self.state.folder_browser.items = loader(
-            self.state.folder_browser.current_path
-        )
+        self.state.folder_browser.items = loader(self.state.folder_browser.current_path)
 
     def _open_ia_collection_folder_browser(self):
         """Open folder browser for IA collection ROM folder selection."""
+        if BUILD_TARGET == "android" and self._file_picker:
+            self.state.ia_collection_wizard.step = "folder"
+            self._launch_native_picker("ia_collection_folder")
+            return
+
         self.state.ia_collection_wizard.step = "folder"
         self.state.folder_browser.show = True
         self.state.folder_browser.highlighted = 0
@@ -3174,6 +3399,172 @@ class ConsoleUtilitiesApp:
         self.state.folder_browser.items = load_folder_contents(
             self.state.folder_browser.current_path
         )
+
+    def _launch_native_picker(self, selection_type: str):
+        """Launch native Android file/folder picker for the given selection type."""
+        from droid.file_picker import SELECTION_CONFIG, _MIME_TYPES
+
+        # Ensure folder_browser state is initialized (needed by _handle_native_picker_result)
+        if (
+            not self.state.folder_browser.selected_system_to_add
+            or self.state.folder_browser.selected_system_to_add.get("type")
+            != selection_type
+        ):
+            self.state.folder_browser.selected_system_to_add = {"type": selection_type}
+
+        mode = SELECTION_CONFIG.get(selection_type, "folder")
+        initial_uri = self._get_picker_initial_uri(selection_type)
+
+        if mode == "folder":
+            self._file_picker.pick_folder(selection_type, initial_uri)
+        else:
+            mime_types = _MIME_TYPES.get(selection_type, ["*/*"])
+            self._file_picker.pick_file(selection_type, mime_types, initial_uri)
+
+    def _get_picker_initial_uri(self, selection_type: str):
+        """Build a content URI hint for the initial directory of the picker."""
+        # Determine filesystem path
+        if selection_type == "work_dir":
+            path = self.settings.get("work_dir", "")
+        elif selection_type == "roms_dir":
+            path = self.settings.get("roms_dir", "")
+        elif selection_type == "archive_json":
+            current = self.settings.get("archive_json_path", "")
+            path = os.path.dirname(current) if current else ""
+        elif selection_type == "nsz_keys":
+            current = self.settings.get("nsz_keys_path", "")
+            path = os.path.dirname(current) if current else ""
+        elif selection_type == "esde_media_path":
+            path = self.settings.get("esde_media_path", "")
+        elif selection_type == "esde_gamelists_path":
+            path = self.settings.get("esde_gamelists_path", "")
+        elif selection_type == "retroarch_thumbnails":
+            path = self.settings.get("retroarch_thumbnails_path", "")
+        elif selection_type == "ia_download_folder":
+            path = self.state.ia_download_wizard.output_folder or self.settings.get(
+                "work_dir", ""
+            )
+        elif selection_type in (
+            "dedupe_folder",
+            "rename_folder",
+            "add_system_folder",
+            "ia_collection_folder",
+            "ghost_cleaner_folder",
+        ):
+            path = self.settings.get("roms_dir", "")
+        elif selection_type in (
+            "we_patcher_rom",
+            "iss_patcher_rom",
+            "nhl94_patcher_rom",
+            "nhl94_gen_patcher_rom",
+            "nhl07_patcher_rom",
+        ):
+            path = self.settings.get("roms_dir", "")
+        elif selection_type in (
+            "extract_zip",
+            "extract_rar",
+            "extract_7z",
+            "nsz_converter",
+        ):
+            path = self.settings.get("work_dir", "")
+        else:
+            path = ""
+
+        if not path:
+            return None
+
+        # Convert filesystem path to content URI for EXTRA_INITIAL_URI
+        try:
+            from jnius import autoclass
+
+            Environment = autoclass("android.os.Environment")
+            ext_root = Environment.getExternalStorageDirectory().getAbsolutePath()
+            if path.startswith(ext_root):
+                rel = path[len(ext_root) :].lstrip("/")
+                encoded = "primary:" + rel
+                return (
+                    "content://com.android.externalstorage.documents"
+                    f"/document/{encoded}"
+                )
+        except Exception:
+            pass
+
+        return None
+
+    def _handle_native_picker_result(self, event):
+        """Handle result from native Android file/folder picker."""
+        try:
+            self._handle_native_picker_result_inner(event)
+        except Exception as e:
+            from utils.logging import log_error
+
+            log_error(f"[native_picker] Error handling picker result: {e}")
+
+    def _handle_native_picker_result_inner(self, event):
+        """Inner handler for native picker results."""
+        path = event.path
+        selection_type = event.selection_type
+
+        # Internal event to dismiss the loading flash message
+        if selection_type == "__dismiss_loading":
+            self._hide_loading()
+            return
+
+        if path is None:
+            # User cancelled — do nothing
+            return
+
+        # Validate file extension for file-type selections
+        from droid.file_picker import VALID_EXTENSIONS
+
+        required_exts = VALID_EXTENSIONS.get(selection_type)
+        if required_exts:
+            ext = os.path.splitext(path)[1].lower()
+            if ext not in required_exts:
+                self._show_loading(
+                    f"Invalid file type '{ext}'. Expected: {', '.join(required_exts)}"
+                )
+                # Show briefly then hide
+                import threading
+
+                def _hide():
+                    import time
+
+                    time.sleep(2)
+                    pygame.event.post(
+                        pygame.event.Event(
+                            pygame.USEREVENT + 1,
+                            {
+                                "path": None,
+                                "selection_type": "__dismiss_loading",
+                            },
+                        )
+                    )
+
+                threading.Thread(target=_hide, daemon=True).start()
+                return
+
+        # Types that need _handle_folder_browser_confirm path
+        # (they set state then call specialized handlers)
+        confirm_types = {
+            "add_system_folder",
+            "ia_collection_folder",
+            "dedupe_folder",
+            "rename_folder",
+            "ghost_cleaner_folder",
+            "ia_download_folder",
+        }
+
+        if selection_type in confirm_types:
+            # Set up state as _handle_folder_browser_confirm expects
+            self.state.folder_browser.current_path = path
+            self.state.folder_browser.selected_system_to_add = (
+                self.state.folder_browser.selected_system_to_add or {}
+            )
+            self.state.folder_browser.selected_system_to_add["type"] = selection_type
+            self._handle_folder_browser_confirm()
+        else:
+            self._complete_folder_browser_selection(path, selection_type)
 
     def _handle_folder_browser_selection(self):
         """Handle folder browser item selection."""
@@ -3198,12 +3589,15 @@ class ConsoleUtilitiesApp:
             nav_loader = load_psx_rom_folder_contents
         elif is_snes_context:
             from services.file_listing import load_snes_rom_folder_contents
+
             nav_loader = load_snes_rom_folder_contents
         elif is_genesis_context:
             from services.file_listing import load_genesis_rom_folder_contents
+
             nav_loader = load_genesis_rom_folder_contents
         elif is_psp_context:
             from services.file_listing import load_psp_iso_folder_contents
+
             nav_loader = load_psp_iso_folder_contents
         else:
             nav_loader = load_folder_contents
@@ -3314,6 +3708,7 @@ class ConsoleUtilitiesApp:
             self.state.nhl94_patcher.rom_path = path
             try:
                 from services.nhl94_snes_patcher import NHL94SNESPatcher
+
                 cache_dir = self.settings.get("work_dir", "workdir")
                 cache_dir = os.path.join(cache_dir, "nhl_cache")
                 patcher = NHL94SNESPatcher(cache_dir)
@@ -3327,6 +3722,7 @@ class ConsoleUtilitiesApp:
             self.state.nhl94_gen_patcher.rom_path = path
             try:
                 from services.nhl94_genesis_patcher import NHL94GenesisPatcher
+
                 cache_dir = self.settings.get("work_dir", "workdir")
                 cache_dir = os.path.join(cache_dir, "nhl_cache")
                 patcher = NHL94GenesisPatcher(cache_dir)
@@ -3340,6 +3736,7 @@ class ConsoleUtilitiesApp:
             self.state.nhl07_psp_patcher.rom_path = path
             try:
                 from services.nhl07_psp_patcher import NHL07PSPPatcher
+
                 cache_dir = self.settings.get("work_dir", "workdir")
                 cache_dir = os.path.join(cache_dir, "nhl_cache")
                 patcher = NHL07PSPPatcher(cache_dir)
@@ -3433,13 +3830,18 @@ class ConsoleUtilitiesApp:
         auth = parent.get("auth") if parent else None
 
         # Auto-generate LibRetro boxarts URL for Myrient systems
-        if not boxarts_url and "myrient.erista.me" in system.get("url", ""):
+        system_url = system.get("url", "")
+        if isinstance(system_url, list):
+            system_url = system_url[0] if system_url else ""
+        if not boxarts_url and "myrient.erista.me" in system_url:
             from urllib.parse import urlparse
 
-            path_parts = urlparse(system["url"]).path.rstrip("/").split("/")
+            path_parts = urlparse(system_url).path.rstrip("/").split("/")
             if path_parts:
                 system_dir = path_parts[-1]
-                boxarts_url = f"https://thumbnails.libretro.com/{system_dir}/Named_Boxarts/"
+                boxarts_url = (
+                    f"https://thumbnails.libretro.com/{system_dir}/Named_Boxarts/"
+                )
 
         # Inherit extra fields from parent (download_url, regex, auth config, etc.)
         inherit_keys = {
@@ -3766,6 +4168,23 @@ class ConsoleUtilitiesApp:
         """Handle search submission from physical keyboard."""
         self._apply_search_filter()
 
+    def _submit_url_input(self):
+        """Handle URL input submission from keyboard/Android."""
+        self.state.url_input.show = False
+
+    def _handle_text_modal_ok_click(self):
+        """Handle OK button click on Android text input modals."""
+        if self.state.show_search_input:
+            self._submit_search_keyboard_input()
+        elif self.state.url_input.show:
+            self._submit_url_input()
+        elif self.state.folder_name_input.show:
+            self._submit_folder_name()
+
+    def _handle_text_modal_cancel_click(self):
+        """Handle Cancel button click on Android text input modals."""
+        self._go_back()
+
     def _apply_search_filter(self):
         """Apply search filter and close search modal."""
         self.state.show_search_input = False
@@ -3954,9 +4373,7 @@ class ConsoleUtilitiesApp:
                     )
 
                     folder_name = os.path.basename(wizard.folder_current_path)
-                    normalized = (
-                        folder_name.lower().replace("-", "").replace("_", "")
-                    )
+                    normalized = folder_name.lower().replace("-", "").replace("_", "")
                     if normalized in ScreenScraperProvider.SYSTEM_ID_MAP:
                         wizard.batch_system = folder_name.lower()
                 return
@@ -4036,6 +4453,16 @@ class ConsoleUtilitiesApp:
         self.state.mode = "downloads"
         self.state.download_queue.highlighted = max(
             0, len(self.state.download_queue.items) - len(selected_games)
+        )
+
+    def _is_text_modal_open(self) -> bool:
+        """Check if a text-input modal is open (one that needs the soft keyboard)."""
+        return (
+            self.state.show_search_input
+            or self.state.folder_name_input.show
+            or self.state.url_input.show
+            or self.state.ia_login.show
+            or self.state.scraper_login.show
         )
 
     def _any_modal_open(self) -> bool:
@@ -5395,11 +5822,35 @@ class ConsoleUtilitiesApp:
 
     # Deduplicated system list for batch scraper (short name per system ID)
     _BATCH_SYSTEMS = [
-        "", "nes", "snes", "n64", "gb", "gbc", "gba", "nds",
-        "psx", "ps2", "psp", "genesis", "sega32x", "gamegear",
-        "mastersystem", "saturn", "dreamcast", "atari2600",
-        "atari7800", "lynx", "neogeo", "arcade", "pcengine",
-        "pcfx", "3do", "jaguar", "gamecube", "wii", "pico8",
+        "",
+        "nes",
+        "snes",
+        "n64",
+        "gb",
+        "gbc",
+        "gba",
+        "nds",
+        "psx",
+        "ps2",
+        "psp",
+        "genesis",
+        "sega32x",
+        "gamegear",
+        "mastersystem",
+        "saturn",
+        "dreamcast",
+        "atari2600",
+        "atari7800",
+        "lynx",
+        "neogeo",
+        "arcade",
+        "pcengine",
+        "pcfx",
+        "3do",
+        "jaguar",
+        "gamecube",
+        "wii",
+        "pico8",
     ]
 
     def _cycle_batch_system(self, reverse=False):
@@ -6279,11 +6730,13 @@ class ConsoleUtilitiesApp:
     def _cycle_we_patcher_language(self, delta: int):
         """Cycle the WE patcher language setting by delta (+1 or -1)."""
         from services.we_patcher.translations.we2002 import LANGUAGE_CODES
+
         cur = self.settings.get("we_patcher_language", "en")
         idx = LANGUAGE_CODES.index(cur) if cur in LANGUAGE_CODES else 0
         idx = (idx + delta) % len(LANGUAGE_CODES)
         self.settings["we_patcher_language"] = LANGUAGE_CODES[idx]
         from config.settings import save_settings
+
         save_settings(self.settings)
 
     def _handle_we_patcher_selection(self):
@@ -6322,9 +6775,13 @@ class ConsoleUtilitiesApp:
             we.roster_preview_player_index = 0
             # Auto-fetch if league selected but data missing
             if we.selected_league and not we.league_data and not we.is_fetching:
-                league_id = we.selected_league.id if hasattr(we.selected_league, "id") else None
+                league_id = (
+                    we.selected_league.id if hasattr(we.selected_league, "id") else None
+                )
                 season = we.selected_season or (
-                    we.selected_league.season if hasattr(we.selected_league, "season") else None
+                    we.selected_league.season
+                    if hasattr(we.selected_league, "season")
+                    else None
                 )
                 if league_id and season:
                     self._start_league_fetch(league_id, season)
@@ -6356,6 +6813,7 @@ class ConsoleUtilitiesApp:
         # If on-screen keyboard is active, handle char input
         if we.league_search_active:
             from ui.organisms.char_keyboard import CharKeyboard
+
             keyboard = CharKeyboard()
             new_text, is_done, toggle_shift = keyboard.handle_selection(
                 we.league_search_cursor,
@@ -6375,7 +6833,11 @@ class ConsoleUtilitiesApp:
         filtered = league_browser_modal.get_filtered_leagues(self.state)
 
         # "Browse all leagues" is the virtual last item when not all are loaded
-        show_browse_all = not we.all_leagues_loaded and not we.league_search_query and not we.is_fetching
+        show_browse_all = (
+            not we.all_leagues_loaded
+            and not we.league_search_query
+            and not we.is_fetching
+        )
         if show_browse_all and we.leagues_highlighted == len(filtered):
             self._load_all_leagues()
             return
@@ -6430,9 +6892,11 @@ class ConsoleUtilitiesApp:
         if not state.we_patcher.available_leagues:
             if provider == "espn":
                 from services.we_patcher import EspnClient
+
                 client = EspnClient(WE_PATCHER_CACHE_DIR)
             else:
                 from services.we_patcher import ApiFootballClient
+
                 client = ApiFootballClient(api_key, WE_PATCHER_CACHE_DIR)
             state.we_patcher.available_leagues = client.get_featured_leagues()
 
@@ -6453,10 +6917,18 @@ class ConsoleUtilitiesApp:
 
                 if provider == "espn":
                     from services.we_patcher import EspnClient
+
                     espn_client = EspnClient(WE_PATCHER_CACHE_DIR, on_status=on_status)
-                    patcher = WePatcher(api_key, WE_PATCHER_CACHE_DIR, on_status=on_status, client=espn_client)
+                    patcher = WePatcher(
+                        api_key,
+                        WE_PATCHER_CACHE_DIR,
+                        on_status=on_status,
+                        client=espn_client,
+                    )
                 else:
-                    patcher = WePatcher(api_key, WE_PATCHER_CACHE_DIR, on_status=on_status)
+                    patcher = WePatcher(
+                        api_key, WE_PATCHER_CACHE_DIR, on_status=on_status
+                    )
 
                 def progress(p, msg):
                     state.we_patcher.fetch_progress = p
@@ -6472,9 +6944,11 @@ class ConsoleUtilitiesApp:
                 state.we_patcher.league_data = league_data
             except Exception as e:
                 from services.we_patcher.api_football import SeasonNotAvailableError
+
                 if isinstance(e, SeasonNotAvailableError):
                     import re as _re
-                    match = _re.search(r'(\d{4})\s+to\s+(\d{4})', e.api_message)
+
+                    match = _re.search(r"(\d{4})\s+to\s+(\d{4})", e.api_message)
                     if match:
                         available = f"Available: {match.group(1)}–{match.group(2)}"
                     else:
@@ -6508,9 +6982,11 @@ class ConsoleUtilitiesApp:
             try:
                 if provider == "espn":
                     from services.we_patcher import EspnClient
+
                     client = EspnClient(WE_PATCHER_CACHE_DIR)
                 else:
                     from services.we_patcher import ApiFootballClient
+
                     client = ApiFootballClient(api_key, WE_PATCHER_CACHE_DIR)
                 leagues = client.get_leagues()
                 state.we_patcher.available_leagues = leagues
@@ -6534,18 +7010,19 @@ class ConsoleUtilitiesApp:
                 avoid picking up previous output files on re-runs.
         """
         import re as _re_gf
+
         directory = os.path.dirname(data_track_path)
         basename = os.path.splitext(os.path.basename(data_track_path))[0]
         # Strip " (Track XX)" or " - Track XX" suffix to get bare game name
         game_base = _re_gf.sub(
-            r'\s*[\(\-]\s*[Tt]rack\s*\d+\)?.*$', '', basename
+            r"\s*[\(\-]\s*[Tt]rack\s*\d+\)?.*$", "", basename
         ).strip()
 
         files = []
         try:
             for entry in os.listdir(directory):
                 ext = os.path.splitext(entry)[1].lower()
-                if ext not in ('.bin', '.cue'):
+                if ext not in (".bin", ".cue"):
                     continue
                 if not entry.lower().startswith(game_base.lower()):
                     continue
@@ -6578,15 +7055,15 @@ class ConsoleUtilitiesApp:
         provider = self.settings.get("sports_roster_provider", "espn")
         if provider == "api_football":
             from services.team_color_cache import apply_cached_colors
+
             apply_cached_colors(WE_PATCHER_CACHE_DIR, we.league_data)
 
         # Auto-generate slot mapping if not already present
         if not we.slot_mapping and we.rom_info:
             from services.we_patcher import WePatcher
+
             patcher = WePatcher(api_key, WE_PATCHER_CACHE_DIR)
-            we.slot_mapping = patcher.create_slot_mapping(
-                we.league_data, we.rom_info
-            )
+            we.slot_mapping = patcher.create_slot_mapping(we.league_data, we.rom_info)
 
         we.is_patching = True
         we.patch_error = ""
@@ -6597,10 +7074,12 @@ class ConsoleUtilitiesApp:
         # Build new file prefix: "[game] - [League] [Season]"
         league_name = (
             we.league_data.league.name
-            if hasattr(we.league_data, "league") and hasattr(we.league_data.league, "name")
+            if hasattr(we.league_data, "league")
+            and hasattr(we.league_data.league, "name")
             else "Unknown League"
         )
         import re as _re2
+
         safe_league = _re2.sub(r'[\\/:*?"<>|]', "-", league_name)
         season = we.selected_season
         game_dir = os.path.dirname(input_path)
@@ -6615,7 +7094,9 @@ class ConsoleUtilitiesApp:
 
         # Data track output path (same folder, renamed)
         data_basename = os.path.basename(input_path)
-        output_bin = os.path.join(game_dir, new_prefix + data_basename[len(game_base):])
+        output_bin = os.path.join(
+            game_dir, new_prefix + data_basename[len(game_base) :]
+        )
 
         def _patch():
             try:
@@ -6630,14 +7111,18 @@ class ConsoleUtilitiesApp:
                     we.patch_status = msg
 
                 patcher.patch_rom(
-                    input_path, output_bin, we.league_data, we.slot_mapping,
-                    progress, language=language,
+                    input_path,
+                    output_bin,
+                    we.league_data,
+                    we.slot_mapping,
+                    progress,
+                    language=language,
                 )
 
                 # Copy companion files AFTER patching succeeds
                 for src in game_files:
                     src_basename = os.path.basename(src)
-                    new_name = new_prefix + src_basename[len(game_base):]
+                    new_name = new_prefix + src_basename[len(game_base) :]
                     dst = os.path.join(game_dir, new_name)
                     ext = os.path.splitext(src_basename)[1].lower()
                     if src == input_path:
@@ -6679,6 +7164,7 @@ class ConsoleUtilitiesApp:
         if iss.active_modal == "league_browser":
             if iss.league_search_active:
                 from ui.organisms.char_keyboard import CharKeyboard
+
                 keyboard = CharKeyboard()
                 total_chars = keyboard.get_total_chars("default")
                 chars_per_row = 13
@@ -6697,8 +7183,13 @@ class ConsoleUtilitiesApp:
                 return
 
             from ui.screens.modals.league_browser_modal import league_browser_modal
+
             filtered = league_browser_modal.get_filtered_leagues(self.state)
-            show_browse_all = not iss.all_leagues_loaded and not iss.league_search_query and not iss.is_fetching
+            show_browse_all = (
+                not iss.all_leagues_loaded
+                and not iss.league_search_query
+                and not iss.is_fetching
+            )
             max_items = (len(filtered) + (1 if show_browse_all else 0)) or 1
             if direction in ("up", "left"):
                 iss.leagues_highlighted = (iss.leagues_highlighted - 1) % max_items
@@ -6711,17 +7202,27 @@ class ConsoleUtilitiesApp:
                 return
             teams = league_data.teams
             if direction == "left":
-                iss.roster_preview_team_index = (iss.roster_preview_team_index - 1) % max(len(teams), 1)
+                iss.roster_preview_team_index = (
+                    iss.roster_preview_team_index - 1
+                ) % max(len(teams), 1)
                 iss.roster_preview_player_index = 0
             elif direction == "right":
-                iss.roster_preview_team_index = (iss.roster_preview_team_index + 1) % max(len(teams), 1)
+                iss.roster_preview_team_index = (
+                    iss.roster_preview_team_index + 1
+                ) % max(len(teams), 1)
                 iss.roster_preview_player_index = 0
             elif direction == "up":
-                iss.roster_preview_player_index = max(0, iss.roster_preview_player_index - 1)
+                iss.roster_preview_player_index = max(
+                    0, iss.roster_preview_player_index - 1
+                )
             elif direction == "down":
                 team_idx = iss.roster_preview_team_index
                 if 0 <= team_idx < len(teams):
-                    players = teams[team_idx].players if hasattr(teams[team_idx], "players") else []
+                    players = (
+                        teams[team_idx].players
+                        if hasattr(teams[team_idx], "players")
+                        else []
+                    )
                     iss.roster_preview_player_index = min(
                         iss.roster_preview_player_index + 1, max(len(players) - 1, 0)
                     )
@@ -6733,14 +7234,19 @@ class ConsoleUtilitiesApp:
             from ui.screens.iss_patcher_screen import iss_patcher_screen
 
             if direction in ("left", "right"):
-                action = iss_patcher_screen.get_action(self.state.highlighted, self.state, self.settings)
+                action = iss_patcher_screen.get_action(
+                    self.state.highlighted, self.state, self.settings
+                )
                 if action == "change_season":
                     provider = self.settings.get("sports_roster_provider", "espn")
                     if provider == "api_football":
                         from datetime import datetime as _dt
+
                         max_year = _dt.now().year
                         delta = -1 if direction == "left" else 1
-                        iss.selected_season = max(2010, min(max_year, iss.selected_season + delta))
+                        iss.selected_season = max(
+                            2010, min(max_year, iss.selected_season + delta)
+                        )
                         iss.league_data = None
                     return
             max_items = iss_patcher_screen.get_count(self.state, self.settings)
@@ -6781,9 +7287,15 @@ class ConsoleUtilitiesApp:
             iss.roster_preview_team_index = 0
             iss.roster_preview_player_index = 0
             if iss.selected_league and not iss.league_data and not iss.is_fetching:
-                league_id = iss.selected_league.id if hasattr(iss.selected_league, "id") else None
+                league_id = (
+                    iss.selected_league.id
+                    if hasattr(iss.selected_league, "id")
+                    else None
+                )
                 season = iss.selected_season or (
-                    iss.selected_league.season if hasattr(iss.selected_league, "season") else None
+                    iss.selected_league.season
+                    if hasattr(iss.selected_league, "season")
+                    else None
                 )
                 if league_id and season:
                     self._start_iss_league_fetch(league_id, season)
@@ -6848,6 +7360,7 @@ class ConsoleUtilitiesApp:
 
         if iss.league_search_active:
             from ui.organisms.char_keyboard import CharKeyboard
+
             keyboard = CharKeyboard()
             new_text, is_done, toggle_shift = keyboard.handle_selection(
                 iss.league_search_cursor,
@@ -6866,7 +7379,11 @@ class ConsoleUtilitiesApp:
 
         filtered = league_browser_modal.get_filtered_leagues(self.state)
 
-        show_browse_all = not iss.all_leagues_loaded and not iss.league_search_query and not iss.is_fetching
+        show_browse_all = (
+            not iss.all_leagues_loaded
+            and not iss.league_search_query
+            and not iss.is_fetching
+        )
         if show_browse_all and iss.leagues_highlighted == len(filtered):
             self._load_iss_all_leagues()
             return
@@ -6897,9 +7414,11 @@ class ConsoleUtilitiesApp:
         if not state.iss_patcher.available_leagues:
             if provider == "espn":
                 from services.sports_api.espn_client import EspnClient
+
                 client = EspnClient(WE_PATCHER_CACHE_DIR)
             else:
                 from services.sports_api.api_football import ApiFootballClient
+
                 client = ApiFootballClient(api_key, WE_PATCHER_CACHE_DIR)
             state.iss_patcher.available_leagues = client.get_featured_leagues()
 
@@ -6919,10 +7438,18 @@ class ConsoleUtilitiesApp:
 
                 if provider == "espn":
                     from services.sports_api.espn_client import EspnClient
+
                     espn_client = EspnClient(WE_PATCHER_CACHE_DIR, on_status=on_status)
-                    patcher = ISSPatcher(api_key, WE_PATCHER_CACHE_DIR, on_status=on_status, client=espn_client)
+                    patcher = ISSPatcher(
+                        api_key,
+                        WE_PATCHER_CACHE_DIR,
+                        on_status=on_status,
+                        client=espn_client,
+                    )
                 else:
-                    patcher = ISSPatcher(api_key, WE_PATCHER_CACHE_DIR, on_status=on_status)
+                    patcher = ISSPatcher(
+                        api_key, WE_PATCHER_CACHE_DIR, on_status=on_status
+                    )
 
                 def progress(p, msg):
                     state.iss_patcher.fetch_progress = p
@@ -6961,9 +7488,11 @@ class ConsoleUtilitiesApp:
             try:
                 if provider == "espn":
                     from services.sports_api.espn_client import EspnClient
+
                     client = EspnClient(WE_PATCHER_CACHE_DIR)
                 else:
                     from services.sports_api.api_football import ApiFootballClient
+
                     client = ApiFootballClient(api_key, WE_PATCHER_CACHE_DIR)
                 leagues = client.get_leagues()
                 state.iss_patcher.available_leagues = leagues
@@ -6999,11 +7528,14 @@ class ConsoleUtilitiesApp:
             from services.sports_api.models import League, Team, TeamRoster, LeagueData
 
             try:
+
                 def on_status(msg):
                     nhl.fetch_status = msg
 
                 patcher = NHL94SNESPatcher(
-                    cache_dir, on_status=on_status, provider=provider,
+                    cache_dir,
+                    on_status=on_status,
+                    provider=provider,
                 )
 
                 def progress(p, msg):
@@ -7011,7 +7543,8 @@ class ConsoleUtilitiesApp:
                     nhl.fetch_status = msg
 
                 rosters = patcher.fetch_rosters(
-                    on_progress=progress, season=season,
+                    on_progress=progress,
+                    season=season,
                 )
                 nhl.rosters = rosters
                 nhl.team_stats = getattr(patcher, "team_stats", {})
@@ -7024,19 +7557,29 @@ class ConsoleUtilitiesApp:
                     if players and hasattr(players[0], "team") and players[0].team:
                         team_name = players[0].team
                     team = Team(
-                        id=0, name=team_name, short_name=team_code,
-                        code=team_code, logo_url="", country="",
+                        id=0,
+                        name=team_name,
+                        short_name=team_code,
+                        code=team_code,
+                        logo_url="",
+                        country="",
                     )
-                    team_rosters.append(TeamRoster(
-                        team=team,
-                        players=players,
-                        player_stats={},
-                    ))
+                    team_rosters.append(
+                        TeamRoster(
+                            team=team,
+                            players=players,
+                            player_stats={},
+                        )
+                    )
                 nhl.league_data = LeagueData(
                     league=League(
-                        id=0, name="NHL", country="USA",
-                        country_code="US", logo_url="",
-                        season=season, teams_count=len(team_rosters),
+                        id=0,
+                        name="NHL",
+                        country="USA",
+                        country_code="US",
+                        logo_url="",
+                        season=season,
+                        teams_count=len(team_rosters),
                     ),
                     teams=team_rosters,
                 )
@@ -7073,9 +7616,7 @@ class ConsoleUtilitiesApp:
         ext = os.path.splitext(input_path)[1]
         season = nhl.selected_season
         season_label = f"{season}-{season + 1}"
-        output_path = os.path.join(
-            game_dir, f"{base_name} - NHL {season_label}{ext}"
-        )
+        output_path = os.path.join(game_dir, f"{base_name} - NHL {season_label}{ext}")
 
         cache_dir = self.settings.get("work_dir", "workdir")
         cache_dir = os.path.join(cache_dir, "nhl_cache")
@@ -7086,7 +7627,8 @@ class ConsoleUtilitiesApp:
                 from services.nhl94_snes_patcher import NHL94SNESPatcher
 
                 patcher = NHL94SNESPatcher(
-                    cache_dir, provider=provider,
+                    cache_dir,
+                    provider=provider,
                 )
                 # Restore team_stats from fetch phase so sorting works
                 patcher.team_stats = nhl.team_stats or {}
@@ -7096,7 +7638,9 @@ class ConsoleUtilitiesApp:
                     nhl.patch_status = msg
 
                 result = patcher.patch_rom(
-                    input_path, output_path, nhl.rosters,
+                    input_path,
+                    output_path,
+                    nhl.rosters,
                     on_progress=progress,
                 )
                 nhl.patch_complete = result.success
@@ -7165,11 +7709,14 @@ class ConsoleUtilitiesApp:
             from services.sports_api.models import League, Team, TeamRoster, LeagueData
 
             try:
+
                 def on_status(msg):
                     nhl.fetch_status = msg
 
                 patcher = NHL94GenesisPatcher(
-                    cache_dir, on_status=on_status, provider=provider,
+                    cache_dir,
+                    on_status=on_status,
+                    provider=provider,
                 )
 
                 def progress(p, msg):
@@ -7177,7 +7724,8 @@ class ConsoleUtilitiesApp:
                     nhl.fetch_status = msg
 
                 rosters = patcher.fetch_rosters(
-                    on_progress=progress, season=season,
+                    on_progress=progress,
+                    season=season,
                 )
                 nhl.rosters = rosters
                 nhl.team_stats = getattr(patcher, "team_stats", {})
@@ -7189,19 +7737,29 @@ class ConsoleUtilitiesApp:
                     if players and hasattr(players[0], "team") and players[0].team:
                         team_name = players[0].team
                     team = Team(
-                        id=0, name=team_name, short_name=team_code,
-                        code=team_code, logo_url="", country="",
+                        id=0,
+                        name=team_name,
+                        short_name=team_code,
+                        code=team_code,
+                        logo_url="",
+                        country="",
                     )
-                    team_rosters.append(TeamRoster(
-                        team=team,
-                        players=players,
-                        player_stats={},
-                    ))
+                    team_rosters.append(
+                        TeamRoster(
+                            team=team,
+                            players=players,
+                            player_stats={},
+                        )
+                    )
                 nhl.league_data = LeagueData(
                     league=League(
-                        id=0, name="NHL", country="USA",
-                        country_code="US", logo_url="",
-                        season=season, teams_count=len(team_rosters),
+                        id=0,
+                        name="NHL",
+                        country="USA",
+                        country_code="US",
+                        logo_url="",
+                        season=season,
+                        teams_count=len(team_rosters),
                     ),
                     teams=team_rosters,
                 )
@@ -7238,9 +7796,7 @@ class ConsoleUtilitiesApp:
         ext = os.path.splitext(input_path)[1]
         season = nhl.selected_season
         season_label = f"{season}-{season + 1}"
-        output_path = os.path.join(
-            game_dir, f"{base_name} - NHL {season_label}{ext}"
-        )
+        output_path = os.path.join(game_dir, f"{base_name} - NHL {season_label}{ext}")
 
         cache_dir = self.settings.get("work_dir", "workdir")
         cache_dir = os.path.join(cache_dir, "nhl_cache")
@@ -7251,7 +7807,8 @@ class ConsoleUtilitiesApp:
                 from services.nhl94_genesis_patcher import NHL94GenesisPatcher
 
                 patcher = NHL94GenesisPatcher(
-                    cache_dir, provider=provider,
+                    cache_dir,
+                    provider=provider,
                 )
                 # Restore team_stats from fetch phase so sorting works
                 patcher.team_stats = nhl.team_stats or {}
@@ -7261,7 +7818,9 @@ class ConsoleUtilitiesApp:
                     nhl.patch_status = msg
 
                 result = patcher.patch_rom(
-                    input_path, output_path, nhl.rosters,
+                    input_path,
+                    output_path,
+                    nhl.rosters,
                     on_progress=progress,
                 )
                 nhl.patch_complete = result.success
@@ -7330,11 +7889,14 @@ class ConsoleUtilitiesApp:
             from services.sports_api.models import League, Team, TeamRoster, LeagueData
 
             try:
+
                 def on_status(msg):
                     nhl.fetch_status = msg
 
                 patcher = NHL07PSPPatcher(
-                    cache_dir, on_status=on_status, provider=provider,
+                    cache_dir,
+                    on_status=on_status,
+                    provider=provider,
                 )
 
                 def progress(p, msg):
@@ -7342,7 +7904,8 @@ class ConsoleUtilitiesApp:
                     nhl.fetch_status = msg
 
                 rosters = patcher.fetch_rosters(
-                    on_progress=progress, season=season,
+                    on_progress=progress,
+                    season=season,
                 )
                 nhl.rosters = rosters
                 nhl.team_stats = getattr(patcher, "team_stats", {})
@@ -7354,19 +7917,29 @@ class ConsoleUtilitiesApp:
                     if players and hasattr(players[0], "team") and players[0].team:
                         team_name = players[0].team
                     team = Team(
-                        id=0, name=team_name, short_name=team_code,
-                        code=team_code, logo_url="", country="",
+                        id=0,
+                        name=team_name,
+                        short_name=team_code,
+                        code=team_code,
+                        logo_url="",
+                        country="",
                     )
-                    team_rosters.append(TeamRoster(
-                        team=team,
-                        players=players,
-                        player_stats={},
-                    ))
+                    team_rosters.append(
+                        TeamRoster(
+                            team=team,
+                            players=players,
+                            player_stats={},
+                        )
+                    )
                 nhl.league_data = LeagueData(
                     league=League(
-                        id=0, name="NHL", country="USA",
-                        country_code="US", logo_url="",
-                        season=season, teams_count=len(team_rosters),
+                        id=0,
+                        name="NHL",
+                        country="USA",
+                        country_code="US",
+                        logo_url="",
+                        season=season,
+                        teams_count=len(team_rosters),
                     ),
                     teams=team_rosters,
                 )
@@ -7403,9 +7976,7 @@ class ConsoleUtilitiesApp:
         ext = os.path.splitext(input_path)[1]
         season = nhl.selected_season
         season_label = f"{season}-{season + 1}"
-        output_path = os.path.join(
-            game_dir, f"{base_name} - NHL {season_label}{ext}"
-        )
+        output_path = os.path.join(game_dir, f"{base_name} - NHL {season_label}{ext}")
 
         cache_dir = self.settings.get("work_dir", "workdir")
         cache_dir = os.path.join(cache_dir, "nhl_cache")
@@ -7416,7 +7987,8 @@ class ConsoleUtilitiesApp:
                 from services.nhl07_psp_patcher import NHL07PSPPatcher
 
                 patcher = NHL07PSPPatcher(
-                    cache_dir, provider=provider,
+                    cache_dir,
+                    provider=provider,
                 )
                 # Restore team_stats from fetch phase so sorting works
                 patcher.team_stats = nhl.team_stats or {}
@@ -7426,7 +7998,9 @@ class ConsoleUtilitiesApp:
                     nhl.patch_status = msg
 
                 result = patcher.patch_rom(
-                    input_path, output_path, nhl.rosters,
+                    input_path,
+                    output_path,
+                    nhl.rosters,
                     on_progress=progress,
                 )
                 nhl.patch_complete = result.success
@@ -7456,12 +8030,16 @@ class ConsoleUtilitiesApp:
         provider = self.settings.get("sports_roster_provider", "espn")
         if provider == "api_football":
             from services.team_color_cache import apply_cached_colors
+
             apply_cached_colors(WE_PATCHER_CACHE_DIR, iss.league_data)
 
         if not iss.slot_mapping and iss.rom_info:
             from services.iss_patcher import ISSPatcher
+
             patcher = ISSPatcher(api_key, WE_PATCHER_CACHE_DIR)
-            iss.slot_mapping = patcher.create_slot_mapping(iss.league_data, iss.rom_info)
+            iss.slot_mapping = patcher.create_slot_mapping(
+                iss.league_data, iss.rom_info
+            )
 
         iss.is_patching = True
         iss.patch_error = ""
@@ -7470,16 +8048,20 @@ class ConsoleUtilitiesApp:
         input_path = iss.rom_path
         league_name = (
             iss.league_data.league.name
-            if hasattr(iss.league_data, "league") and hasattr(iss.league_data.league, "name")
+            if hasattr(iss.league_data, "league")
+            and hasattr(iss.league_data.league, "name")
             else "Unknown League"
         )
         import re as _re2
+
         safe_league = _re2.sub(r'[\\/:*?"<>|]', "-", league_name)
         season = iss.selected_season
         game_dir = os.path.dirname(input_path)
         base_name = os.path.splitext(os.path.basename(input_path))[0]
         ext = os.path.splitext(input_path)[1]
-        output_path = os.path.join(game_dir, f"{base_name} - {safe_league} {season}{ext}")
+        output_path = os.path.join(
+            game_dir, f"{base_name} - {safe_league} {season}{ext}"
+        )
 
         def _patch():
             try:
@@ -7492,7 +8074,10 @@ class ConsoleUtilitiesApp:
                     iss.patch_status = msg
 
                 patcher.patch_rom(
-                    input_path, output_path, iss.league_data, iss.slot_mapping,
+                    input_path,
+                    output_path,
+                    iss.league_data,
+                    iss.slot_mapping,
                     progress,
                 )
 
@@ -7548,7 +8133,12 @@ class ConsoleUtilitiesApp:
                 team = teams[cp.team_index].team
                 _, hex_color = COLOR_PALETTE[color_idx]
                 team.color = hex_color
-                set_team_color(WE_PATCHER_CACHE_DIR, team.id, team.color, team.alternate_color or "")
+                set_team_color(
+                    WE_PATCHER_CACHE_DIR,
+                    team.id,
+                    team.color,
+                    team.alternate_color or "",
+                )
                 cp.picking = "secondary"
                 cp.color_index = color_idx
                 return
@@ -7559,7 +8149,12 @@ class ConsoleUtilitiesApp:
                 team = teams[cp.team_index].team
                 _, hex_color = COLOR_PALETTE[color_idx]
                 team.alternate_color = hex_color
-                set_team_color(WE_PATCHER_CACHE_DIR, team.id, team.color or "", team.alternate_color)
+                set_team_color(
+                    WE_PATCHER_CACHE_DIR,
+                    team.id,
+                    team.color or "",
+                    team.alternate_color,
+                )
                 # Advance to next team
                 cp.picking = "primary"
                 cp.color_index = 0
@@ -7587,12 +8182,16 @@ class ConsoleUtilitiesApp:
 
         if cp.picking == "primary":
             team.color = hex_color
-            set_team_color(WE_PATCHER_CACHE_DIR, team.id, team.color, team.alternate_color or "")
+            set_team_color(
+                WE_PATCHER_CACHE_DIR, team.id, team.color, team.alternate_color or ""
+            )
             # Advance to secondary — keep color_index so user can confirm or change
             cp.picking = "secondary"
         else:
             team.alternate_color = hex_color
-            set_team_color(WE_PATCHER_CACHE_DIR, team.id, team.color or "", team.alternate_color)
+            set_team_color(
+                WE_PATCHER_CACHE_DIR, team.id, team.color or "", team.alternate_color
+            )
             # Advance to next team
             cp.picking = "primary"
             cp.color_index = 0
