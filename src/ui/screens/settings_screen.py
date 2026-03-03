@@ -31,6 +31,7 @@ class SettingsScreen:
         "Remote Games Bkp File",
         "Add Game System",
         "Games Systems Preference",
+        "Clear Systems Cache",
     ]
 
     # View options section
@@ -383,6 +384,7 @@ class SettingsScreen:
                 "Remap Controller": "remap_controller",
                 "Add Game System": "add_systems",
                 "Games Systems Preference": "systems_settings",
+                "Clear Systems Cache": "clear_systems_cache",
                 "Enable PortMaster (beta)": "toggle_portmaster_enabled",
                 "Enable Internet Archive": "toggle_ia_enabled",
                 "Internet Archive Login": "ia_login",
