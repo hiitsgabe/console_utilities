@@ -22,7 +22,8 @@ if __name__ == "__main__":
             request_permissions([
                 Permission.WRITE_EXTERNAL_STORAGE,
                 Permission.READ_EXTERNAL_STORAGE,
-                Permission.INTERNET
+                Permission.INTERNET,
+                Permission.POST_NOTIFICATIONS,
             ])
             
             # Set Android-specific paths

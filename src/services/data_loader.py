@@ -7,7 +7,7 @@ import json
 import os
 import re
 import traceback
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 from urllib.parse import urljoin
 
 import requests
@@ -19,7 +19,11 @@ from utils.logging import log_error
 _json_file: Optional[str] = None
 
 # Path to bundled JSON file in assets folder
-BUNDLED_JSON_FILE = os.path.join(SCRIPT_DIR, "assets", "bundled_data.json")
+# In .pygame/zip bundles, SCRIPT_DIR is the project root; on Android it's src/
+_bundled_path = os.path.join(SCRIPT_DIR, "assets", "bundled_data.json")
+if not os.path.exists(_bundled_path):
+    _bundled_path = os.path.join(SCRIPT_DIR, "..", "assets", "bundled_data.json")
+BUNDLED_JSON_FILE = _bundled_path
 
 
 def get_json_file() -> Optional[str]:
@@ -148,7 +152,7 @@ def save_added_systems(added_systems_list: List[Dict[str, Any]]) -> bool:
 def add_system_to_added_systems(
     system_name: str,
     rom_folder: str,
-    system_url: str,
+    system_url: Union[str, List[str]],
     boxarts_url: str = "",
     file_formats: Optional[List[str]] = None,
     should_unzip: bool = True,

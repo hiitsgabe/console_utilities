@@ -142,6 +142,8 @@ Systems are defined as JSON objects in configuration files. You can add systems 
 }
 ```
 
+> **Note**: The `url` field can also be an array of strings for multi-part collections. See [Multi-Part Collection](#multi-part-collection) below.
+
 ### Required Fields
 
 | Field | Type | Description |
@@ -155,7 +157,7 @@ Plus one of the following source configurations:
 **For HTML directory listing:**
 | Field | Type | Description |
 |-------|------|-------------|
-| `url` | string | URL to the HTML directory page |
+| `url` | string or array | URL(s) to the HTML directory page(s). Use an array for multi-part collections. |
 
 **For JSON API:**
 | Field | Type | Description |
@@ -165,7 +167,7 @@ Plus one of the following source configurations:
 **For Internet Archive:**
 | Field | Type | Description |
 |-------|------|-------------|
-| `url` | string | Must be an `archive.org/download/` URL |
+| `url` | string or array | `archive.org/download/` URL(s). Use an array for collections split across multiple items. |
 
 ### Optional Fields
 
@@ -235,6 +237,27 @@ The simplest configuration for a server that serves an HTML directory listing:
   "should_unzip": true
 }
 ```
+
+### Multi-Part Collection
+
+For systems that are split across multiple archive items or server directories, use an array of URLs. Games from all URLs are combined into a single alphabetical list:
+
+```json
+{
+  "name": "My Large System",
+  "url": [
+    "https://archive.org/download/my-collection-part1/",
+    "https://archive.org/download/my-collection-part2/",
+    "https://archive.org/download/my-collection-part3/"
+  ],
+  "file_format": [".zip"],
+  "roms_folder": "my_system",
+  "boxarts": "https://thumbnails.example.com/My%20System/Named_Boxarts/",
+  "should_unzip": true
+}
+```
+
+This also works with HTML directory listings — you can mix and match archive.org URLs with regular HTML URLs in the same array.
 
 ### System with Custom Download URLs
 

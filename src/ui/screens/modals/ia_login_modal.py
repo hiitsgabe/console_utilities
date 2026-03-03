@@ -56,6 +56,10 @@ class IALoginModal:
         Returns:
             Tuple of (modal_rect, content_rect, close_rect, char_rects)
         """
+        # Android uses native soft keyboard — render like keyboard mode
+        if input_mode == "android":
+            input_mode = "keyboard"
+
         if step == "email":
             return self._render_email_step(
                 screen, email, cursor_position, input_mode, shift_active
