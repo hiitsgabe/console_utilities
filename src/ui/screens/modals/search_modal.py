@@ -8,6 +8,7 @@ from typing import Tuple, List, Optional
 from ui.theme import Theme, default_theme
 from ui.organisms.modal_frame import ModalFrame
 from ui.organisms.char_keyboard import CharKeyboard
+from ui.molecules.action_button import ActionButton
 from ui.atoms.text import Text
 from utils.button_hints import get_search_hints, get_button_hint
 
@@ -25,7 +26,10 @@ class SearchModal:
         self.theme = theme
         self.modal_frame = ModalFrame(theme)
         self.char_keyboard = CharKeyboard(theme)
+        self.action_button = ActionButton(theme)
         self.text = Text(theme)
+        self.ok_rect = None
+        self.cancel_rect = None
 
     def render(
         self,
@@ -47,9 +51,17 @@ class SearchModal:
         Returns:
             Tuple of (modal_rect, content_rect, close_rect, char_rects)
         """
+        # Reset button rects
+        self.ok_rect = None
+        self.cancel_rect = None
+
         # Keyboard mode uses smaller modal (no on-screen keyboard needed)
         if input_mode == "keyboard":
             return self._render_keyboard_mode(screen, search_text)
+
+        # Android mode: larger modal with OK/Cancel buttons, native soft keyboard
+        if input_mode == "android":
+            return self._render_android_mode(screen, search_text)
 
         # Gamepad and touch modes use on-screen keyboard
         return self._render_onscreen_keyboard_mode(
@@ -135,6 +147,102 @@ class SearchModal:
             size=self.theme.font_size_sm,
             align="center",
         )
+
+        return modal_rect, content_rect, None, []
+
+    def _render_android_mode(
+        self, screen: pygame.Surface, search_text: str
+    ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
+        """Render modal for Android (larger, with OK/Cancel buttons)."""
+        sw, sh = screen.get_size()
+        width = min(int(sw * 0.9), 600)
+        height = 230
+
+        modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
+            screen, width, height, title="Search Games", show_close=False
+        )
+
+        padding = self.theme.padding_sm
+        y = content_rect.top + padding
+
+        # Draw input field (larger for touch)
+        field_height = 48
+        field_rect = pygame.Rect(
+            content_rect.left + padding,
+            y,
+            content_rect.width - padding * 2,
+            field_height,
+        )
+
+        pygame.draw.rect(
+            screen,
+            self.theme.surface_hover,
+            field_rect,
+            border_radius=self.theme.radius_sm,
+        )
+
+        # Draw text
+        display_text = search_text if search_text else "Type to search..."
+        text_color = (
+            self.theme.text_primary if search_text else self.theme.text_disabled
+        )
+        self.text.render(
+            screen,
+            display_text,
+            (
+                field_rect.left + padding,
+                field_rect.centery - self.theme.font_size_md // 2,
+            ),
+            color=text_color,
+            size=self.theme.font_size_md,
+            max_width=field_rect.width - padding * 2,
+        )
+
+        # Draw cursor
+        if search_text:
+            cursor_x = (
+                field_rect.left
+                + padding
+                + self.text.measure(search_text, self.theme.font_size_md)[0]
+                + 2
+            )
+        else:
+            cursor_x = field_rect.left + padding
+
+        pygame.draw.line(
+            screen,
+            self.theme.primary,
+            (cursor_x, field_rect.top + 8),
+            (cursor_x, field_rect.bottom - 8),
+            2,
+        )
+
+        # Draw OK and Cancel buttons
+        y = field_rect.bottom + padding * 3
+        button_width = 120
+        button_height = 44
+        button_spacing = self.theme.padding_lg
+
+        ok_rect = pygame.Rect(
+            content_rect.centerx - button_width - button_spacing // 2,
+            y,
+            button_width,
+            button_height,
+        )
+        cancel_rect = pygame.Rect(
+            content_rect.centerx + button_spacing // 2,
+            y,
+            button_width,
+            button_height,
+        )
+
+        self.action_button.render(screen, ok_rect, "Search", hover=True)
+        self.action_button.render_secondary(
+            screen, cancel_rect, "Cancel", hover=False
+        )
+
+        self.ok_rect = ok_rect
+        self.cancel_rect = cancel_rect
 
         return modal_rect, content_rect, None, []
 

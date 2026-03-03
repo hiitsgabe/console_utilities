@@ -336,7 +336,7 @@ def get_ia_download_url(item_id: str, filename: str) -> str:
         Full download URL
     """
     # URL-encode the filename to handle special characters
-    encoded_filename = quote(filename, safe="")
+    encoded_filename = quote(filename, safe="/")
     return IA_DOWNLOAD_BASE.format(item_id=item_id, filename=encoded_filename)
 
 

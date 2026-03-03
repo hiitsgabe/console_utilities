@@ -543,10 +543,15 @@ class DownloadManager:
         if "download_url" in system_data:
             return game.get("href") if isinstance(game, dict) else None
         elif "url" in system_data:
+            # Use per-game base URL (from multi-URL listing) or resolve from url field
+            base_url = game.get("_base_url") if isinstance(game, dict) else None
+            if not base_url:
+                url_field = system_data["url"]
+                base_url = url_field[0] if isinstance(url_field, list) else url_field
             if isinstance(game, dict) and "href" in game:
-                return urljoin(system_data["url"], game["href"])
+                return urljoin(base_url, game["href"])
             else:
-                return urljoin(system_data["url"], filename)
+                return urljoin(base_url, filename)
         return None
 
     def _get_roms_folder(self, system_data: Dict[str, Any]) -> str:

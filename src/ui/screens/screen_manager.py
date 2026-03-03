@@ -5,6 +5,7 @@ Screen manager - Coordinates screen rendering based on app state.
 import pygame
 from typing import Dict, Any, Optional, Tuple, List
 
+from constants import BUILD_TARGET
 from ui.theme import Theme, default_theme
 from .systems_screen import SystemsScreen
 from .games_screen import GamesScreen
@@ -130,6 +131,12 @@ class ScreenManager:
         """
         rects = {}
 
+        # On Android, use "android" mode for text input modals:
+        # native soft keyboard + touchable OK/Cancel buttons
+        modal_input_mode = (
+            "android" if BUILD_TARGET == "android" else state.input_mode
+        )
+
         # Check for modals first (they overlay the current screen)
         # Loading modal has highest priority
         if state.loading.show:
@@ -160,12 +167,15 @@ class ScreenManager:
                 screen,
                 state.search.input_text,
                 state.search.cursor_position,
-                input_mode=state.input_mode,
+                input_mode=modal_input_mode,
                 shift_active=state.search.shift_active,
             )
             rects["modal"] = modal_rect
             rects["close"] = close_rect
             rects["char_rects"] = char_rects
+            if getattr(self.search_modal, "ok_rect", None):
+                rects["text_ok"] = self.search_modal.ok_rect
+                rects["text_cancel"] = self.search_modal.cancel_rect
             return rects
 
         if state.folder_name_input.show:
@@ -174,13 +184,16 @@ class ScreenManager:
                     screen,
                     state.folder_name_input.input_text,
                     state.folder_name_input.cursor_position,
-                    input_mode=state.input_mode,
+                    input_mode=modal_input_mode,
                     shift_active=state.folder_name_input.shift_active,
                 )
             )
             rects["modal"] = modal_rect
             rects["close"] = close_rect
             rects["char_rects"] = char_rects
+            if getattr(self.folder_name_modal, "ok_rect", None):
+                rects["text_ok"] = self.folder_name_modal.ok_rect
+                rects["text_cancel"] = self.folder_name_modal.cancel_rect
             return rects
 
         if state.folder_browser.show:
@@ -235,13 +248,16 @@ class ScreenManager:
                     state.url_input.input_text,
                     state.url_input.cursor_position,
                     state.url_input.context,
-                    input_mode=state.input_mode,
+                    input_mode=modal_input_mode,
                     shift_active=state.url_input.shift_active,
                 )
             )
             rects["modal"] = modal_rect
             rects["close"] = close_rect
             rects["char_rects"] = char_rects
+            if getattr(self.url_input_modal, "ok_rect", None):
+                rects["text_ok"] = self.url_input_modal.ok_rect
+                rects["text_cancel"] = self.url_input_modal.cancel_rect
             return rects
 
         # Internet Archive modals
@@ -254,7 +270,7 @@ class ScreenManager:
                     state.ia_login.password,
                     state.ia_login.cursor_position,
                     state.ia_login.error_message,
-                    input_mode=state.input_mode,
+                    input_mode=modal_input_mode,
                     shift_active=state.ia_login.shift_active,
                 )
             )
@@ -276,7 +292,7 @@ class ScreenManager:
                     state.ia_download_wizard.should_extract,
                     state.ia_download_wizard.cursor_position,
                     state.ia_download_wizard.error_message,
-                    input_mode=state.input_mode,
+                    input_mode=modal_input_mode,
                     shift_active=state.ia_download_wizard.shift_active,
                     display_items=state.ia_download_wizard.display_items,
                     current_folder=state.ia_download_wizard.current_folder,
@@ -303,7 +319,7 @@ class ScreenManager:
                     state.ia_collection_wizard.should_unzip,
                     state.ia_collection_wizard.cursor_position,
                     state.ia_collection_wizard.error_message,
-                    input_mode=state.input_mode,
+                    input_mode=modal_input_mode,
                     adding_custom_format=state.ia_collection_wizard.adding_custom_format,
                     custom_format_input=state.ia_collection_wizard.custom_format_input,
                     extract_contents=state.ia_collection_wizard.extract_contents,
@@ -328,7 +344,7 @@ class ScreenManager:
                     state.scraper_login.api_key,
                     state.scraper_login.cursor_position,
                     state.scraper_login.error_message,
-                    input_mode=state.input_mode,
+                    input_mode=modal_input_mode,
                     shift_active=state.scraper_login.shift_active,
                 )
             )

@@ -63,6 +63,10 @@ class IADownloadModal:
             Tuple of (modal_rect, content_rect, close_rect,
                        char_rects, item_rects)
         """
+        # Android uses native soft keyboard — render like keyboard mode
+        if input_mode == "android":
+            input_mode = "keyboard"
+
         if step == "url":
             rects = self._render_url_step(
                 screen, url, cursor_position, input_mode, shift_active

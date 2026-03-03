@@ -108,7 +108,7 @@ The UI follows Atomic Design principles for component composition:
 ### download.json / added_systems.json
 Located in `workdir/` (dev) or root (console). Defines gaming systems with:
 - `name`: System display name
-- `url`: ROM directory URL (HTML or JSON API)
+- `url`: ROM directory URL or array of URLs for multi-part collections (HTML or Internet Archive)
 - `file_format`: Supported file extensions array
 - `roms_folder`: Target directory within roms folder
 - `regex`: Optional custom HTML parsing regex

@@ -183,6 +183,25 @@ Simply set the `url` to an `archive.org/download/` URL:
 
 The app automatically detects archive.org URLs and uses the Internet Archive metadata API to list files.
 
+### Multi-Part Collections
+
+For collections split across multiple archive.org items, use an array of URLs:
+
+```json
+{
+  "name": "Large Collection",
+  "url": [
+    "https://archive.org/download/my-collection-part1",
+    "https://archive.org/download/my-collection-part2",
+    "https://archive.org/download/my-collection-part3"
+  ],
+  "file_format": [".zip"],
+  "roms_folder": "my_system"
+}
+```
+
+The app fetches file lists from all items and merges them into a single alphabetical list. Download URLs are resolved per-item, so files from different items download correctly.
+
 ### Authentication
 
 For private or restricted items, provide S3-style credentials:
