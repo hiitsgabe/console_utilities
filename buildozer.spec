@@ -28,6 +28,7 @@ p4a.local_recipes = ./recipes
 p4a.source_dir = /p4a
 android.add_resources = res/xml/file_paths.xml:xml/file_paths.xml
 android.gradle_dependencies = androidx.core:core:1.6.0
+android.release_artifact = apk
 android.keystore = keystore/release.keystore
 android.keyalias = consoleutilities
 
