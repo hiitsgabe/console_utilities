@@ -1,5 +1,9 @@
 .PHONY: run debug stream watch install dev clean test lint format setup build-android bundle bundle-macos bundle-windows release
 
+# Load .env if present (for KEYSTORE_PASSWORD etc.)
+-include .env
+export KEYSTORE_PASSWORD
+
 CONDA_ENV = app_cutil
 CONDA_ACTIVATE = conda run -n $(CONDA_ENV)
 
@@ -185,7 +189,7 @@ build-android:
 	@sed -i.bak 's/^BUILD_TARGET = .*/BUILD_TARGET = "android"/' src/constants.py
 	@rm -f src/constants.py.bak
 	@echo "🚀 Building Docker Image..."
-	docker build -t rom-builder -f docker/dockerfile.android .
+	docker build --build-arg KEYSTORE_PASSWORD=$(KEYSTORE_PASSWORD) -t rom-builder -f docker/dockerfile.android .
 	@echo "🚀 Running Docker Container..."
 	docker run --name rom-build rom-builder
 	mkdir -p dist/android

@@ -156,6 +156,42 @@ class ModalFrame:
 
         return self.render(screen, modal_rect, title, show_close)
 
+    def render_top_aligned(
+        self,
+        screen: pygame.Surface,
+        width: int,
+        height: int,
+        title: Optional[str] = None,
+        show_close: bool = True,
+    ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect]]:
+        """
+        Render modal at top of screen (for Android keyboard visibility).
+
+        Args:
+            screen: Surface to render to
+            width: Modal width
+            height: Modal height
+            title: Optional title
+            show_close: Show close button
+
+        Returns:
+            Tuple of (modal_rect, content_rect, close_button_rect or None)
+        """
+        screen_rect = screen.get_rect()
+        inset = BEZEL_INSET
+        max_w = screen_rect.width - inset * 2
+        max_h = screen_rect.height - inset * 2
+        clamped_w = min(width, max_w)
+        clamped_h = min(height, max_h)
+        modal_rect = pygame.Rect(
+            (screen_rect.width - clamped_w) // 2,
+            inset + 10,
+            clamped_w,
+            clamped_h,
+        )
+
+        return self.render(screen, modal_rect, title, show_close)
+
     def render_fullscreen(
         self,
         screen: pygame.Surface,

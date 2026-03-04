@@ -360,7 +360,7 @@ class DownloadManager:
             os.makedirs(self.work_dir, exist_ok=True)
 
             with open(file_path, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
+                for chunk in response.iter_content(chunk_size=1048576):
                     if self._cancel_current:
                         f.close()
                         if os.path.exists(file_path):
@@ -373,8 +373,9 @@ class DownloadManager:
 
                         # Update progress and speed every 500ms
                         current_time = time.time()
-                        if current_time - last_update >= 0.5:
-                            item.speed = (item.downloaded - last_downloaded) * 2
+                        elapsed = current_time - last_update
+                        if elapsed >= 0.5:
+                            item.speed = (item.downloaded - last_downloaded) / elapsed
                             last_downloaded = item.downloaded
                             last_update = current_time
 
@@ -387,8 +388,15 @@ class DownloadManager:
             log_error(f"Download request failed: {e}")
             log_error(f"Failed URL: {url}")
             item.status = "failed"
-            # Include more details in error message
-            if hasattr(e, "response") and e.response is not None:
+            # Check for IA auth failure
+            if (
+                hasattr(e, "response")
+                and e.response is not None
+                and e.response.status_code in (401, 403)
+                and "archive.org" in url
+            ):
+                item.error = "ia_auth_required"
+            elif hasattr(e, "response") and e.response is not None:
                 item.error = f"HTTP {e.response.status_code}: {str(e)[:40]}"
             else:
                 item.error = f"Network error: {str(e)[:50]}"

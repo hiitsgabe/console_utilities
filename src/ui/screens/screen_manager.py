@@ -176,6 +176,8 @@ class ScreenManager:
             if getattr(self.search_modal, "ok_rect", None):
                 rects["text_ok"] = self.search_modal.ok_rect
                 rects["text_cancel"] = self.search_modal.cancel_rect
+            if getattr(self.search_modal, "backspace_rect", None):
+                rects["text_backspace"] = self.search_modal.backspace_rect
             return rects
 
         if state.folder_name_input.show:
@@ -194,6 +196,8 @@ class ScreenManager:
             if getattr(self.folder_name_modal, "ok_rect", None):
                 rects["text_ok"] = self.folder_name_modal.ok_rect
                 rects["text_cancel"] = self.folder_name_modal.cancel_rect
+            if getattr(self.folder_name_modal, "backspace_rect", None):
+                rects["text_backspace"] = self.folder_name_modal.backspace_rect
             return rects
 
         if state.folder_browser.show:
@@ -258,6 +262,8 @@ class ScreenManager:
             if getattr(self.url_input_modal, "ok_rect", None):
                 rects["text_ok"] = self.url_input_modal.ok_rect
                 rects["text_cancel"] = self.url_input_modal.cancel_rect
+            if getattr(self.url_input_modal, "backspace_rect", None):
+                rects["text_backspace"] = self.url_input_modal.backspace_rect
             return rects
 
         # Internet Archive modals
@@ -277,6 +283,11 @@ class ScreenManager:
             rects["modal"] = modal_rect
             rects["close"] = close_rect
             rects["char_rects"] = char_rects
+            if getattr(self.ia_login_modal, "ok_rect", None):
+                rects["text_ok"] = self.ia_login_modal.ok_rect
+                rects["text_cancel"] = self.ia_login_modal.cancel_rect
+            if getattr(self.ia_login_modal, "backspace_rect", None):
+                rects["text_backspace"] = self.ia_login_modal.backspace_rect
             return rects
 
         if state.ia_download_wizard.show:

@@ -7,6 +7,8 @@ existing main loop.
 """
 
 import os
+import threading
+
 import pygame
 from utils.logging import log_error
 
@@ -143,31 +145,55 @@ class AndroidFilePicker:
         activity.startActivityForResult(intent, _REQUEST_FILE)
 
     def _on_activity_result(self, request_code, result_code, intent):
-        """Handle SAF picker result — runs on Android main thread."""
-        from jnius import autoclass
+        """Handle SAF picker result — runs on Android UI thread.
 
-        Activity = autoclass("android.app.Activity")
+        Must be lightweight to avoid blocking SDL surface recreation (ANR).
+        Extract URI string immediately, then defer heavy processing to a
+        background thread.
+        """
+        try:
+            selection_type = self._current_selection_type
+            uri_str = None
+            is_file = request_code == _REQUEST_FILE
 
-        selection_type = self._current_selection_type
-        path = None
+            # RESULT_OK = -1 on Android; avoid autoclass call here to
+            # reduce JNI work on the UI thread during surface restoration.
+            if result_code == -1 and intent is not None:
+                try:
+                    uri = intent.getData()
+                    if uri is not None:
+                        uri_str = uri.toString()
+                except Exception as e:
+                    log_error(f"[file_picker] getData error: {e}")
 
-        if result_code == Activity.RESULT_OK and intent is not None:
-            uri = intent.getData()
-            if uri is not None:
-                if request_code == _REQUEST_FOLDER:
-                    path = self._uri_to_path(uri)
-                elif request_code == _REQUEST_FILE:
-                    path = self._uri_to_path(uri)
-                    if path is None:
-                        # Fallback: copy to cache for non-local providers
-                        path = self._copy_uri_to_cache(uri)
+            # Defer heavy URI-to-path resolution off the UI thread
+            def _resolve():
+                path = None
+                if uri_str:
+                    try:
+                        from jnius import autoclass as ac
 
-        # Post result as pygame event (thread-safe)
-        evt = pygame.event.Event(
-            PICKER_RESULT_EVENT,
-            {"path": path, "selection_type": selection_type},
-        )
-        pygame.event.post(evt)
+                        Uri = ac("android.net.Uri")
+                        uri = Uri.parse(uri_str)
+                        path = self._uri_to_path(uri)
+                        if path is None and is_file:
+                            path = self._copy_uri_to_cache(uri)
+                    except Exception as e:
+                        log_error(f"[file_picker] resolve error: {e}")
+
+                try:
+                    evt = pygame.event.Event(
+                        PICKER_RESULT_EVENT,
+                        {"path": path, "selection_type": selection_type},
+                    )
+                    pygame.event.post(evt)
+                except Exception as e:
+                    log_error(f"[file_picker] event post error: {e}")
+
+            threading.Thread(target=_resolve, daemon=True).start()
+
+        except Exception as e:
+            log_error(f"[file_picker] _on_activity_result error: {e}")
 
     def _uri_to_path(self, uri):
         """Convert a content:// URI to a filesystem path, if possible."""

@@ -21,7 +21,6 @@ class SettingsScreen:
     # Directories section
     DIRECTORIES_SECTION = [
         "--- DIRECTORIES ---",
-        "Work Directory",
         "ROMs Directory",
     ]
 
@@ -58,8 +57,7 @@ class SettingsScreen:
     # Internet Archive section items
     IA_SECTION = [
         "--- INTERNET ARCHIVE ---",
-        "Enable Internet Archive",
-        "Internet Archive Login",  # Only shown when IA is enabled
+        "Internet Archive Login",
     ]
 
     # Sports Roster section
@@ -149,13 +147,8 @@ class SettingsScreen:
             items.extend(self.PORTMASTER_SECTION)
 
         # Add Internet Archive section
-        ia_enabled = settings.get("ia_enabled", False)
         divider_indices.add(len(items))
-        items.append(self.IA_SECTION[0])  # Divider
-        items.append(self.IA_SECTION[1])  # Enable toggle
-        # Only show login if IA is enabled
-        if ia_enabled:
-            items.append(self.IA_SECTION[2])  # Login
+        items.extend(self.IA_SECTION)
 
         # Add Sports Roster section
         sports_roster_enabled = settings.get("sports_roster_enabled", False)
@@ -239,10 +232,6 @@ class SettingsScreen:
                     else "OFF"
                 )
                 items.append((item, value))
-            elif item == "Work Directory":
-                path = settings.get("work_dir", "")
-                short_path = self._shorten_path(path)
-                items.append((item, short_path))
             elif item == "ROMs Directory":
                 path = settings.get("roms_dir", "")
                 short_path = self._shorten_path(path)
@@ -257,9 +246,6 @@ class SettingsScreen:
                 items.append((item, value))
             elif item == "Enable PortMaster (beta)":
                 value = "ON" if settings.get("portmaster_enabled", False) else "OFF"
-                items.append((item, value))
-            elif item == "Enable Internet Archive":
-                value = "ON" if settings.get("ia_enabled", False) else "OFF"
                 items.append((item, value))
             elif item == "Internet Archive Login":
                 email = settings.get("ia_email", "")
@@ -378,7 +364,6 @@ class SettingsScreen:
             item = settings_items[index]
             actions = {
                 "Remote Games Bkp File": "select_archive_json",
-                "Work Directory": "select_work_dir",
                 "ROMs Directory": "select_roms_dir",
                 "NSZ Keys": "select_nsz_keys",
                 "Remap Controller": "remap_controller",
@@ -386,7 +371,6 @@ class SettingsScreen:
                 "Games Systems Preference": "systems_settings",
                 "Clear Systems Cache": "clear_systems_cache",
                 "Enable PortMaster (beta)": "toggle_portmaster_enabled",
-                "Enable Internet Archive": "toggle_ia_enabled",
                 "Internet Archive Login": "ia_login",
                 "Enable Box-art Display": "toggle_boxart",
                 "USA Games Only": "toggle_usa_only",
