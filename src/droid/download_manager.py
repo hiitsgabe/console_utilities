@@ -375,7 +375,14 @@ class AndroidDownloadManager:
                         item.error = "Downloaded file not found"
                 else:
                     item.status = "failed"
-                    item.error = f"Download failed (status: {status})"
+                    # Check if this is an IA URL without auth — likely needs login
+                    url = self._get_download_url(
+                        item.system_data, item.game, ""
+                    )
+                    if url and "archive.org" in url and "auth" not in item.system_data:
+                        item.error = "ia_auth_required"
+                    else:
+                        item.error = f"Download failed (status: {status})"
             else:
                 if cursor:
                     cursor.close()
@@ -389,6 +396,7 @@ class AndroidDownloadManager:
     def _get_downloaded_file_path(self, download_id: int) -> Optional[str]:
         """Get the local file path for a completed download."""
         from jnius import autoclass
+        from urllib.parse import unquote
 
         DownloadManagerClass = autoclass("android.app.DownloadManager")
         Query = autoclass("android.app.DownloadManager$Query")
@@ -405,7 +413,7 @@ class AndroidDownloadManager:
             cursor.close()
 
             if local_uri and local_uri.startswith("file://"):
-                return local_uri[7:]  # Strip file:// prefix
+                return unquote(local_uri[7:])  # Strip file:// and decode %20 etc.
             return local_uri
 
         if cursor:
@@ -473,6 +481,8 @@ class AndroidDownloadManager:
         DownloadManagerClass = autoclass("android.app.DownloadManager")
         Query = autoclass("android.app.DownloadManager$Query")
 
+        now = time.time()
+
         with self._lock:
             for download_id, item in list(self._download_ids.items()):
                 if item.status != "downloading":
@@ -501,8 +511,12 @@ class AndroidDownloadManager:
                     if item.total_size > 0:
                         item.progress = item.downloaded / item.total_size
 
-                    # Approximate speed (bytes in last 500ms x 2)
-                    item.speed = (downloaded - old_downloaded) * 2
+                    # Speed based on actual elapsed time
+                    last_poll = getattr(item, "_last_poll_time", 0.0)
+                    elapsed = now - last_poll if last_poll > 0 else 0.5
+                    if elapsed > 0.1:
+                        item.speed = (downloaded - old_downloaded) / elapsed
+                        item._last_poll_time = now
                 else:
                     if cursor:
                         cursor.close()

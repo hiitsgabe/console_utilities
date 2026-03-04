@@ -513,6 +513,17 @@ class ConsoleUtilitiesApp:
 
         return bezel
 
+    def _restore_android_display(self):
+        """Restore display after returning from an external activity (SAF picker etc)."""
+        try:
+            w, h = self.screen.get_size()
+            self.screen = pygame.display.set_mode(
+                (w, h), pygame.SCALED | pygame.FULLSCREEN
+            )
+        except Exception as e:
+            from utils.logging import log_error
+            log_error(f"[restore_display] Error: {e}")
+
     def _handle_resize(self, new_w: int, new_h: int):
         """Handle screen resize (Android orientation change)."""
         self.screen = pygame.display.set_mode((new_w, new_h), pygame.RESIZABLE)
@@ -732,6 +743,14 @@ class ConsoleUtilitiesApp:
             if not self.needs_mapping:
                 self.navigation.handle_continuous(self._on_navigate)
 
+            # Check for IA auth failures in download queue
+            if not self.state.confirm_modal.show:
+                for item in self.state.download_queue.items:
+                    if item.error == "ia_auth_required":
+                        item.error = "Login required"
+                        self._show_ia_login_required_modal()
+                        break
+
             # Manage Android soft keyboard show/hide
             if BUILD_TARGET == "android":
                 text_modal_was_open = getattr(self, "_text_modal_open", False)
@@ -749,11 +768,14 @@ class ConsoleUtilitiesApp:
 
                 elif event.type == pygame.KEYDOWN:
                     # Skip ALL keyboard events if joystick is connected,
-                    # UNLESS tagged as web companion synthetic events.
+                    # UNLESS tagged as web companion synthetic events
+                    # or on Android (soft keyboard sends KEYDOWN for backspace/enter).
                     # Some consoles/controllers generate keyboard events alongside joystick events
                     # which causes double input. Joystick takes priority.
-                    if self.joystick is not None and not getattr(
-                        event, "web_companion", False
+                    if (
+                        self.joystick is not None
+                        and not getattr(event, "web_companion", False)
+                        and BUILD_TARGET != "android"
                     ):
                         continue
                     self.state.input_mode = "keyboard"
@@ -791,6 +813,12 @@ class ConsoleUtilitiesApp:
                 elif event.type == pygame.VIDEORESIZE:
                     if BUILD_TARGET != "android":
                         self._handle_resize(event.w, event.h)
+
+                elif BUILD_TARGET == "android" and event.type in (
+                    getattr(pygame, "WINDOWRESTORED", -1),
+                    getattr(pygame, "APP_DIDENTERFOREGROUND", -1),
+                ):
+                    self._restore_android_display()
 
                 elif event.type == pygame.TEXTINPUT:
                     if BUILD_TARGET == "android":
@@ -2058,14 +2086,18 @@ class ConsoleUtilitiesApp:
                     self._start_download()
                 return
 
-        # Check Android text modal OK/Cancel buttons
+        # Check Android text modal OK/Cancel/Backspace buttons
         text_ok = self.state.ui_rects.rects.get("text_ok")
         text_cancel = self.state.ui_rects.rects.get("text_cancel")
+        text_bksp = self.state.ui_rects.rects.get("text_backspace")
         if text_ok and text_ok.collidepoint(x, y):
             self._handle_text_modal_ok_click()
             return
         if text_cancel and text_cancel.collidepoint(x, y):
             self._handle_text_modal_cancel_click()
+            return
+        if text_bksp and text_bksp.collidepoint(x, y):
+            self._handle_text_modal_backspace()
             return
 
         # Check modal character buttons (search/url input/IA modals)
@@ -2506,7 +2538,9 @@ class ConsoleUtilitiesApp:
 
                 # Show loading while fetching games (non-blocking)
                 self._show_loading(f"Loading {system['name']}...")
-                system_data = self.data[self.state.selected_system]
+                system_data = self._inject_ia_auth(
+                    self.data[self.state.selected_system]
+                )
 
                 import threading
 
@@ -2676,7 +2710,7 @@ class ConsoleUtilitiesApp:
 
         if context == "download_all" and data:
             # Add all games to download queue
-            system_data = self.data[self.state.selected_system]
+            system_data = self._inject_ia_auth(self.data[self.state.selected_system])
             system_name = system_data.get("name", "Unknown")
             self.download_manager.add_to_queue(data, system_data, system_name)
 
@@ -2698,6 +2732,12 @@ class ConsoleUtilitiesApp:
             os.makedirs(SYSTEMS_CACHE_DIR, exist_ok=True)
             _listing_cache.clear()
             self.image_cache.clear()
+        elif context == "go_to_ia_settings":
+            self._handle_confirm_modal_cancel()
+            self.state.mode = "settings"
+            self.state.highlighted = 0
+            self._show_ia_login()
+            return
         # Close the modal
         self._handle_confirm_modal_cancel()
 
@@ -2843,9 +2883,6 @@ class ConsoleUtilitiesApp:
             current = self.settings.get("scraper_frontend", "emulationstation_base")
             idx = frontends.index(current) if current in frontends else 0
             self.settings["scraper_frontend"] = frontends[(idx + 1) % len(frontends)]
-            save_settings(self.settings)
-        elif action == "toggle_ia_enabled":
-            self.settings["ia_enabled"] = not self.settings.get("ia_enabled", False)
             save_settings(self.settings)
         elif action == "ia_login":
             self._show_ia_login()
@@ -3106,7 +3143,9 @@ class ConsoleUtilitiesApp:
                 "",
             ]
 
-            can_auto_update = BUILD_TARGET == "pygame" and release_info.get("asset_url")
+            can_auto_update = BUILD_TARGET in ("pygame", "android") and release_info.get(
+                "asset_url"
+            )
 
             if can_auto_update:
                 size = release_info.get("asset_size", 0)
@@ -3136,13 +3175,13 @@ class ConsoleUtilitiesApp:
         thread.start()
 
     def _apply_update(self, release_info):
-        """Apply a pygame update from release_info."""
-        from services.update_service import apply_pygame_update
-
+        """Apply an update from release_info (pygame or Android)."""
         self.state.confirm_modal.show = False
         self.state.loading.show = True
         self.state.loading.message = "Downloading update..."
         self.state.loading.progress = 0
+
+        is_android = BUILD_TARGET == "android"
 
         def on_progress(progress, status):
             self.state.loading.progress = int(progress * 100)
@@ -3151,13 +3190,23 @@ class ConsoleUtilitiesApp:
         def on_complete():
             self.state.loading.show = False
             self.state.confirm_modal.show = True
-            self.state.confirm_modal.title = "Update Complete"
-            self.state.confirm_modal.message_lines = [
-                f"Updated to {release_info['tag']}.",
-                "",
-                "Please restart the application",
-                "to use the new version.",
-            ]
+            if is_android:
+                self.state.confirm_modal.title = "Installing Update"
+                self.state.confirm_modal.message_lines = [
+                    f"Installing {release_info['tag']}...",
+                    "",
+                    "The system installer should open.",
+                    "Follow the prompts to complete",
+                    "the update.",
+                ]
+            else:
+                self.state.confirm_modal.title = "Update Complete"
+                self.state.confirm_modal.message_lines = [
+                    f"Updated to {release_info['tag']}.",
+                    "",
+                    "Please restart the application",
+                    "to use the new version.",
+                ]
             self.state.confirm_modal.ok_label = "OK"
             self.state.confirm_modal.cancel_label = ""
             self.state.confirm_modal.button_index = 0
@@ -3176,12 +3225,24 @@ class ConsoleUtilitiesApp:
             self.state.confirm_modal.button_index = 0
             self.state.confirm_modal.context = ""
 
-        apply_pygame_update(
-            release_info["asset_url"],
-            on_progress=on_progress,
-            on_complete=on_complete,
-            on_error=on_error,
-        )
+        if is_android:
+            from droid.updater import apply_android_update
+
+            apply_android_update(
+                release_info["asset_url"],
+                on_progress=on_progress,
+                on_complete=on_complete,
+                on_error=on_error,
+            )
+        else:
+            from services.update_service import apply_pygame_update
+
+            apply_pygame_update(
+                release_info["asset_url"],
+                on_progress=on_progress,
+                on_complete=on_complete,
+                on_error=on_error,
+            )
 
     def _handle_utils_selection(self):
         """Handle utils item selection."""
@@ -4173,17 +4234,66 @@ class ConsoleUtilitiesApp:
         self.state.url_input.show = False
 
     def _handle_text_modal_ok_click(self):
-        """Handle OK button click on Android text input modals."""
+        """Handle OK button click on text input modals."""
         if self.state.show_search_input:
             self._submit_search_keyboard_input()
         elif self.state.url_input.show:
             self._submit_url_input()
         elif self.state.folder_name_input.show:
             self._submit_folder_name()
+        elif self.state.ia_login.show:
+            self._handle_ia_login_ok()
 
     def _handle_text_modal_cancel_click(self):
-        """Handle Cancel button click on Android text input modals."""
+        """Handle Cancel button click on text input modals."""
         self._go_back()
+
+    def _handle_ia_login_ok(self):
+        """Handle OK/Next/Login button click on IA login modal."""
+        step = self.state.ia_login.step
+        if step == "email":
+            if self.state.ia_login.email:
+                self.state.ia_login.step = "password"
+                self.state.ia_login.cursor_position = 0
+        elif step == "password":
+            if self.state.ia_login.password:
+                self._test_ia_credentials()
+        elif step == "complete":
+            self._close_ia_login()
+        elif step == "error":
+            self.state.ia_login.step = "email"
+            self.state.ia_login.password = ""
+            self.state.ia_login.cursor_position = 0
+            self.state.ia_login.error_message = ""
+
+    def _handle_text_modal_backspace(self):
+        """Handle backspace button tap on Android text input modals."""
+        if self.state.ia_login.show:
+            step = self.state.ia_login.step
+            if step == "email" and self.state.ia_login.email:
+                self.state.ia_login.email = self.state.ia_login.email[:-1]
+            elif step == "password" and self.state.ia_login.password:
+                self.state.ia_login.password = self.state.ia_login.password[:-1]
+        elif self.state.scraper_login.show:
+            step = self.state.scraper_login.step
+            if step == "username" and self.state.scraper_login.username:
+                self.state.scraper_login.username = self.state.scraper_login.username[:-1]
+            elif step == "password" and self.state.scraper_login.password:
+                self.state.scraper_login.password = self.state.scraper_login.password[:-1]
+            elif step == "api_key" and self.state.scraper_login.api_key:
+                self.state.scraper_login.api_key = self.state.scraper_login.api_key[:-1]
+        elif self.state.show_search_input:
+            if self.state.search.input_text:
+                self.state.search.input_text = self.state.search.input_text[:-1]
+                self.state.search.query = self.state.search.input_text
+        elif self.state.url_input.show:
+            if self.state.url_input.input_text:
+                self.state.url_input.input_text = self.state.url_input.input_text[:-1]
+        elif self.state.folder_name_input.show:
+            if self.state.folder_name_input.input_text:
+                self.state.folder_name_input.input_text = (
+                    self.state.folder_name_input.input_text[:-1]
+                )
 
     def _apply_search_filter(self):
         """Apply search filter and close search modal."""
@@ -4427,12 +4537,34 @@ class ConsoleUtilitiesApp:
         self.state.mode = "systems"
         self.state.highlighted = 0
 
+    def _inject_ia_auth(self, system_data):
+        """Return system_data with IA auth injected if credentials exist in settings."""
+        urls = system_data.get("url", "")
+        url_list = urls if isinstance(urls, list) else [urls]
+        is_ia = any("archive.org" in u for u in url_list if u)
+        if not is_ia or "auth" in system_data:
+            return system_data
+        access_key = self.settings.get("ia_access_key") or None
+        secret_key = self.settings.get("ia_secret_key") or None
+        if access_key and secret_key:
+            from services.internet_archive import decode_password
+
+            return {
+                **system_data,
+                "auth": {
+                    "type": "ia_s3",
+                    "access_key": access_key,
+                    "secret_key": decode_password(secret_key),
+                },
+            }
+        return system_data
+
     def _start_download(self):
         """Start downloading selected games by adding to background queue."""
         if not self.state.selected_games or self.state.selected_system < 0:
             return
 
-        system_data = self.data[self.state.selected_system]
+        system_data = self._inject_ia_auth(self.data[self.state.selected_system])
         game_list = (
             self.state.search.filtered_list
             if self.state.search.mode
@@ -4636,6 +4768,22 @@ class ConsoleUtilitiesApp:
 
     # ---- Internet Archive Handlers ---- #
 
+    def _show_ia_login_required_modal(self):
+        """Show modal telling user to log in to Internet Archive."""
+        self.state.confirm_modal.show = True
+        self.state.confirm_modal.title = "Login Required"
+        self.state.confirm_modal.message_lines = [
+            "This download requires an",
+            "Internet Archive account.",
+            "",
+            "Go to Settings >",
+            "Internet Archive Login",
+        ]
+        self.state.confirm_modal.ok_label = "Go to Settings"
+        self.state.confirm_modal.cancel_label = "Cancel"
+        self.state.confirm_modal.context = "go_to_ia_settings"
+        self.state.confirm_modal.button_index = 0
+
     def _show_ia_login(self):
         """Show the Internet Archive login modal."""
         self.state.ia_login.show = True
@@ -4659,8 +4807,8 @@ class ConsoleUtilitiesApp:
         step = self.state.ia_login.step
 
         if step == "email":
-            if self.state.input_mode == "keyboard":
-                # Keyboard mode - Enter pressed, move to password
+            if self.state.input_mode == "keyboard" or BUILD_TARGET == "android":
+                # Keyboard/Android mode - Enter/OK pressed, move to password
                 if self.state.ia_login.email:
                     self.state.ia_login.step = "password"
                     self.state.ia_login.cursor_position = 0
@@ -4685,8 +4833,8 @@ class ConsoleUtilitiesApp:
                     self.state.ia_login.cursor_position = 0
 
         elif step == "password":
-            if self.state.input_mode == "keyboard":
-                # Keyboard mode - Enter pressed, test credentials
+            if self.state.input_mode == "keyboard" or BUILD_TARGET == "android":
+                # Keyboard/Android mode - Enter/OK pressed, test credentials
                 if self.state.ia_login.password:
                     self._test_ia_credentials()
             else:

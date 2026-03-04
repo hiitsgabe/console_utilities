@@ -39,10 +39,24 @@ RUN apt-get -y install build-essential libsqlite3-dev sqlite3 bzip2 libbz2-dev z
 
 RUN apt-get install libffi-dev
 
+# Clone python-for-android and patch AndroidManifest template to include FileProvider
+# (extra_manifest_application_arguments only supports attributes, not child elements)
+COPY ./docker/patch_manifest.py /tmp/patch_manifest.py
+RUN git clone -b master --single-branch https://github.com/kivy/python-for-android.git /p4a && \
+    python3 /tmp/patch_manifest.py
+
+ARG KEYSTORE_PASSWORD
+# p4a reads signing config from env vars, not buildozer.spec
+ENV P4A_RELEASE_KEYSTORE=/app/keystore/release.keystore
+ENV P4A_RELEASE_KEYALIAS=consoleutilities
+ENV P4A_RELEASE_KEYSTORE_PASSWD=${KEYSTORE_PASSWORD}
+ENV P4A_RELEASE_KEYALIAS_PASSWD=${KEYSTORE_PASSWORD}
+
 WORKDIR /app
 
 COPY ./main.py ./
 COPY ./buildozer.spec ./
+COPY ./keystore ./keystore
 
 # Copy assets directory
 COPY ./assets ./assets
@@ -51,13 +65,16 @@ COPY ./assets ./assets
 COPY ./assets/images/logo.png ./icon.png
 COPY ./assets/images/logo_big.png ./presplash.png
 
+# Copy Android resources (FileProvider config, extra manifest)
+COPY ./res ./res
+
 # Copy recipes if they exist (for custom python-for-android recipes)
 COPY ./recipes ./recipes
 
 # Copy source code
 COPY ./src ./src
 
-RUN yes | buildozer android debug
+RUN yes | buildozer android release
 
 RUN mkdir -p /dist && cp -r bin/* /dist/
 

@@ -201,7 +201,7 @@ jobs:
 
       - name: Build Android APK via Docker
         run: |
-          docker build -t rom-builder -f docker/dockerfile.android .
+          docker build --build-arg KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }} -t rom-builder -f docker/dockerfile.android .
           docker create --name rom-build rom-builder
           mkdir -p dist/android
           docker cp rom-build:/dist/. ./dist/android/

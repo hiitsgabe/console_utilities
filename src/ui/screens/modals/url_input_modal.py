@@ -29,6 +29,7 @@ class UrlInputModal:
         self.text = Text(theme)
         self.ok_rect = None
         self.cancel_rect = None
+        self.backspace_rect = None
 
     def render(
         self,
@@ -61,6 +62,7 @@ class UrlInputModal:
         # Reset button rects
         self.ok_rect = None
         self.cancel_rect = None
+        self.backspace_rect = None
 
         # Keyboard mode uses smaller modal (no on-screen keyboard needed)
         if input_mode == "keyboard":
@@ -164,19 +166,20 @@ class UrlInputModal:
         width = min(int(sw * 0.9), 600)
         height = 230
 
-        modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
+        modal_rect, content_rect, close_rect = self.modal_frame.render_top_aligned(
             screen, width, height, title=title, show_close=False
         )
 
         padding = self.theme.padding_sm
         y = content_rect.top + padding
 
-        # Draw input field (larger for touch)
+        # Draw input field with backspace button (larger for touch)
         field_height = 48
+        bksp_width = 48
         field_rect = pygame.Rect(
             content_rect.left + padding,
             y,
-            content_rect.width - padding * 2,
+            content_rect.width - padding * 3 - bksp_width,
             field_height,
         )
 
@@ -186,6 +189,29 @@ class UrlInputModal:
             field_rect,
             border_radius=self.theme.radius_sm,
         )
+
+        # Backspace button
+        bksp_rect = pygame.Rect(
+            field_rect.right + padding,
+            y,
+            bksp_width,
+            field_height,
+        )
+        pygame.draw.rect(
+            screen,
+            self.theme.surface_hover,
+            bksp_rect,
+            border_radius=self.theme.radius_sm,
+        )
+        self.text.render(
+            screen,
+            "<x]",
+            (bksp_rect.centerx, bksp_rect.centery - self.theme.font_size_md // 2),
+            color=self.theme.text_primary,
+            size=self.theme.font_size_md,
+            align="center",
+        )
+        self.backspace_rect = bksp_rect
 
         # Draw text
         display_text = input_text if input_text else "Type URL..."

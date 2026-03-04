@@ -72,10 +72,9 @@ class UtilsScreen:
         divider_indices.add(len(items))
         items.extend(self.DOWNLOAD_SECTION_ITEMS)
 
-        # Add IA section if enabled
-        if settings.get("ia_enabled", False):
-            divider_indices.add(len(items))
-            items.extend(self.IA_SECTION_ITEMS)
+        # Add IA section
+        divider_indices.add(len(items))
+        items.extend(self.IA_SECTION_ITEMS)
 
         # Add extraction section
         divider_indices.add(len(items))

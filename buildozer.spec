@@ -19,12 +19,17 @@ ios.ios_deploy_url = https://github.com/phonegap/ios-deploy
 ios.ios_deploy_branch = 1.10.0
 ios.codesign.allowed = false
 android.accept_sdk_license = True
-android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,ACCESS_NETWORK_STATE,WAKE_LOCK,MANAGE_EXTERNAL_STORAGE,DOWNLOAD_WITHOUT_NOTIFICATION,POST_NOTIFICATIONS,FOREGROUND_SERVICE,FOREGROUND_SERVICE_DATA_SYNC
+android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,ACCESS_NETWORK_STATE,WAKE_LOCK,MANAGE_EXTERNAL_STORAGE,DOWNLOAD_WITHOUT_NOTIFICATION,POST_NOTIFICATIONS,FOREGROUND_SERVICE,FOREGROUND_SERVICE_DATA_SYNC,REQUEST_INSTALL_PACKAGES
 services = ExtractionService:./src/droid/service.py:foreground:sticky
 icon.filename = icon.png
 presplash.filename = presplash.png
 android.presplash_color = #ffffff
 p4a.local_recipes = ./recipes
+p4a.source_dir = /p4a
+android.add_resources = res/xml/file_paths.xml:xml/file_paths.xml
+android.gradle_dependencies = androidx.core:core:1.6.0
+android.keystore = keystore/release.keystore
+android.keyalias = consoleutilities
 
 [buildozer]
 log_level = 2

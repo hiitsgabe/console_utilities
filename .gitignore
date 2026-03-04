@@ -23,6 +23,7 @@ debug.log
 download.json
 .DS_Store
 assets/bundled_data.json
+assets/bundled_data_*.json
 assets/translations/we2002_*.ppf
 .env
 downloads/
