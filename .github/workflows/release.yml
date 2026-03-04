@@ -196,12 +196,15 @@ jobs:
           sed -i 's/^APP_VERSION = .*/APP_VERSION = "${{ steps.version.outputs.VERSION }}"/' src/constants.py
           sed -i 's/^BUILD_TARGET = .*/BUILD_TARGET = "android"/' src/constants.py
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Disable buildx alias
+        run: docker buildx rm default 2>/dev/null || true
 
       - name: Build Android APK via Docker
+        env:
+          DOCKER_BUILDKIT: "0"
         run: |
-          docker build --build-arg KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }} -t rom-builder -f docker/dockerfile.android .
+          KS_PASS=$(echo -n "${{ secrets.KEYSTORE_PASSWORD }}" | tr -d '\n')
+          docker build --build-arg "KEYSTORE_PASSWORD=${KS_PASS}" -t rom-builder -f docker/dockerfile.android .
           docker create --name rom-build rom-builder
           mkdir -p dist/android
           docker cp rom-build:/dist/. ./dist/android/
