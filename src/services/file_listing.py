@@ -288,7 +288,12 @@ def _list_files_json_api(
 
     headers, cookies = _get_request_headers_cookies(system_data)
 
-    r = requests.get(list_url, timeout=10, headers=headers, cookies=cookies)
+    try:
+        r = requests.get(list_url, timeout=(10, 30), headers=headers, cookies=cookies)
+    except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
+        r = requests.get(
+            list_url, timeout=(10, 30), headers=headers, cookies=cookies, verify=False
+        )
     response = r.json()
 
     if isinstance(response, dict) and "files" in response:
@@ -343,8 +348,14 @@ def _list_files_html_single(
 
     headers, cookies = _get_request_headers_cookies(system_data)
 
-    r = requests.get(url, timeout=30, headers=headers, cookies=cookies)
-    r.raise_for_status()
+    try:
+        r = requests.get(url, timeout=(15, 60), headers=headers, cookies=cookies)
+        r.raise_for_status()
+    except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
+        r = requests.get(
+            url, timeout=(15, 60), headers=headers, cookies=cookies, verify=False
+        )
+        r.raise_for_status()
     html_content = r.text
 
     files = []

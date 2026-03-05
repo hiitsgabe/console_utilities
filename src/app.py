@@ -86,6 +86,13 @@ class ConsoleUtilitiesApp:
         # Block SDL event loop while app is paused (prevents GL calls during background)
         if BUILD_TARGET == "android":
             os.environ["SDL_ANDROID_BLOCK_ON_PAUSE"] = "1"
+            # Set SSL certificate bundle for requests/urllib on Android
+            try:
+                import certifi
+                os.environ["SSL_CERT_FILE"] = certifi.where()
+                os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
+            except ImportError:
+                pass
 
         # Track Android background state for render guards
         self._is_backgrounded = False
