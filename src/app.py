@@ -13,6 +13,8 @@ from typing import Optional, Dict, Any
 from constants import (
     BEZEL_INSET,
     BUILD_TARGET,
+    CONFIG_FILE,
+    ADDED_SYSTEMS_FILE,
     DEV_MODE,
     FPS,
     SCREEN_WIDTH,
@@ -84,6 +86,10 @@ class ConsoleUtilitiesApp:
         # Initialize logging
         init_log_file()
 
+        # Migrate Android data from old internal storage to external files dir
+        if BUILD_TARGET == "android":
+            self._migrate_android_data()
+
         # Block SDL event loop while app is paused (prevents GL calls during background)
         if BUILD_TARGET == "android":
             os.environ["SDL_ANDROID_BLOCK_ON_PAUSE"] = "1"
@@ -103,13 +109,14 @@ class ConsoleUtilitiesApp:
         pygame.init()
         pygame.display.set_caption("Console Utilities")
 
-        # Create display - auto-detect native resolution on console
+        # Create display - auto-detect native resolution on console/Android
         if DEV_MODE:
             self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         elif BUILD_TARGET == "android":
+            display_info = pygame.display.Info()
             self.screen = pygame.display.set_mode(
-                (SCREEN_WIDTH, SCREEN_HEIGHT),
-                pygame.SCALED | pygame.FULLSCREEN,
+                (display_info.current_w, display_info.current_h),
+                pygame.FULLSCREEN,
             )
         else:
             display_info = pygame.display.Info()
@@ -755,6 +762,35 @@ class ConsoleUtilitiesApp:
         pygame.display.flip()
         # Process events to prevent freezing
         pygame.event.pump()
+
+    def _migrate_android_data(self):
+        """Migrate config files from old SCRIPT_DIR to external files dir.
+
+        On Android, prior versions stored config inside the app's internal
+        storage (SCRIPT_DIR) which gets wiped on APK update.  If the new
+        external location is empty but the old location has data, copy it over.
+        """
+        import shutil
+
+        old_new_pairs = [
+            (os.path.join(SCRIPT_DIR, "config.json"), CONFIG_FILE),
+            (os.path.join(SCRIPT_DIR, "added_systems.json"), ADDED_SYSTEMS_FILE),
+            (
+                os.path.join(SCRIPT_DIR, "controller_mapping.json"),
+                os.path.join(os.path.dirname(CONFIG_FILE), "controller_mapping.json"),
+            ),
+        ]
+        for old_path, new_path in old_new_pairs:
+            try:
+                if (
+                    old_path != new_path
+                    and os.path.exists(old_path)
+                    and not os.path.exists(new_path)
+                ):
+                    os.makedirs(os.path.dirname(new_path), exist_ok=True)
+                    shutil.copy2(old_path, new_path)
+            except Exception:
+                pass
 
     def run(self):
         """Run the main application loop."""

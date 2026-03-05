@@ -1,0 +1,29 @@
+# Large/unnecessary files excluded from Docker build context
+psp/
+dist/
+workdir/
+.buildozer/
+build/
+.git/
+__pycache__/
+*.pyc
+*.egg-info
+*.iso
+*.zip
+
+# Dev/local files
+.env
+.claude
+.DS_Store
+roms/
+py_downloads/
+downloads/
+debug.log
+error.log
+
+# Android SDK artifacts (from prior local builds)
+emulator/
+licenses/
+platform-tools/
+platforms/
+system-images/
