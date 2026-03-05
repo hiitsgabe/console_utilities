@@ -83,6 +83,14 @@ class ConsoleUtilitiesApp:
         # Initialize logging
         init_log_file()
 
+        # Block SDL event loop while app is paused (prevents GL calls during background)
+        if BUILD_TARGET == "android":
+            os.environ["SDL_ANDROID_BLOCK_ON_PAUSE"] = "1"
+
+        # Track Android background state for render guards
+        self._is_backgrounded = False
+        self._needs_display_restore = False
+
         # Initialize pygame
         pygame.init()
         pygame.display.set_caption("Console Utilities")
@@ -195,12 +203,9 @@ class ConsoleUtilitiesApp:
         ):
             self._start_web_companion()
 
-        # Native file/folder picker (Android only)
+        # Native file/folder picker disabled (causes black screen on Android
+        # due to EGL surface destruction during SAF intent lifecycle)
         self._file_picker = None
-        if BUILD_TARGET == "android":
-            from droid.file_picker import AndroidFilePicker
-
-            self._file_picker = AndroidFilePicker()
 
         # CRT vignette overlay (edge darkening)
         self.vignette_surface = self._create_vignette()
@@ -520,9 +525,28 @@ class ConsoleUtilitiesApp:
             self.screen = pygame.display.set_mode(
                 (w, h), pygame.SCALED | pygame.FULLSCREEN
             )
+
+            # Recreate overlay surfaces (GPU textures are lost on context restore)
+            self.scanline_surface = None
+            if self.theme.crt_scanlines:
+                self.scanline_surface = pygame.Surface((w, h), pygame.SRCALPHA)
+                for y in range(0, h, 3):
+                    pygame.draw.line(
+                        self.scanline_surface, (0, 0, 0, 40), (0, y), (w, y)
+                    )
+
+            self.bezel_surface = self._create_crt_bezel()
+            self.vignette_surface = self._create_vignette()
+
+            # Invalidate image cache (stale GPU-side data)
+            self.image_cache.clear()
+
         except Exception as e:
+            # Surface not ready yet — re-flag for retry next frame
+            self._is_backgrounded = True
+            self._needs_display_restore = True
             from utils.logging import log_error
-            log_error(f"[restore_display] Error: {e}")
+            log_error(f"[restore_display] Error, will retry: {e}")
 
     def _handle_resize(self, new_w: int, new_h: int):
         """Handle screen resize (Android orientation change)."""
@@ -706,6 +730,8 @@ class ConsoleUtilitiesApp:
 
     def _render_frame(self):
         """Render a single frame (used during loading)."""
+        if self._is_backgrounded:
+            return
         self._draw_background()
         self.screen_manager.render(
             self.screen,
@@ -811,21 +837,45 @@ class ConsoleUtilitiesApp:
                     self.touch.handle_mouse_motion(event, on_scroll=self._handle_scroll)
 
                 elif event.type == pygame.VIDEORESIZE:
-                    if BUILD_TARGET != "android":
+                    if BUILD_TARGET == "android":
+                        # surfaceChanged() fires VIDEORESIZE — surface is now valid
+                        if self._needs_display_restore:
+                            self._needs_display_restore = False
+                            self._is_backgrounded = False
+                            self._restore_android_display()
+                    else:
                         self._handle_resize(event.w, event.h)
 
                 elif BUILD_TARGET == "android" and event.type in (
-                    getattr(pygame, "WINDOWRESTORED", -1),
-                    getattr(pygame, "APP_DIDENTERFOREGROUND", -1),
+                    getattr(pygame, "APP_WILLENTERBACKGROUND", -1),
+                    0x101,  # SDL_APP_WILLENTERBACKGROUND raw value
                 ):
-                    self._restore_android_display()
+                    self._is_backgrounded = True
+
+                elif BUILD_TARGET == "android" and event.type == pygame.ACTIVEEVENT:
+                    # Focus lost (state=2) fires before surfaceDestroyed
+                    if hasattr(event, "state") and event.state & 2:
+                        if hasattr(event, "gain") and not event.gain:
+                            self._is_backgrounded = True
+
+                elif BUILD_TARGET == "android" and event.type == getattr(
+                    pygame, "WINDOWFOCUSLOST", -1
+                ):
+                    self._is_backgrounded = True
+
+                elif BUILD_TARGET == "android" and event.type in (
+                    getattr(pygame, "WINDOWRESTORED", -1),
+                    getattr(pygame, "WINDOWFOCUSGAINED", -1),
+                    getattr(pygame, "APP_DIDENTERFOREGROUND", -1),
+                    0x104,  # SDL_APP_DIDENTERFOREGROUND raw value
+                ):
+                    if self._is_backgrounded:
+                        self._needs_display_restore = True
 
                 elif event.type == pygame.TEXTINPUT:
                     if BUILD_TARGET == "android":
                         self._handle_text_input_event(event)
 
-                elif BUILD_TARGET == "android" and event.type == pygame.USEREVENT + 1:
-                    self._handle_native_picker_result(event)
 
             # Update image cache (process loaded images from background threads)
             self.image_cache.update()
@@ -835,40 +885,55 @@ class ConsoleUtilitiesApp:
                 self.web_companion.process_actions(self.state)
                 self.web_companion.push_state(self.state, self.settings, self.data)
 
-            # Draw
-            self._draw_background()
+            # Deferred display restore: wait until surface is recreated by SDL
+            if self._needs_display_restore and pygame.display.get_surface() is not None:
+                self._needs_display_restore = False
+                self._is_backgrounded = False
+                self._restore_android_display()
 
-            # Render current screen
-            rects = self.screen_manager.render(
-                self.screen,
-                self.state,
-                self.settings,
-                self.data,
-                get_thumbnail=self._get_thumbnail,
-                get_hires_image=self._get_hires_image,
+            # Draw (skip when backgrounded or display surface is gone)
+            _surface_ok = (
+                not self._is_backgrounded
+                and pygame.display.get_surface() is not None
             )
+            if _surface_ok:
+                try:
+                    self._draw_background()
 
-            # Store rects for click handling
-            self.state.ui_rects.menu_items = rects.get("item_rects", [])
-            self.state.ui_rects.back_button = rects.get("back")
-            self.state.ui_rects.download_button = rects.get("download_button")
-            self.state.ui_rects.close_button = rects.get("close")
-            self.state.ui_rects.modal_char_rects = rects.get("char_rects", [])
-            self.state.ui_rects.scroll_offset = rects.get("scroll_offset", 0)
-            self.state.ui_rects.folder_select_button = rects.get("select_button")
-            self.state.ui_rects.folder_cancel_button = rects.get("cancel_button")
-            self.state.ui_rects.confirm_ok_button = rects.get("confirm_ok")
-            self.state.ui_rects.confirm_cancel_button = rects.get("confirm_cancel")
-            self.state.ui_rects.rects = rects
+                    # Render current screen
+                    rects = self.screen_manager.render(
+                        self.screen,
+                        self.state,
+                        self.settings,
+                        self.data,
+                        get_thumbnail=self._get_thumbnail,
+                        get_hires_image=self._get_hires_image,
+                    )
 
-            if self.scanline_surface:
-                self.screen.blit(self.scanline_surface, (0, 0))
-            self.screen.blit(self.bezel_surface, (0, 0))
-            pygame.display.flip()
+                    # Store rects for click handling
+                    self.state.ui_rects.menu_items = rects.get("item_rects", [])
+                    self.state.ui_rects.back_button = rects.get("back")
+                    self.state.ui_rects.download_button = rects.get("download_button")
+                    self.state.ui_rects.close_button = rects.get("close")
+                    self.state.ui_rects.modal_char_rects = rects.get("char_rects", [])
+                    self.state.ui_rects.scroll_offset = rects.get("scroll_offset", 0)
+                    self.state.ui_rects.folder_select_button = rects.get("select_button")
+                    self.state.ui_rects.folder_cancel_button = rects.get("cancel_button")
+                    self.state.ui_rects.confirm_ok_button = rects.get("confirm_ok")
+                    self.state.ui_rects.confirm_cancel_button = rects.get("confirm_cancel")
+                    self.state.ui_rects.rects = rects
 
-            # Web companion: capture frame for MJPEG thumbnail
-            if self.web_companion and self.web_companion._running:
-                self.web_companion.capture_frame(self.screen)
+                    if self.scanline_surface:
+                        self.screen.blit(self.scanline_surface, (0, 0))
+                    self.screen.blit(self.bezel_surface, (0, 0))
+                    pygame.display.flip()
+
+                    # Web companion: capture frame for MJPEG thumbnail
+                    if self.web_companion and self.web_companion._running:
+                        self.web_companion.capture_frame(self.screen)
+                except pygame.error:
+                    # Surface was destroyed mid-frame (Android lifecycle race)
+                    self._is_backgrounded = True
 
         # Cleanup
         if self.web_companion:
@@ -3344,10 +3409,6 @@ class ConsoleUtilitiesApp:
 
     def _open_folder_browser(self, selection_type: str):
         """Open the folder browser modal."""
-        if BUILD_TARGET == "android" and self._file_picker:
-            self._launch_native_picker(selection_type)
-            return
-
         self.state.folder_browser.show = True
         self.state.folder_browser.highlighted = 0
         self.state.folder_browser.focus_area = "list"
@@ -3436,11 +3497,6 @@ class ConsoleUtilitiesApp:
 
     def _open_ia_collection_folder_browser(self):
         """Open folder browser for IA collection ROM folder selection."""
-        if BUILD_TARGET == "android" and self._file_picker:
-            self.state.ia_collection_wizard.step = "folder"
-            self._launch_native_picker("ia_collection_folder")
-            return
-
         self.state.ia_collection_wizard.step = "folder"
         self.state.folder_browser.show = True
         self.state.folder_browser.highlighted = 0

@@ -1,8 +1,9 @@
-.PHONY: run debug stream watch install dev clean test lint format setup build-android bundle bundle-macos bundle-windows release run-android stop-android android-status clean-docker-build clean-docker-emulator clean-docker
+.PHONY: run debug stream watch install dev clean test lint format setup build-android bundle bundle-macos bundle-windows release run-android android-status
 
 # Load .env if present (for KEYSTORE_PASSWORD etc.)
 -include .env
 export KEYSTORE_PASSWORD
+export APPETIZE_API_KEY
 
 CONDA_ENV = app_cutil
 CONDA_ACTIVATE = conda run -n $(CONDA_ENV)
@@ -221,31 +222,14 @@ test:
 release:
 	@./scripts/local_release.sh $(VERSION)
 
-# ─── Android Emulator ──────────────────────────────────────────
-# Start emulator, install APK from dist/, and launch app in browser
+# ─── Appetize.io Cloud Emulator ───────────────────────────────
+# Upload APK to Appetize.io and get a browser link
 run-android:
-	@./scripts/android_emulator.sh run
+	@./scripts/appetize.sh upload
 
-# Stop the Android emulator
-stop-android:
-	@./scripts/android_emulator.sh stop
-
-# Show emulator status
+# Check app status on Appetize.io
 android-status:
-	@./scripts/android_emulator.sh status
-
-# ─── Docker Cleanup ───────────────────────────────────────────
-# Clean Android build Docker resources (rom-builder image)
-clean-docker-build:
-	@./scripts/android_emulator.sh clean-build
-
-# Clean Android emulator Docker resources
-clean-docker-emulator:
-	@./scripts/android_emulator.sh clean-emulator
-
-# Clean ALL Docker resources (build + emulator)
-clean-docker:
-	@./scripts/android_emulator.sh clean-all
+	@./scripts/appetize.sh status
 
 # Show help
 help:
@@ -265,11 +249,7 @@ help:
 	@echo "  bundle-macos  - Create macOS .app bundle (standalone)"
 	@echo "  bundle-windows- Create Windows .exe bundle (standalone)"
 	@echo "  build-android      - Build Android APK using Docker"
-	@echo "  run-android        - Start emulator, install APK, open in browser"
-	@echo "  stop-android       - Stop the Android emulator"
-	@echo "  android-status     - Show emulator status"
-	@echo "  clean-docker-build - Clean build Docker images (rom-builder)"
-	@echo "  clean-docker-emulator - Clean emulator Docker images"
-	@echo "  clean-docker       - Clean ALL Docker resources"
+	@echo "  run-android        - Upload APK to Appetize.io cloud emulator"
+	@echo "  android-status     - Check app status on Appetize.io"
 	@echo "  release            - Create release and upload to GitHub (VERSION=v1.0.0)"
 	@echo "  help               - Show this help message"

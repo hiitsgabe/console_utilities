@@ -26,6 +26,7 @@ assets/bundled_data.json
 assets/bundled_data_*.json
 assets/translations/we2002_*.ppf
 .env
+.appetize_key
 downloads/
 .claude
 .knownPackages
