@@ -20,14 +20,11 @@ All patchers follow the same guided, step-by-step workflow:
 
 ### 1. Select Season
 
-Choose the season year for roster data. Depending on the data provider:
-- **ESPN API** — Current season only, no authentication required
-- **Public Hockey API** — Historical seasons back to 1993, no authentication required
-- **API-Football** — Current and historical seasons, requires a free API key (configured in Settings)
+Choose the season year for roster data. Depending on the data provider, you may have access to the current season only or historical seasons going back several decades.
 
 ### 2. Select League (Soccer Only)
 
-For soccer patchers, browse and search available leagues from the selected API provider. Hockey patchers fetch rosters directly for the selected season.
+For soccer patchers, browse and search available leagues from the selected data provider. Hockey patchers fetch rosters directly for the selected season.
 
 ### 3. Fetch Rosters
 
@@ -43,7 +40,7 @@ Before any changes are made, you can review every team and its players. The prev
 
 This step lets you verify the data looks correct before proceeding.
 
-### 5. Set Team Colors (Soccer, API-Football Only)
+### 5. Set Team Colors (Soccer Only, When Available)
 
 An interactive color picker lets you customize primary, secondary, tertiary, and goalkeeper kit colors for each team. Colors are fetched from the API when available and can be manually adjusted.
 
@@ -67,10 +64,10 @@ The patcher writes updated data into a **new output file**, leaving your origina
 ### PS1 Soccer Patcher
 
 - **Team Slots**: 32 club team slots + 63 national team slots
-- **Dual Write**: Each team is written to both a club slot and a national team slot simultaneously, so updated rosters appear in all game modes
+- **Dual Write**: Each team is written to both a club slot and a national team slot, so updated rosters appear in all game modes
 - **Language Support**: Team names can be written in English, German, French, Spanish, or Japanese
 - **Translation Patch**: Optionally applies a full English translation patch (PPF format) during the patching process
-- **What Gets Patched**: Player names, attributes (mapped from a 1-9 scale to the game's internal 3-bit encoding), kit colors (primary/secondary/GK), team flags, team names (including abbreviations and alternate display variants), and force/strength bars
+- **What Gets Patched**: Player names, attributes (mapped from a 1–9 scale to the game's internal 3-bit encoding), kit colors (primary/secondary/GK), team flags, team names (including abbreviations and alternate display variants), and force/strength bars
 
 ### SNES Soccer Patcher
 
@@ -82,9 +79,9 @@ The patcher writes updated data into a **new output file**, leaving your origina
 ### Genesis Hockey Patcher
 
 - **Team Slots**: 26 teams
-- **Architecture**: Motorola 68000 big-endian ROM with a pointer table at a fixed offset
-- **What Gets Patched**: Player names (variable-length with length prefix), jersey numbers (BCD encoded), player attributes (14 attributes per player on a 0-6 scale, nibble-packed into 7 bytes), line assignments, and team roster headers
-- **Checksum Bypass**: The patcher writes an RTS instruction to disable the game's internal ROM checksum validation, allowing the modified ROM to boot correctly
+- **Architecture**: Big-endian ROM with a pointer table at a fixed offset
+- **What Gets Patched**: Player names (variable-length with length prefix), jersey numbers (BCD encoded), player attributes (14 attributes per player on a 0–6 scale, nibble-packed into 7 bytes), line assignments, and team roster headers
+- **Checksum Bypass**: The patcher disables the game's internal ROM checksum validation so the modified ROM boots correctly
 - **Budget-Aware**: Player names are truncated if necessary to fit within each team's existing byte allocation in the ROM
 
 ### SNES Hockey Patcher
@@ -97,31 +94,33 @@ The patcher writes updated data into a **new output file**, leaving your origina
 ### PSP Hockey Patcher
 
 - **Team Slots**: 30 league teams + 2 all-star teams + international teams
-- **Complex Archive Stack**: The game stores roster data inside a compressed archive within the ISO:
-  - ISO 9660 image → EA BIGF archive (`db.viv`) → RefPack-compressed TDB database files → bit-packed table records
-- **What Gets Patched**: Player bios and attributes, roster assignments, team associations — across multiple cross-referenced database tables (linked via an internal player ID index system)
+- **Complex Archive Stack**: The game stores roster data inside a compressed archive within the ISO (ISO image > compressed archive > compressed database files > bit-packed table records)
+- **What Gets Patched**: Player bios and attributes, roster assignments, team associations — across multiple cross-referenced database tables
 - **Non-Destructive**: The patcher copies the full ISO before modifying it, so the original file is never altered
 - **Patching Process**:
   1. Copies the ISO to the output path
   2. Extracts the database archive from the ISO
-  3. Decompresses the TDB files using the RefPack algorithm
-  4. Modifies the relevant database tables with new roster data
-  5. Recompresses the TDB files
+  3. Decompresses the database files
+  4. Modifies the relevant tables with new roster data
+  5. Recompresses the database files
   6. Rebuilds the archive and writes it back into the ISO
 
-## Data Sources
+## Data Providers
 
-The patcher fetches real-world roster and statistics data from public sports APIs:
+The patcher fetches real-world roster and statistics data from sports APIs. You can choose between providers in Settings depending on the sport:
 
 | Provider | Sports | Auth Required | Season Coverage |
 |----------|--------|--------------|-----------------|
-| ESPN Public API | Hockey, Soccer | No | Current season |
+| ESPN | Hockey, Soccer | No | Current season |
 | Public Hockey API | Hockey | No | 1993 to present |
-| API-Football | Soccer | Yes (free key) | Multiple seasons |
+| API-Football | Soccer | Yes (paid key) | Multiple seasons |
+
+- **Hockey**: Choose between ESPN (current season, no setup) or the Public Hockey API (historical seasons back to 1993, no setup).
+- **Soccer**: ESPN works out of the box for the current season. API-Football supports historical seasons and additional leagues but requires a paid API key.
 
 ### Configuring API-Football
 
-1. Sign up for a free API key at the API-Football provider
+1. Sign up for an API key at API-Football
 2. Open **Settings** in Console Utilities
 3. Enter your API key in the API-Football configuration section
 4. The soccer patchers will now offer API-Football as a data provider alongside ESPN
@@ -130,11 +129,11 @@ The patcher fetches real-world roster and statistics data from public sports API
 
 Each patcher maps real-world player statistics to the target game's internal attribute system. The mapping varies by game but generally considers:
 
-- **Offensive stats**: Goals, assists, points → shooting, offensive awareness
-- **Defensive stats**: Blocks, takeaways, defensive plays → checking, defensive awareness
-- **Physical stats**: Height, weight → size, strength, aggression
-- **Performance stats**: Games played, ice time/minutes → endurance, stamina
-- **Skill stats**: Save percentage (goalies), pass completion → accuracy attributes
+- **Offensive stats**: Goals, assists, points
+- **Defensive stats**: Blocks, takeaways, defensive plays
+- **Physical stats**: Height, weight
+- **Performance stats**: Games played, ice time/minutes played
+- **Skill stats**: Save percentage (goalies), pass completion
 
 The exact mapping formula is tuned per game to produce balanced, realistic in-game ratings that reflect each player's real-world performance.
 
@@ -142,10 +141,10 @@ The exact mapping formula is tuned per game to produce balanced, realistic in-ga
 
 ### Common Issues
 
-- **"No teams found"**: Check your network connection. The patcher requires internet access to fetch roster data from public APIs.
-- **API rate limits**: The ESPN and public hockey APIs are free and generally generous, but excessive requests may be throttled. Wait a moment and try again.
+- **"No teams found"**: Check your network connection. The patcher requires internet access to fetch roster data.
+- **API rate limits**: The public APIs are generally generous, but excessive requests may be throttled. Wait a moment and try again.
 - **ROM not recognized**: Ensure you are selecting the correct file format for the patcher (e.g., `.bin` for Genesis, `.sfc` for SNES, `.iso` for PSP).
-- **Patched game doesn't boot**: Some emulators are stricter about ROM validation than others. Try a different emulator or verify your source ROM is a clean, unmodified dump.
+- **Patched game doesn't boot**: Some emulators are stricter about ROM validation. Try a different emulator or verify your source ROM is a clean, unmodified dump.
 - **Missing players**: The patcher writes as many players as the ROM format allows per team. If a real-world roster has more players than available slots, lower-ranked players may be omitted.
 
 ### Output Files

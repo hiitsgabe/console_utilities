@@ -1,16 +1,16 @@
 # Server Response Format
 
-This document describes how your server needs to respond for Console Utilities to detect and list files from it. The app supports three server response formats: **HTML Directory Listing**, **JSON API**, and **Internet Archive**.
+This document describes how your server needs to respond for Console Utilities to detect and list files. The app supports three response formats: **HTML Directory Listing**, **JSON API**, and **Internet Archive**.
+
+---
 
 ## HTML Directory Listing (Recommended)
 
-This is the most common format. Your server serves an HTML page containing a table of files, and the app uses a regex pattern to extract file information from each row.
+The most common format. Your server serves an HTML page containing a table of files, and the app uses a regex pattern to extract file information from each row.
 
 ### Expected HTML Structure
 
-The app fetches the page at the configured `url` and applies a regex pattern to extract file entries. The default regex expects an HTML table with rows containing link, size, and date columns.
-
-Here's an example of what the HTML response should look like:
+The app fetches the page at the configured `url` and applies a regex to extract file entries. Here's an example of a valid response:
 
 ```html
 <!DOCTYPE html>
@@ -52,7 +52,7 @@ Here's an example of what the HTML response should look like:
 
 ### Regex Pattern
 
-The regex must use **named capture groups** to extract data from each row. The app recognizes the following group names:
+The regex must use **named capture groups** to extract data. The app recognizes these group names:
 
 | Group Name   | Required | Description |
 |-------------|----------|-------------|
@@ -65,7 +65,7 @@ The regex must use **named capture groups** to extract data from each row. The a
 
 *Either `href` or `id` (with `download_url`) is required.
 
-Here's the regex pattern that matches the HTML table structure shown above:
+Here's the regex that matches the HTML structure above:
 
 ```regex
 <tr><td class="link"><a href="(?P<href>[^"]+)" title="(?P<title>[^"]+)">(?P<text>[^<]+)</a></td><td class="size">(?P<size>[^<]+)</td><td class="date">[^<]*</td></tr>
@@ -79,20 +79,20 @@ If no custom `regex` is configured, the app falls back to a simple pattern that 
 <a href="([^"]+)"[^>]*>([^<]+)</a>
 ```
 
-This captures `(href, text)` as positional groups. It's less precise but works with any page containing file links.
+This captures `(href, text)` as positional groups. Less precise, but works with any page containing file links.
 
 ### Key Requirements
 
-1. **File links must contain the filename** (or a URL-encoded version of it) in the `href` attribute
-2. **Relative URLs are supported** - the app joins them with the base `url`
-3. **URL encoding** - filenames with special characters should be URL-encoded in the `href` (e.g., spaces as `%20`)
+1. File links must contain the filename (or a URL-encoded version) in the `href` attribute
+2. Relative URLs are supported — the app joins them with the base `url`
+3. Filenames with special characters should be URL-encoded in the `href` (e.g., spaces as `%20`)
 4. The `title` attribute should contain the decoded/readable filename
 5. The visible link text should also be the readable filename
-6. **Content-Length header** - your server should respond to `HEAD` requests with a `Content-Length` header so the app can show file sizes and download progress
+6. Your server should respond to `HEAD` requests with a `Content-Length` header so the app can show file sizes and download progress
 
 ### Download URL Template
 
-For servers where the download URL differs from the listing URL, use the `download_url` field with an `<id>` placeholder:
+For servers where the download URL differs from the listing URL, use `download_url` with an `<id>` placeholder:
 
 ```json
 {
@@ -102,7 +102,7 @@ For servers where the download URL differs from the listing URL, use the `downlo
 }
 ```
 
-When the regex captures an `id` group, the app replaces `<id>` in the `download_url` template to build the final download link.
+When the regex captures an `id` group, the app replaces `<id>` in the template to build the final download link.
 
 ---
 
@@ -112,7 +112,7 @@ For servers that return structured JSON instead of HTML.
 
 ### Configuration
 
-Use `list_url` instead of `url` to signal that this is a JSON API source:
+Use `list_url` instead of `url` to indicate a JSON API source:
 
 ```json
 {
@@ -160,7 +160,7 @@ If your API returns data in a different structure, configure the field paths acc
 }
 ```
 
-> **Note**: The `list_json_file_location` currently resolves a single top-level key. Nested paths are not supported.
+> **Note**: The `list_json_file_location` resolves a single top-level key. Nested paths are not supported.
 
 ---
 
@@ -170,7 +170,7 @@ For items hosted on archive.org.
 
 ### Configuration
 
-Simply set the `url` to an `archive.org/download/` URL:
+Set the `url` to an `archive.org/download/` URL:
 
 ```json
 {
@@ -181,11 +181,11 @@ Simply set the `url` to an `archive.org/download/` URL:
 }
 ```
 
-The app automatically detects archive.org URLs and uses the Internet Archive metadata API to list files.
+The app automatically detects archive.org URLs and uses the metadata API to list files.
 
 ### Multi-Part Collections
 
-For collections split across multiple archive.org items, use an array of URLs:
+For collections split across multiple items, use an array of URLs:
 
 ```json
 {
@@ -217,7 +217,7 @@ For private or restricted items, provide S3-style credentials:
 }
 ```
 
-Credentials can be obtained from the [Internet Archive S3 API](https://archive.org/account/s3.php).
+You can obtain credentials from your Internet Archive account's S3 API settings page.
 
 ---
 
@@ -271,16 +271,16 @@ Sent as: `Authorization: LOW access-key:secret-key`
 
 The app applies several filters to the parsed file list:
 
-1. **Extension filtering** - Only files matching extensions in `file_format` are shown (case-insensitive). Can be disabled with `"ignore_extension_filtering": true`.
-2. **USA filter** - When enabled in settings, filters filenames matching a regex pattern (default: `(USA)`). Configurable per-system with `usa_regex`.
-3. **Non-ASCII filter** - Files starting with non-ASCII characters are skipped.
-4. **Sorting** - Results are sorted alphabetically by filename.
+1. **Extension filtering** — Only files matching extensions in `file_format` are shown (case-insensitive). Disable with `"ignore_extension_filtering": true`.
+2. **USA filter** — When enabled in settings, filters filenames matching a regex pattern (default: `(USA)`). Configurable per-system with `usa_regex`.
+3. **Non-ASCII filter** — Files starting with non-ASCII characters are skipped.
+4. **Sorting** — Results are sorted alphabetically by filename.
 
 ---
 
 ## Testing Your Server
 
-You can test if your server responds correctly by curling the URL and checking that the regex matches:
+You can verify your server responds correctly by testing from the command line:
 
 ```bash
 # Fetch the HTML page
