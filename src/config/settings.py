@@ -84,18 +84,9 @@ class Settings:
 
 def _get_android_external_dir() -> str:
     """Get Android external files directory via JNI."""
-    try:
-        from jnius import autoclass
+    from droid.storage import get_external_data_dir
 
-        PythonActivity = autoclass("org.kivy.android.PythonActivity")
-        Environment = autoclass("android.os.Environment")
-        context = PythonActivity.mActivity.getApplicationContext()
-        ext_dir = context.getExternalFilesDir(None)
-        if ext_dir:
-            return ext_dir.getAbsolutePath()
-    except Exception:
-        pass
-    return os.path.join(SCRIPT_DIR, "files")
+    return get_external_data_dir(SCRIPT_DIR)
 
 
 def _get_default_work_dir() -> str:
