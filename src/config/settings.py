@@ -9,7 +9,7 @@ import traceback
 from dataclasses import dataclass, field, asdict
 from typing import Dict, Any, Optional
 
-from constants import CONFIG_FILE, SCRIPT_DIR, DEV_MODE
+from constants import CONFIG_FILE, SCRIPT_DIR, DEV_MODE, BUILD_TARGET
 
 
 @dataclass
@@ -82,10 +82,28 @@ class Settings:
         return cls(**filtered_data)
 
 
+def _get_android_external_dir() -> str:
+    """Get Android external files directory via JNI."""
+    try:
+        from jnius import autoclass
+
+        PythonActivity = autoclass("org.kivy.android.PythonActivity")
+        Environment = autoclass("android.os.Environment")
+        context = PythonActivity.mActivity.getApplicationContext()
+        ext_dir = context.getExternalFilesDir(None)
+        if ext_dir:
+            return ext_dir.getAbsolutePath()
+    except Exception:
+        pass
+    return os.path.join(SCRIPT_DIR, "files")
+
+
 def _get_default_work_dir() -> str:
     """Get the default work directory based on environment."""
     if DEV_MODE:
         return os.path.join(SCRIPT_DIR, "..", "workdir", "downloads")
+    elif BUILD_TARGET == "android":
+        return os.path.join(_get_android_external_dir(), "downloads")
     elif os.path.exists("/userdata") and os.access("/userdata", os.W_OK):
         return "/userdata/downloads"
     else:
@@ -96,6 +114,8 @@ def _get_default_roms_dir() -> str:
     """Get the default ROMs directory based on environment."""
     if DEV_MODE:
         return os.path.join(SCRIPT_DIR, "..", "roms")
+    elif BUILD_TARGET == "android":
+        return os.path.join(_get_android_external_dir(), "roms")
     elif os.path.exists("/userdata") and os.access("/userdata", os.W_OK):
         return "/userdata/roms"
     else:

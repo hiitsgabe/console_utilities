@@ -1086,6 +1086,9 @@ class ConsoleUtilitiesApp:
             extra_items = 1 if self.settings.get("show_download_all", False) else 0
             max_items = len(game_list) + extra_items
 
+            if max_items == 0:
+                return
+
             if direction in ("left", "right"):
                 # Left/right scroll the highlighted item's text horizontally
                 scroll_step = 20
@@ -2597,10 +2600,23 @@ class ConsoleUtilitiesApp:
                 import threading
 
                 def _do_load_games(sd=system_data):
-                    self.state.game_list = list_files(sd, self.settings)
+                    games = list_files(sd, self.settings)
+                    self._hide_loading()
+                    if not games:
+                        self.state.confirm_modal.show = True
+                        self.state.confirm_modal.title = "No Games Found"
+                        self.state.confirm_modal.message_lines = [
+                            "Could not load games list.",
+                            "Check your connection and try again.",
+                        ]
+                        self.state.confirm_modal.ok_label = "OK"
+                        self.state.confirm_modal.cancel_label = ""
+                        self.state.confirm_modal.button_index = 0
+                        self.state.confirm_modal.context = ""
+                        return
+                    self.state.game_list = games
                     roms_folder = get_roms_folder_for_system(sd, self.settings)
                     installed_checker.set_roms_folder(roms_folder)
-                    self._hide_loading()
                     self.state.mode = "games"
                     self.state.highlighted = 0
 
