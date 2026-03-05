@@ -3750,8 +3750,8 @@ class ConsoleUtilitiesApp:
             self.state.folder_name_input.input_text = ""
             self.state.folder_name_input.cursor_position = 0
 
-        elif item_type == "folder":
-            # Navigate into the folder
+        elif item_type in ("folder", "storage_volume"):
+            # Navigate into the folder or storage volume
             self.state.folder_browser.current_path = item_path
             self.state.folder_browser.items = nav_loader(item_path)
             self.state.folder_browser.highlighted = 0
