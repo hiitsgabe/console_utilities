@@ -46,11 +46,18 @@ def check_for_update() -> Tuple[bool, Optional[Dict[str, Any]], str]:
         return False, None, "Cannot check updates in dev mode"
 
     try:
-        response = requests.get(
-            RELEASES_API,
-            headers={"Accept": "application/vnd.github.v3+json"},
-            timeout=10,
-        )
+        api_headers = {
+            "Accept": "application/vnd.github.v3+json",
+            "User-Agent": "ConsoleUtilities/1.0",
+        }
+        try:
+            response = requests.get(
+                RELEASES_API, headers=api_headers, timeout=10
+            )
+        except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
+            response = requests.get(
+                RELEASES_API, headers=api_headers, timeout=10, verify=False
+            )
 
         if response.status_code == 403:
             return False, None, "GitHub API rate limit exceeded. Try again later."
@@ -124,9 +131,22 @@ def apply_pygame_update(
             os.makedirs(tmp_dir, exist_ok=True)
             tmp_zip = os.path.join(tmp_dir, "update.zip")
 
-            # Stream download with progress
-            response = requests.get(asset_url, stream=True, timeout=60)
-            response.raise_for_status()
+            # Stream download with progress (SSL fallback for cert issues)
+            dl_headers = {"User-Agent": "ConsoleUtilities/1.0"}
+            try:
+                response = requests.get(
+                    asset_url, stream=True, timeout=(15, 60), headers=dl_headers
+                )
+                response.raise_for_status()
+            except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
+                response = requests.get(
+                    asset_url,
+                    stream=True,
+                    timeout=(15, 60),
+                    headers=dl_headers,
+                    verify=False,
+                )
+                response.raise_for_status()
             total = int(response.headers.get("content-length", 0))
             downloaded = 0
 

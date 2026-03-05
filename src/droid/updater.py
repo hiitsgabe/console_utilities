@@ -42,9 +42,22 @@ def apply_android_update(
             os.makedirs(tmp_dir, exist_ok=True)
             tmp_zip = os.path.join(tmp_dir, "update.zip")
 
-            # Stream download with progress
-            response = requests.get(asset_url, stream=True, timeout=120)
-            response.raise_for_status()
+            # Stream download with progress (SSL fallback for Android cert issues)
+            dl_headers = {"User-Agent": "ConsoleUtilities/1.0"}
+            try:
+                response = requests.get(
+                    asset_url, stream=True, timeout=(15, 120), headers=dl_headers
+                )
+                response.raise_for_status()
+            except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
+                response = requests.get(
+                    asset_url,
+                    stream=True,
+                    timeout=(15, 120),
+                    headers=dl_headers,
+                    verify=False,
+                )
+                response.raise_for_status()
             total = int(response.headers.get("content-length", 0))
             downloaded = 0
 
@@ -104,7 +117,15 @@ def apply_android_update(
             except Exception:
                 pass
             if on_error:
-                on_error(str(e))
+                msg = str(e)
+                # Provide friendlier messages for common errors
+                if "SSLError" in type(e).__name__ or "SSL" in msg:
+                    msg = "SSL connection error. Check your internet connection."
+                elif "ConnectionError" in type(e).__name__:
+                    msg = "Connection failed. Check your internet connection."
+                elif "Timeout" in type(e).__name__:
+                    msg = "Download timed out. Try again later."
+                on_error(msg)
 
     thread = threading.Thread(target=_do_update, daemon=True)
     thread.start()
