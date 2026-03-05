@@ -2825,7 +2825,7 @@ class ConsoleUtilitiesApp:
         )
 
         if action == "select_archive_json":
-            self._show_bundled_json_picker()
+            self._open_folder_browser("archive_json")
         elif action == "select_nsz_keys":
             self._open_folder_browser("nsz_keys")
         elif action == "toggle_boxart":
@@ -3394,37 +3394,6 @@ class ConsoleUtilitiesApp:
         self.state.dedupe_wizard.step = "mode_select"
         self.state.dedupe_wizard.mode_highlighted = 0
 
-    def _show_bundled_json_picker(self):
-        """Show picker for bundled JSON files (Android)."""
-        import glob
-
-        # Search for bundled JSON files
-        search_dirs = [
-            os.path.join(SCRIPT_DIR, "assets"),
-            os.path.normpath(os.path.join(SCRIPT_DIR, "..", "assets")),
-            SCRIPT_DIR,
-        ]
-        json_files = []
-        for d in search_dirs:
-            json_files = sorted(glob.glob(os.path.join(d, "bundled_data*.json")))
-            if json_files:
-                break
-
-        if not json_files:
-            return
-
-        # Use folder browser with a virtual file list (no directory navigation)
-        self.state.folder_browser.show = True
-        self.state.folder_browser.highlighted = 0
-        self.state.folder_browser.focus_area = "list"
-        self.state.folder_browser.button_index = 0
-        self.state.folder_browser.selected_system_to_add = {"type": "archive_json"}
-        self.state.folder_browser.current_path = os.path.dirname(json_files[0])
-        self.state.folder_browser.items = [
-            {"name": os.path.basename(f), "type": "json_file", "path": f}
-            for f in json_files
-        ]
-
     def _open_folder_browser(self, selection_type: str):
         """Open the folder browser modal."""
         self.state.folder_browser.show = True
@@ -3448,7 +3417,13 @@ class ConsoleUtilitiesApp:
             current = self.settings.get("archive_json_path", "")
             path = os.path.dirname(current) if current else ""
             if not path or not os.path.exists(path):
-                path = self.settings.get("work_dir", SCRIPT_DIR)
+                # Default to assets directory where bundled JSONs live
+                assets_dir = os.path.join(SCRIPT_DIR, "assets")
+                if not os.path.isdir(assets_dir):
+                    assets_dir = os.path.normpath(
+                        os.path.join(SCRIPT_DIR, "..", "assets")
+                    )
+                path = assets_dir if os.path.isdir(assets_dir) else SCRIPT_DIR
         elif selection_type == "nsz_keys":
             current = self.settings.get("nsz_keys_path", "")
             path = os.path.dirname(current) if current else SCRIPT_DIR
