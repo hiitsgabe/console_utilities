@@ -336,13 +336,21 @@ def fix_added_systems_roms_folder(roms_dir: str) -> None:
         )
 
 
+def is_nsz_system(system: Dict[str, Any]) -> bool:
+    """Check if system uses NSZ file format."""
+    file_format = system.get("file_format", [])
+    if isinstance(file_format, list):
+        return any(".nsz" in fmt.lower() for fmt in file_format)
+    return ".nsz" in str(file_format).lower()
+
+
 def get_visible_systems(
     data: List[Dict[str, Any]], settings: Dict[str, Any]
 ) -> List[Dict[str, Any]]:
     """
     Get list of systems that are not hidden and not list_systems.
 
-    Also filters out NSZ systems if NSZ is disabled.
+    NSZ systems are always shown (access is gated at selection time).
 
     Args:
         data: Full list of system data
@@ -352,21 +360,12 @@ def get_visible_systems(
         Filtered list of visible systems
     """
     system_settings = settings.get("system_settings", {})
-    nsz_enabled = settings.get("nsz_enabled", False)
-
-    def is_nsz_system(system: Dict[str, Any]) -> bool:
-        """Check if system uses NSZ file format."""
-        file_format = system.get("file_format", [])
-        if isinstance(file_format, list):
-            return any(".nsz" in fmt.lower() for fmt in file_format)
-        return ".nsz" in str(file_format).lower()
 
     visible_systems = [
         d
         for d in data
         if not d.get("list_systems", False)
         and not system_settings.get(d["name"], {}).get("hidden", False)
-        and (nsz_enabled or not is_nsz_system(d))
     ]
     return visible_systems
 
