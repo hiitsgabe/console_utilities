@@ -646,6 +646,19 @@ class NHL94SNESPatcherState:
 
 
 @dataclass
+class AuthTokenInputState:
+    """State for auth token input modal."""
+
+    show: bool = False
+    input_text: str = ""
+    cursor_position: int = 0
+    shift_active: bool = False
+    auth_message: str = ""
+    system_index: int = -1  # Index in data array for the system needing auth
+    step: str = "message"  # "message" (showing auth message) or "input" (typing token)
+
+
+@dataclass
 class UIRects:
     """Stores rectangles for clickable UI elements."""
 
@@ -761,6 +774,9 @@ class AppState:
         # ---- NHL 07 PSP Patcher ---- #
         self.nhl07_psp_patcher = NHL07PSPPatcherState()
 
+        # ---- Auth Token Input ---- #
+        self.auth_token_input = AuthTokenInputState()
+
         # ---- UI Rectangles ---- #
         self.ui_rects = UIRects()
 
@@ -833,6 +849,7 @@ class AppState:
         self.rename_wizard.show = False
         self.ghost_cleaner_wizard.show = False
         self.port_details.show = False
+        self.auth_token_input.show = False
         self.we_patcher.active_modal = None
 
     def get_current_game_list(self) -> List[Any]:
