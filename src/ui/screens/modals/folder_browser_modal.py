@@ -42,6 +42,7 @@ class FolderBrowserModal:
         Optional[pygame.Rect],
         Optional[pygame.Rect],
         Optional[pygame.Rect],
+        int,
     ]:
         """
         Render the folder browser modal.
@@ -82,10 +83,20 @@ class FolderBrowserModal:
             max_width=content_rect.width,
         )
 
-        # List area (below path, above buttons)
+        # Determine if this is a folder selection (show buttons) or file selection (no buttons)
+        is_folder_selection = selection_type in (
+            "work_dir", "roms_dir", "custom_folder",
+            "esde_media_path", "esde_gamelists_path", "retroarch_thumbnails",
+            "add_system_folder", "ia_collection_folder",
+            "dedupe_folder", "rename_folder", "ghost_cleaner_folder",
+            "ia_download_folder", "folder",
+        )
+
+        # List area (below path, above buttons if shown)
         button_height = 44
         button_area_height = (
-            button_height + self.theme.padding_lg + self.theme.padding_sm
+            (button_height + self.theme.padding_lg + self.theme.padding_sm)
+            if is_folder_selection else 0
         )
         list_rect = pygame.Rect(
             content_rect.left,
@@ -98,7 +109,7 @@ class FolderBrowserModal:
         )
 
         # Render folder list
-        item_rects, _ = self.menu_list.render(
+        item_rects, scroll_offset = self.menu_list.render(
             screen,
             list_rect,
             items,
@@ -109,37 +120,41 @@ class FolderBrowserModal:
             get_secondary=self._get_item_type_label,
         )
 
-        # Draw action buttons anchored to bottom of content area
-        button_y = content_rect.bottom - button_height - self.theme.padding_sm
-        button_width = 140
-        button_spacing = self.theme.padding_lg
+        select_rect = None
+        cancel_rect = None
 
-        # Select button
-        select_label = self._get_select_label(selection_type)
-        select_rect = pygame.Rect(
-            content_rect.centerx - button_width - button_spacing // 2,
-            button_y,
-            button_width,
-            button_height,
-        )
-        select_focused = focus_area == "buttons" and button_index == 0
-        self.action_button.render_success(
-            screen, select_rect, select_label, hover=select_focused
-        )
+        if is_folder_selection:
+            # Draw action buttons anchored to bottom of content area
+            button_y = content_rect.bottom - button_height - self.theme.padding_sm
+            button_width = 140
+            button_spacing = self.theme.padding_lg
 
-        # Cancel button
-        cancel_rect = pygame.Rect(
-            content_rect.centerx + button_spacing // 2,
-            button_y,
-            button_width,
-            button_height,
-        )
-        cancel_focused = focus_area == "buttons" and button_index == 1
-        self.action_button.render_secondary(
-            screen, cancel_rect, "Cancel", hover=cancel_focused
-        )
+            # Select button
+            select_label = self._get_select_label(selection_type)
+            select_rect = pygame.Rect(
+                content_rect.centerx - button_width - button_spacing // 2,
+                button_y,
+                button_width,
+                button_height,
+            )
+            select_focused = focus_area == "buttons" and button_index == 0
+            self.action_button.render_success(
+                screen, select_rect, select_label, hover=select_focused
+            )
 
-        return modal_rect, item_rects, select_rect, cancel_rect, close_rect
+            # Cancel button
+            cancel_rect = pygame.Rect(
+                content_rect.centerx + button_spacing // 2,
+                button_y,
+                button_width,
+                button_height,
+            )
+            cancel_focused = focus_area == "buttons" and button_index == 1
+            self.action_button.render_secondary(
+                screen, cancel_rect, "Cancel", hover=cancel_focused
+            )
+
+        return modal_rect, item_rects, select_rect, cancel_rect, close_rect, scroll_offset
 
     def _get_item_label(self, item: Dict[str, Any]) -> str:
         """Get display label for item."""

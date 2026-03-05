@@ -2,6 +2,7 @@
 Settings screen - Application settings menu.
 """
 
+import os
 import pygame
 from typing import List, Dict, Any, Tuple, Optional, Set
 
@@ -242,7 +243,7 @@ class SettingsScreen:
                 items.append((item, value))
             elif item == "Remote Games Bkp File":
                 path = settings.get("archive_json_path", "")
-                value = "Set" if path else "Not Set"
+                value = os.path.basename(path) if path else "Not Set"
                 items.append((item, value))
             elif item == "Enable PortMaster (beta)":
                 value = "ON" if settings.get("portmaster_enabled", False) else "OFF"

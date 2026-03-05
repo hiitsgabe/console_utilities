@@ -2049,10 +2049,10 @@ class ConsoleUtilitiesApp:
                     self.state.folder_browser.show = False
                     self.state.folder_browser.focus_area = "list"
                     return
-            # Check folder browser items
+            # Check folder browser items (account for scroll offset)
             for i, rect in enumerate(self.state.ui_rects.menu_items):
                 if rect.collidepoint(x, y):
-                    self.state.folder_browser.highlighted = i
+                    self.state.folder_browser.highlighted = i + self.state.ui_rects.scroll_offset
                     self._handle_folder_browser_selection()
                     return
             return
@@ -2825,7 +2825,7 @@ class ConsoleUtilitiesApp:
         )
 
         if action == "select_archive_json":
-            self._open_folder_browser("archive_json")
+            self._show_bundled_json_picker()
         elif action == "select_nsz_keys":
             self._open_folder_browser("nsz_keys")
         elif action == "toggle_boxart":
@@ -3394,6 +3394,37 @@ class ConsoleUtilitiesApp:
         self.state.dedupe_wizard.step = "mode_select"
         self.state.dedupe_wizard.mode_highlighted = 0
 
+    def _show_bundled_json_picker(self):
+        """Show picker for bundled JSON files (Android)."""
+        import glob
+
+        # Search for bundled JSON files
+        search_dirs = [
+            os.path.join(SCRIPT_DIR, "assets"),
+            os.path.normpath(os.path.join(SCRIPT_DIR, "..", "assets")),
+            SCRIPT_DIR,
+        ]
+        json_files = []
+        for d in search_dirs:
+            json_files = sorted(glob.glob(os.path.join(d, "bundled_data*.json")))
+            if json_files:
+                break
+
+        if not json_files:
+            return
+
+        # Use folder browser with a virtual file list (no directory navigation)
+        self.state.folder_browser.show = True
+        self.state.folder_browser.highlighted = 0
+        self.state.folder_browser.focus_area = "list"
+        self.state.folder_browser.button_index = 0
+        self.state.folder_browser.selected_system_to_add = {"type": "archive_json"}
+        self.state.folder_browser.current_path = os.path.dirname(json_files[0])
+        self.state.folder_browser.items = [
+            {"name": os.path.basename(f), "type": "json_file", "path": f}
+            for f in json_files
+        ]
+
     def _open_folder_browser(self, selection_type: str):
         """Open the folder browser modal."""
         self.state.folder_browser.show = True
@@ -3415,7 +3446,9 @@ class ConsoleUtilitiesApp:
             path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "archive_json":
             current = self.settings.get("archive_json_path", "")
-            path = os.path.dirname(current) if current else SCRIPT_DIR
+            path = os.path.dirname(current) if current else ""
+            if not path or not os.path.exists(path):
+                path = self.settings.get("work_dir", SCRIPT_DIR)
         elif selection_type == "nsz_keys":
             current = self.settings.get("nsz_keys_path", "")
             path = os.path.dirname(current) if current else SCRIPT_DIR
@@ -3738,8 +3771,16 @@ class ConsoleUtilitiesApp:
             "psp_iso",
             "file",
         ):
-            # Select the file based on selection type
-            self._complete_folder_browser_selection(item_path, selection_type)
+            # Only allow file selection for file-type selection modes
+            folder_only_types = (
+                "work_dir", "roms_dir", "custom_folder",
+                "esde_media_path", "esde_gamelists_path", "retroarch_thumbnails",
+                "add_system_folder", "ia_collection_folder",
+                "dedupe_folder", "rename_folder", "ghost_cleaner_folder",
+                "ia_download_folder", "folder",
+            )
+            if selection_type not in folder_only_types:
+                self._complete_folder_browser_selection(item_path, selection_type)
 
     def _complete_folder_browser_selection(self, path: str, selection_type: str):
         """Complete folder browser selection with chosen path."""
@@ -3902,8 +3943,15 @@ class ConsoleUtilitiesApp:
             self.state.folder_browser.show = False
             self.state.ia_download_wizard.step = "options"
         else:
-            # For file selection, user needs to select a file
-            pass
+            # For file selection types, select the currently highlighted file
+            items = self.state.folder_browser.items
+            highlighted = self.state.folder_browser.highlighted
+            if highlighted < len(items):
+                item = items[highlighted]
+                if item.get("type") not in ("parent", "folder", "create_folder"):
+                    self._complete_folder_browser_selection(
+                        item.get("path", ""), selection_type
+                    )
 
     def _handle_add_systems_selection(self):
         """Handle add systems item selection — open folder browser for destination."""
@@ -4112,6 +4160,17 @@ class ConsoleUtilitiesApp:
         """Navigate folder browser modal with list and button support."""
         fb = self.state.folder_browser
         max_items = len(fb.items) or 1
+        selection_type = (
+            fb.selected_system_to_add.get("type", "folder")
+            if fb.selected_system_to_add else "folder"
+        )
+        is_folder_selection = selection_type in (
+            "work_dir", "roms_dir", "custom_folder",
+            "esde_media_path", "esde_gamelists_path", "retroarch_thumbnails",
+            "add_system_folder", "ia_collection_folder",
+            "dedupe_folder", "rename_folder", "ghost_cleaner_folder",
+            "ia_download_folder", "folder",
+        )
 
         if fb.focus_area == "list":
             if direction == "up":
@@ -4121,15 +4180,15 @@ class ConsoleUtilitiesApp:
             elif direction == "down":
                 if fb.highlighted < max_items - 1:
                     fb.highlighted += 1
-                else:
-                    # Move to buttons when at bottom of list
+                elif is_folder_selection:
+                    # Move to buttons when at bottom of list (folder mode only)
                     fb.focus_area = "buttons"
                     fb.button_index = 0
-            elif direction == "left":
+            elif direction == "left" and is_folder_selection:
                 # Jump to buttons - Cancel button (index 1)
                 fb.focus_area = "buttons"
                 fb.button_index = 1
-            elif direction == "right":
+            elif direction == "right" and is_folder_selection:
                 # Jump to buttons - Select button (index 0)
                 fb.focus_area = "buttons"
                 fb.button_index = 0

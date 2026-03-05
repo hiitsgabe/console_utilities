@@ -201,7 +201,7 @@ class ScreenManager:
             return rects
 
         if state.folder_browser.show:
-            modal_rect, item_rects, select_rect, cancel_rect, close_rect = (
+            modal_rect, item_rects, select_rect, cancel_rect, close_rect, scroll_off = (
                 self.folder_browser_modal.render(
                     screen,
                     state.folder_browser.current_path,
@@ -223,6 +223,7 @@ class ScreenManager:
             rects["select_button"] = select_rect
             rects["cancel_button"] = cancel_rect
             rects["close"] = close_rect
+            rects["scroll_offset"] = scroll_off
             return rects
 
         if state.game_details.show and state.game_details.current_game:
