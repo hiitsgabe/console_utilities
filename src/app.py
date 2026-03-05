@@ -41,6 +41,7 @@ from services.data_loader import (
     get_visible_systems,
     get_system_index_by_name,
     add_system_to_added_systems,
+    is_nsz_system,
 )
 from services.internet_archive import (
     get_ia_s3_credentials,
@@ -2656,8 +2657,24 @@ class ConsoleUtilitiesApp:
                 )
                 self.state.selected_system = system_index
 
-                # Check if system requires auth token
                 system_data = self.data[system_index]
+
+                # Check if NSZ system requires NSZ to be enabled
+                if is_nsz_system(system_data) and not self.settings.get("nsz_enabled", False):
+                    self.state.confirm_modal.show = True
+                    self.state.confirm_modal.title = "NSZ Not Enabled"
+                    self.state.confirm_modal.message_lines = [
+                        "NSZ decompression should be enabled.",
+                        "Go to Settings to enable and set",
+                        "your decompression keys.",
+                    ]
+                    self.state.confirm_modal.ok_label = "OK"
+                    self.state.confirm_modal.cancel_label = ""
+                    self.state.confirm_modal.button_index = 0
+                    self.state.confirm_modal.context = ""
+                    return
+
+                # Check if system requires auth token
                 auth = system_data.get("auth", {})
                 if auth.get("auth_message") and not auth.get("token"):
                     self.state.auth_token_input.show = True
