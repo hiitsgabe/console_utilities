@@ -314,7 +314,7 @@ class DownloadManager:
                         resp = requests.get(
                             current_url,
                             stream=True,
-                            timeout=30,
+                            timeout=(15, 30),
                             headers=request_headers,
                             cookies=cookies,
                             allow_redirects=False,
@@ -333,18 +333,20 @@ class DownloadManager:
                     response = requests.get(
                         url,
                         stream=True,
-                        timeout=30,
+                        timeout=(15, 30),
                         headers=request_headers,
                         cookies=cookies,
                     )
                     response.raise_for_status()
             else:
-                # For non-IA URLs, use simple request handling (no extra headers)
+                # For non-IA URLs, include browser User-Agent
+                dl_headers = dict(request_headers)
+                dl_headers.update(headers)
                 response = requests.get(
                     url,
                     stream=True,
-                    timeout=30,
-                    headers=headers,
+                    timeout=(15, 30),
+                    headers=dl_headers,
                     cookies=cookies,
                     allow_redirects=True,
                 )

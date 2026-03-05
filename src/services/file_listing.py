@@ -212,7 +212,8 @@ def list_files(
                 for f in files:
                     f["_base_url"] = url
 
-            _save_listing_cache(url, files)
+            if files:
+                _save_listing_cache(url, files)
             all_files.extend(files)
 
         # Sort combined list by filename
@@ -342,7 +343,7 @@ def _list_files_html_single(
 
     headers, cookies = _get_request_headers_cookies(system_data)
 
-    r = requests.get(url, timeout=10, headers=headers, cookies=cookies)
+    r = requests.get(url, timeout=30, headers=headers, cookies=cookies)
     r.raise_for_status()
     html_content = r.text
 
