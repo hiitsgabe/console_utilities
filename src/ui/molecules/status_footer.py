@@ -75,7 +75,7 @@ class StatusFooter:
 
         for i, item in enumerate(items):
             # Stack from bottom: last item is at very bottom, above bezel
-            bar_y = screen_height - inset - (len(items) - i) * self.BAR_HEIGHT
+            bar_y = screen_height - inset * 2 - (len(items) - i) * self.BAR_HEIGHT
             bar_rect = pygame.Rect(inset, bar_y, safe_width, self.BAR_HEIGHT)
 
             # Background with top border
