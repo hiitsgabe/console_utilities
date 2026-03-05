@@ -166,6 +166,8 @@ class FolderBrowserModal:
             return ".. (Parent Directory)"
         elif item_type == "create_folder":
             return "+ Create New Folder"
+        elif item_type == "storage_volume":
+            return f"> {name}"
         elif item_type == "folder":
             return f"[DIR] {name}"
         else:
@@ -178,6 +180,7 @@ class FolderBrowserModal:
             "folder": "Folder",
             "parent": "",
             "create_folder": "",
+            "storage_volume": "Storage",
             "keys_file": ".keys",
             "json_file": ".json",
             "nsz_file": ".nsz",
