@@ -1,4 +1,6 @@
-This project is an exercise to test Vibe Coding's capabilities. (CLAUDE)
+A note on this project: I’m building this to get my hands dirty with agentic AI and see what it can actually do for coding. This is a non-commercial, educational project by hiitsgabe.
+
+I know there’s a lot of "AI slop" being sold to gamers right now, and I want to be clear: this isn't that. This is my personal sandbox for testing the limits of AI agents and sharing what I find. It might be experimental and a bit unstable, but it’s a genuine effort to create something cool and helpful while I learn the ropes. 
 
 # Console Utilities
 
