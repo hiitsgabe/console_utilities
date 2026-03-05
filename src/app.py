@@ -2664,9 +2664,11 @@ class ConsoleUtilitiesApp:
                     self.state.confirm_modal.show = True
                     self.state.confirm_modal.title = "NSZ Not Enabled"
                     self.state.confirm_modal.message_lines = [
-                        "NSZ decompression should be enabled.",
-                        "Go to Settings to enable and set",
-                        "your decompression keys.",
+                        "NSZ decompression must be",
+                        "enabled to use this system.",
+                        "",
+                        "Go to Settings to enable it",
+                        "and set your keys.",
                     ]
                     self.state.confirm_modal.ok_label = "OK"
                     self.state.confirm_modal.cancel_label = ""
