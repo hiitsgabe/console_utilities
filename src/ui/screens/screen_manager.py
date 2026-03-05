@@ -36,6 +36,7 @@ from .modals.league_browser_modal import LeagueBrowserModal
 from .modals.roster_preview_modal import RosterPreviewModal
 from .modals.patch_progress_modal import PatchProgressModal
 from .modals.color_picker_modal import ColorPickerModal
+from .modals.auth_token_modal import AuthTokenModal
 from .portmaster_screen import PortMasterScreen
 from .scraper_menu_screen import ScraperMenuScreen
 from .sports_patcher_screen import SportsPatcherScreen
@@ -102,6 +103,7 @@ class ScreenManager:
         self.roster_preview_modal = RosterPreviewModal(theme)
         self.patch_progress_modal = PatchProgressModal(theme)
         self.color_picker_modal = ColorPickerModal(theme)
+        self.auth_token_modal = AuthTokenModal(theme)
 
         # Initialize generic status footer
         self.status_footer = StatusFooter(theme)
@@ -160,6 +162,30 @@ class ScreenManager:
             rects["confirm_ok"] = ok_rect
             rects["confirm_cancel"] = cancel_rect
             rects["close"] = close_rect
+            return rects
+
+        if state.auth_token_input.show:
+            modal_rect, content_rect, close_rect, char_rects = (
+                self.auth_token_modal.render(
+                    screen,
+                    state.auth_token_input.step,
+                    state.auth_token_input.auth_message,
+                    state.auth_token_input.input_text,
+                    state.auth_token_input.cursor_position,
+                    input_mode=modal_input_mode,
+                    shift_active=state.auth_token_input.shift_active,
+                )
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["char_rects"] = char_rects
+            if self.auth_token_modal.enter_token_rect:
+                rects["auth_enter_token"] = self.auth_token_modal.enter_token_rect
+            if self.auth_token_modal.ok_rect:
+                rects["text_ok"] = self.auth_token_modal.ok_rect
+                rects["text_cancel"] = self.auth_token_modal.cancel_rect
+            if self.auth_token_modal.backspace_rect:
+                rects["text_backspace"] = self.auth_token_modal.backspace_rect
             return rects
 
         if state.show_search_input:

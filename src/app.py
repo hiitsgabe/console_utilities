@@ -941,6 +941,13 @@ class ConsoleUtilitiesApp:
     def _move_highlight(self, direction: str):
         """Move highlight in the given direction."""
         # Check modals first (they take priority over modes)
+        if self.state.auth_token_input.show:
+            if self.state.auth_token_input.step == "input":
+                self._navigate_keyboard_modal(
+                    direction, self.state.auth_token_input, char_set="url"
+                )
+            return
+
         if self.state.show_search_input:
             self._navigate_keyboard_modal(
                 direction, self.state.search, char_set="default"
@@ -1867,6 +1874,33 @@ class ConsoleUtilitiesApp:
                         wizard.collection_name += event.unicode
                 return
 
+        # Handle keyboard/web-companion text input for auth token input
+        if self.state.auth_token_input.show and self.state.auth_token_input.step == "input" and (
+            self.state.input_mode == "keyboard"
+            or BUILD_TARGET == "android"
+            or getattr(event, "web_companion", False)
+        ):
+            if event.key == pygame.K_ESCAPE:
+                self._go_back()
+            elif event.key == pygame.K_RETURN:
+                self._submit_auth_token()
+            elif event.key == pygame.K_BACKSPACE:
+                if self.state.auth_token_input.input_text:
+                    self.state.auth_token_input.input_text = (
+                        self.state.auth_token_input.input_text[:-1]
+                    )
+            elif self._is_paste_event(event):
+                clip = self._get_clipboard_text()
+                if clip:
+                    self.state.auth_token_input.input_text += clip
+            elif (
+                event.unicode
+                and event.unicode.isprintable()
+                and BUILD_TARGET != "android"
+            ):
+                self.state.auth_token_input.input_text += event.unicode
+            return
+
         # Handle keyboard/web-companion text input for URL input
         if self.state.url_input.show and (
             self.state.input_mode == "keyboard"
@@ -1971,6 +2005,8 @@ class ConsoleUtilitiesApp:
                 self.state.scraper_login.password += text
             elif step == "api_key":
                 self.state.scraper_login.api_key += text
+        elif self.state.auth_token_input.show and self.state.auth_token_input.step == "input":
+            self.state.auth_token_input.input_text += text
         elif self.state.url_input.show:
             self.state.url_input.input_text += text
         elif self.state.folder_name_input.show:
@@ -2137,6 +2173,12 @@ class ConsoleUtilitiesApp:
                 # Only return if in formats mode - fall through to char_rect check otherwise
                 return
 
+        # Check auth token "Enter Token" button
+        auth_enter = self.state.ui_rects.rects.get("auth_enter_token")
+        if auth_enter and auth_enter.collidepoint(x, y):
+            self._handle_auth_token_selection()
+            return
+
         # Check download button (modal or games screen)
         if self.state.ui_rects.download_button:
             if self.state.ui_rects.download_button.collidepoint(x, y):
@@ -2167,7 +2209,10 @@ class ConsoleUtilitiesApp:
             for char_rect, char_index, char in self.state.ui_rects.modal_char_rects:
                 if char_rect.collidepoint(x, y):
                     # Set cursor position and trigger selection based on active modal
-                    if self.state.show_search_input:
+                    if self.state.auth_token_input.show and self.state.auth_token_input.step == "input":
+                        self.state.auth_token_input.cursor_position = char_index
+                        self._handle_auth_token_selection()
+                    elif self.state.show_search_input:
                         self.state.search.cursor_position = char_index
                         self._handle_search_input_selection()
                     elif self.state.url_input.show:
@@ -2350,6 +2395,14 @@ class ConsoleUtilitiesApp:
             self.state.search.cursor_position = 0
             self.state.search.filtered_list = []
             self.state.highlighted = 0
+        elif self.state.auth_token_input.show:
+            if self.state.auth_token_input.step == "input":
+                # Go back to message step
+                self.state.auth_token_input.step = "message"
+                self.state.auth_token_input.input_text = ""
+                self.state.auth_token_input.cursor_position = 0
+            else:
+                self.state.auth_token_input.show = False
         elif self.state.confirm_modal.show:
             self._handle_confirm_modal_cancel()
         elif self.state.url_input.show:
@@ -2503,6 +2556,10 @@ class ConsoleUtilitiesApp:
                 self._handle_confirm_modal_cancel()
             return
 
+        if self.state.auth_token_input.show:
+            self._handle_auth_token_selection()
+            return
+
         if self.state.show_search_input:
             self._handle_search_input_selection()
             return
@@ -2594,40 +2651,25 @@ class ConsoleUtilitiesApp:
             visible = get_visible_systems(self.data, self.settings)
             if visible and self.state.systems_list_highlighted < len(visible):
                 system = visible[self.state.systems_list_highlighted]
-                self.state.selected_system = get_system_index_by_name(
+                system_index = get_system_index_by_name(
                     self.data, system["name"]
                 )
+                self.state.selected_system = system_index
 
-                # Show loading while fetching games (non-blocking)
-                self._show_loading(f"Loading {system['name']}...")
-                system_data = self._inject_ia_auth(
-                    self.data[self.state.selected_system]
-                )
+                # Check if system requires auth token
+                system_data = self.data[system_index]
+                auth = system_data.get("auth", {})
+                if auth.get("auth_message") and not auth.get("token"):
+                    self.state.auth_token_input.show = True
+                    self.state.auth_token_input.step = "message"
+                    self.state.auth_token_input.auth_message = auth["auth_message"]
+                    self.state.auth_token_input.system_index = system_index
+                    self.state.auth_token_input.input_text = ""
+                    self.state.auth_token_input.cursor_position = 0
+                    self.state.auth_token_input.shift_active = False
+                    return
 
-                import threading
-
-                def _do_load_games(sd=system_data):
-                    games = list_files(sd, self.settings)
-                    self._hide_loading()
-                    if not games:
-                        self.state.confirm_modal.show = True
-                        self.state.confirm_modal.title = "No Games Found"
-                        self.state.confirm_modal.message_lines = [
-                            "Could not load games list.",
-                            "Check your connection and try again.",
-                        ]
-                        self.state.confirm_modal.ok_label = "OK"
-                        self.state.confirm_modal.cancel_label = ""
-                        self.state.confirm_modal.button_index = 0
-                        self.state.confirm_modal.context = ""
-                        return
-                    self.state.game_list = games
-                    roms_folder = get_roms_folder_for_system(sd, self.settings)
-                    installed_checker.set_roms_folder(roms_folder)
-                    self.state.mode = "games"
-                    self.state.highlighted = 0
-
-                threading.Thread(target=_do_load_games, daemon=True).start()
+                self._load_games_for_system(system_index)
 
         elif self.state.mode == "games":
             game_list = (
@@ -4330,6 +4372,95 @@ class ConsoleUtilitiesApp:
         if is_done:
             self._apply_search_filter()
 
+    def _handle_auth_token_selection(self):
+        """Handle selection in auth token modal."""
+        if self.state.auth_token_input.step == "message":
+            # "Enter Token" button pressed - switch to input step
+            self.state.auth_token_input.step = "input"
+            self.state.auth_token_input.input_text = ""
+            self.state.auth_token_input.cursor_position = 0
+        elif self.state.auth_token_input.step == "input":
+            # On-screen keyboard selection
+            if self.state.input_mode in ("gamepad", "touch"):
+                from ui.screens.modals.auth_token_modal import AuthTokenModal
+
+                modal = AuthTokenModal()
+                new_text, is_done, toggle_shift = modal.handle_selection(
+                    self.state.auth_token_input.cursor_position,
+                    self.state.auth_token_input.input_text,
+                    shift_active=self.state.auth_token_input.shift_active,
+                )
+                if toggle_shift:
+                    self.state.auth_token_input.shift_active = (
+                        not self.state.auth_token_input.shift_active
+                    )
+                self.state.auth_token_input.input_text = new_text
+                if is_done:
+                    self._submit_auth_token()
+            else:
+                # Keyboard mode - Enter was pressed
+                self._submit_auth_token()
+
+    def _submit_auth_token(self):
+        """Save auth token to the JSON file and proceed to load games."""
+        token = self.state.auth_token_input.input_text.strip()
+        if not token:
+            return
+
+        system_index = self.state.auth_token_input.system_index
+        if system_index < 0 or system_index >= len(self.data):
+            self.state.auth_token_input.show = False
+            return
+
+        # Update the token in the in-memory data
+        self.data[system_index].setdefault("auth", {})["token"] = token
+
+        # Persist token back to the JSON file
+        self._save_auth_token_to_json(system_index, token)
+
+        # Close modal and load games
+        self.state.auth_token_input.show = False
+        self._load_games_for_system(system_index)
+
+    def _save_auth_token_to_json(self, system_index: int, token: str):
+        """Save the auth token back to the source JSON file."""
+        import json
+        from services.data_loader import BUNDLED_JSON_FILE
+        from constants import ADDED_SYSTEMS_FILE
+
+        system_name = self.data[system_index].get("name", "")
+
+        # Try each JSON file that could contain this system
+        json_paths = []
+        archive_path = self.settings.get("archive_json_path", "")
+        if archive_path and os.path.exists(archive_path):
+            json_paths.append(archive_path)
+        if os.path.exists(BUNDLED_JSON_FILE):
+            json_paths.append(BUNDLED_JSON_FILE)
+        if os.path.exists(ADDED_SYSTEMS_FILE):
+            json_paths.append(ADDED_SYSTEMS_FILE)
+
+        for json_path in json_paths:
+            try:
+                with open(json_path, "r") as f:
+                    file_data = json.load(f)
+
+                found = False
+                for system in file_data:
+                    if system.get("name") == system_name and "auth" in system:
+                        system["auth"]["token"] = token
+                        found = True
+                        break
+
+                if found:
+                    with open(json_path, "w") as f:
+                        json.dump(file_data, f, indent=2)
+                    return
+            except Exception as e:
+                from utils.logging import log_error
+
+                log_error(f"Failed to save auth token to {json_path}: {e}")
+
     def _submit_search_keyboard_input(self):
         """Handle search submission from physical keyboard."""
         self._apply_search_filter()
@@ -4340,6 +4471,9 @@ class ConsoleUtilitiesApp:
 
     def _handle_text_modal_ok_click(self):
         """Handle OK button click on text input modals."""
+        if self.state.auth_token_input.show and self.state.auth_token_input.step == "input":
+            self._submit_auth_token()
+            return
         if self.state.show_search_input:
             self._submit_search_keyboard_input()
         elif self.state.url_input.show:
@@ -4373,7 +4507,12 @@ class ConsoleUtilitiesApp:
 
     def _handle_text_modal_backspace(self):
         """Handle backspace button tap on Android text input modals."""
-        if self.state.ia_login.show:
+        if self.state.auth_token_input.show and self.state.auth_token_input.step == "input":
+            if self.state.auth_token_input.input_text:
+                self.state.auth_token_input.input_text = (
+                    self.state.auth_token_input.input_text[:-1]
+                )
+        elif self.state.ia_login.show:
             step = self.state.ia_login.step
             if step == "email" and self.state.ia_login.email:
                 self.state.ia_login.email = self.state.ia_login.email[:-1]
@@ -4664,6 +4803,38 @@ class ConsoleUtilitiesApp:
             }
         return system_data
 
+    def _load_games_for_system(self, system_index: int):
+        """Load games for a system (non-blocking)."""
+        system_data = self._inject_ia_auth(self.data[system_index])
+        system_name = system_data.get("name", "Unknown")
+
+        self._show_loading(f"Loading {system_name}...")
+
+        import threading
+
+        def _do_load_games(sd=system_data):
+            games = list_files(sd, self.settings)
+            self._hide_loading()
+            if not games:
+                self.state.confirm_modal.show = True
+                self.state.confirm_modal.title = "No Games Found"
+                self.state.confirm_modal.message_lines = [
+                    "Could not load games list.",
+                    "Check your connection and try again.",
+                ]
+                self.state.confirm_modal.ok_label = "OK"
+                self.state.confirm_modal.cancel_label = ""
+                self.state.confirm_modal.button_index = 0
+                self.state.confirm_modal.context = ""
+                return
+            self.state.game_list = games
+            roms_folder = get_roms_folder_for_system(sd, self.settings)
+            installed_checker.set_roms_folder(roms_folder)
+            self.state.mode = "games"
+            self.state.highlighted = 0
+
+        threading.Thread(target=_do_load_games, daemon=True).start()
+
     def _start_download(self):
         """Start downloading selected games by adding to background queue."""
         if not self.state.selected_games or self.state.selected_system < 0:
@@ -4720,6 +4891,7 @@ class ConsoleUtilitiesApp:
             or self.state.dedupe_wizard.show
             or self.state.rename_wizard.show
             or self.state.ghost_cleaner_wizard.show
+            or self.state.auth_token_input.show
         )
 
     # ---- PortMaster Handlers ---- #
