@@ -852,20 +852,7 @@ class ConsoleUtilitiesApp:
                 ):
                     self._is_backgrounded = True
 
-                elif BUILD_TARGET == "android" and event.type == pygame.ACTIVEEVENT:
-                    # Focus lost (state=2) fires before surfaceDestroyed
-                    if hasattr(event, "state") and event.state & 2:
-                        if hasattr(event, "gain") and not event.gain:
-                            self._is_backgrounded = True
-
-                elif BUILD_TARGET == "android" and event.type == getattr(
-                    pygame, "WINDOWFOCUSLOST", -1
-                ):
-                    self._is_backgrounded = True
-
                 elif BUILD_TARGET == "android" and event.type in (
-                    getattr(pygame, "WINDOWRESTORED", -1),
-                    getattr(pygame, "WINDOWFOCUSGAINED", -1),
                     getattr(pygame, "APP_DIDENTERFOREGROUND", -1),
                     0x104,  # SDL_APP_DIDENTERFOREGROUND raw value
                 ):
@@ -3769,6 +3756,11 @@ class ConsoleUtilitiesApp:
             self._show_loading("Loading systems data...")
             update_json_file_path(self.settings)
             self.data = load_main_systems_data(self.settings)
+            # Reset navigation state for new data
+            self.state.selected_system = -1
+            self.state.game_list = []
+            self.state.current_screen = "systems"
+            self.state.highlighted = 0
             self._hide_loading()
         elif selection_type == "nsz_keys":
             self.settings["nsz_keys_path"] = path
