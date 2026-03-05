@@ -8,6 +8,7 @@ This project is an exercise to test Vibe Coding's capabilities. (CLAUDE)
   <a href="https://hiitsgabe.github.io/console_utilities/">Website</a> &middot;
   <a href="https://github.com/hiitsgabe/console_utilities/releases">Downloads</a>
 </div>
+<br><br>
 
 ![Screenshot](assets/images/screenshot.png)
 
@@ -21,7 +22,7 @@ A PyGame-based utility suite for handheld gaming consoles, with a retro CRT-them
 - **Batch Downloads**: Select multiple games and download them in a queue with real-time progress, speed, and ETA
 - **Resume Capability**: Interrupted downloads can be resumed
 - **Automatic Extraction**: ZIP and RAR files are extracted and organized into the correct system folder
-- **NSZ Decompression**: Built-in Nintendo Switch NSZ to NSP conversion
+- **NSZ Decompression**: Built-in NX => NSZ to NSP conversion
 
 ### Browsing & Navigation
 - **Multiple View Modes**: List view and grid layout with box art thumbnails
