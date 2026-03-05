@@ -212,7 +212,8 @@ def list_files(
                 for f in files:
                     f["_base_url"] = url
 
-            _save_listing_cache(url, files)
+            if files:
+                _save_listing_cache(url, files)
             all_files.extend(files)
 
         # Sort combined list by filename
@@ -287,7 +288,12 @@ def _list_files_json_api(
 
     headers, cookies = _get_request_headers_cookies(system_data)
 
-    r = requests.get(list_url, timeout=10, headers=headers, cookies=cookies)
+    try:
+        r = requests.get(list_url, timeout=(10, 30), headers=headers, cookies=cookies)
+    except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
+        r = requests.get(
+            list_url, timeout=(10, 30), headers=headers, cookies=cookies, verify=False
+        )
     response = r.json()
 
     if isinstance(response, dict) and "files" in response:
@@ -342,8 +348,14 @@ def _list_files_html_single(
 
     headers, cookies = _get_request_headers_cookies(system_data)
 
-    r = requests.get(url, timeout=10, headers=headers, cookies=cookies)
-    r.raise_for_status()
+    try:
+        r = requests.get(url, timeout=(15, 60), headers=headers, cookies=cookies)
+        r.raise_for_status()
+    except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
+        r = requests.get(
+            url, timeout=(15, 60), headers=headers, cookies=cookies, verify=False
+        )
+        r.raise_for_status()
     html_content = r.text
 
     files = []
@@ -623,6 +635,93 @@ def load_psp_iso_folder_contents(path: str) -> List[Dict[str, Any]]:
     return items
 
 
+def get_android_storage_volumes() -> List[Dict[str, Any]]:
+    """
+    Get available storage volumes on Android (internal + SD card).
+
+    Returns:
+        List of storage volume dicts with name, type, and path.
+        Empty list on non-Android platforms.
+    """
+    from constants import BUILD_TARGET
+
+    if BUILD_TARGET != "android":
+        return []
+
+    volumes = []
+    try:
+        # Internal shared storage
+        internal = "/storage/emulated/0"
+        if os.path.isdir(internal) and os.access(internal, os.R_OK):
+            volumes.append(
+                {"name": "Internal Storage", "type": "storage_volume", "path": internal}
+            )
+
+        # App's external files dir (always writable)
+        try:
+            from jnius import autoclass
+
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            context = PythonActivity.mActivity.getApplicationContext()
+            ext_dir = context.getExternalFilesDir(None)
+            if ext_dir:
+                app_path = ext_dir.getAbsolutePath()
+                if os.path.isdir(app_path):
+                    volumes.append(
+                        {"name": "App Storage", "type": "storage_volume", "path": app_path}
+                    )
+
+            # External SD card volumes via getExternalFilesDirs (plural)
+            ext_dirs = context.getExternalFilesDirs(None)
+            if ext_dirs:
+                for i in range(ext_dirs.length):
+                    d = ext_dirs[i]
+                    if d is None:
+                        continue
+                    sd_app_path = d.getAbsolutePath()
+                    # Skip internal (already added)
+                    if "emulated" in sd_app_path:
+                        continue
+                    # Navigate up to the SD card root for browsing
+                    # Path is like /storage/XXXX-XXXX/Android/data/<pkg>/files
+                    sd_root = sd_app_path
+                    android_idx = sd_app_path.find("/Android/")
+                    if android_idx > 0:
+                        sd_root = sd_app_path[:android_idx]
+                    label = os.path.basename(sd_root) if sd_root != "/" else "SD Card"
+                    volumes.append(
+                        {"name": f"SD Card ({label})", "type": "storage_volume", "path": sd_root}
+                    )
+                    # Also add the writable app dir on SD card
+                    if os.path.isdir(sd_app_path):
+                        volumes.append(
+                            {"name": f"SD App Storage ({label})", "type": "storage_volume", "path": sd_app_path}
+                        )
+        except Exception:
+            pass
+
+        # Fallback: scan /storage for any mount points we missed
+        if os.path.isdir("/storage"):
+            try:
+                for entry in os.listdir("/storage"):
+                    if entry == "emulated" or entry == "self":
+                        continue
+                    full = os.path.join("/storage", entry)
+                    if os.path.isdir(full) and os.access(full, os.R_OK):
+                        # Check if already added
+                        existing_paths = {v["path"] for v in volumes}
+                        if full not in existing_paths:
+                            volumes.append(
+                                {"name": f"SD Card ({entry})", "type": "storage_volume", "path": full}
+                            )
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    return volumes
+
+
 def load_folder_contents(path: str) -> List[Dict[str, Any]]:
     """
     Load folder contents for browser.
@@ -643,6 +742,15 @@ def load_folder_contents(path: str) -> List[Dict[str, Any]]:
             items.append(
                 {"name": "..", "type": "parent", "path": os.path.dirname(path)}
             )
+
+        # On Android, add storage volume shortcuts for quick navigation
+        from constants import BUILD_TARGET
+        if BUILD_TARGET == "android":
+            volumes = get_android_storage_volumes()
+            for vol in volumes:
+                # Skip if we're already at this exact path
+                if vol["path"] != path:
+                    items.append(vol)
 
         # Add "Create New Folder" option
         items.append(

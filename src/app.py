@@ -41,6 +41,7 @@ from services.data_loader import (
     get_visible_systems,
     get_system_index_by_name,
     add_system_to_added_systems,
+    is_nsz_system,
 )
 from services.internet_archive import (
     get_ia_s3_credentials,
@@ -82,6 +83,21 @@ class ConsoleUtilitiesApp:
         """Initialize the application."""
         # Initialize logging
         init_log_file()
+
+        # Block SDL event loop while app is paused (prevents GL calls during background)
+        if BUILD_TARGET == "android":
+            os.environ["SDL_ANDROID_BLOCK_ON_PAUSE"] = "1"
+            # Set SSL certificate bundle for requests/urllib on Android
+            try:
+                import certifi
+                os.environ["SSL_CERT_FILE"] = certifi.where()
+                os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
+            except ImportError:
+                pass
+
+        # Track Android background state for render guards
+        self._is_backgrounded = False
+        self._needs_display_restore = False
 
         # Initialize pygame
         pygame.init()
@@ -195,12 +211,9 @@ class ConsoleUtilitiesApp:
         ):
             self._start_web_companion()
 
-        # Native file/folder picker (Android only)
+        # Native file/folder picker disabled (causes black screen on Android
+        # due to EGL surface destruction during SAF intent lifecycle)
         self._file_picker = None
-        if BUILD_TARGET == "android":
-            from droid.file_picker import AndroidFilePicker
-
-            self._file_picker = AndroidFilePicker()
 
         # CRT vignette overlay (edge darkening)
         self.vignette_surface = self._create_vignette()
@@ -520,9 +533,28 @@ class ConsoleUtilitiesApp:
             self.screen = pygame.display.set_mode(
                 (w, h), pygame.SCALED | pygame.FULLSCREEN
             )
+
+            # Recreate overlay surfaces (GPU textures are lost on context restore)
+            self.scanline_surface = None
+            if self.theme.crt_scanlines:
+                self.scanline_surface = pygame.Surface((w, h), pygame.SRCALPHA)
+                for y in range(0, h, 3):
+                    pygame.draw.line(
+                        self.scanline_surface, (0, 0, 0, 40), (0, y), (w, y)
+                    )
+
+            self.bezel_surface = self._create_crt_bezel()
+            self.vignette_surface = self._create_vignette()
+
+            # Invalidate image cache (stale GPU-side data)
+            self.image_cache.clear()
+
         except Exception as e:
+            # Surface not ready yet — re-flag for retry next frame
+            self._is_backgrounded = True
+            self._needs_display_restore = True
             from utils.logging import log_error
-            log_error(f"[restore_display] Error: {e}")
+            log_error(f"[restore_display] Error, will retry: {e}")
 
     def _handle_resize(self, new_w: int, new_h: int):
         """Handle screen resize (Android orientation change)."""
@@ -706,6 +738,8 @@ class ConsoleUtilitiesApp:
 
     def _render_frame(self):
         """Render a single frame (used during loading)."""
+        if self._is_backgrounded:
+            return
         self._draw_background()
         self.screen_manager.render(
             self.screen,
@@ -811,21 +845,32 @@ class ConsoleUtilitiesApp:
                     self.touch.handle_mouse_motion(event, on_scroll=self._handle_scroll)
 
                 elif event.type == pygame.VIDEORESIZE:
-                    if BUILD_TARGET != "android":
+                    if BUILD_TARGET == "android":
+                        # surfaceChanged() fires VIDEORESIZE — surface is now valid
+                        if self._needs_display_restore:
+                            self._needs_display_restore = False
+                            self._is_backgrounded = False
+                            self._restore_android_display()
+                    else:
                         self._handle_resize(event.w, event.h)
 
                 elif BUILD_TARGET == "android" and event.type in (
-                    getattr(pygame, "WINDOWRESTORED", -1),
-                    getattr(pygame, "APP_DIDENTERFOREGROUND", -1),
+                    getattr(pygame, "APP_WILLENTERBACKGROUND", -1),
+                    0x101,  # SDL_APP_WILLENTERBACKGROUND raw value
                 ):
-                    self._restore_android_display()
+                    self._is_backgrounded = True
+
+                elif BUILD_TARGET == "android" and event.type in (
+                    getattr(pygame, "APP_DIDENTERFOREGROUND", -1),
+                    0x104,  # SDL_APP_DIDENTERFOREGROUND raw value
+                ):
+                    if self._is_backgrounded:
+                        self._needs_display_restore = True
 
                 elif event.type == pygame.TEXTINPUT:
                     if BUILD_TARGET == "android":
                         self._handle_text_input_event(event)
 
-                elif BUILD_TARGET == "android" and event.type == pygame.USEREVENT + 1:
-                    self._handle_native_picker_result(event)
 
             # Update image cache (process loaded images from background threads)
             self.image_cache.update()
@@ -835,40 +880,55 @@ class ConsoleUtilitiesApp:
                 self.web_companion.process_actions(self.state)
                 self.web_companion.push_state(self.state, self.settings, self.data)
 
-            # Draw
-            self._draw_background()
+            # Deferred display restore: wait until surface is recreated by SDL
+            if self._needs_display_restore and pygame.display.get_surface() is not None:
+                self._needs_display_restore = False
+                self._is_backgrounded = False
+                self._restore_android_display()
 
-            # Render current screen
-            rects = self.screen_manager.render(
-                self.screen,
-                self.state,
-                self.settings,
-                self.data,
-                get_thumbnail=self._get_thumbnail,
-                get_hires_image=self._get_hires_image,
+            # Draw (skip when backgrounded or display surface is gone)
+            _surface_ok = (
+                not self._is_backgrounded
+                and pygame.display.get_surface() is not None
             )
+            if _surface_ok:
+                try:
+                    self._draw_background()
 
-            # Store rects for click handling
-            self.state.ui_rects.menu_items = rects.get("item_rects", [])
-            self.state.ui_rects.back_button = rects.get("back")
-            self.state.ui_rects.download_button = rects.get("download_button")
-            self.state.ui_rects.close_button = rects.get("close")
-            self.state.ui_rects.modal_char_rects = rects.get("char_rects", [])
-            self.state.ui_rects.scroll_offset = rects.get("scroll_offset", 0)
-            self.state.ui_rects.folder_select_button = rects.get("select_button")
-            self.state.ui_rects.folder_cancel_button = rects.get("cancel_button")
-            self.state.ui_rects.confirm_ok_button = rects.get("confirm_ok")
-            self.state.ui_rects.confirm_cancel_button = rects.get("confirm_cancel")
-            self.state.ui_rects.rects = rects
+                    # Render current screen
+                    rects = self.screen_manager.render(
+                        self.screen,
+                        self.state,
+                        self.settings,
+                        self.data,
+                        get_thumbnail=self._get_thumbnail,
+                        get_hires_image=self._get_hires_image,
+                    )
 
-            if self.scanline_surface:
-                self.screen.blit(self.scanline_surface, (0, 0))
-            self.screen.blit(self.bezel_surface, (0, 0))
-            pygame.display.flip()
+                    # Store rects for click handling
+                    self.state.ui_rects.menu_items = rects.get("item_rects", [])
+                    self.state.ui_rects.back_button = rects.get("back")
+                    self.state.ui_rects.download_button = rects.get("download_button")
+                    self.state.ui_rects.close_button = rects.get("close")
+                    self.state.ui_rects.modal_char_rects = rects.get("char_rects", [])
+                    self.state.ui_rects.scroll_offset = rects.get("scroll_offset", 0)
+                    self.state.ui_rects.folder_select_button = rects.get("select_button")
+                    self.state.ui_rects.folder_cancel_button = rects.get("cancel_button")
+                    self.state.ui_rects.confirm_ok_button = rects.get("confirm_ok")
+                    self.state.ui_rects.confirm_cancel_button = rects.get("confirm_cancel")
+                    self.state.ui_rects.rects = rects
 
-            # Web companion: capture frame for MJPEG thumbnail
-            if self.web_companion and self.web_companion._running:
-                self.web_companion.capture_frame(self.screen)
+                    if self.scanline_surface:
+                        self.screen.blit(self.scanline_surface, (0, 0))
+                    self.screen.blit(self.bezel_surface, (0, 0))
+                    pygame.display.flip()
+
+                    # Web companion: capture frame for MJPEG thumbnail
+                    if self.web_companion and self.web_companion._running:
+                        self.web_companion.capture_frame(self.screen)
+                except pygame.error:
+                    # Surface was destroyed mid-frame (Android lifecycle race)
+                    self._is_backgrounded = True
 
         # Cleanup
         if self.web_companion:
@@ -882,6 +942,13 @@ class ConsoleUtilitiesApp:
     def _move_highlight(self, direction: str):
         """Move highlight in the given direction."""
         # Check modals first (they take priority over modes)
+        if self.state.auth_token_input.show:
+            if self.state.auth_token_input.step == "input":
+                self._navigate_keyboard_modal(
+                    direction, self.state.auth_token_input, char_set="url"
+                )
+            return
+
         if self.state.show_search_input:
             self._navigate_keyboard_modal(
                 direction, self.state.search, char_set="default"
@@ -1033,6 +1100,9 @@ class ConsoleUtilitiesApp:
             # Add 1 for "Download All" button if enabled
             extra_items = 1 if self.settings.get("show_download_all", False) else 0
             max_items = len(game_list) + extra_items
+
+            if max_items == 0:
+                return
 
             if direction in ("left", "right"):
                 # Left/right scroll the highlighted item's text horizontally
@@ -1805,6 +1875,33 @@ class ConsoleUtilitiesApp:
                         wizard.collection_name += event.unicode
                 return
 
+        # Handle keyboard/web-companion text input for auth token input
+        if self.state.auth_token_input.show and self.state.auth_token_input.step == "input" and (
+            self.state.input_mode == "keyboard"
+            or BUILD_TARGET == "android"
+            or getattr(event, "web_companion", False)
+        ):
+            if event.key == pygame.K_ESCAPE:
+                self._go_back()
+            elif event.key == pygame.K_RETURN:
+                self._submit_auth_token()
+            elif event.key == pygame.K_BACKSPACE:
+                if self.state.auth_token_input.input_text:
+                    self.state.auth_token_input.input_text = (
+                        self.state.auth_token_input.input_text[:-1]
+                    )
+            elif self._is_paste_event(event):
+                clip = self._get_clipboard_text()
+                if clip:
+                    self.state.auth_token_input.input_text += clip
+            elif (
+                event.unicode
+                and event.unicode.isprintable()
+                and BUILD_TARGET != "android"
+            ):
+                self.state.auth_token_input.input_text += event.unicode
+            return
+
         # Handle keyboard/web-companion text input for URL input
         if self.state.url_input.show and (
             self.state.input_mode == "keyboard"
@@ -1909,6 +2006,8 @@ class ConsoleUtilitiesApp:
                 self.state.scraper_login.password += text
             elif step == "api_key":
                 self.state.scraper_login.api_key += text
+        elif self.state.auth_token_input.show and self.state.auth_token_input.step == "input":
+            self.state.auth_token_input.input_text += text
         elif self.state.url_input.show:
             self.state.url_input.input_text += text
         elif self.state.folder_name_input.show:
@@ -1997,10 +2096,10 @@ class ConsoleUtilitiesApp:
                     self.state.folder_browser.show = False
                     self.state.folder_browser.focus_area = "list"
                     return
-            # Check folder browser items
+            # Check folder browser items (account for scroll offset)
             for i, rect in enumerate(self.state.ui_rects.menu_items):
                 if rect.collidepoint(x, y):
-                    self.state.folder_browser.highlighted = i
+                    self.state.folder_browser.highlighted = i + self.state.ui_rects.scroll_offset
                     self._handle_folder_browser_selection()
                     return
             return
@@ -2075,6 +2174,12 @@ class ConsoleUtilitiesApp:
                 # Only return if in formats mode - fall through to char_rect check otherwise
                 return
 
+        # Check auth token "Enter Token" button
+        auth_enter = self.state.ui_rects.rects.get("auth_enter_token")
+        if auth_enter and auth_enter.collidepoint(x, y):
+            self._handle_auth_token_selection()
+            return
+
         # Check download button (modal or games screen)
         if self.state.ui_rects.download_button:
             if self.state.ui_rects.download_button.collidepoint(x, y):
@@ -2105,7 +2210,10 @@ class ConsoleUtilitiesApp:
             for char_rect, char_index, char in self.state.ui_rects.modal_char_rects:
                 if char_rect.collidepoint(x, y):
                     # Set cursor position and trigger selection based on active modal
-                    if self.state.show_search_input:
+                    if self.state.auth_token_input.show and self.state.auth_token_input.step == "input":
+                        self.state.auth_token_input.cursor_position = char_index
+                        self._handle_auth_token_selection()
+                    elif self.state.show_search_input:
                         self.state.search.cursor_position = char_index
                         self._handle_search_input_selection()
                     elif self.state.url_input.show:
@@ -2288,6 +2396,14 @@ class ConsoleUtilitiesApp:
             self.state.search.cursor_position = 0
             self.state.search.filtered_list = []
             self.state.highlighted = 0
+        elif self.state.auth_token_input.show:
+            if self.state.auth_token_input.step == "input":
+                # Go back to message step
+                self.state.auth_token_input.step = "message"
+                self.state.auth_token_input.input_text = ""
+                self.state.auth_token_input.cursor_position = 0
+            else:
+                self.state.auth_token_input.show = False
         elif self.state.confirm_modal.show:
             self._handle_confirm_modal_cancel()
         elif self.state.url_input.show:
@@ -2441,6 +2557,10 @@ class ConsoleUtilitiesApp:
                 self._handle_confirm_modal_cancel()
             return
 
+        if self.state.auth_token_input.show:
+            self._handle_auth_token_selection()
+            return
+
         if self.state.show_search_input:
             self._handle_search_input_selection()
             return
@@ -2532,27 +2652,43 @@ class ConsoleUtilitiesApp:
             visible = get_visible_systems(self.data, self.settings)
             if visible and self.state.systems_list_highlighted < len(visible):
                 system = visible[self.state.systems_list_highlighted]
-                self.state.selected_system = get_system_index_by_name(
+                system_index = get_system_index_by_name(
                     self.data, system["name"]
                 )
+                self.state.selected_system = system_index
 
-                # Show loading while fetching games (non-blocking)
-                self._show_loading(f"Loading {system['name']}...")
-                system_data = self._inject_ia_auth(
-                    self.data[self.state.selected_system]
-                )
+                system_data = self.data[system_index]
 
-                import threading
+                # Check if NSZ system requires NSZ to be enabled
+                if is_nsz_system(system_data) and not self.settings.get("nsz_enabled", False):
+                    self.state.confirm_modal.show = True
+                    self.state.confirm_modal.title = "NSZ Not Enabled"
+                    self.state.confirm_modal.message_lines = [
+                        "NSZ decompression must be",
+                        "enabled to use this system.",
+                        "",
+                        "Go to Settings to enable it",
+                        "and set your keys.",
+                    ]
+                    self.state.confirm_modal.ok_label = "OK"
+                    self.state.confirm_modal.cancel_label = ""
+                    self.state.confirm_modal.button_index = 0
+                    self.state.confirm_modal.context = ""
+                    return
 
-                def _do_load_games(sd=system_data):
-                    self.state.game_list = list_files(sd, self.settings)
-                    roms_folder = get_roms_folder_for_system(sd, self.settings)
-                    installed_checker.set_roms_folder(roms_folder)
-                    self._hide_loading()
-                    self.state.mode = "games"
-                    self.state.highlighted = 0
+                # Check if system requires auth token
+                auth = system_data.get("auth", {})
+                if auth.get("auth_message") and not auth.get("token"):
+                    self.state.auth_token_input.show = True
+                    self.state.auth_token_input.step = "message"
+                    self.state.auth_token_input.auth_message = auth["auth_message"]
+                    self.state.auth_token_input.system_index = system_index
+                    self.state.auth_token_input.input_text = ""
+                    self.state.auth_token_input.cursor_position = 0
+                    self.state.auth_token_input.shift_active = False
+                    return
 
-                threading.Thread(target=_do_load_games, daemon=True).start()
+                self._load_games_for_system(system_index)
 
         elif self.state.mode == "games":
             game_list = (
@@ -3344,10 +3480,6 @@ class ConsoleUtilitiesApp:
 
     def _open_folder_browser(self, selection_type: str):
         """Open the folder browser modal."""
-        if BUILD_TARGET == "android" and self._file_picker:
-            self._launch_native_picker(selection_type)
-            return
-
         self.state.folder_browser.show = True
         self.state.folder_browser.highlighted = 0
         self.state.folder_browser.focus_area = "list"
@@ -3367,7 +3499,15 @@ class ConsoleUtilitiesApp:
             path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "archive_json":
             current = self.settings.get("archive_json_path", "")
-            path = os.path.dirname(current) if current else SCRIPT_DIR
+            path = os.path.dirname(current) if current else ""
+            if not path or not os.path.exists(path):
+                # Default to assets directory where bundled JSONs live
+                assets_dir = os.path.join(SCRIPT_DIR, "assets")
+                if not os.path.isdir(assets_dir):
+                    assets_dir = os.path.normpath(
+                        os.path.join(SCRIPT_DIR, "..", "assets")
+                    )
+                path = assets_dir if os.path.isdir(assets_dir) else SCRIPT_DIR
         elif selection_type == "nsz_keys":
             current = self.settings.get("nsz_keys_path", "")
             path = os.path.dirname(current) if current else SCRIPT_DIR
@@ -3436,11 +3576,6 @@ class ConsoleUtilitiesApp:
 
     def _open_ia_collection_folder_browser(self):
         """Open folder browser for IA collection ROM folder selection."""
-        if BUILD_TARGET == "android" and self._file_picker:
-            self.state.ia_collection_wizard.step = "folder"
-            self._launch_native_picker("ia_collection_folder")
-            return
-
         self.state.ia_collection_wizard.step = "folder"
         self.state.folder_browser.show = True
         self.state.folder_browser.highlighted = 0
@@ -3676,8 +3811,8 @@ class ConsoleUtilitiesApp:
             self.state.folder_name_input.input_text = ""
             self.state.folder_name_input.cursor_position = 0
 
-        elif item_type == "folder":
-            # Navigate into the folder
+        elif item_type in ("folder", "storage_volume"):
+            # Navigate into the folder or storage volume
             self.state.folder_browser.current_path = item_path
             self.state.folder_browser.items = nav_loader(item_path)
             self.state.folder_browser.highlighted = 0
@@ -3695,8 +3830,16 @@ class ConsoleUtilitiesApp:
             "psp_iso",
             "file",
         ):
-            # Select the file based on selection type
-            self._complete_folder_browser_selection(item_path, selection_type)
+            # Only allow file selection for file-type selection modes
+            folder_only_types = (
+                "work_dir", "roms_dir", "custom_folder",
+                "esde_media_path", "esde_gamelists_path", "retroarch_thumbnails",
+                "add_system_folder", "ia_collection_folder",
+                "dedupe_folder", "rename_folder", "ghost_cleaner_folder",
+                "ia_download_folder", "folder",
+            )
+            if selection_type not in folder_only_types:
+                self._complete_folder_browser_selection(item_path, selection_type)
 
     def _complete_folder_browser_selection(self, path: str, selection_type: str):
         """Complete folder browser selection with chosen path."""
@@ -3713,6 +3856,11 @@ class ConsoleUtilitiesApp:
             self._show_loading("Loading systems data...")
             update_json_file_path(self.settings)
             self.data = load_main_systems_data(self.settings)
+            # Reset navigation state for new data
+            self.state.selected_system = -1
+            self.state.game_list = []
+            self.state.current_screen = "systems"
+            self.state.highlighted = 0
             self._hide_loading()
         elif selection_type == "nsz_keys":
             self.settings["nsz_keys_path"] = path
@@ -3854,8 +4002,15 @@ class ConsoleUtilitiesApp:
             self.state.folder_browser.show = False
             self.state.ia_download_wizard.step = "options"
         else:
-            # For file selection, user needs to select a file
-            pass
+            # For file selection types, select the currently highlighted file
+            items = self.state.folder_browser.items
+            highlighted = self.state.folder_browser.highlighted
+            if highlighted < len(items):
+                item = items[highlighted]
+                if item.get("type") not in ("parent", "folder", "create_folder"):
+                    self._complete_folder_browser_selection(
+                        item.get("path", ""), selection_type
+                    )
 
     def _handle_add_systems_selection(self):
         """Handle add systems item selection — open folder browser for destination."""
@@ -4064,6 +4219,17 @@ class ConsoleUtilitiesApp:
         """Navigate folder browser modal with list and button support."""
         fb = self.state.folder_browser
         max_items = len(fb.items) or 1
+        selection_type = (
+            fb.selected_system_to_add.get("type", "folder")
+            if fb.selected_system_to_add else "folder"
+        )
+        is_folder_selection = selection_type in (
+            "work_dir", "roms_dir", "custom_folder",
+            "esde_media_path", "esde_gamelists_path", "retroarch_thumbnails",
+            "add_system_folder", "ia_collection_folder",
+            "dedupe_folder", "rename_folder", "ghost_cleaner_folder",
+            "ia_download_folder", "folder",
+        )
 
         if fb.focus_area == "list":
             if direction == "up":
@@ -4073,15 +4239,15 @@ class ConsoleUtilitiesApp:
             elif direction == "down":
                 if fb.highlighted < max_items - 1:
                     fb.highlighted += 1
-                else:
-                    # Move to buttons when at bottom of list
+                elif is_folder_selection:
+                    # Move to buttons when at bottom of list (folder mode only)
                     fb.focus_area = "buttons"
                     fb.button_index = 0
-            elif direction == "left":
+            elif direction == "left" and is_folder_selection:
                 # Jump to buttons - Cancel button (index 1)
                 fb.focus_area = "buttons"
                 fb.button_index = 1
-            elif direction == "right":
+            elif direction == "right" and is_folder_selection:
                 # Jump to buttons - Select button (index 0)
                 fb.focus_area = "buttons"
                 fb.button_index = 0
@@ -4225,6 +4391,95 @@ class ConsoleUtilitiesApp:
         if is_done:
             self._apply_search_filter()
 
+    def _handle_auth_token_selection(self):
+        """Handle selection in auth token modal."""
+        if self.state.auth_token_input.step == "message":
+            # "Enter Token" button pressed - switch to input step
+            self.state.auth_token_input.step = "input"
+            self.state.auth_token_input.input_text = ""
+            self.state.auth_token_input.cursor_position = 0
+        elif self.state.auth_token_input.step == "input":
+            # On-screen keyboard selection
+            if self.state.input_mode in ("gamepad", "touch"):
+                from ui.screens.modals.auth_token_modal import AuthTokenModal
+
+                modal = AuthTokenModal()
+                new_text, is_done, toggle_shift = modal.handle_selection(
+                    self.state.auth_token_input.cursor_position,
+                    self.state.auth_token_input.input_text,
+                    shift_active=self.state.auth_token_input.shift_active,
+                )
+                if toggle_shift:
+                    self.state.auth_token_input.shift_active = (
+                        not self.state.auth_token_input.shift_active
+                    )
+                self.state.auth_token_input.input_text = new_text
+                if is_done:
+                    self._submit_auth_token()
+            else:
+                # Keyboard mode - Enter was pressed
+                self._submit_auth_token()
+
+    def _submit_auth_token(self):
+        """Save auth token to the JSON file and proceed to load games."""
+        token = self.state.auth_token_input.input_text.strip()
+        if not token:
+            return
+
+        system_index = self.state.auth_token_input.system_index
+        if system_index < 0 or system_index >= len(self.data):
+            self.state.auth_token_input.show = False
+            return
+
+        # Update the token in the in-memory data
+        self.data[system_index].setdefault("auth", {})["token"] = token
+
+        # Persist token back to the JSON file
+        self._save_auth_token_to_json(system_index, token)
+
+        # Close modal and load games
+        self.state.auth_token_input.show = False
+        self._load_games_for_system(system_index)
+
+    def _save_auth_token_to_json(self, system_index: int, token: str):
+        """Save the auth token back to the source JSON file."""
+        import json
+        from services.data_loader import BUNDLED_JSON_FILE
+        from constants import ADDED_SYSTEMS_FILE
+
+        system_name = self.data[system_index].get("name", "")
+
+        # Try each JSON file that could contain this system
+        json_paths = []
+        archive_path = self.settings.get("archive_json_path", "")
+        if archive_path and os.path.exists(archive_path):
+            json_paths.append(archive_path)
+        if os.path.exists(BUNDLED_JSON_FILE):
+            json_paths.append(BUNDLED_JSON_FILE)
+        if os.path.exists(ADDED_SYSTEMS_FILE):
+            json_paths.append(ADDED_SYSTEMS_FILE)
+
+        for json_path in json_paths:
+            try:
+                with open(json_path, "r") as f:
+                    file_data = json.load(f)
+
+                found = False
+                for system in file_data:
+                    if system.get("name") == system_name and "auth" in system:
+                        system["auth"]["token"] = token
+                        found = True
+                        break
+
+                if found:
+                    with open(json_path, "w") as f:
+                        json.dump(file_data, f, indent=2)
+                    return
+            except Exception as e:
+                from utils.logging import log_error
+
+                log_error(f"Failed to save auth token to {json_path}: {e}")
+
     def _submit_search_keyboard_input(self):
         """Handle search submission from physical keyboard."""
         self._apply_search_filter()
@@ -4235,6 +4490,9 @@ class ConsoleUtilitiesApp:
 
     def _handle_text_modal_ok_click(self):
         """Handle OK button click on text input modals."""
+        if self.state.auth_token_input.show and self.state.auth_token_input.step == "input":
+            self._submit_auth_token()
+            return
         if self.state.show_search_input:
             self._submit_search_keyboard_input()
         elif self.state.url_input.show:
@@ -4268,7 +4526,12 @@ class ConsoleUtilitiesApp:
 
     def _handle_text_modal_backspace(self):
         """Handle backspace button tap on Android text input modals."""
-        if self.state.ia_login.show:
+        if self.state.auth_token_input.show and self.state.auth_token_input.step == "input":
+            if self.state.auth_token_input.input_text:
+                self.state.auth_token_input.input_text = (
+                    self.state.auth_token_input.input_text[:-1]
+                )
+        elif self.state.ia_login.show:
             step = self.state.ia_login.step
             if step == "email" and self.state.ia_login.email:
                 self.state.ia_login.email = self.state.ia_login.email[:-1]
@@ -4559,6 +4822,38 @@ class ConsoleUtilitiesApp:
             }
         return system_data
 
+    def _load_games_for_system(self, system_index: int):
+        """Load games for a system (non-blocking)."""
+        system_data = self._inject_ia_auth(self.data[system_index])
+        system_name = system_data.get("name", "Unknown")
+
+        self._show_loading(f"Loading {system_name}...")
+
+        import threading
+
+        def _do_load_games(sd=system_data):
+            games = list_files(sd, self.settings)
+            self._hide_loading()
+            if not games:
+                self.state.confirm_modal.show = True
+                self.state.confirm_modal.title = "No Games Found"
+                self.state.confirm_modal.message_lines = [
+                    "Could not load games list.",
+                    "Check your connection and try again.",
+                ]
+                self.state.confirm_modal.ok_label = "OK"
+                self.state.confirm_modal.cancel_label = ""
+                self.state.confirm_modal.button_index = 0
+                self.state.confirm_modal.context = ""
+                return
+            self.state.game_list = games
+            roms_folder = get_roms_folder_for_system(sd, self.settings)
+            installed_checker.set_roms_folder(roms_folder)
+            self.state.mode = "games"
+            self.state.highlighted = 0
+
+        threading.Thread(target=_do_load_games, daemon=True).start()
+
     def _start_download(self):
         """Start downloading selected games by adding to background queue."""
         if not self.state.selected_games or self.state.selected_system < 0:
@@ -4615,6 +4910,7 @@ class ConsoleUtilitiesApp:
             or self.state.dedupe_wizard.show
             or self.state.rename_wizard.show
             or self.state.ghost_cleaner_wizard.show
+            or self.state.auth_token_input.show
         )
 
     # ---- PortMaster Handlers ---- #

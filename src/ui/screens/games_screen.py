@@ -192,14 +192,17 @@ class GamesScreen:
         bar_surface.fill((*self.theme.surface[:3], 230))
         screen.blit(bar_surface, (inset, bar_y))
 
-        # Draw selected count on the left
+        # Draw selected count on the left (vertically centered)
         count_text = (
             f"{selected_count} game{'s' if selected_count != 1 else ''} selected"
         )
+        font = self.text.get_font(self.theme.font_size_md)
+        text_h = font.get_height()
+        text_y = bar_y + (bar_height - text_h) // 2
         self.text.render(
             screen,
             count_text,
-            (inset + self.theme.padding_md, bar_y + bar_height // 2),
+            (inset + self.theme.padding_md, text_y),
             color=self.theme.secondary,
             size=self.theme.font_size_md,
             align="left",
@@ -227,7 +230,7 @@ class GamesScreen:
                 hint_text,
                 (
                     screen_width - inset - self.theme.padding_md,
-                    bar_y + bar_height // 2,
+                    text_y,
                 ),
                 color=self.theme.warning,
                 size=self.theme.font_size_md,

@@ -490,6 +490,64 @@ html, body {
     display: none;
 }
 
+#logsView {
+    display: none;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+}
+#logsView.active {
+    display: flex;
+}
+.logs-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--primary-dark);
+    flex-shrink: 0;
+}
+.logs-toolbar button {
+    padding: 6px 12px;
+    font-size: 12px;
+    font-family: inherit;
+    background: var(--surface-hover);
+    color: var(--text-dim);
+    border: 1px solid var(--primary-dark);
+    border-radius: var(--radius);
+    cursor: pointer;
+}
+.logs-toolbar button:hover {
+    color: var(--text);
+    border-color: var(--primary);
+}
+.logs-toolbar button.active {
+    color: var(--primary);
+    border-color: var(--primary);
+}
+.logs-toolbar .spacer { flex: 1; }
+.logs-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 12px;
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--text-dim);
+    -webkit-overflow-scrolling: touch;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+.logs-content .log-line {
+    padding: 1px 0;
+}
+.logs-content .log-error {
+    color: var(--error);
+}
+.logs-content .log-ts {
+    color: var(--text-disabled);
+}
+
 /* FM Toolbar */
 .fm-toolbar {
     display: flex;
@@ -956,6 +1014,7 @@ html, body {
     <div class="tab-bar" id="tabBar">
         <button class="active" data-tab="companion">Companion</button>
         <button data-tab="files">Files</button>
+        <button data-tab="logs">Logs</button>
     </div>
 
     <!-- Companion view (original) -->
@@ -1023,6 +1082,18 @@ html, body {
     <div class="ctx-sep"></div>
     <button data-action="delete" class="danger">Delete</button>
 </div>
+
+    <!-- Logs view -->
+    <div id="logsView">
+        <div class="logs-toolbar">
+            <button id="logsAutoScroll" class="active">Auto-scroll</button>
+            <button id="logsShowErrors" class="active">App Log</button>
+            <div class="spacer"></div>
+            <button id="logsClear">Clear</button>
+            <button id="logsRefresh">Refresh</button>
+        </div>
+        <div class="logs-content" id="logsContent"></div>
+    </div>
 
 <!-- FM Modal overlay -->
 <div class="fm-modal-overlay" id="fmModalOverlay">
@@ -1500,6 +1571,7 @@ connectSSE();
 const tabBar = document.getElementById('tabBar');
 const companionView = document.getElementById('companionView');
 const fileManagerView = document.getElementById('fileManagerView');
+const logsView = document.getElementById('logsView');
 let activeTab = 'companion';
 
 tabBar.addEventListener('click', (e) => {
@@ -1513,16 +1585,25 @@ tabBar.addEventListener('click', (e) => {
     tabBar.querySelectorAll('button').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
 
+    // Hide all views
+    companionView.classList.add('hidden');
+    fileManagerView.classList.remove('active');
+    logsView.classList.remove('active');
+
     if (tab === 'companion') {
         companionView.classList.remove('hidden');
-        fileManagerView.classList.remove('active');
-    } else {
-        companionView.classList.add('hidden');
+    } else if (tab === 'files') {
         fileManagerView.classList.add('active');
-        // Load roms directory on first switch to Files tab
+        logsManager.stop();
         if (!fm.loaded) {
             fm.init();
         }
+    } else if (tab === 'logs') {
+        logsView.classList.add('active');
+        logsManager.start();
+    }
+    if (tab !== 'logs') {
+        logsManager.stop();
     }
 });
 
@@ -2277,6 +2358,82 @@ document.addEventListener('keydown', (e) => {
         }
     }
 });
+
+/* ============================================================
+   LOGS VIEWER
+   ============================================================ */
+const logsManager = {
+    content: document.getElementById('logsContent'),
+    autoScroll: true,
+    showErrors: true,
+    pollTimer: null,
+    lines: [],
+    errorLines: [],
+
+    start() {
+        if (!this.pollTimer) {
+            this.fetch();
+            this.pollTimer = setInterval(() => this.fetch(), 2000);
+        }
+    },
+
+    stop() {
+        if (this.pollTimer) {
+            clearInterval(this.pollTimer);
+            this.pollTimer = null;
+        }
+    },
+
+    async fetch() {
+        try {
+            const r = await fetch('/api/logs');
+            const data = await r.json();
+            this.lines = data.lines || [];
+            this.errorLines = data.error_log || [];
+            this.render();
+        } catch (e) {}
+    },
+
+    render() {
+        const lines = this.showErrors ? this.errorLines : this.lines;
+        if (!lines.length) {
+            this.content.innerHTML = '<div style="color:var(--text-disabled);padding:20px;text-align:center">No logs yet</div>';
+            return;
+        }
+        const html = lines.map(l => {
+            const isErr = /error|fail|exception|traceback/i.test(l);
+            const cls = isErr ? 'log-line log-error' : 'log-line';
+            const escaped = l.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            return '<div class="' + cls + '">' + escaped + '</div>';
+        }).join('');
+        this.content.innerHTML = html;
+        if (this.autoScroll) {
+            this.content.scrollTop = this.content.scrollHeight;
+        }
+    },
+
+    clear() {
+        this.lines = [];
+        this.errorLines = [];
+        this.render();
+    }
+};
+
+document.getElementById('logsAutoScroll').addEventListener('click', function() {
+    logsManager.autoScroll = !logsManager.autoScroll;
+    this.classList.toggle('active', logsManager.autoScroll);
+    if (logsManager.autoScroll) {
+        logsManager.content.scrollTop = logsManager.content.scrollHeight;
+    }
+});
+document.getElementById('logsShowErrors').addEventListener('click', function() {
+    logsManager.showErrors = !logsManager.showErrors;
+    this.classList.toggle('active', logsManager.showErrors);
+    this.textContent = logsManager.showErrors ? 'App Log' : 'Error Log';
+    logsManager.render();
+});
+document.getElementById('logsClear').addEventListener('click', () => logsManager.clear());
+document.getElementById('logsRefresh').addEventListener('click', () => logsManager.fetch());
 </script>
 </body>
 </html>"""
