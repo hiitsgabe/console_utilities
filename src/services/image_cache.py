@@ -124,8 +124,12 @@ class _ThumbnailListingCache:
     def _fetch_listing(self, boxart_url: str):
         """Fetch and parse the directory listing from a thumbnail server."""
         try:
-            response = requests.get(boxart_url, timeout=30)
-            response.raise_for_status()
+            try:
+                response = requests.get(boxart_url, timeout=(10, 30))
+                response.raise_for_status()
+            except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
+                response = requests.get(boxart_url, timeout=(10, 30), verify=False)
+                response.raise_for_status()
             html = response.text
 
             # Parse href attributes pointing to image files

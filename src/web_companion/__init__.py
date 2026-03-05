@@ -617,18 +617,28 @@ class WebCompanion:
             def _handle_logs(self):
                 """GET /api/logs - Return recent log lines."""
                 lines = log_capture.get_lines(300)
-                # Also append error.log tail if available
+                # Read error.log (check both temp and work_dir locations)
+                error_lines = []
                 try:
                     from utils.logging import get_log_file
-                    log_path = get_log_file()
-                    if os.path.exists(log_path):
-                        with open(log_path, "r", errors="replace") as f:
-                            error_lines = f.readlines()[-100:]
-                            error_lines = [l.rstrip() for l in error_lines if l.strip()]
-                    else:
-                        error_lines = []
+                    from constants import TEMP_LOG_DIR
+                    # Check configured log path and temp fallback
+                    paths = [get_log_file()]
+                    temp_log = os.path.join(TEMP_LOG_DIR, "error.log")
+                    if temp_log not in paths:
+                        paths.append(temp_log)
+                    for log_path in paths:
+                        if log_path and os.path.exists(log_path):
+                            try:
+                                with open(log_path, "r", errors="replace") as f:
+                                    file_lines = f.readlines()[-200:]
+                                    error_lines.extend(
+                                        l.rstrip() for l in file_lines if l.strip()
+                                    )
+                            except Exception:
+                                pass
                 except Exception:
-                    error_lines = []
+                    pass
                 self._send_json({"lines": lines, "error_log": error_lines})
 
             def log_message(self, format, *args):

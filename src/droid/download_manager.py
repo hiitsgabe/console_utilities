@@ -703,6 +703,7 @@ def _resolve_ia_redirects(url, auth_headers, max_redirects=5):
     request_headers.update(auth_headers)
 
     current_url = url
+    verify = True
     for _ in range(max_redirects):
         try:
             resp = requests.get(
@@ -711,6 +712,7 @@ def _resolve_ia_redirects(url, auth_headers, max_redirects=5):
                 timeout=30,
                 headers=request_headers,
                 allow_redirects=False,
+                verify=verify,
             )
             if resp.status_code in (301, 302, 303, 307, 308):
                 current_url = resp.headers.get("Location", current_url)
@@ -719,6 +721,11 @@ def _resolve_ia_redirects(url, auth_headers, max_redirects=5):
             else:
                 resp.close()
                 return current_url
+        except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
+            if verify:
+                verify = False
+                continue  # Retry same URL without SSL verification
+            return None
         except Exception:
             return None
     return None

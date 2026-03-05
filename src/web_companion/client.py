@@ -1087,7 +1087,7 @@ html, body {
     <div id="logsView">
         <div class="logs-toolbar">
             <button id="logsAutoScroll" class="active">Auto-scroll</button>
-            <button id="logsShowErrors">Error Log</button>
+            <button id="logsShowErrors" class="active">App Log</button>
             <div class="spacer"></div>
             <button id="logsClear">Clear</button>
             <button id="logsRefresh">Refresh</button>
@@ -2365,7 +2365,7 @@ document.addEventListener('keydown', (e) => {
 const logsManager = {
     content: document.getElementById('logsContent'),
     autoScroll: true,
-    showErrors: false,
+    showErrors: true,
     pollTimer: null,
     lines: [],
     errorLines: [],
