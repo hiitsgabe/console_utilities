@@ -5,12 +5,14 @@ Runs an HTTP server alongside PyGame so the user can open a phone browser
 on the same network and get a context-aware web interface for faster input.
 """
 
+import collections
 import io
 import json
 import os
 import queue
 import shutil
 import socket
+import sys
 import threading
 import time
 import urllib.parse
@@ -23,6 +25,80 @@ from constants import SCREEN_WIDTH, SCREEN_HEIGHT, WEB_COMPANION_PORT
 from .state_serializer import serialize_web_state
 from .action_handler import handle_action
 from .client import CLIENT_HTML
+
+
+class _LogCapture:
+    """Captures stdout/stderr into a ring buffer while forwarding to original streams."""
+
+    def __init__(self, maxlen=500):
+        self._buffer = collections.deque(maxlen=maxlen)
+        self._lock = threading.Lock()
+        self._original_stdout = None
+        self._original_stderr = None
+        self._installed = False
+
+    def install(self):
+        if self._installed:
+            return
+        self._original_stdout = sys.stdout
+        self._original_stderr = sys.stderr
+        sys.stdout = _TeeWriter(self._original_stdout, self)
+        sys.stderr = _TeeWriter(self._original_stderr, self)
+        self._installed = True
+
+    def add_line(self, line):
+        ts = time.strftime("%H:%M:%S")
+        with self._lock:
+            self._buffer.append(f"[{ts}] {line}")
+
+    def get_lines(self, last_n=200):
+        with self._lock:
+            lines = list(self._buffer)
+        return lines[-last_n:]
+
+
+class _TeeWriter:
+    """Writes to both original stream and log capture."""
+
+    def __init__(self, original, capture):
+        self._original = original
+        self._capture = capture
+        self._line_buf = ""
+
+    def write(self, text):
+        if self._original:
+            try:
+                self._original.write(text)
+            except Exception:
+                pass
+        self._line_buf += text
+        while "\n" in self._line_buf:
+            line, self._line_buf = self._line_buf.split("\n", 1)
+            if line.strip():
+                self._capture.add_line(line)
+
+    def flush(self):
+        if self._original:
+            try:
+                self._original.flush()
+            except Exception:
+                pass
+
+    def fileno(self):
+        if self._original:
+            return self._original.fileno()
+        raise io.UnsupportedOperation("fileno")
+
+    def isatty(self):
+        return False
+
+    @property
+    def encoding(self):
+        return getattr(self._original, "encoding", "utf-8")
+
+
+# Module-level singleton
+log_capture = _LogCapture()
 
 
 def _get_local_ip():
@@ -69,6 +145,7 @@ class WebCompanion:
         """Start the web companion server in a daemon thread."""
         if self._running:
             return
+        log_capture.install()
         self._running = True
         self._local_ip = _get_local_ip()
         print(f"\n  Web Companion: {self.url}\n")
@@ -131,6 +208,8 @@ class WebCompanion:
                     self._handle_sse()
                 elif self.path == "/mjpeg":
                     self._handle_mjpeg()
+                elif self.path.startswith("/api/logs"):
+                    self._handle_logs()
                 elif self.path == "/api/files/config":
                     self._handle_file_config()
                 elif self.path.startswith("/api/files/download"):
@@ -534,6 +613,33 @@ class WebCompanion:
                     self._send_json({"ok": True, "path": new_path})
                 except OSError as e:
                     self._send_error_json(str(e), 500)
+
+            def _handle_logs(self):
+                """GET /api/logs - Return recent log lines."""
+                lines = log_capture.get_lines(300)
+                # Read error.log (check both temp and work_dir locations)
+                error_lines = []
+                try:
+                    from utils.logging import get_log_file
+                    from constants import TEMP_LOG_DIR
+                    # Check configured log path and temp fallback
+                    paths = [get_log_file()]
+                    temp_log = os.path.join(TEMP_LOG_DIR, "error.log")
+                    if temp_log not in paths:
+                        paths.append(temp_log)
+                    for log_path in paths:
+                        if log_path and os.path.exists(log_path):
+                            try:
+                                with open(log_path, "r", errors="replace") as f:
+                                    file_lines = f.readlines()[-200:]
+                                    error_lines.extend(
+                                        l.rstrip() for l in file_lines if l.strip()
+                                    )
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+                self._send_json({"lines": lines, "error_log": error_lines})
 
             def log_message(self, format, *args):
                 pass

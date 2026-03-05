@@ -482,6 +482,7 @@ class AndroidDownloadManager:
         Query = autoclass("android.app.DownloadManager$Query")
 
         now = time.time()
+        failed_items = []
 
         with self._lock:
             for download_id, item in list(self._download_ids.items()):
@@ -493,6 +494,9 @@ class AndroidDownloadManager:
                 cursor = self._dm.query(query)
 
                 if cursor and cursor.moveToFirst():
+                    status_col = cursor.getColumnIndex(
+                        DownloadManagerClass.COLUMN_STATUS
+                    )
                     downloaded_col = cursor.getColumnIndex(
                         DownloadManagerClass.COLUMN_BYTES_DOWNLOADED_SO_FAR
                     )
@@ -500,8 +504,23 @@ class AndroidDownloadManager:
                         DownloadManagerClass.COLUMN_TOTAL_SIZE_BYTES
                     )
 
+                    dm_status = cursor.getInt(status_col)
                     downloaded = cursor.getLong(downloaded_col)
                     total = cursor.getLong(total_col)
+
+                    # Check for failure
+                    if dm_status == DownloadManagerClass.STATUS_FAILED:
+                        reason_col = cursor.getColumnIndex(
+                            DownloadManagerClass.COLUMN_REASON
+                        )
+                        reason = cursor.getInt(reason_col)
+                        cursor.close()
+                        item.status = "failed"
+                        item.error = f"Download failed (reason: {reason})"
+                        self._download_ids.pop(download_id, None)
+                        failed_items.append(item)
+                        continue
+
                     cursor.close()
 
                     old_downloaded = item.downloaded
@@ -520,6 +539,10 @@ class AndroidDownloadManager:
                 else:
                     if cursor:
                         cursor.close()
+
+        # Process next item if any failed (outside lock)
+        if failed_items:
+            self._process_next()
 
     def _poll_extraction_status(self):
         """Check IPC status files for extraction progress updates."""
@@ -680,6 +703,7 @@ def _resolve_ia_redirects(url, auth_headers, max_redirects=5):
     request_headers.update(auth_headers)
 
     current_url = url
+    verify = True
     for _ in range(max_redirects):
         try:
             resp = requests.get(
@@ -688,6 +712,7 @@ def _resolve_ia_redirects(url, auth_headers, max_redirects=5):
                 timeout=30,
                 headers=request_headers,
                 allow_redirects=False,
+                verify=verify,
             )
             if resp.status_code in (301, 302, 303, 307, 308):
                 current_url = resp.headers.get("Location", current_url)
@@ -696,6 +721,11 @@ def _resolve_ia_redirects(url, auth_headers, max_redirects=5):
             else:
                 resp.close()
                 return current_url
+        except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
+            if verify:
+                verify = False
+                continue  # Retry same URL without SSL verification
+            return None
         except Exception:
             return None
     return None

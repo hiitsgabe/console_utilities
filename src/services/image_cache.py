@@ -108,7 +108,7 @@ class _ThumbnailListingCache:
         # Wait for the listing to become available (already in bg thread)
         event = self._events.get(boxart_url)
         if event:
-            event.wait(timeout=10)
+            event.wait(timeout=30)
 
         lookup = self._listings.get(boxart_url, {})
         cleaned = _clean_name_for_matching(game_base_name)
@@ -124,8 +124,12 @@ class _ThumbnailListingCache:
     def _fetch_listing(self, boxart_url: str):
         """Fetch and parse the directory listing from a thumbnail server."""
         try:
-            response = requests.get(boxart_url, timeout=15)
-            response.raise_for_status()
+            try:
+                response = requests.get(boxart_url, timeout=(10, 30))
+                response.raise_for_status()
+            except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
+                response = requests.get(boxart_url, timeout=(10, 30), verify=False)
+                response.raise_for_status()
             html = response.text
 
             # Parse href attributes pointing to image files
@@ -186,6 +190,9 @@ class ImageCache:
 
         self._hires_cache: Dict[str, Any] = {}
         self._hires_queue: Queue = Queue()
+
+        self._retry_counts: Dict[str, int] = {}
+        self._max_retries = 2
 
     def get_thumbnail(
         self, game_item: Any, boxart_url: str, settings: Dict[str, Any]
@@ -334,6 +341,7 @@ class ImageCache:
         """Clear all cached images and queues."""
         self._thumbnail_cache.clear()
         self._hires_cache.clear()
+        self._retry_counts.clear()
 
         # Drain queues
         self._drain_queue(self._thumbnail_queue)
@@ -550,7 +558,18 @@ class ImageCache:
         while not queue.empty():
             try:
                 cache_key, image = queue.get_nowait()
-                cache[cache_key] = image
+                if image is not None:
+                    cache[cache_key] = image
+                    self._retry_counts.pop(cache_key, None)
+                else:
+                    retries = self._retry_counts.get(cache_key, 0)
+                    if retries < self._max_retries:
+                        # Allow retry by removing from cache
+                        self._retry_counts[cache_key] = retries + 1
+                        cache.pop(cache_key, None)
+                    else:
+                        # Max retries reached, cache as not found
+                        cache[cache_key] = None
             except Empty:
                 break
 
