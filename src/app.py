@@ -120,10 +120,18 @@ class ConsoleUtilitiesApp:
             self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         elif BUILD_TARGET == "android":
             display_info = pygame.display.Info()
-            self.screen = pygame.display.set_mode(
-                (display_info.current_w, display_info.current_h),
-                pygame.FULLSCREEN,
-            )
+            native_w, native_h = display_info.current_w, display_info.current_h
+            if native_h > native_w:
+                # Portrait: use fixed 800x600 scaled to fit
+                self.screen = pygame.display.set_mode(
+                    (SCREEN_WIDTH, SCREEN_HEIGHT),
+                    pygame.SCALED | pygame.FULLSCREEN,
+                )
+            else:
+                # Landscape: use native resolution
+                self.screen = pygame.display.set_mode(
+                    (native_w, native_h), pygame.SCALED | pygame.FULLSCREEN,
+                )
         else:
             display_info = pygame.display.Info()
             self.screen = pygame.display.set_mode(
@@ -569,6 +577,35 @@ class ConsoleUtilitiesApp:
             from utils.logging import log_error
             log_error(f"[restore_display] Error, will retry: {e}")
 
+    def _handle_android_orientation(self, new_w: int, new_h: int):
+        """Handle Android orientation change. Portrait keeps 800x600, landscape resizes."""
+        is_portrait = new_h > new_w
+        if is_portrait:
+            # Portrait: use fixed 800x600 with SCALED to fit
+            self.screen = pygame.display.set_mode(
+                (SCREEN_WIDTH, SCREEN_HEIGHT),
+                pygame.SCALED | pygame.FULLSCREEN,
+            )
+        else:
+            # Landscape: use native resolution
+            self.screen = pygame.display.set_mode(
+                (new_w, new_h), pygame.SCALED | pygame.FULLSCREEN
+            )
+
+        # Recreate theme and overlays
+        self.theme = Theme()
+        self.scanline_surface = None
+        if self.theme.crt_scanlines:
+            sw, sh = self.screen.get_size()
+            self.scanline_surface = pygame.Surface((sw, sh), pygame.SRCALPHA)
+            for y in range(0, sh, 3):
+                pygame.draw.line(
+                    self.scanline_surface, (0, 0, 0, 40), (0, y), (sw, y)
+                )
+        self.bezel_surface = self._create_crt_bezel()
+        self.vignette_surface = self._create_vignette()
+        self.image_cache.clear()
+
     def _handle_resize(self, new_w: int, new_h: int):
         """Handle screen resize (Android orientation change)."""
         self.screen = pygame.display.set_mode((new_w, new_h), pygame.RESIZABLE)
@@ -888,11 +925,14 @@ class ConsoleUtilitiesApp:
 
                 elif event.type == pygame.VIDEORESIZE:
                     if BUILD_TARGET == "android":
-                        # surfaceChanged() fires VIDEORESIZE — surface is now valid
                         if self._needs_display_restore:
+                            # surfaceChanged() fires VIDEORESIZE — surface is now valid
                             self._needs_display_restore = False
                             self._is_backgrounded = False
                             self._restore_android_display()
+                        else:
+                            # Orientation change: landscape = resize, portrait = 800x600
+                            self._handle_android_orientation(event.w, event.h)
                     else:
                         self._handle_resize(event.w, event.h)
 
