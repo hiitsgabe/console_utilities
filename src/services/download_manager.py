@@ -493,7 +493,7 @@ class DownloadManager:
                         if f.endswith(".nsp"):
                             src_path = os.path.join(self.work_dir, f)
                             dst_path = os.path.join(roms_folder, f)
-                            os.rename(src_path, dst_path)
+                            shutil.move(src_path, dst_path)
 
                     if os.path.exists(file_path):
                         os.remove(file_path)
@@ -516,7 +516,7 @@ class DownloadManager:
                     return False
                 src_path = os.path.join(self.work_dir, f)
                 dst_path = os.path.join(roms_folder, f)
-                os.rename(src_path, dst_path)
+                shutil.move(src_path, dst_path)
                 item.progress = (i + 1) / max(len(files_to_move), 1)
 
             # Clean up work directory

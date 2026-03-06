@@ -151,7 +151,7 @@ def _process_file(service, item_id, file_path, filename, work_dir, roms_folder, 
             return
         src_path = os.path.join(work_dir, f)
         dst_path = os.path.join(roms_folder, f)
-        os.rename(src_path, dst_path)
+        shutil.move(src_path, dst_path)
         progress = (i + 1) / max(len(files_to_move), 1)
         write_status(work_dir, item_id, {"status": "moving", "progress": progress})
         update_notification(service, f"Moving: {f}", int(progress * 100), 100)
@@ -227,7 +227,7 @@ def _extract_zip(service, item_id, file_path, filename, work_dir, roms_folder, s
                 return
             src_path = os.path.join(work_dir, f)
             dst_path = os.path.join(roms_folder, f)
-            os.rename(src_path, dst_path)
+            shutil.move(src_path, dst_path)
             progress = (i + 1) / max(len(files_to_move), 1)
             write_status(work_dir, item_id, {"status": "moving", "progress": progress})
 
@@ -259,7 +259,7 @@ def _decompress_nsz(service, item_id, file_path, work_dir, roms_folder, system_d
             if f.endswith(".nsp"):
                 src_path = os.path.join(work_dir, f)
                 dst_path = os.path.join(roms_folder, f)
-                os.rename(src_path, dst_path)
+                shutil.move(src_path, dst_path)
 
         if os.path.exists(file_path):
             os.remove(file_path)
