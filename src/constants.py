@@ -35,6 +35,15 @@ if DEV_MODE:
     TEMP_LOG_DIR = os.path.join(SCRIPT_DIR, "..", "workdir")
     CONFIG_FILE = os.path.join(SCRIPT_DIR, "..", "workdir", "config.json")
     ADDED_SYSTEMS_FILE = os.path.join(SCRIPT_DIR, "..", "workdir", "added_systems.json")
+elif BUILD_TARGET == "android":
+    # Use external files dir on Android so config survives app updates.
+    # Internal app storage gets wiped on reinstall.
+    from droid.storage import get_external_data_dir
+    _ANDROID_DATA_DIR = get_external_data_dir(SCRIPT_DIR)
+    os.makedirs(_ANDROID_DATA_DIR, exist_ok=True)
+    TEMP_LOG_DIR = _ANDROID_DATA_DIR
+    CONFIG_FILE = os.path.join(_ANDROID_DATA_DIR, "config.json")
+    ADDED_SYSTEMS_FILE = os.path.join(_ANDROID_DATA_DIR, "added_systems.json")
 else:
     TEMP_LOG_DIR = SCRIPT_DIR
     CONFIG_FILE = os.path.join(SCRIPT_DIR, "config.json")
@@ -46,12 +55,16 @@ LOG_FILE = os.path.join(TEMP_LOG_DIR, "error.log")
 # WE Patcher cache directory
 if DEV_MODE:
     WE_PATCHER_CACHE_DIR = os.path.join(SCRIPT_DIR, "..", "workdir", "we_patcher_cache")
+elif BUILD_TARGET == "android":
+    WE_PATCHER_CACHE_DIR = os.path.join(_ANDROID_DATA_DIR, "we_patcher_cache")
 else:
     WE_PATCHER_CACHE_DIR = os.path.join(SCRIPT_DIR, "we_patcher_cache")
 
 # Systems cache directory (file listings + thumbnail listings)
 if DEV_MODE:
     SYSTEMS_CACHE_DIR = os.path.join(SCRIPT_DIR, "..", "workdir", "systems_cache")
+elif BUILD_TARGET == "android":
+    SYSTEMS_CACHE_DIR = os.path.join(_ANDROID_DATA_DIR, "systems_cache")
 else:
     SYSTEMS_CACHE_DIR = os.path.join(SCRIPT_DIR, "systems_cache")
 
