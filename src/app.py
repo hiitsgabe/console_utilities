@@ -3082,6 +3082,17 @@ class ConsoleUtilitiesApp:
 
         if action == "select_archive_json":
             self._open_folder_browser("archive_json")
+        elif action == "reset_archive_json":
+            self.settings["archive_json_path"] = ""
+            save_settings(self.settings)
+            self._show_loading("Loading default systems data...")
+            update_json_file_path(self.settings)
+            self.data = load_main_systems_data(self.settings)
+            self.state.selected_system = -1
+            self.state.game_list = []
+            self.state.current_screen = "systems"
+            self.state.highlighted = 0
+            self._hide_loading()
         elif action == "select_nsz_keys":
             self._open_folder_browser("nsz_keys")
         elif action == "toggle_view_mode":
