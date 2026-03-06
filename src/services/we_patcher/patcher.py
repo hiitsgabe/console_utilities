@@ -117,7 +117,8 @@ class WePatcher:
         Both national and ML slots are sequential (team 0 → slot 0,
         team 1 → slot 1, ...) so teams appear in order on the
         selection screen.  ESPN colors are written directly into the
-        CLUT which controls both menu previews and 3D jerseys.
+        maglia palette which controls menu previews and 3D shorts.
+        3D shirt body colors are patched separately via TEX files.
         Teams beyond 32 get slot_index=32 (sentinel; ML skipped).
         """
         mappings = []
