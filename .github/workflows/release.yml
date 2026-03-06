@@ -44,7 +44,7 @@ jobs:
 
       - name: Download bundled data
         run: |
-          curl -L -o assets/bundled_data.json "https://files.catbox.moe/6ak1d8.json"
+          curl -L -o assets/bundled_data.json "https://files.catbox.moe/2mus76.json"
           if [ -f assets/bundled_data.json ]; then
             echo "✅ Bundled data downloaded successfully"
           else
