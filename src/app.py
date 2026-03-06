@@ -5169,6 +5169,7 @@ class ConsoleUtilitiesApp:
             or self.state.url_input.show
             or self.state.ia_login.show
             or self.state.scraper_login.show
+            or (self.state.auth_token_input.show and self.state.auth_token_input.step == "input")
         )
 
     def _any_modal_open(self) -> bool:
