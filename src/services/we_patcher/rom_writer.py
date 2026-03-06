@@ -26,7 +26,7 @@ import os
 import struct
 import shutil
 import unicodedata
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from .models import WETeamRecord, WEPlayerRecord
 
@@ -165,25 +165,118 @@ _POS_MAP = {0: 0, 1: 1, 2: 3, 3: 6}
 _TEX_BASE_LBA = 8400       # LBA of TEX_00.BIN on CD
 _TEX_LBA_STRIDE = 20       # Each TEX allocated 20 sectors
 _TEX_COUNT = 95             # 63 national + 32 ML teams
+_TEX_MAX_BYTES = 20 * 2048  # 40960 bytes max per TEX slot
 
-# TEX file sizes from ISO9660 directory (bytes per file, indices 0-94)
-_TEX_SIZES = {
-    0: 29944, 1: 30676, 2: 30956, 3: 29964, 4: 30428, 5: 31652, 6: 29044,
-    7: 30016, 8: 29656, 9: 31056, 10: 29312, 11: 31860, 12: 30848, 13: 30372,
-    14: 31188, 15: 31412, 16: 31680, 17: 30340, 18: 30264, 19: 32380,
-    20: 31116, 21: 31596, 22: 30772, 23: 31492, 24: 31072, 25: 30808,
-    26: 31936, 27: 31048, 28: 30812, 29: 30404, 30: 31168, 31: 30532,
-    32: 30912, 33: 30424, 34: 31464, 35: 29540, 36: 30444, 37: 32000,
-    38: 27296, 39: 31116, 40: 31196, 41: 27572, 42: 27196, 43: 26664,
-    44: 28076, 45: 28420, 46: 27020, 47: 30712, 48: 30368, 49: 27424,
-    50: 28724, 51: 28304, 52: 25948, 53: 27412, 54: 32168, 55: 32376,
-    56: 29108, 57: 29032, 58: 29088, 59: 29384, 60: 28980, 61: 29936,
-    62: 29928, 63: 30516, 64: 30748, 65: 29664, 66: 29300, 67: 29612,
-    68: 31888, 69: 31056, 70: 29900, 71: 27328, 72: 28280, 73: 30464,
-    74: 31248, 75: 31520, 76: 26456, 77: 31872, 78: 28496, 79: 28372,
-    80: 26156, 81: 27272, 82: 26844, 83: 32244, 84: 27928, 85: 26492,
-    86: 28456, 87: 27588, 88: 28648, 89: 33284, 90: 26720, 91: 28208,
-    92: 26656, 93: 26560, 94: 26648,
+# ISO9660 BIN directory location (for updating TEX file sizes)
+_BIN_DIR_LBA = 2925
+_BIN_DIR_SIZE = 12288
+
+# Known home shirt colors from the 2D maglia palette (entry 2, BGR555→RGB888).
+# TEX 0-62 = national/allstar, TEX 63-94 = Master League.
+# Dominant shirt color = most frequent RGB among maglia entries 2-7.
+# Known home jersey colors for each TEX slot (real-world 2001-02 kits).
+# National teams use real kit colors; ML teams use the real club counterpart.
+_TEX_JERSEY_COLORS = {
+    # --- National teams (0-53) ---
+    0: (0, 128, 48),        # Ireland — green
+    1: (0, 0, 102),         # Scotland — dark navy
+    2: (200, 0, 0),         # Wales — red
+    3: (255, 255, 255),     # England — white
+    4: (128, 0, 24),        # Portugal — dark red/maroon
+    5: (200, 0, 0),         # Spain — red
+    6: (0, 32, 160),        # France — blue
+    7: (200, 0, 0),         # Belgium — red
+    8: (255, 128, 0),       # Netherlands — orange
+    9: (200, 0, 0),         # Switzerland — red
+    10: (0, 82, 165),       # Italy — azzurri blue
+    11: (180, 0, 48),       # Czech Republic — dark red
+    12: (255, 255, 255),    # Germany — white
+    13: (200, 0, 0),        # Denmark — red
+    14: (200, 0, 0),        # Norway — red
+    15: (255, 204, 0),      # Sweden — yellow
+    16: (0, 0, 160),        # Iceland — blue
+    17: (255, 255, 255),    # Poland — white
+    18: (0, 0, 160),        # Slovakia — blue
+    19: (255, 255, 255),    # Austria — white
+    20: (200, 0, 0),        # Hungary — red
+    21: (200, 0, 0),        # Albania — red
+    22: (200, 50, 50),      # Croatia — red/white checkered
+    23: (0, 0, 160),        # Serbia — blue
+    24: (255, 204, 0),      # Romania — yellow
+    25: (0, 0, 160),        # Bosnia — blue
+    26: (255, 255, 255),    # Greece — white
+    27: (200, 0, 0),        # Turkey — red
+    28: (255, 204, 0),      # Ukraine — yellow
+    29: (255, 255, 255),    # Russia — white
+    30: (200, 0, 0),        # Morocco — red
+    31: (255, 128, 0),      # Ivory Coast — orange
+    32: (200, 0, 0),        # Egypt — red
+    33: (0, 128, 0),        # Nigeria — green
+    34: (0, 128, 0),        # Cameroon — green
+    35: (0, 128, 0),        # Algeria — green
+    36: (255, 255, 255),    # Ghana — white
+    37: (255, 255, 255),    # U.S.A. — white
+    38: (0, 128, 0),        # Mexico — green
+    39: (128, 0, 0),        # Venezuela — vinotinto (dark maroon)
+    40: (255, 204, 0),      # Colombia — yellow
+    41: (255, 204, 0),      # Brazil — yellow (canarinha)
+    42: (255, 255, 255),    # Peru — white (with red sash)
+    43: (200, 0, 0),        # Chile — red
+    44: (200, 0, 50),       # Paraguay — red/white stripes
+    45: (128, 180, 230),    # Uruguay — celeste (light blue)
+    46: (128, 180, 230),    # Argentina — albiceleste
+    47: (255, 204, 0),      # Ecuador — yellow
+    48: (0, 0, 180),        # Japan — blue
+    49: (200, 0, 0),        # South Korea — red
+    50: (200, 0, 0),        # China — red
+    51: (0, 0, 160),        # India — blue
+    52: (255, 255, 255),    # New Zealand — white (All Whites)
+    53: (255, 204, 0),      # Australia — gold/yellow
+    # --- All-Star / Classic teams (54-62) ---
+    54: (255, 255, 255),    # Euro All Stars — white
+    55: (255, 255, 255),    # World All Stars — white
+    56: (255, 255, 255),    # Clas. England — white
+    57: (0, 32, 160),       # Clas. France — blue
+    58: (255, 128, 0),      # Clas. Netherlands — orange
+    59: (0, 82, 165),       # Clas. Italy — azzurri blue
+    60: (255, 255, 255),    # Clas. Germany — white
+    61: (255, 204, 0),      # Clas. Brazil — yellow
+    62: (128, 180, 230),    # Clas. Argentina — light blue
+    # --- Master League teams (63-94) ---
+    # These are FICTIONAL teams with custom kits — colors from maglia palette,
+    # not real-world clubs.  Only override when maglia clearly wrong.
+    63: (156, 33, 33),      # Aragon (≈Man Utd) — red
+    64: (165, 33, 57),      # London (≈Arsenal) — red
+    65: (0, 57, 173),       # Europort (≈Chelsea) — blue
+    66: (173, 16, 49),      # Liguria (≈Liverpool) — red
+    67: (255, 255, 255),    # Yorkshire (≈Man City) — white kit in-game
+    68: (33, 41, 49),       # Highlands (≈Tottenham) — dark kit in-game
+    69: (165, 33, 57),      # Vascongadas (≈Atl. Madrid) — red
+    70: (148, 8, 57),       # Cataluna (≈Barcelona) — dark red/blue
+    71: (255, 255, 255),    # Navarra (≈Real Madrid) — white
+    72: (255, 255, 255),    # Andalucia (≈Valencia) — white
+    73: (57, 74, 148),      # Cantabria (≈Sevilla) — blue kit in-game
+    74: (132, 41, 33),      # Provence (≈Monaco) — red
+    75: (255, 255, 255),    # Languedoc (≈Porto) — white kit in-game
+    76: (57, 74, 148),      # Normandie (≈PSG) — blue
+    77: (255, 255, 255),    # Medoc (≈Benfica) — white kit in-game
+    78: (255, 255, 255),    # Rijnkanaal (≈Ajax) — white
+    79: (99, 0, 8),         # Noordzeekanaal (≈CSKA) — dark red
+    80: (255, 255, 255),    # Flandre (≈Zenit) — white/red kit in-game
+    81: (16, 57, 140),      # Marche (≈Inter) — dark blue
+    82: (40, 40, 40),       # Piemonte (≈Juventus) — black/white
+    83: (156, 8, 33),       # Lombardia (≈Milan) — red
+    84: (90, 132, 189),     # Umbria (≈Lazio) — sky blue
+    85: (41, 41, 123),      # Emilia (≈Napoli) — dark blue-purple
+    86: (66, 57, 123),      # Toscana (≈Fiorentina) — purple
+    87: (115, 41, 41),      # Abruzzi (≈Roma) — dark red
+    88: (41, 41, 41),       # Westfalen (≈Dortmund) — dark kit in-game
+    89: (41, 41, 41),       # Anhalt (≈Bayern) — dark kit in-game
+    90: (140, 33, 33),      # Ruhr (≈Leverkusen) — red
+    91: (255, 255, 255),    # Peloponnisos (≈Wolfsburg) — white kit in-game
+    92: (165, 165, 74),     # Byzantinobul (≈Galatasaray) — olive/yellow
+    93: (255, 255, 255),    # Marmara (≈Shakhtar) — white kit in-game
+    94: (16, 57, 140),      # Patagonia (≈Basel) — dark blue
 }
 
 # ---------------------------------------------------------------------------
@@ -1127,6 +1220,57 @@ def _edc_compute(data: bytes) -> int:
     return crc
 
 
+def _build_tex_dir_map(rom_data: bytes) -> Tuple[dict, dict]:
+    """Scan ISO9660 BIN directory to find TEX file entries.
+
+    Returns:
+        (sizes, dir_offsets) where:
+        - sizes: dict of TEX index → file size in bytes
+        - dir_offsets: dict of TEX index → absolute ROM byte offset of directory record
+    """
+    dir_data = bytearray()
+    sectors = (_BIN_DIR_SIZE + 2047) // 2048
+    for s in range(sectors):
+        off = (_BIN_DIR_LBA + s) * 2352 + 24
+        dir_data.extend(rom_data[off:off + 2048])
+
+    sizes = {}
+    dir_offsets = {}
+    pos = 0
+    while pos < len(dir_data):
+        rec_len = dir_data[pos]
+        if rec_len == 0:
+            pos = ((pos // 2048) + 1) * 2048
+            continue
+        name_len = dir_data[pos + 32]
+        name = dir_data[pos + 33:pos + 33 + name_len].decode('ascii', errors='replace')
+        if name.startswith('TEX_') and name.endswith('.BIN;1'):
+            idx_str = name[4:-6]
+            try:
+                idx = int(idx_str)
+                if idx < _TEX_COUNT:
+                    ext_size = struct.unpack_from('<I', dir_data, pos + 10)[0]
+                    sizes[idx] = ext_size
+                    sector_in_dir = pos // 2048
+                    offset_in_sector = pos % 2048
+                    abs_pos = (_BIN_DIR_LBA + sector_in_dir) * 2352 + 24 + offset_in_sector
+                    dir_offsets[idx] = abs_pos
+            except ValueError:
+                pass
+        pos += rec_len
+    return sizes, dir_offsets
+
+
+def _update_iso_dir_size(rom: bytearray, dir_record_offset: int, new_size: int):
+    """Update file size in an ISO9660 directory record (both LE and BE) + EDC."""
+    struct.pack_into('<I', rom, dir_record_offset + 10, new_size)
+    struct.pack_into('>I', rom, dir_record_offset + 14, new_size)
+    # Recalculate EDC for the sector containing this directory record
+    sector_off = (dir_record_offset // 2352) * 2352
+    new_edc = _edc_compute(rom[sector_off + 16:sector_off + 2072])
+    struct.pack_into("<I", rom, sector_off + 2072, new_edc)
+
+
 def _read_cd_file(rom_data: bytes, lba: int, size: int) -> bytes:
     """Read a file from Mode2/2352 CD sectors, skipping sector overhead."""
     result = bytearray()
@@ -1156,58 +1300,11 @@ def _write_cd_file_with_edc(rom: bytearray, lba: int, file_data: bytes):
         current_lba += 1
 
 
-def _bgr555_to_rgb_tex(val: int) -> Tuple[int, int, int]:
-    """Convert PS1 BGR555 to RGB888."""
-    r5 = val & 0x1F
-    g5 = (val >> 5) & 0x1F
-    b5 = (val >> 10) & 0x1F
-    return (r5 << 3) | (r5 >> 2), (g5 << 3) | (g5 >> 2), (b5 << 3) | (b5 >> 2)
-
-
-def _get_tex_dominant_color(tex_data: bytes):
-    """Extract dominant jersey color from TEX file's home CLUT (Y=486).
-
-    Returns (R, G, B) tuple or None if no valid CLUT found.
-    """
-    base = 0x800F0000
-    ptrs = set()
-    for i in range(0, 48, 4):
-        val = struct.unpack_from("<I", tex_data, i)[0]
-        if base <= val < base + 0x10000:
-            ptrs.add(val - base)
-
-    for off in sorted(ptrs):
-        if off >= len(tex_data) - 2:
-            continue
-        if struct.unpack_from("<H", tex_data, off)[0] != 0xFF09:
-            continue
-        if struct.unpack_from("<H", tex_data, off + 4)[0] != 486:
-            continue
-        clut_start = off + 32
-        if clut_start + 512 > len(tex_data):
-            continue
-        colors = struct.unpack_from("<256H", tex_data, clut_start)
-        rs, gs, bs = [], [], []
-        for ci in range(2, 20):
-            r, g, b = _bgr555_to_rgb_tex(colors[ci])
-            rs.append(r)
-            gs.append(g)
-            bs.append(b)
-        return (sum(rs) // len(rs), sum(gs) // len(gs), sum(bs) // len(bs))
-    return None
-
-
-def _find_best_tex_match(
-    target_rgb: Tuple[int, int, int],
-    catalog: dict,
-    max_size: int,
-):
-    """Find the TEX index with closest color that fits in max_size bytes."""
+def _find_best_tex_match(target_rgb: Tuple[int, int, int]) -> Optional[int]:
+    """Find the TEX index whose known jersey color is closest to target_rgb."""
     best_idx = None
     best_dist = float('inf')
-    for idx, (color, size) in catalog.items():
-        if size > max_size:
-            continue
+    for idx, color in _TEX_JERSEY_COLORS.items():
         dist = sum((a - b) ** 2 for a, b in zip(target_rgb, color))
         if dist < best_dist:
             best_dist = dist
@@ -1229,7 +1326,9 @@ class RomWriter:
         if os.path.exists(rom_path):
             shutil.copy2(rom_path, output_path)
         self.output_path = output_path
-        self._tex_catalog = None  # Built lazily on first 3D jersey patch
+        self._tex_cache = None       # Original TEX file data (avoids re-read corruption)
+        self._tex_sizes = None       # TEX file sizes from ISO9660 directory
+        self._tex_dir_offsets = None  # ISO9660 directory record offsets for size patching
 
     def write_team(self, slot_index: int, team: WETeamRecord):
         """Write team names, abbreviations, and force bars for a ROM slot.
@@ -1675,31 +1774,37 @@ class RomWriter:
     # 3D jersey patching (TEX files on CD)
     # ------------------------------------------------------------------
 
-    def _ensure_tex_catalog(self):
-        """Build TEX color catalog on first use by scanning all 95 TEX files."""
-        if self._tex_catalog is not None:
+    def _ensure_tex_cache(self):
+        """Cache original TEX file data on first use for 3D jersey patching."""
+        if self._tex_cache is not None:
             return
         if not os.path.exists(self.output_path):
-            self._tex_catalog = {}
+            self._tex_cache = {}
             return
 
         with open(self.output_path, "rb") as f:
             rom = f.read()
 
-        catalog = {}
+        # Scan ISO9660 directory for TEX file sizes and record offsets
+        tex_sizes, tex_dir_offsets = _build_tex_dir_map(rom)
+        self._tex_sizes = tex_sizes
+        self._tex_dir_offsets = tex_dir_offsets
+
+        tex_cache = {}
         for idx in range(_TEX_COUNT):
-            size = _TEX_SIZES.get(idx)
+            size = tex_sizes.get(idx)
             if size is None:
                 continue
             lba = _TEX_BASE_LBA + idx * _TEX_LBA_STRIDE
-            tex = _read_cd_file(rom, lba, size)
-            color = _get_tex_dominant_color(tex)
-            if color:
-                catalog[idx] = (color, size)
-        self._tex_catalog = catalog
+            tex_cache[idx] = _read_cd_file(rom, lba, size)
+        self._tex_cache = tex_cache
 
     def patch_3d_jersey(self, tex_index: int, target_rgb: Tuple[int, int, int]):
         """Patch a team's 3D jersey by copying the best color-matched TEX file.
+
+        Uses the static _TEX_JERSEY_COLORS map (from 2D maglia data) to find
+        the source TEX whose known jersey color is closest to target_rgb.
+        Copies the entire TEX file and updates the ISO9660 directory size.
 
         Args:
             tex_index: TEX file index (0-62 national, 63-94 ML).
@@ -1708,18 +1813,24 @@ class RomWriter:
         if not os.path.exists(self.output_path):
             return
 
-        self._ensure_tex_catalog()
-        if not self._tex_catalog:
+        self._ensure_tex_cache()
+        if not self._tex_cache:
             return
 
-        target_size = _TEX_SIZES.get(tex_index)
-        if target_size is None:
+        if tex_index not in self._tex_sizes:
             return
 
-        # Find best color match that fits in the target slot
-        best_idx = _find_best_tex_match(
-            target_rgb, self._tex_catalog, target_size
-        )
+        best_idx = _find_best_tex_match(target_rgb)
+        with open("/tmp/tex_debug.log", "a") as _dbg:
+            if best_idx is not None and best_idx != tex_index:
+                src_color = _TEX_JERSEY_COLORS[best_idx]
+                dist = sum((a - b) ** 2 for a, b in zip(target_rgb, src_color))
+                _dbg.write(f"[TEX] Patch TEX_{tex_index:02d}: want RGB{target_rgb} -> "
+                           f"best TEX_{best_idx:02d} RGB{src_color} dist={dist}\n")
+            else:
+                reason = "no match" if best_idx is None else "same slot"
+                _dbg.write(f"[TEX] Patch TEX_{tex_index:02d}: want RGB{target_rgb} -> "
+                           f"SKIP ({reason})\n")
         if best_idx is None or best_idx == tex_index:
             return
 
@@ -1727,14 +1838,20 @@ class RomWriter:
             rom_data = f.read()
 
         rom = bytearray(rom_data)
-        src_size = _TEX_SIZES[best_idx]
-        src_lba = _TEX_BASE_LBA + best_idx * _TEX_LBA_STRIDE
         dst_lba = _TEX_BASE_LBA + tex_index * _TEX_LBA_STRIDE
 
-        src_data = _read_cd_file(rom, src_lba, src_size)
-        padded = bytearray(src_data) + bytearray(target_size - src_size)
+        # Use cached original TEX data to avoid reading from already-modified slots
+        src_data = self._tex_cache[best_idx]
+        src_size = len(src_data)
 
+        # Write source TEX data into target slot sectors (pad to fill sectors)
+        sectors_needed = (src_size + 2047) // 2048
+        padded = bytearray(src_data) + bytearray(sectors_needed * 2048 - src_size)
         _write_cd_file_with_edc(rom, dst_lba, bytes(padded))
+
+        # Update ISO9660 directory entry so game reads correct file size
+        if tex_index in self._tex_dir_offsets:
+            _update_iso_dir_size(rom, self._tex_dir_offsets[tex_index], src_size)
 
         with open(self.output_path, "wb") as f:
             f.write(rom)
