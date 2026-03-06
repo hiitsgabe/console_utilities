@@ -40,6 +40,7 @@ class SettingsScreen:
         "View Mode",
         "Enable Box-art Display",
         "USA Games Only",
+        "Dedupe Game List",
         "Show Download All Button",
         "Skip Installed Games",
     ]
@@ -228,6 +229,9 @@ class SettingsScreen:
             elif item == "USA Games Only":
                 value = "ON" if settings.get("usa_only", False) else "OFF"
                 items.append((item, value))
+            elif item == "Dedupe Game List":
+                value = "ON" if settings.get("dedupe_game_list", False) else "OFF"
+                items.append((item, value))
             elif item == "Show Download All Button":
                 value = "ON" if settings.get("show_download_all", False) else "OFF"
                 items.append((item, value))
@@ -381,6 +385,7 @@ class SettingsScreen:
                 "View Mode": "toggle_view_mode",
                 "Enable Box-art Display": "toggle_boxart",
                 "USA Games Only": "toggle_usa_only",
+                "Dedupe Game List": "toggle_dedupe_game_list",
                 "Show Download All Button": "toggle_download_all",
                 "Skip Installed Games": "toggle_exclude_installed",
                 "Enable Sports Updater": "toggle_sports_roster_enabled",

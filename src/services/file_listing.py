@@ -45,6 +45,59 @@ def _save_listing_cache(url: str, files_list: List[Dict[str, Any]]):
         pass
 
 
+def _dedupe_game_list(files: List[Any]) -> List[Any]:
+    """
+    Deduplicate game list by normalized name, preferring USA titles.
+
+    Groups files by base game name (stripping region/version tags),
+    then picks the best representative: USA > World > Europe > largest file.
+    """
+
+    def _get_filename(f):
+        return f.get("filename", "") if isinstance(f, dict) else str(f)
+
+    # Group by normalized name
+    groups: Dict[str, List[Any]] = {}
+    for f in files:
+        filename = _get_filename(f)
+        # Strip extension, remove all parenthetical/bracket content, normalize
+        name = re.sub(r"\.[^.]+$", "", filename)
+        norm = re.sub(r"\(.*?\)", "", name)
+        norm = re.sub(r"\[.*?\]", "", norm)
+        norm = norm.strip().lower()
+        norm = re.sub(r"\s+", " ", norm)
+        if norm not in groups:
+            groups[norm] = []
+        groups[norm].append(f)
+
+    # Pick best from each group
+    def _priority(f):
+        name = _get_filename(f)
+        # Lower score = higher priority
+        if "(USA)" in name:
+            region = 0
+        elif "(World)" in name:
+            region = 1
+        elif "(USA, Europe)" in name or "(Europe, USA)" in name:
+            region = 2
+        elif "(Europe)" in name:
+            region = 3
+        else:
+            region = 4
+        size = f.get("size", 0) if isinstance(f, dict) else 0
+        try:
+            size = int(size)
+        except (ValueError, TypeError):
+            size = 0
+        return (region, -size)
+
+    result = []
+    for group in groups.values():
+        best = min(group, key=_priority)
+        result.append(best)
+    return result
+
+
 def _normalize_urls(url):
     """Normalize url field to a list of strings.
 
@@ -220,6 +273,24 @@ def list_files(
                 _save_listing_cache(url, files)
             all_files.extend(files)
 
+        # Apply USA filter if enabled (top-level for all sources)
+        if settings.get("usa_only", False) and system_data.get(
+            "should_filter_usa", True
+        ):
+            usa_regex = system_data.get("usa_regex", r"\(USA")
+            all_files = [
+                f
+                for f in all_files
+                if re.search(
+                    usa_regex,
+                    f.get("filename", "") if isinstance(f, dict) else f,
+                )
+            ]
+
+        # Deduplicate game list (prefer USA, then largest file)
+        if settings.get("dedupe_game_list", False) and all_files:
+            all_files = _dedupe_game_list(all_files)
+
         # Sort combined list by filename
         if all_files and isinstance(all_files[0], dict):
             all_files.sort(key=lambda x: x.get("filename", ""))
@@ -308,13 +379,6 @@ def _list_files_json_api(
                 for f in files
                 if any(f[file_id].lower().endswith(ext.lower()) for ext in formats)
             ]
-
-            # Apply USA filter if enabled
-            if settings.get("usa_only", False) and system_data.get(
-                "should_filter_usa", True
-            ):
-                usa_regex = system_data.get("usa_regex", "(USA)")
-                filtered_files = [f for f in filtered_files if re.search(usa_regex, f)]
 
             return filtered_files
 
@@ -429,10 +493,6 @@ def _list_files_html_single(
             if any(filename.lower().endswith(ext.lower()) for ext in formats):
                 files.append({"filename": filename, "href": href})
 
-    # Apply USA filter if enabled
-    if settings.get("usa_only", False) and system_data.get("should_filter_usa", True):
-        usa_regex = system_data.get("usa_regex", "(USA)")
-        files = [f for f in files if re.search(usa_regex, f["filename"])]
 
     return sorted(files, key=lambda x: x["filename"])
 

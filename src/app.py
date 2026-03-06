@@ -3096,6 +3096,11 @@ class ConsoleUtilitiesApp:
         elif action == "toggle_usa_only":
             self.settings["usa_only"] = not self.settings.get("usa_only", False)
             save_settings(self.settings)
+        elif action == "toggle_dedupe_game_list":
+            self.settings["dedupe_game_list"] = not self.settings.get(
+                "dedupe_game_list", False
+            )
+            save_settings(self.settings)
         elif action == "toggle_download_all":
             self.settings["show_download_all"] = not self.settings.get(
                 "show_download_all", False
