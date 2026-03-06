@@ -44,7 +44,7 @@ jobs:
 
       - name: Download bundled data
         run: |
-          curl -L -o assets/bundled_data.json "${{ secrets.BUNDLED_DATA_URL }}"
+          curl -L -o assets/bundled_data.json "${{ secrets.EXAMPLE_DATA_URL }}"
           if [ -f assets/bundled_data.json ]; then
             echo "✅ Bundled data downloaded successfully"
           else
@@ -87,7 +87,7 @@ jobs:
 
       - name: Download bundled data
         run: |
-          curl -L -o assets/bundled_data.json "${{ secrets.BUNDLED_DATA_URL }}"
+          curl -L -o assets/bundled_data.json "${{ secrets.EXAMPLE_DATA_URL }}"
           if [ -f assets/bundled_data.json ]; then
             echo "✅ Bundled data downloaded successfully"
           else
@@ -131,7 +131,7 @@ jobs:
 
       - name: Download bundled data
         run: |
-          Invoke-WebRequest -Uri "${{ secrets.BUNDLED_DATA_URL }}" -OutFile "assets/bundled_data.json"
+          Invoke-WebRequest -Uri "${{ secrets.EXAMPLE_DATA_URL }}" -OutFile "assets/bundled_data.json"
           if (Test-Path "assets/bundled_data.json") {
             Write-Host "✅ Bundled data downloaded successfully"
           } else {
@@ -184,7 +184,7 @@ jobs:
 
       - name: Download bundled data
         run: |
-          curl -L -o assets/bundled_data.json "${{ secrets.BUNDLED_DATA_URL }}"
+          curl -L -o assets/bundled_data.json "${{ secrets.EXAMPLE_DATA_URL }}"
           if [ -f assets/bundled_data.json ]; then
             echo "✅ Bundled data downloaded successfully"
           else
