@@ -31,7 +31,7 @@ class SettingsScreen:
         "Remote Games Bkp File",
         "Add Game System",
         "Games Systems Preference",
-        "Clear Systems Cache",
+        "Clear Game List Cache",
     ]
 
     # View options section
@@ -138,6 +138,7 @@ class SettingsScreen:
         if has_backup_list:
             items.append(self.SYSTEMS_SECTION[2])  # Add Game System
         items.append(self.SYSTEMS_SECTION[3])  # Games Systems Preference
+        items.append(self.SYSTEMS_SECTION[4])  # Clear Game List Cache
 
         # Add View Options section
         divider_indices.add(len(items))
@@ -374,7 +375,7 @@ class SettingsScreen:
                 "Remap Controller": "remap_controller",
                 "Add Game System": "add_systems",
                 "Games Systems Preference": "systems_settings",
-                "Clear Systems Cache": "clear_systems_cache",
+                "Clear Game List Cache": "clear_game_list_cache",
                 "Enable PortMaster (beta)": "toggle_portmaster_enabled",
                 "Internet Archive Login": "ia_login",
                 "View Mode": "toggle_view_mode",
