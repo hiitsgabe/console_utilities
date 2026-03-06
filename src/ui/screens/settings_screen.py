@@ -29,6 +29,7 @@ class SettingsScreen:
     SYSTEMS_SECTION = [
         "--- GAME BACKUP ---",
         "Remote Games Bkp File",
+        "Reset to Default Bkp File",
         "Add Game System",
         "Games Systems Preference",
         "Clear Game List Cache",
@@ -135,11 +136,14 @@ class SettingsScreen:
         divider_indices.add(len(items))
         items.append(self.SYSTEMS_SECTION[0])  # Divider
         items.append(self.SYSTEMS_SECTION[1])  # Remote Games Bkp File
+        # Only show reset when a custom bkp file is set
+        if settings.get("archive_json_path", ""):
+            items.append(self.SYSTEMS_SECTION[2])  # Reset to Default Bkp File
         # Only show "Add Game System" when data has a list_systems entry
         if has_backup_list:
-            items.append(self.SYSTEMS_SECTION[2])  # Add Game System
-        items.append(self.SYSTEMS_SECTION[3])  # Games Systems Preference
-        items.append(self.SYSTEMS_SECTION[4])  # Clear Game List Cache
+            items.append(self.SYSTEMS_SECTION[3])  # Add Game System
+        items.append(self.SYSTEMS_SECTION[4])  # Games Systems Preference
+        items.append(self.SYSTEMS_SECTION[5])  # Clear Game List Cache
 
         # Add View Options section
         divider_indices.add(len(items))
@@ -374,6 +378,7 @@ class SettingsScreen:
             item = settings_items[index]
             actions = {
                 "Remote Games Bkp File": "select_archive_json",
+                "Reset to Default Bkp File": "reset_archive_json",
                 "ROMs Directory": "select_roms_dir",
                 "NSZ Keys": "select_nsz_keys",
                 "Remap Controller": "remap_controller",
