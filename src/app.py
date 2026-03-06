@@ -901,6 +901,9 @@ class ConsoleUtilitiesApp:
                     0x101,  # SDL_APP_WILLENTERBACKGROUND raw value
                 ):
                     self._is_backgrounded = True
+                    # Pause JNI operations in download manager
+                    if hasattr(self.download_manager, "pause"):
+                        self.download_manager.pause()
 
                 elif BUILD_TARGET == "android" and event.type in (
                     getattr(pygame, "APP_DIDENTERFOREGROUND", -1),
@@ -908,6 +911,9 @@ class ConsoleUtilitiesApp:
                 ):
                     if self._is_backgrounded:
                         self._needs_display_restore = True
+                        # Resume download manager (re-acquire activity, process pending)
+                        if hasattr(self.download_manager, "resume"):
+                            self.download_manager.resume()
 
                 elif event.type == pygame.TEXTINPUT:
                     if BUILD_TARGET == "android":

@@ -66,6 +66,12 @@ class AndroidDownloadManager:
         self._poll_thread: Optional[threading.Thread] = None
         self._stop_poll = False
 
+        # Pause flag — set True when Android activity is backgrounded
+        self._paused = False
+
+        # Pending download completions that arrived while paused
+        self._pending_completions: List[int] = []
+
         self._init_android()
 
     def _init_android(self):
@@ -200,6 +206,39 @@ class AndroidDownloadManager:
             for item in self.queue.items:
                 if item.status == "waiting":
                     item.status = "cancelled"
+
+    def pause(self):
+        """Pause JNI operations when the Android activity is backgrounded."""
+        self._paused = True
+
+    def resume(self):
+        """Resume JNI operations when the Android activity is foregrounded.
+
+        Re-acquires the activity reference (it may have been recreated) and
+        processes any download completions that arrived while paused.
+        """
+        self._paused = False
+
+        # Re-acquire activity reference (may have been recreated)
+        try:
+            from jnius import autoclass
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            self._activity = PythonActivity.mActivity
+        except Exception as e:
+            log_error(f"Failed to re-acquire activity: {e}")
+
+        # Process any download completions that arrived while paused
+        pending = []
+        with self._lock:
+            pending = list(self._pending_completions)
+            self._pending_completions.clear()
+
+        for download_id in pending:
+            self._on_download_complete(download_id)
+
+        # Restart poll thread if downloads are active
+        if self.is_active:
+            self._start_poll_thread()
 
     def clear_completed(self):
         with self._lock:
@@ -343,51 +382,66 @@ class AndroidDownloadManager:
 
     def _on_download_complete(self, download_id: int):
         """Callback from BroadcastReceiver when a download finishes."""
+        # Defer JNI-heavy work if app is backgrounded (activity may be invalid)
+        if self._paused:
+            with self._lock:
+                self._pending_completions.append(download_id)
+            return
+
         with self._lock:
             item = self._download_ids.pop(download_id, None)
             if item is None:
                 return
 
-            # Check if download succeeded
-            from jnius import autoclass
+            try:
+                # Check if download succeeded
+                from jnius import autoclass
 
-            DownloadManagerClass = autoclass("android.app.DownloadManager")
-            Query = autoclass("android.app.DownloadManager$Query")
+                DownloadManagerClass = autoclass("android.app.DownloadManager")
+                Query = autoclass("android.app.DownloadManager$Query")
 
-            query = Query()
-            query.setFilterById(download_id)
-            cursor = self._dm.query(query)
+                query = Query()
+                query.setFilterById(download_id)
+                cursor = self._dm.query(query)
 
-            if cursor and cursor.moveToFirst():
-                status_col = cursor.getColumnIndex(
-                    DownloadManagerClass.COLUMN_STATUS
-                )
-                status = cursor.getInt(status_col)
-                cursor.close()
+                if cursor and cursor.moveToFirst():
+                    status_col = cursor.getColumnIndex(
+                        DownloadManagerClass.COLUMN_STATUS
+                    )
+                    status = cursor.getInt(status_col)
+                    cursor.close()
 
-                if status == DownloadManagerClass.STATUS_SUCCESSFUL:
-                    # Get the downloaded file path
-                    file_path = self._get_downloaded_file_path(download_id)
-                    if file_path:
-                        self._start_extraction_service(item, file_path)
+                    if status == DownloadManagerClass.STATUS_SUCCESSFUL:
+                        # Get the downloaded file path
+                        file_path = self._get_downloaded_file_path(download_id)
+                        if file_path:
+                            self._start_extraction_service(item, file_path)
+                        else:
+                            item.status = "failed"
+                            item.error = "Downloaded file not found"
                     else:
                         item.status = "failed"
-                        item.error = "Downloaded file not found"
+                        # Check if this is an IA URL without auth — likely needs login
+                        url = self._get_download_url(
+                            item.system_data, item.game, ""
+                        )
+                        if url and "archive.org" in url and "auth" not in item.system_data:
+                            item.error = "ia_auth_required"
+                        else:
+                            item.error = f"Download failed (status: {status})"
                 else:
+                    if cursor:
+                        cursor.close()
                     item.status = "failed"
-                    # Check if this is an IA URL without auth — likely needs login
-                    url = self._get_download_url(
-                        item.system_data, item.game, ""
-                    )
-                    if url and "archive.org" in url and "auth" not in item.system_data:
-                        item.error = "ia_auth_required"
-                    else:
-                        item.error = f"Download failed (status: {status})"
-            else:
-                if cursor:
-                    cursor.close()
+                    item.error = "Download status unknown"
+            except Exception as e:
+                log_error(
+                    f"Download complete handler failed: {e}",
+                    type(e).__name__,
+                    traceback.format_exc(),
+                )
                 item.status = "failed"
-                item.error = "Download status unknown"
+                item.error = f"Completion check failed: {e}"
 
         # Process next (outside lock to avoid holding lock during Java calls)
         if item and item.status == "failed":
@@ -441,10 +495,26 @@ class AndroidDownloadManager:
             "item_id": item_id,
         }
 
+        # Re-acquire activity reference in case it was recreated
+        try:
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            self._activity = PythonActivity.mActivity
+        except Exception:
+            pass
+
         # Use p4a's generated service class .start() method
         # The service receives the argument via PYTHON_SERVICE_ARGUMENT env var
-        ServiceClass = autoclass(_SERVICE_CLASS)
-        ServiceClass.start(self._activity, json.dumps(task_info))
+        try:
+            ServiceClass = autoclass(_SERVICE_CLASS)
+            ServiceClass.start(self._activity, json.dumps(task_info))
+        except Exception as e:
+            item.status = "failed"
+            item.error = f"Failed to start extraction: {e}"
+            log_error(
+                f"Extraction service start failed: {e}",
+                type(e).__name__,
+                traceback.format_exc(),
+            )
 
     # ---- Poll thread for progress updates ----
 
@@ -460,8 +530,12 @@ class AndroidDownloadManager:
         """Poll Android DM for download progress and IPC for extraction status."""
         while not self._stop_poll:
             try:
-                self._poll_download_progress()
-                self._poll_extraction_status()
+                if self._paused:
+                    # Skip JNI calls while backgrounded; still poll IPC (file-based)
+                    self._poll_extraction_status()
+                else:
+                    self._poll_download_progress()
+                    self._poll_extraction_status()
             except Exception as e:
                 log_error(
                     f"Poll loop error: {e}",
