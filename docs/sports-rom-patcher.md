@@ -1,6 +1,6 @@
 # Sports ROM Patcher
 
-The Sports ROM Patcher lets you update team rosters in retro sports games using real-world data from public sports APIs. It supports soccer and hockey titles across multiple console platforms.
+The Sports ROM Patcher lets you update team rosters in retro sports games using real-world data from public sports APIs. It supports soccer, hockey, and baseball titles across multiple console platforms.
 
 **Important:** You must provide your own ROM or ISO file dumped from an original game copy that you legally own. This project does not provide, distribute, or link to any game files. The developers assume no responsibility for any misuse of this tool.
 
@@ -10,6 +10,7 @@ The Sports ROM Patcher lets you update team rosters in retro sports games using 
 |----------|-------|------------|
 | PS1 | Soccer | `.bin` (Mode2/2352) |
 | SNES | Soccer | `.sfc` |
+| SNES | Baseball | `.sfc` / `.smc` |
 | Genesis | Hockey | `.bin` |
 | SNES | Hockey | `.sfc` / `.smc` |
 | PSP | Hockey | `.iso` |
@@ -76,6 +77,18 @@ The patcher writes updated data into a **new output file**, leaving your origina
 - **What Gets Patched**: Player names, player data (speed, shooting, technique, stamina, hair style), home/away/GK jersey colors (BGR555 format), flag tiles and colors, predominant team color, and team name text
 - **Color System**: Kit colors use 15-bit BGR little-endian encoding; flag tiles use a simple RLE compression scheme
 
+### SNES Baseball Patcher
+
+- **Game**: Ken Griffey Jr. Presents Major League Baseball (1994)
+- **Team Slots**: 28 teams (14 AL + 14 NL, matching 1994 MLB)
+- **Player Layout**: 25 players per team — 15 batters, 5 starting pitchers, 5 relief pitchers
+- **Fixed-Size Records**: Each player is exactly 32 bytes at a known offset (no variable-length parsing)
+- **Custom Encoding**: Player names use a game-specific character encoding (not ASCII), supporting uppercase A–Z, digits, and lowercase 'c' (for Mc-prefixed surnames)
+- **What Gets Patched**: Player names (first initial + 8-char last name), positions, jersey numbers, batter ratings (BAT/POW/SPD/DEF on a 1–10 scale), pitcher ratings (SPD/CON/FAT on a 1–10 scale), batting statistics (AVG/HR/RBI), and pitching statistics (W/L/ERA/SV)
+- **Roster Type Flags**: The patcher sets correct roster type flags (batter/starter/reliever) based on slot position
+- **No License Advantage**: The original game has real MLB teams but fake player names (no MLBPA license), making a roster patcher especially valuable — every player name gets replaced with the real one
+- **Modern Team Mapping**: Maps all 30 current MLB teams to the 28 ROM slots, including franchise moves (Montreal Expos → Washington Nationals, California Angels → Los Angeles Angels, Florida Marlins → Miami Marlins). Arizona and Tampa Bay have no ROM slot (expansion teams added after 1994)
+
 ### Genesis Hockey Patcher
 
 - **Team Slots**: 26 teams
@@ -111,10 +124,11 @@ The patcher fetches real-world roster and statistics data from sports APIs. You 
 
 | Provider | Sports | Auth Required | Season Coverage |
 |----------|--------|--------------|-----------------|
-| ESPN | Hockey, Soccer | No | Current season |
+| ESPN | Baseball, Hockey, Soccer | No | Current season |
 | Public Hockey API | Hockey | No | 1993 to present |
 | API-Football | Soccer | Yes (paid key) | Multiple seasons |
 
+- **Baseball**: ESPN provides current-season MLB roster and statistics data (AVG, HR, RBI, OPS, ERA, W, SV, etc.).
 - **Hockey**: Choose between ESPN (current season, no setup) or the Public Hockey API (historical seasons back to 1993, no setup).
 - **Soccer**: ESPN works out of the box for the current season. API-Football supports historical seasons and additional leagues but requires a paid API key.
 
@@ -129,11 +143,11 @@ The patcher fetches real-world roster and statistics data from sports APIs. You 
 
 Each patcher maps real-world player statistics to the target game's internal attribute system. The mapping varies by game but generally considers:
 
-- **Offensive stats**: Goals, assists, points
-- **Defensive stats**: Blocks, takeaways, defensive plays
+- **Offensive stats**: Goals, assists, points, batting average, home runs, OPS, slugging
+- **Defensive stats**: Blocks, takeaways, defensive plays, fielding position
 - **Physical stats**: Height, weight
-- **Performance stats**: Games played, ice time/minutes played
-- **Skill stats**: Save percentage (goalies), pass completion
+- **Performance stats**: Games played, ice time/minutes played, innings pitched
+- **Skill stats**: Save percentage (goalies), pass completion, strikeout rate (pitchers), walk rate, stolen bases
 
 The exact mapping formula is tuned per game to produce balanced, realistic in-game ratings that reflect each player's real-world performance.
 

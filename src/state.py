@@ -602,6 +602,46 @@ class NHL94GenesisPatcherState:
 
 
 @dataclass
+class KGJMLBPatcherState:
+    """State for the KGJ MLB Patcher feature."""
+
+    # MLB season year (e.g. 2025 = 2025 season)
+    selected_season: int = field(
+        default_factory=lambda: datetime.now().year - 1
+    )
+    selected_league: Any = None
+
+    # Fetched data
+    rosters: Any = None
+    team_stats: Any = None
+    league_data: Any = None
+    fetch_progress: float = 0.0
+    fetch_status: str = ""
+    is_fetching: bool = False
+    fetch_error: str = ""
+
+    # ROM
+    rom_path: str = ""
+    rom_info: Any = None
+    rom_valid: bool = False
+
+    # Patching
+    patch_progress: float = 0.0
+    patch_status: str = ""
+    is_patching: bool = False
+    patch_output_path: str = ""
+    patch_complete: bool = False
+    patch_error: str = ""
+
+    # Roster preview
+    roster_preview_team_index: int = 0
+    roster_preview_player_index: int = 0
+
+    # UI navigation
+    active_modal: Optional[str] = None
+
+
+@dataclass
 class NHL94SNESPatcherState:
     """State for the NHL94 SNES Patcher feature."""
 
@@ -767,6 +807,9 @@ class AppState:
         # ---- ISS Patcher ---- #
         self.iss_patcher = ISSPatcherState()
 
+        # ---- KGJ MLB Patcher ---- #
+        self.kgj_mlb_patcher = KGJMLBPatcherState()
+
         # ---- NHL94 Patchers ---- #
         self.nhl94_patcher = NHL94SNESPatcherState()
         self.nhl94_gen_patcher = NHL94GenesisPatcherState()
@@ -794,6 +837,8 @@ class AppState:
         WePatcherState, ISSPatcherState, and NHL94SNESPatcherState share
         common field names so modals can use this generically.
         """
+        if self.mode == "kgj_mlb_patcher":
+            return self.kgj_mlb_patcher
         if self.mode == "iss_patcher":
             return self.iss_patcher
         if self.mode == "nhl94_patcher":

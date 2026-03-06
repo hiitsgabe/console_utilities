@@ -34,7 +34,7 @@ A PyGame-based utility suite for handheld gaming consoles, with a retro CRT-them
 
 ### Sports ROM Patcher
 - **Live Roster Updates**: Fetch current or historical season rosters from public sports APIs and patch them into your legally owned game ROMs
-- **Multi-Platform Support**: Patchers for retro soccer and hockey titles across PS1, SNES, Genesis, and PSP
+- **Multi-Platform Support**: Patchers for retro soccer, baseball, and hockey titles across PS1, SNES, Genesis, and PSP
 - **Step-by-Step Workflow**: Guided process — select season, fetch rosters, preview teams, pick your ROM, and patch
 - **Roster Preview**: View fetched teams and players before committing changes
 - **Player Attributes**: Maps real-world stats (goals, assists, speed, etc.) to in-game attribute scales
@@ -165,6 +165,7 @@ console_utilities/
 │   │   ├── scraper_providers/        # Libretro, ScreenScraper, etc.
 │   │   ├── we_patcher/              # PS1 soccer ROM patcher
 │   │   ├── iss_patcher/             # SNES soccer ROM patcher
+│   │   ├── kgj_mlb_patcher/         # SNES baseball ROM patcher
 │   │   ├── nhl94_genesis_patcher/   # Genesis hockey ROM patcher
 │   │   ├── nhl94_snes_patcher/      # SNES hockey ROM patcher
 │   │   └── nhl07_psp_patcher/       # PSP hockey ISO patcher
