@@ -1065,6 +1065,18 @@ html, body {
             </div>
         </div>
     </div>
+
+    <!-- Logs view -->
+    <div id="logsView">
+        <div class="logs-toolbar">
+            <button id="logsAutoScroll" class="active">Auto-scroll</button>
+            <button id="logsToggleSource" class="active">Console</button>
+            <div class="spacer"></div>
+            <button id="logsClear">Clear</button>
+            <button id="logsRefresh">Refresh</button>
+        </div>
+        <div class="logs-content" id="logsContent"></div>
+    </div>
 </div>
 
 <div class="disconnected hidden" id="disconnected">
@@ -1082,18 +1094,6 @@ html, body {
     <div class="ctx-sep"></div>
     <button data-action="delete" class="danger">Delete</button>
 </div>
-
-    <!-- Logs view -->
-    <div id="logsView">
-        <div class="logs-toolbar">
-            <button id="logsAutoScroll" class="active">Auto-scroll</button>
-            <button id="logsShowErrors" class="active">App Log</button>
-            <div class="spacer"></div>
-            <button id="logsClear">Clear</button>
-            <button id="logsRefresh">Refresh</button>
-        </div>
-        <div class="logs-content" id="logsContent"></div>
-    </div>
 
 <!-- FM Modal overlay -->
 <div class="fm-modal-overlay" id="fmModalOverlay">
@@ -2365,7 +2365,7 @@ document.addEventListener('keydown', (e) => {
 const logsManager = {
     content: document.getElementById('logsContent'),
     autoScroll: true,
-    showErrors: true,
+    showConsole: true,
     pollTimer: null,
     lines: [],
     errorLines: [],
@@ -2386,7 +2386,7 @@ const logsManager = {
 
     async fetch() {
         try {
-            const r = await fetch('/api/logs');
+            const r = await window.fetch('/api/logs');
             const data = await r.json();
             this.lines = data.lines || [];
             this.errorLines = data.error_log || [];
@@ -2395,7 +2395,7 @@ const logsManager = {
     },
 
     render() {
-        const lines = this.showErrors ? this.errorLines : this.lines;
+        const lines = this.showConsole ? this.lines : this.errorLines;
         if (!lines.length) {
             this.content.innerHTML = '<div style="color:var(--text-disabled);padding:20px;text-align:center">No logs yet</div>';
             return;
@@ -2426,10 +2426,10 @@ document.getElementById('logsAutoScroll').addEventListener('click', function() {
         logsManager.content.scrollTop = logsManager.content.scrollHeight;
     }
 });
-document.getElementById('logsShowErrors').addEventListener('click', function() {
-    logsManager.showErrors = !logsManager.showErrors;
-    this.classList.toggle('active', logsManager.showErrors);
-    this.textContent = logsManager.showErrors ? 'App Log' : 'Error Log';
+document.getElementById('logsToggleSource').addEventListener('click', function() {
+    logsManager.showConsole = !logsManager.showConsole;
+    this.classList.toggle('active', logsManager.showConsole);
+    this.textContent = logsManager.showConsole ? 'Console' : 'File Log';
     logsManager.render();
 });
 document.getElementById('logsClear').addEventListener('click', () => logsManager.clear());

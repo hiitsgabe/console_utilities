@@ -6,7 +6,27 @@ serializes relevant data as a JSON-friendly dict for the SPA client.
 """
 
 import os
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
+
+
+def _get_source_label(system):
+    """Derive a human-readable source label from the system URL."""
+    url = system.get("url", "")
+    if isinstance(url, list):
+        url = url[0] if url else ""
+    if not url:
+        return "Unknown"
+    if "archive.org" in url:
+        return "Internet Archive"
+    if "myrient" in url:
+        return "Myrient"
+    try:
+        host = urlparse(url).hostname or ""
+        if host.startswith("www."):
+            host = host[4:]
+        return host if host else "Custom URL"
+    except Exception:
+        return "Custom URL"
 
 
 def _get_game_name(game):
@@ -74,6 +94,25 @@ def serialize_web_state(state, settings=None, data=None):
             "buttons": [state.confirm_modal.ok_label, state.confirm_modal.cancel_label],
             "selected": state.confirm_modal.button_index,
         }
+
+    # Auth token input
+    if state.auth_token_input.show:
+        if state.auth_token_input.step == "message":
+            return {
+                "screen_type": "confirm",
+                "title": "Authentication Required",
+                "message": state.auth_token_input.auth_message or "Enter auth token",
+                "buttons": ["Enter Token", "Cancel"],
+                "selected": 0,
+            }
+        else:
+            return {
+                "screen_type": "text_input",
+                "title": "Auth Token",
+                "text": state.auth_token_input.input_text,
+                "input_type": "text",
+                "cursor": state.auth_token_input.cursor_position,
+            }
 
     # Search input
     if state.show_search_input:
@@ -661,16 +700,36 @@ def serialize_web_state(state, settings=None, data=None):
 
     if state.mode == "system_settings":
         sys_idx = getattr(state, "selected_system_for_settings", 0)
+        system = {}
         sys_name = ""
         if data and sys_idx < len(data):
-            sys_name = data[sys_idx].get("name", "")
+            system = data[sys_idx]
+            sys_name = system.get("name", "")
         sys_settings = (settings or {}).get("system_settings", {}).get(sys_name, {})
         hidden = sys_settings.get("hidden", False)
         custom = sys_settings.get("custom_folder", "")
-        items = [
-            {"name": f"Hide System: {'ON' if hidden else 'OFF'}", "selected": False},
-            {"name": f"Custom Folder: {custom or 'Default'}", "selected": False},
-        ]
+
+        # Build items matching system_settings_screen._get_items()
+        items = []
+        # Source section
+        items.append({"name": "--- SOURCE ---", "is_divider": True})
+        source_label = _get_source_label(system)
+        items.append({"name": f"Source: {source_label}", "selected": False})
+        # Settings section
+        items.append({"name": "--- SETTINGS ---", "is_divider": True})
+        items.append({"name": f"Hide System: {'ON' if hidden else 'OFF'}", "selected": False})
+        items.append({"name": f"Custom Folder: {custom or 'Default'}", "selected": False})
+        # Auth section (only for token-based auth)
+        auth = system.get("auth", {})
+        if auth and auth.get("type") != "ia_s3" and ("token" in auth or auth.get("auth_message")):
+            items.append({"name": "--- AUTHENTICATION ---", "is_divider": True})
+            token = auth.get("token", "")
+            if token:
+                display = token[:3] + "..." + token[-3:] if len(token) > 6 else "Set"
+            else:
+                display = "Not set"
+            items.append({"name": f"Edit Auth Token: {display}", "selected": False})
+
         return {
             "screen_type": "list",
             "title": f"{sys_name} Settings",

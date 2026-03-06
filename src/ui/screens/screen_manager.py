@@ -707,6 +707,7 @@ class ScreenManager:
                     input_mode=state.input_mode,
                     show_download_all=settings.get("show_download_all", False),
                     text_scroll_offset=state.text_scroll_offset,
+                    view_type=settings.get("view_type", "list"),
                 )
             )
             rects["back"] = back_rect

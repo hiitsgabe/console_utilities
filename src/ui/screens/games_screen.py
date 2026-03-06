@@ -7,6 +7,7 @@ from typing import List, Dict, Any, Tuple, Optional, Set, Callable
 
 from ui.theme import Theme, default_theme
 from ui.templates.list_screen import ListScreenTemplate
+from ui.templates.grid_screen import GridScreenTemplate
 from ui.atoms.text import Text
 from ui.molecules.thumbnail import Thumbnail
 from ui.molecules.action_button import ActionButton
@@ -15,16 +16,29 @@ from services.installed_checker import installed_checker
 from constants import BEZEL_INSET
 
 
+def get_grid_columns(screen_width: int) -> int:
+    """Calculate grid columns based on screen width."""
+    if screen_width >= 1200:
+        return 6
+    elif screen_width >= 900:
+        return 5
+    elif screen_width >= 640:
+        return 4
+    else:
+        return 3
+
+
 class GamesScreen:
     """
     Games screen.
 
-    Displays games for a selected system in list view.
+    Displays games for a selected system in list or grid view.
     """
 
     def __init__(self, theme: Theme = default_theme):
         self.theme = theme
         self.list_template = ListScreenTemplate(theme)
+        self.grid_template = GridScreenTemplate(theme)
         self.text = Text(theme)
         self.thumbnail = Thumbnail(theme)
         self.action_button = ActionButton(theme)
@@ -41,6 +55,7 @@ class GamesScreen:
         input_mode: str = "keyboard",
         show_download_all: bool = False,
         text_scroll_offset: int = 0,
+        view_type: str = "list",
     ) -> Tuple[
         Optional[pygame.Rect],
         List[pygame.Rect],
@@ -61,6 +76,7 @@ class GamesScreen:
             get_thumbnail: Function to get thumbnail for a game
             input_mode: Current input mode ("keyboard", "gamepad", "touch")
             show_download_all: Whether to show "Download All" button
+            view_type: "list" or "grid"
 
         Returns:
             Tuple of (back_rect, item_rects, scroll_offset, download_button_rect, download_all_rect)
@@ -79,21 +95,36 @@ class GamesScreen:
         # Adjust highlighted to not exceed display items
         display_highlighted = min(highlighted, len(display_items) - 1)
 
-        back_rect, item_rects, scroll_offset = self.list_template.render(
-            screen,
-            title=title,
-            items=display_items,
-            highlighted=display_highlighted,
-            selected=selected_games,
-            show_back=True,
-            subtitle=subtitle,
-            item_height=50,
-            get_label=self._get_game_label,
-            get_thumbnail=get_thumbnail,
-            show_checkbox=True,
-            footer_height=footer_height,
-            text_scroll_offset=text_scroll_offset,
-        )
+        if view_type == "grid":
+            back_rect, item_rects, scroll_offset = self.grid_template.render(
+                screen,
+                title=title,
+                items=display_items,
+                highlighted=display_highlighted,
+                selected=selected_games,
+                show_back=True,
+                subtitle=subtitle,
+                columns=get_grid_columns(screen.get_width()),
+                get_label=self._get_game_label,
+                get_image=get_thumbnail,
+                footer_height=footer_height,
+            )
+        else:
+            back_rect, item_rects, scroll_offset = self.list_template.render(
+                screen,
+                title=title,
+                items=display_items,
+                highlighted=display_highlighted,
+                selected=selected_games,
+                show_back=True,
+                subtitle=subtitle,
+                item_height=50,
+                get_label=self._get_game_label,
+                get_thumbnail=get_thumbnail,
+                show_checkbox=True,
+                footer_height=footer_height,
+                text_scroll_offset=text_scroll_offset,
+            )
 
         # Draw status bar when games are selected
         download_button_rect = None
