@@ -1,9 +1,10 @@
 """
 Logging utilities for Console Utilities.
-Provides error logging with timestamps and traceback support.
+Provides logging with timestamps, file output, and stdout mirroring.
 """
 
 import os
+import sys
 from datetime import datetime
 from typing import Optional
 
@@ -18,51 +19,42 @@ def get_log_file() -> str:
     return _log_file
 
 
-def update_log_file_path(work_dir: str) -> None:
-    """
-    Update LOG_FILE path to use the configured work directory.
-
-    Saves error.log directly in the work directory.
-
-    Args:
-        work_dir: The work directory path
-    """
-    global _log_file
-    os.makedirs(work_dir, exist_ok=True)
-    _log_file = os.path.join(work_dir, "error.log")
-
-
 def log_error(
     error_msg: str,
     error_type: Optional[str] = None,
     traceback_str: Optional[str] = None,
 ) -> None:
     """
-    Log an error message to the log file.
+    Log a message to the log file and stdout.
+
+    Writes to both the log file and stdout so that the web companion's
+    log capture can pick it up in real time.
 
     Args:
-        error_msg: The error message to log
+        error_msg: The message to log
         error_type: Optional error type/class name
         traceback_str: Optional traceback string
     """
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_message = f"[{timestamp}] ERROR: {error_msg}\n"
+    log_message = f"[{timestamp}] {error_msg}"
 
     if error_type:
-        log_message += f"Type: {error_type}\n"
+        log_message += f" | {error_type}"
 
+    # Always print to stdout (captured by web companion's _LogCapture)
+    print(log_message, flush=True)
+
+    # Build full file entry with traceback
+    file_message = log_message + "\n"
     if traceback_str:
-        log_message += f"Traceback:\n{traceback_str}\n"
-
-    log_message += "-" * 80 + "\n"
+        file_message += f"Traceback:\n{traceback_str}\n"
+    file_message += "-" * 80 + "\n"
 
     try:
         with open(_log_file, "a") as f:
-            f.write(log_message)
-    except Exception as e:
-        # If logging fails, print to console as fallback
-        print(f"Failed to write to log file: {e}")
-        print(log_message)
+            f.write(file_message)
+    except Exception:
+        pass
 
 
 def init_log_file() -> bool:
@@ -72,18 +64,17 @@ def init_log_file() -> bool:
     Returns:
         True if successful, False otherwise
     """
-    import sys
-
     try:
         log_dir = os.path.dirname(_log_file) if os.path.dirname(_log_file) else "."
         os.makedirs(log_dir, exist_ok=True)
 
         with open(_log_file, "w") as f:
             f.write(
-                f"Error Log - Started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                f"Log - Started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
             )
             f.write(f"Python version: {sys.version}\n")
             f.write(f"Platform: {sys.platform}\n")
+            f.write(f"Log file: {_log_file}\n")
             f.write("-" * 80 + "\n")
 
         print(f"Log file initialized: {_log_file}")
