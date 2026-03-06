@@ -159,6 +159,34 @@ _CARAT_SIZE   = 12
 _POS_MAP = {0: 0, 1: 1, 2: 3, 3: 6}
 
 # ---------------------------------------------------------------------------
+# 3D jersey TEX file constants (CD filesystem)
+# ---------------------------------------------------------------------------
+
+_TEX_BASE_LBA = 8400       # LBA of TEX_00.BIN on CD
+_TEX_LBA_STRIDE = 20       # Each TEX allocated 20 sectors
+_TEX_COUNT = 95             # 63 national + 32 ML teams
+
+# TEX file sizes from ISO9660 directory (bytes per file, indices 0-94)
+_TEX_SIZES = {
+    0: 29944, 1: 30676, 2: 30956, 3: 29964, 4: 30428, 5: 31652, 6: 29044,
+    7: 30016, 8: 29656, 9: 31056, 10: 29312, 11: 31860, 12: 30848, 13: 30372,
+    14: 31188, 15: 31412, 16: 31680, 17: 30340, 18: 30264, 19: 32380,
+    20: 31116, 21: 31596, 22: 30772, 23: 31492, 24: 31072, 25: 30808,
+    26: 31936, 27: 31048, 28: 30812, 29: 30404, 30: 31168, 31: 30532,
+    32: 30912, 33: 30424, 34: 31464, 35: 29540, 36: 30444, 37: 32000,
+    38: 27296, 39: 31116, 40: 31196, 41: 27572, 42: 27196, 43: 26664,
+    44: 28076, 45: 28420, 46: 27020, 47: 30712, 48: 30368, 49: 27424,
+    50: 28724, 51: 28304, 52: 25948, 53: 27412, 54: 32168, 55: 32376,
+    56: 29108, 57: 29032, 58: 29088, 59: 29384, 60: 28980, 61: 29936,
+    62: 29928, 63: 30516, 64: 30748, 65: 29664, 66: 29300, 67: 29612,
+    68: 31888, 69: 31056, 70: 29900, 71: 27328, 72: 28280, 73: 30464,
+    74: 31248, 75: 31520, 76: 26456, 77: 31872, 78: 28496, 79: 28372,
+    80: 26156, 81: 27272, 82: 26844, 83: 32244, 84: 27928, 85: 26492,
+    86: 28456, 87: 27588, 88: 28648, 89: 33284, 90: 26720, 91: 28208,
+    92: 26656, 93: 26560, 94: 26648,
+}
+
+# ---------------------------------------------------------------------------
 # Hardcoded name length tables from WE2002-editor-2.0 (edDlg.cpp lines 639-709)
 #
 # 95 entries each: indices 0-62 = national/allstar, indices 63-94 = 32 ML teams.
@@ -1077,6 +1105,117 @@ def _compute_ml_bar_offset() -> int:
 _ML_BAR_OFFSET = _compute_ml_bar_offset()
 
 # ---------------------------------------------------------------------------
+# 3D jersey TEX file helpers (CD sector I/O with EDC)
+# ---------------------------------------------------------------------------
+
+
+def _edc_compute(data: bytes) -> int:
+    """Compute EDC (CRC-32) for CD-ROM Mode 2 Form 1 sector data.
+
+    Covers bytes 16..2071 of a sector (subheader + user data = 2056 bytes).
+    Uses the CD-ROM polynomial 0xD8018001.
+    """
+    table = []
+    for i in range(256):
+        edc = i
+        for _ in range(8):
+            edc = (edc >> 1) ^ 0xD8018001 if edc & 1 else edc >> 1
+        table.append(edc)
+    crc = 0
+    for b in data:
+        crc = table[(crc ^ b) & 0xFF] ^ (crc >> 8)
+    return crc
+
+
+def _read_cd_file(rom_data: bytes, lba: int, size: int) -> bytes:
+    """Read a file from Mode2/2352 CD sectors, skipping sector overhead."""
+    result = bytearray()
+    current_lba = lba
+    remaining = size
+    while remaining > 0:
+        sector_offset = current_lba * 2352 + 24
+        chunk = min(remaining, 2048)
+        result.extend(rom_data[sector_offset:sector_offset + chunk])
+        remaining -= chunk
+        current_lba += 1
+    return bytes(result)
+
+
+def _write_cd_file_with_edc(rom: bytearray, lba: int, file_data: bytes):
+    """Write file data to CD sectors, recalculating EDC checksums."""
+    current_lba = lba
+    offset = 0
+    while offset < len(file_data):
+        sector_off = current_lba * 2352
+        user_off = sector_off + 24
+        chunk = min(len(file_data) - offset, 2048)
+        rom[user_off:user_off + chunk] = file_data[offset:offset + chunk]
+        new_edc = _edc_compute(rom[sector_off + 16:sector_off + 2072])
+        struct.pack_into("<I", rom, sector_off + 2072, new_edc)
+        offset += chunk
+        current_lba += 1
+
+
+def _bgr555_to_rgb_tex(val: int) -> Tuple[int, int, int]:
+    """Convert PS1 BGR555 to RGB888."""
+    r5 = val & 0x1F
+    g5 = (val >> 5) & 0x1F
+    b5 = (val >> 10) & 0x1F
+    return (r5 << 3) | (r5 >> 2), (g5 << 3) | (g5 >> 2), (b5 << 3) | (b5 >> 2)
+
+
+def _get_tex_dominant_color(tex_data: bytes):
+    """Extract dominant jersey color from TEX file's home CLUT (Y=486).
+
+    Returns (R, G, B) tuple or None if no valid CLUT found.
+    """
+    base = 0x800F0000
+    ptrs = set()
+    for i in range(0, 48, 4):
+        val = struct.unpack_from("<I", tex_data, i)[0]
+        if base <= val < base + 0x10000:
+            ptrs.add(val - base)
+
+    for off in sorted(ptrs):
+        if off >= len(tex_data) - 2:
+            continue
+        if struct.unpack_from("<H", tex_data, off)[0] != 0xFF09:
+            continue
+        if struct.unpack_from("<H", tex_data, off + 4)[0] != 486:
+            continue
+        clut_start = off + 32
+        if clut_start + 512 > len(tex_data):
+            continue
+        colors = struct.unpack_from("<256H", tex_data, clut_start)
+        rs, gs, bs = [], [], []
+        for ci in range(2, 20):
+            r, g, b = _bgr555_to_rgb_tex(colors[ci])
+            rs.append(r)
+            gs.append(g)
+            bs.append(b)
+        return (sum(rs) // len(rs), sum(gs) // len(gs), sum(bs) // len(bs))
+    return None
+
+
+def _find_best_tex_match(
+    target_rgb: Tuple[int, int, int],
+    catalog: dict,
+    max_size: int,
+):
+    """Find the TEX index with closest color that fits in max_size bytes."""
+    best_idx = None
+    best_dist = float('inf')
+    for idx, (color, size) in catalog.items():
+        if size > max_size:
+            continue
+        dist = sum((a - b) ** 2 for a, b in zip(target_rgb, color))
+        if dist < best_dist:
+            best_dist = dist
+            best_idx = idx
+    return best_idx
+
+
+# ---------------------------------------------------------------------------
 # Public writer class
 # ---------------------------------------------------------------------------
 
@@ -1090,6 +1229,7 @@ class RomWriter:
         if os.path.exists(rom_path):
             shutil.copy2(rom_path, output_path)
         self.output_path = output_path
+        self._tex_catalog = None  # Built lazily on first 3D jersey patch
 
     def write_team(self, slot_index: int, team: WETeamRecord):
         """Write team names, abbreviations, and force bars for a ROM slot.
@@ -1109,6 +1249,10 @@ class RomWriter:
             self._write_abbreviations(f, slot_index, team)
             self._write_force_bars(f, slot_index, team)
             self._write_jersey_colors(f, slot_index, team)
+
+        # Patch 3D jersey TEX file (ML teams are TEX indices 63-94)
+        tex_index = 63 + slot_index
+        self.patch_3d_jersey(tex_index, team.kit_home)
 
     def _write_team_names(self, f, slot_index: int, team: WETeamRecord):
         """Write all 6 name variants + lowercase for an ML team slot.
@@ -1263,11 +1407,12 @@ class RomWriter:
         )
 
     def _write_jersey_colors(self, f, slot_index: int, team: WETeamRecord):
-        """Write jersey CLUT (maglia1 + maglia2) for an ML team.
+        """Write jersey preview palette (maglia1 + maglia2) for an ML team.
 
-        The CLUT controls BOTH the menu preview AND the in-game 3D
-        jerseys (the PS1 GPU palette-swaps the same texture).
-        Indices 0-1 are reserved, 2-9 = shirt, 10-15 = shorts.
+        The maglia controls the 2D menu preview and 3D shorts only.
+        The 3D shirt body is controlled by TEX files (patched separately
+        via patch_3d_jersey).  Indices 0-1 reserved, 2-9 = shirt preview,
+        10-15 = shorts.
         """
         if team.jersey_data and len(team.jersey_data) == 64:
             off = _OFS_ANT_MAGLIE2 + slot_index * 64
@@ -1367,6 +1512,9 @@ class RomWriter:
             self._write_nat_force_bars(f, nat_index, team)
             self._write_nat_jersey_colors(f, nat_index, team)
 
+        # Patch 3D jersey TEX file (national teams are TEX indices 0-62)
+        self.patch_3d_jersey(nat_index, team.kit_home)
+
     def _write_nat_team_names(self, f, nat_index: int, team: WETeamRecord):
         """Write all name variants for a national team slot."""
         name = team.name
@@ -1444,10 +1592,12 @@ class RomWriter:
         _write_chunks(f, bar_data, chunks)
 
     def _write_nat_jersey_colors(self, f, nat_index: int, team: WETeamRecord):
-        """Write jersey CLUT (maglia1 + maglia2) for a national team slot.
+        """Write jersey preview palette (maglia1 + maglia2) for a national team slot.
 
-        The CLUT controls BOTH the menu preview AND the in-game 3D
-        jerseys.  Indices 0-1 reserved, 2-9 = shirt, 10-15 = shorts.
+        The maglia controls the 2D menu preview and 3D shorts only.
+        The 3D shirt body is controlled by TEX files (patched separately
+        via patch_3d_jersey).  Indices 0-1 reserved, 2-9 = shirt preview,
+        10-15 = shorts.
         """
         if team.jersey_data and len(team.jersey_data) == 64:
             off = _nat_jersey_offset(nat_index)
@@ -1520,6 +1670,74 @@ class RomWriter:
             if nat_index in _NAT_COLOR_OFFSETS:
                 chunks = _NAT_COLOR_OFFSETS[nat_index]
                 _write_chunks(f, color_data, chunks)
+
+    # ------------------------------------------------------------------
+    # 3D jersey patching (TEX files on CD)
+    # ------------------------------------------------------------------
+
+    def _ensure_tex_catalog(self):
+        """Build TEX color catalog on first use by scanning all 95 TEX files."""
+        if self._tex_catalog is not None:
+            return
+        if not os.path.exists(self.output_path):
+            self._tex_catalog = {}
+            return
+
+        with open(self.output_path, "rb") as f:
+            rom = f.read()
+
+        catalog = {}
+        for idx in range(_TEX_COUNT):
+            size = _TEX_SIZES.get(idx)
+            if size is None:
+                continue
+            lba = _TEX_BASE_LBA + idx * _TEX_LBA_STRIDE
+            tex = _read_cd_file(rom, lba, size)
+            color = _get_tex_dominant_color(tex)
+            if color:
+                catalog[idx] = (color, size)
+        self._tex_catalog = catalog
+
+    def patch_3d_jersey(self, tex_index: int, target_rgb: Tuple[int, int, int]):
+        """Patch a team's 3D jersey by copying the best color-matched TEX file.
+
+        Args:
+            tex_index: TEX file index (0-62 national, 63-94 ML).
+            target_rgb: Desired jersey color as (R, G, B).
+        """
+        if not os.path.exists(self.output_path):
+            return
+
+        self._ensure_tex_catalog()
+        if not self._tex_catalog:
+            return
+
+        target_size = _TEX_SIZES.get(tex_index)
+        if target_size is None:
+            return
+
+        # Find best color match that fits in the target slot
+        best_idx = _find_best_tex_match(
+            target_rgb, self._tex_catalog, target_size
+        )
+        if best_idx is None or best_idx == tex_index:
+            return
+
+        with open(self.output_path, "r+b") as f:
+            rom_data = f.read()
+
+        rom = bytearray(rom_data)
+        src_size = _TEX_SIZES[best_idx]
+        src_lba = _TEX_BASE_LBA + best_idx * _TEX_LBA_STRIDE
+        dst_lba = _TEX_BASE_LBA + tex_index * _TEX_LBA_STRIDE
+
+        src_data = _read_cd_file(rom, src_lba, src_size)
+        padded = bytearray(src_data) + bytearray(target_size - src_size)
+
+        _write_cd_file_with_edc(rom, dst_lba, bytes(padded))
+
+        with open(self.output_path, "wb") as f:
+            f.write(rom)
 
     def verify_patches(self, original_path: str, slot_mapping, we_teams) -> str:
         """Compare original vs patched ROM AND read-back the output to confirm.
@@ -1751,8 +1969,8 @@ class RomWriter:
     def finalize(self):
         """Post-processing after all patches are written.
 
-        EDC/ECC regeneration is not implemented — most emulators (DuckStation,
-        ePSXe, PCSX-R, Mednafen) skip ECC verification and run patched ROMs
-        as-is.  Hardware play may require a separate edcre pass.
+        EDC checksums for TEX file sectors are recalculated inline during
+        3D jersey patching.  Non-TEX patches (names, maglia, flags) modify
+        sectors that emulators don't validate EDC for.
         """
         pass
