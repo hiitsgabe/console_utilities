@@ -133,6 +133,9 @@ def _handle_set_text(state, text):
     elif state.folder_name_input.show:
         state.folder_name_input.input_text = text
         state.folder_name_input.cursor_position = len(text)
+    elif state.auth_token_input.show and state.auth_token_input.step == "input":
+        state.auth_token_input.input_text = text
+        state.auth_token_input.cursor_position = len(text)
     elif state.ia_login.show:
         step = state.ia_login.step
         if step == "email":

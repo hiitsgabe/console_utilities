@@ -8,10 +8,15 @@ import threading
 import traceback
 from zipfile import ZipFile
 
+import pygame
 import requests
-from jnius import autoclass
 
 from utils.logging import log_error
+
+# Custom pygame event for triggering APK install on the main thread.
+# jnius calls must happen on the main thread (or a JVM-attached thread);
+# posting a pygame event is the safest way to ensure that.
+APK_INSTALL_EVENT = pygame.USEREVENT + 99
 
 
 def apply_android_update(
@@ -31,9 +36,12 @@ def apply_android_update(
     """
 
     def _do_update():
+        cache_dir = None
         try:
             if on_progress:
                 on_progress(0.0, "Downloading update...")
+
+            from jnius import autoclass
 
             PythonActivity = autoclass("org.kivy.android.PythonActivity")
             cache_dir = PythonActivity.mActivity.getCacheDir().getAbsolutePath()
@@ -98,7 +106,10 @@ def apply_android_update(
             if on_progress:
                 on_progress(0.9, "Launching installer...")
 
-            _install_apk(final_apk)
+            # Post APK install to the main thread via pygame event.
+            # jnius Intent calls must run on the main/UI thread.
+            event = pygame.event.Event(APK_INSTALL_EVENT, apk_path=final_apk)
+            pygame.event.post(event)
 
             if on_progress:
                 on_progress(1.0, "Installing...")
@@ -110,12 +121,13 @@ def apply_android_update(
             log_error(
                 "Android update failed", type(e).__name__, traceback.format_exc()
             )
-            try:
-                shutil.rmtree(
-                    os.path.join(cache_dir, "update_tmp"), ignore_errors=True
-                )
-            except Exception:
-                pass
+            if cache_dir:
+                try:
+                    shutil.rmtree(
+                        os.path.join(cache_dir, "update_tmp"), ignore_errors=True
+                    )
+                except Exception:
+                    pass
             if on_error:
                 msg = str(e)
                 # Provide friendlier messages for common errors
@@ -132,8 +144,13 @@ def apply_android_update(
     return thread
 
 
-def _install_apk(apk_path: str):
-    """Launch Android package installer for the given APK file."""
+def install_apk(apk_path: str):
+    """Launch Android package installer for the given APK file.
+
+    Must be called on the main thread (jnius requirement).
+    """
+    from jnius import autoclass
+
     PythonActivity = autoclass("org.kivy.android.PythonActivity")
     Intent = autoclass("android.content.Intent")
     File = autoclass("java.io.File")

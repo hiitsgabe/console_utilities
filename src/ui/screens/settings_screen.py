@@ -37,6 +37,7 @@ class SettingsScreen:
     # View options section
     VIEW_OPTIONS_SECTION = [
         "--- VIEW OPTIONS ---",
+        "View Mode",
         "Enable Box-art Display",
         "USA Games Only",
         "Show Download All Button",
@@ -217,6 +218,9 @@ class SettingsScreen:
         for i, item in enumerate(settings_items):
             if i in divider_indices:
                 items.append(item)
+            elif item == "View Mode":
+                value = "Grid" if settings.get("view_type", "list") == "grid" else "List"
+                items.append((item, value))
             elif item == "Enable Box-art Display":
                 value = "ON" if settings.get("enable_boxart", True) else "OFF"
                 items.append((item, value))
@@ -373,6 +377,7 @@ class SettingsScreen:
                 "Clear Systems Cache": "clear_systems_cache",
                 "Enable PortMaster (beta)": "toggle_portmaster_enabled",
                 "Internet Archive Login": "ia_login",
+                "View Mode": "toggle_view_mode",
                 "Enable Box-art Display": "toggle_boxart",
                 "USA Games Only": "toggle_usa_only",
                 "Show Download All Button": "toggle_download_all",
