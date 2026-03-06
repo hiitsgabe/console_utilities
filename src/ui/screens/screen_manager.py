@@ -42,6 +42,7 @@ from .scraper_menu_screen import ScraperMenuScreen
 from .sports_patcher_screen import SportsPatcherScreen
 from .we_patcher_screen import WePatcherScreen
 from .iss_patcher_screen import ISSPatcherScreen
+from .kgj_mlb_patcher_screen import KGJMLBPatcherScreen
 from .nhl94_snes_patcher_screen import NHL94SNESPatcherScreen
 from .nhl94_genesis_patcher_screen import NHL94GenesisPatcherScreen
 from .nhl07_psp_patcher_screen import NHL07PSPPatcherScreen
@@ -77,6 +78,7 @@ class ScreenManager:
         self.sports_patcher_screen = SportsPatcherScreen(theme)
         self.we_patcher_screen = WePatcherScreen(theme)
         self.iss_patcher_screen = ISSPatcherScreen(theme)
+        self.kgj_mlb_patcher_screen = KGJMLBPatcherScreen(theme)
         self.nhl94_patcher_screen = NHL94SNESPatcherScreen(theme)
         self.nhl94_gen_patcher_screen = NHL94GenesisPatcherScreen(theme)
         self.nhl07_psp_patcher_screen = NHL07PSPPatcherScreen(theme)
@@ -628,6 +630,25 @@ class ScreenManager:
             rects["item_rects"] = item_rects
             return rects
 
+        # KGJ MLB Patcher modals
+        if state.kgj_mlb_patcher.active_modal == "roster_preview":
+            modal_rect, content_rect, close_rect, item_rects = (
+                self.roster_preview_modal.render(screen, state)
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["item_rects"] = item_rects
+            return rects
+
+        if state.kgj_mlb_patcher.active_modal == "patch_progress":
+            modal_rect, content_rect, close_rect, item_rects = (
+                self.patch_progress_modal.render(screen, state)
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["item_rects"] = item_rects
+            return rects
+
         # NHL94 Genesis Patcher modals
         if state.nhl94_gen_patcher.active_modal == "roster_preview":
             modal_rect, content_rect, close_rect, item_rects = (
@@ -862,6 +883,14 @@ class ScreenManager:
             rects["scroll_offset"] = scroll_offset
             rects["season_left_arrow"] = self.nhl94_patcher_screen.season_arrow_left
             rects["season_right_arrow"] = self.nhl94_patcher_screen.season_arrow_right
+
+        elif state.mode == "kgj_mlb_patcher":
+            back_rect, item_rects, scroll_offset = self.kgj_mlb_patcher_screen.render(
+                screen, state.highlighted, state, settings
+            )
+            rects["back"] = back_rect
+            rects["item_rects"] = item_rects
+            rects["scroll_offset"] = scroll_offset
 
         elif state.mode == "nhl94_gen_patcher":
             back_rect, item_rects, scroll_offset = self.nhl94_gen_patcher_screen.render(

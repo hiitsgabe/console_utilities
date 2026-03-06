@@ -1367,6 +1367,9 @@ class ConsoleUtilitiesApp:
         elif self.state.mode == "nhl94_patcher":
             self._handle_nhl94_patcher_navigation(direction)
 
+        elif self.state.mode == "kgj_mlb_patcher":
+            self._handle_kgj_mlb_patcher_navigation(direction)
+
         elif self.state.mode == "nhl94_gen_patcher":
             self._handle_nhl94_gen_patcher_navigation(direction)
 
@@ -1541,6 +1544,53 @@ class ConsoleUtilitiesApp:
                     return
 
             max_items = nhl94_snes_patcher_screen.get_count(self.state, self.settings)
+            if direction in ("up", "left"):
+                self.state.highlighted = (self.state.highlighted - 1) % max_items
+            elif direction in ("down", "right"):
+                self.state.highlighted = (self.state.highlighted + 1) % max_items
+
+    def _handle_kgj_mlb_patcher_navigation(self, direction):
+        """Handle D-pad navigation for kgj_mlb_patcher mode and its modals."""
+        kgj = self.state.kgj_mlb_patcher
+
+        if kgj.active_modal == "roster_preview":
+            league_data = kgj.league_data
+            if not league_data or not hasattr(league_data, "teams"):
+                return
+            teams = league_data.teams
+            if direction == "left":
+                kgj.roster_preview_team_index = (
+                    kgj.roster_preview_team_index - 1
+                ) % max(len(teams), 1)
+                kgj.roster_preview_player_index = 0
+            elif direction == "right":
+                kgj.roster_preview_team_index = (
+                    kgj.roster_preview_team_index + 1
+                ) % max(len(teams), 1)
+                kgj.roster_preview_player_index = 0
+            elif direction == "up":
+                kgj.roster_preview_player_index = max(
+                    0, kgj.roster_preview_player_index - 1
+                )
+            elif direction == "down":
+                team_idx = kgj.roster_preview_team_index
+                if 0 <= team_idx < len(teams):
+                    players = (
+                        teams[team_idx].players
+                        if hasattr(teams[team_idx], "players")
+                        else []
+                    )
+                    kgj.roster_preview_player_index = min(
+                        kgj.roster_preview_player_index + 1,
+                        max(len(players) - 1, 0),
+                    )
+
+        elif kgj.active_modal is None:
+            from ui.screens.kgj_mlb_patcher_screen import kgj_mlb_patcher_screen
+
+            max_items = kgj_mlb_patcher_screen.get_count(
+                self.state, self.settings
+            )
             if direction in ("up", "left"):
                 self.state.highlighted = (self.state.highlighted - 1) % max_items
             elif direction in ("down", "right"):
@@ -2604,6 +2654,15 @@ class ConsoleUtilitiesApp:
                 self.state.nhl94_patcher = NHL94SNESPatcherState()
                 self.state.mode = "sports_patcher"
                 self.state.highlighted = 0
+        elif self.state.mode == "kgj_mlb_patcher":
+            if self.state.kgj_mlb_patcher.active_modal:
+                self.state.kgj_mlb_patcher.active_modal = None
+            else:
+                from state import KGJMLBPatcherState
+
+                self.state.kgj_mlb_patcher = KGJMLBPatcherState()
+                self.state.mode = "sports_patcher"
+                self.state.highlighted = 0
         elif self.state.mode == "nhl94_gen_patcher":
             if self.state.nhl94_gen_patcher.active_modal:
                 self.state.nhl94_gen_patcher.active_modal = None
@@ -2851,6 +2910,9 @@ class ConsoleUtilitiesApp:
             elif action == "nhl94_patcher":
                 self.state.mode = "nhl94_patcher"
                 self.state.highlighted = 0
+            elif action == "kgj_mlb_patcher":
+                self.state.mode = "kgj_mlb_patcher"
+                self.state.highlighted = 0
             elif action == "nhl94_gen_patcher":
                 self.state.mode = "nhl94_gen_patcher"
                 self.state.highlighted = 0
@@ -2866,6 +2928,9 @@ class ConsoleUtilitiesApp:
 
         elif self.state.mode == "nhl94_patcher":
             self._handle_nhl94_patcher_selection()
+
+        elif self.state.mode == "kgj_mlb_patcher":
+            self._handle_kgj_mlb_patcher_selection()
 
         elif self.state.mode == "nhl94_gen_patcher":
             self._handle_nhl94_gen_patcher_selection()
@@ -3653,6 +3718,8 @@ class ConsoleUtilitiesApp:
             path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "nhl94_patcher_rom":
             path = self.settings.get("roms_dir", SCRIPT_DIR)
+        elif selection_type == "kgj_mlb_patcher_rom":
+            path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "nhl94_gen_patcher_rom":
             path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "nhl07_patcher_rom":
@@ -3672,6 +3739,10 @@ class ConsoleUtilitiesApp:
 
             loader = load_snes_rom_folder_contents
         elif selection_type == "nhl94_patcher_rom":
+            from services.file_listing import load_snes_rom_folder_contents
+
+            loader = load_snes_rom_folder_contents
+        elif selection_type == "kgj_mlb_patcher_rom":
             from services.file_listing import load_snes_rom_folder_contents
 
             loader = load_snes_rom_folder_contents
@@ -3765,6 +3836,7 @@ class ConsoleUtilitiesApp:
             "we_patcher_rom",
             "iss_patcher_rom",
             "nhl94_patcher_rom",
+            "kgj_mlb_patcher_rom",
             "nhl94_gen_patcher_rom",
             "nhl07_patcher_rom",
         ):
@@ -3891,7 +3963,7 @@ class ConsoleUtilitiesApp:
         )
 
         is_psx_context = selection_type == "we_patcher_rom"
-        is_snes_context = selection_type in ("iss_patcher_rom", "nhl94_patcher_rom")
+        is_snes_context = selection_type in ("iss_patcher_rom", "nhl94_patcher_rom", "kgj_mlb_patcher_rom")
         is_genesis_context = selection_type == "nhl94_gen_patcher_rom"
         is_psp_context = selection_type == "nhl07_patcher_rom"
         if is_psx_context:
@@ -4040,6 +4112,20 @@ class ConsoleUtilitiesApp:
             except Exception:
                 self.state.nhl94_patcher.rom_valid = False
                 self.state.nhl94_patcher.rom_info = None
+        elif selection_type == "kgj_mlb_patcher_rom":
+            self.state.kgj_mlb_patcher.rom_path = path
+            try:
+                from services.kgj_mlb_patcher import KGJMLBPatcher
+
+                cache_dir = self.settings.get("work_dir", "workdir")
+                cache_dir = os.path.join(cache_dir, "mlb_cache")
+                patcher = KGJMLBPatcher(cache_dir)
+                rom_info = patcher.analyze_rom(path)
+                self.state.kgj_mlb_patcher.rom_info = rom_info
+                self.state.kgj_mlb_patcher.rom_valid = rom_info.is_valid
+            except Exception:
+                self.state.kgj_mlb_patcher.rom_valid = False
+                self.state.kgj_mlb_patcher.rom_info = None
         elif selection_type == "nhl94_gen_patcher_rom":
             self.state.nhl94_gen_patcher.rom_path = path
             try:
@@ -8232,6 +8318,172 @@ class ConsoleUtilitiesApp:
                 nhl.patch_complete = False
             finally:
                 nhl.is_patching = False
+
+        threading.Thread(target=_patch, daemon=True).start()
+
+    def _handle_kgj_mlb_patcher_selection(self):
+        """Handle item selection on the kgj_mlb_patcher main menu."""
+        kgj = self.state.kgj_mlb_patcher
+
+        if kgj.active_modal == "roster_preview":
+            return
+        if kgj.active_modal == "patch_progress":
+            if kgj.patch_complete or kgj.patch_error:
+                kgj.active_modal = None
+            return
+
+        from ui.screens.kgj_mlb_patcher_screen import kgj_mlb_patcher_screen
+
+        action = kgj_mlb_patcher_screen.get_action(
+            self.state.highlighted, self.state, self.settings
+        )
+
+        if action == "fetch_rosters":
+            self._start_kgj_mlb_roster_fetch()
+        elif action == "preview_rosters":
+            kgj.active_modal = "roster_preview"
+            kgj.roster_preview_team_index = 0
+            kgj.roster_preview_player_index = 0
+            if not kgj.rosters and not kgj.is_fetching:
+                self._start_kgj_mlb_roster_fetch()
+        elif action == "select_rom":
+            self._open_folder_browser("kgj_mlb_patcher_rom")
+        elif action == "patch_rom":
+            kgj.active_modal = "patch_progress"
+            self._start_kgj_mlb_patching()
+
+    def _start_kgj_mlb_roster_fetch(self):
+        """Start background KGJ MLB roster fetch thread."""
+        import threading
+
+        kgj = self.state.kgj_mlb_patcher
+
+        if kgj.is_fetching:
+            return
+
+        kgj.is_fetching = True
+        kgj.fetch_error = ""
+        kgj.rosters = None
+
+        cache_dir = self.settings.get("work_dir", "workdir")
+        cache_dir = os.path.join(cache_dir, "mlb_cache")
+        season = kgj.selected_season
+
+        def _fetch():
+            from services.kgj_mlb_patcher import KGJMLBPatcher
+            from services.sports_api.models import League, Team, TeamRoster, LeagueData
+
+            try:
+
+                def on_status(msg):
+                    kgj.fetch_status = msg
+
+                patcher = KGJMLBPatcher(cache_dir, on_status=on_status)
+
+                def progress(p, msg):
+                    kgj.fetch_progress = p
+                    kgj.fetch_status = msg
+
+                rosters = patcher.fetch_rosters(
+                    on_progress=progress,
+                    season=season,
+                )
+                kgj.rosters = rosters
+                kgj.team_stats = getattr(patcher, "team_stats", {})
+
+                # Build LeagueData for roster preview modal
+                team_rosters = []
+                for team_code, players in sorted(rosters.items()):
+                    team_name = team_code
+                    team = Team(
+                        id=0,
+                        name=team_name,
+                        short_name=team_code,
+                        code=team_code,
+                        logo_url="",
+                        country="",
+                    )
+                    team_rosters.append(
+                        TeamRoster(
+                            team=team,
+                            players=players,
+                            player_stats={},
+                        )
+                    )
+                kgj.league_data = LeagueData(
+                    league=League(
+                        id=0,
+                        name="MLB",
+                        country="USA",
+                        country_code="US",
+                        logo_url="",
+                        season=season,
+                        teams_count=len(team_rosters),
+                    ),
+                    teams=team_rosters,
+                )
+            except Exception as e:
+                kgj.fetch_error = str(e)
+            finally:
+                kgj.is_fetching = False
+
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def _start_kgj_mlb_patching(self):
+        """Start background KGJ MLB patching thread."""
+        import threading
+        import os
+
+        kgj = self.state.kgj_mlb_patcher
+
+        if not kgj.rosters or not kgj.rom_path:
+            kgj.patch_error = "Missing rosters or ROM"
+            return
+
+        if not kgj.rom_valid:
+            kgj.patch_error = "Invalid ROM"
+            return
+
+        kgj.is_patching = True
+        kgj.patch_error = ""
+        kgj.patch_complete = False
+        kgj.patch_output_path = ""
+
+        input_path = kgj.rom_path
+        game_dir = os.path.dirname(input_path)
+        base_name = os.path.splitext(os.path.basename(input_path))[0]
+        ext = os.path.splitext(input_path)[1]
+        season = kgj.selected_season
+        output_path = os.path.join(game_dir, f"{base_name} - MLB {season}{ext}")
+
+        cache_dir = self.settings.get("work_dir", "workdir")
+        cache_dir = os.path.join(cache_dir, "mlb_cache")
+
+        def _patch():
+            try:
+                from services.kgj_mlb_patcher import KGJMLBPatcher
+
+                patcher = KGJMLBPatcher(cache_dir)
+                patcher.team_stats = kgj.team_stats or {}
+
+                def progress(p, msg):
+                    kgj.patch_progress = p
+                    kgj.patch_status = msg
+
+                result = patcher.patch_rom(
+                    input_path,
+                    output_path,
+                    kgj.rosters,
+                    on_progress=progress,
+                )
+                kgj.patch_complete = result.success
+                kgj.patch_error = result.error if not result.success else ""
+                kgj.patch_output_path = result.output_path if result.success else ""
+            except Exception as e:
+                kgj.patch_error = str(e)
+                kgj.patch_complete = False
+            finally:
+                kgj.is_patching = False
 
         threading.Thread(target=_patch, daemon=True).start()
 

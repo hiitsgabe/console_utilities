@@ -74,6 +74,10 @@ HOCKEY_BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/hockey"
 HOCKEY_CORE_URL = (
     "https://sports.core.api.espn.com/v2/sports/hockey/leagues/nhl"
 )
+BASEBALL_BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/baseball"
+BASEBALL_CORE_URL = (
+    "https://sports.core.api.espn.com/v2/sports/baseball/leagues/mlb"
+)
 
 
 class EspnClient:
@@ -213,6 +217,136 @@ class EspnClient:
             self._save_cache(cache_key, stats)
         return stats
 
+    # ------------------------------------------------------------------
+    # Baseball / MLB
+    # ------------------------------------------------------------------
+
+    def get_mlb_teams(self) -> List[Team]:
+        """Fetch all current MLB teams."""
+        cache_key = "espn_mlb_teams"
+        cached = self._load_cache(cache_key)
+        if cached:
+            return self._parse_teams(cached)
+        data = self._request("/mlb/teams", sport="baseball")
+        if data:
+            self._save_cache(cache_key, data)
+        return self._parse_teams(data)
+
+    def get_baseball_squad(self, team_id: int) -> List[Player]:
+        """Fetch current roster for an MLB team."""
+        cache_key = f"espn_baseball_squad_{team_id}"
+        cached = self._load_cache(cache_key)
+        if cached:
+            return self._parse_baseball_squad(cached)
+        data = self._request(
+            f"/mlb/teams/{team_id}/roster", sport="baseball"
+        )
+        if data:
+            self._save_cache(cache_key, data)
+        return self._parse_baseball_squad(data)
+
+    def get_baseball_team_leaders(
+        self, team_id: int, season: int = 2025
+    ) -> dict:
+        """Fetch per-player stats via team leaders endpoint.
+
+        Returns dict mapping ESPN player ID (str) to stat dict.
+        """
+        cache_key = f"espn_baseball_leaders_{team_id}_{season}"
+        cached = self._load_cache(cache_key)
+        if cached:
+            return cached
+
+        url = (
+            f"{BASEBALL_CORE_URL}/seasons/{season}/types/2"
+            f"/teams/{team_id}/leaders"
+        )
+        try:
+            resp = requests.get(url, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception:
+            return {}
+
+        stats = {}
+        for cat in data.get("categories", []):
+            abbrev = cat.get("abbreviation", "")
+            for entry in cat.get("leaders", []):
+                athlete = entry.get("athlete", {})
+                pid = self._extract_pid(athlete)
+                if not pid:
+                    continue
+                if pid not in stats:
+                    stats[pid] = {}
+                val = entry.get("value", 0)
+                stats[pid][abbrev] = val
+
+        if stats:
+            self._save_cache(cache_key, stats)
+        return stats
+
+    def _parse_baseball_squad(self, data: dict) -> List[Player]:
+        """Parse MLB team roster with baseball-specific positions.
+
+        ESPN baseball roster groups athletes by role:
+        athletes: [{position: "Pitchers", items: [...]}, ...]
+        """
+        if not isinstance(data, dict):
+            return []
+
+        players = []
+        for group in data.get("athletes", []):
+            items = group.get("items", [])
+            for athlete in items:
+                pos_info = athlete.get("position", {})
+                pos_abbrev = (
+                    pos_info.get("abbreviation", "OF")
+                    if isinstance(pos_info, dict) else "OF"
+                ).upper()
+
+                jersey = athlete.get("jersey")
+                number = (
+                    int(jersey)
+                    if jersey and str(jersey).isdigit()
+                    else None
+                )
+
+                display_name = athlete.get(
+                    "displayName", athlete.get("fullName", "")
+                )
+                first_name = athlete.get("firstName", "")
+                last_name = athlete.get("lastName", "")
+
+                if not last_name and display_name:
+                    parts = display_name.split()
+                    if len(parts) == 1:
+                        last_name = parts[0]
+                        first_name = ""
+                    else:
+                        last_name = parts[-1]
+                        first_name = " ".join(parts[:-1])
+
+                # ESPN doesn't provide handedness for baseball
+                hand_info = athlete.get("hand", {})
+                hand = (
+                    hand_info.get("abbreviation", "")
+                    if isinstance(hand_info, dict) else ""
+                )
+
+                players.append(Player(
+                    id=int(athlete.get("id", 0)),
+                    name=display_name,
+                    first_name=first_name,
+                    last_name=last_name,
+                    age=athlete.get("age", 25) or 25,
+                    nationality=athlete.get("citizenship", ""),
+                    position=pos_abbrev,
+                    number=number,
+                    photo_url="",
+                    handedness=hand,
+                ))
+        return players
+
     def _extract_pid(self, athlete) -> Optional[str]:
         """Extract player ID from athlete obj or $ref link."""
         if isinstance(athlete, dict):
@@ -240,7 +374,12 @@ class EspnClient:
         )
 
     def _request(self, path: str, sport: str = "soccer") -> dict:
-        base = HOCKEY_BASE_URL if sport == "hockey" else SOCCER_BASE_URL
+        if sport == "hockey":
+            base = HOCKEY_BASE_URL
+        elif sport == "baseball":
+            base = BASEBALL_BASE_URL
+        else:
+            base = SOCCER_BASE_URL
         try:
             if self.on_status:
                 self.on_status(f"Fetching{path}...")
