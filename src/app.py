@@ -83,6 +83,12 @@ class ConsoleUtilitiesApp:
 
     def __init__(self):
         """Initialize the application."""
+        # Install log capture early so all print/log_error output is captured
+        # for the web companion logs viewer (even before it's enabled).
+        from web_companion import log_capture
+
+        log_capture.install()
+
         # Initialize logging
         init_log_file()
 
@@ -907,6 +913,23 @@ class ConsoleUtilitiesApp:
                     if BUILD_TARGET == "android":
                         self._handle_text_input_event(event)
 
+                elif BUILD_TARGET == "android":
+                    from droid.updater import APK_INSTALL_EVENT
+
+                    if event.type == APK_INSTALL_EVENT:
+                        from droid.updater import install_apk
+
+                        try:
+                            install_apk(event.apk_path)
+                        except Exception as e:
+                            import traceback
+
+                            log_error(
+                                "APK install failed",
+                                type(e).__name__,
+                                traceback.format_exc(),
+                            )
+
 
             # Update image cache (process loaded images from background threads)
             self.image_cache.update()
@@ -1140,21 +1163,48 @@ class ConsoleUtilitiesApp:
             if max_items == 0:
                 return
 
-            if direction in ("left", "right"):
-                # Left/right scroll the highlighted item's text horizontally
-                scroll_step = 20
-                if direction == "right":
-                    self.state.text_scroll_offset += scroll_step
-                else:
-                    self.state.text_scroll_offset = max(
-                        0, self.state.text_scroll_offset - scroll_step
-                    )
-            elif direction == "up":
-                self.state.highlighted = (self.state.highlighted - 1) % max_items
+            view_type = self.settings.get("view_type", "list")
+
+            if view_type == "grid":
+                from ui.screens.games_screen import get_grid_columns
+
+                columns = get_grid_columns(self.screen.get_width())
+                if direction == "left":
+                    self.state.highlighted = (self.state.highlighted - 1) % max_items
+                elif direction == "right":
+                    self.state.highlighted = (self.state.highlighted + 1) % max_items
+                elif direction == "up":
+                    new_pos = self.state.highlighted - columns
+                    if new_pos < 0:
+                        # Wrap to last row
+                        last_row_start = (max_items - 1) // columns * columns
+                        new_pos = min(last_row_start + (self.state.highlighted % columns), max_items - 1)
+                    self.state.highlighted = new_pos
+                elif direction == "down":
+                    new_pos = self.state.highlighted + columns
+                    if new_pos >= max_items:
+                        # Wrap to first row
+                        new_pos = self.state.highlighted % columns
+                        if new_pos >= max_items:
+                            new_pos = 0
+                    self.state.highlighted = new_pos
                 self.state.text_scroll_offset = 0
-            elif direction == "down":
-                self.state.highlighted = (self.state.highlighted + 1) % max_items
-                self.state.text_scroll_offset = 0
+            else:
+                if direction in ("left", "right"):
+                    # Left/right scroll the highlighted item's text horizontally
+                    scroll_step = 20
+                    if direction == "right":
+                        self.state.text_scroll_offset += scroll_step
+                    else:
+                        self.state.text_scroll_offset = max(
+                            0, self.state.text_scroll_offset - scroll_step
+                        )
+                elif direction == "up":
+                    self.state.highlighted = (self.state.highlighted - 1) % max_items
+                    self.state.text_scroll_offset = 0
+                elif direction == "down":
+                    self.state.highlighted = (self.state.highlighted + 1) % max_items
+                    self.state.text_scroll_offset = 0
 
         elif self.state.mode in ("settings", "utils", "scraper_menu"):
             if self.state.mode == "settings":
@@ -1225,15 +1275,32 @@ class ConsoleUtilitiesApp:
                 ) % max_items
 
         elif self.state.mode == "system_settings":
-            max_items = 2  # Hide System, Set Custom Folder
-            if direction in ("up", "left"):
-                self.state.system_settings_highlighted = (
-                    self.state.system_settings_highlighted - 1
-                ) % max_items
-            elif direction in ("down", "right"):
-                self.state.system_settings_highlighted = (
-                    self.state.system_settings_highlighted + 1
-                ) % max_items
+            from ui.screens.system_settings_screen import system_settings_screen
+
+            system = self._get_system_for_settings()
+            if system:
+                system_name = system.get("name", "")
+                sys_settings = self.settings.get("system_settings", {})
+                is_hidden = sys_settings.get(system_name, {}).get("hidden", False)
+                max_items = system_settings_screen.get_max_items(system, is_hidden)
+                _, divider_indices = system_settings_screen._get_items(
+                    system, is_hidden
+                )
+            else:
+                max_items = 0
+                divider_indices = set()
+
+            if max_items > 0:
+                if direction in ("up", "left"):
+                    new_pos = (self.state.system_settings_highlighted - 1) % max_items
+                    while new_pos in divider_indices and max_items > len(divider_indices):
+                        new_pos = (new_pos - 1) % max_items
+                    self.state.system_settings_highlighted = new_pos
+                elif direction in ("down", "right"):
+                    new_pos = (self.state.system_settings_highlighted + 1) % max_items
+                    while new_pos in divider_indices and max_items > len(divider_indices):
+                        new_pos = (new_pos + 1) % max_items
+                    self.state.system_settings_highlighted = new_pos
 
         elif self.state.mode == "downloads":
             max_items = len(self.state.download_queue.items) or 1
@@ -2948,6 +3015,10 @@ class ConsoleUtilitiesApp:
             self._open_folder_browser("archive_json")
         elif action == "select_nsz_keys":
             self._open_folder_browser("nsz_keys")
+        elif action == "toggle_view_mode":
+            current = self.settings.get("view_type", "list")
+            self.settings["view_type"] = "grid" if current == "list" else "list"
+            save_settings(self.settings)
         elif action == "toggle_boxart":
             self.settings["enable_boxart"] = not self.settings.get(
                 "enable_boxart", True
@@ -4152,30 +4223,54 @@ class ConsoleUtilitiesApp:
             self.state.mode = "system_settings"
             self.state.system_settings_highlighted = 0
 
+    def _get_system_for_settings(self) -> Optional[Dict[str, Any]]:
+        """Get the system dict for the current system_settings screen."""
+        idx = self.state.selected_system_for_settings
+        if idx is not None and idx < len(self.data):
+            return self.data[idx]
+        return None
+
     def _handle_system_settings_selection(self):
         """Handle individual system settings selection."""
-        from ui.screens.system_settings_screen import SystemSettingsScreen
+        from ui.screens.system_settings_screen import system_settings_screen
 
-        action = SystemSettingsScreen().get_setting_action(
-            self.state.system_settings_highlighted
-        )
-
-        if self.state.selected_system_for_settings is None:
+        system = self._get_system_for_settings()
+        if system is None:
             return
 
-        system = self.data[self.state.selected_system_for_settings]
         system_name = system.get("name", "")
+        sys_settings = self.settings.get("system_settings", {})
+        is_hidden = sys_settings.get(system_name, {}).get("hidden", False)
+
+        action = system_settings_screen.get_setting_action(
+            self.state.system_settings_highlighted, system, is_hidden
+        )
+
+        if action in ("divider", "noop", "unknown"):
+            return
 
         if action == "toggle_hide_system":
-            # Toggle hidden state
-            system_settings = self.settings.setdefault("system_settings", {})
-            sys_settings = system_settings.setdefault(system_name, {})
-            sys_settings["hidden"] = not sys_settings.get("hidden", False)
+            settings_map = self.settings.setdefault("system_settings", {})
+            sys_s = settings_map.setdefault(system_name, {})
+            sys_s["hidden"] = not sys_s.get("hidden", False)
             save_settings(self.settings)
 
         elif action == "set_custom_folder":
-            # Open folder browser for custom folder
             self._open_folder_browser("custom_folder")
+
+        elif action == "edit_auth_token":
+            # Find the actual data index for this system
+            system_index = self.state.selected_system_for_settings
+            auth = system.get("auth", {})
+            self.state.auth_token_input.show = True
+            self.state.auth_token_input.step = "input"
+            self.state.auth_token_input.auth_message = auth.get("auth_message", "")
+            self.state.auth_token_input.system_index = system_index
+            self.state.auth_token_input.input_text = auth.get("token", "")
+            self.state.auth_token_input.cursor_position = len(
+                self.state.auth_token_input.input_text
+            )
+            self.state.auth_token_input.shift_active = False
 
     def _toggle_keyboard_shift(self):
         """Toggle shift state for the currently active keyboard modal."""
