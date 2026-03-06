@@ -3033,15 +3033,13 @@ class ConsoleUtilitiesApp:
         elif context == "apply_update" and data:
             self._apply_update(data)
             return  # Don't close modal yet - _apply_update manages its own UI
-        elif context == "clear_systems_cache":
+        elif context == "clear_game_list_cache":
             import shutil
             from constants import SYSTEMS_CACHE_DIR
-            from services.image_cache import _listing_cache
 
-            shutil.rmtree(SYSTEMS_CACHE_DIR, ignore_errors=True)
-            os.makedirs(SYSTEMS_CACHE_DIR, exist_ok=True)
-            _listing_cache.clear()
-            self.image_cache.clear()
+            listings_dir = os.path.join(SYSTEMS_CACHE_DIR, "listings")
+            shutil.rmtree(listings_dir, ignore_errors=True)
+            os.makedirs(listings_dir, exist_ok=True)
         elif context == "go_to_ia_settings":
             self._handle_confirm_modal_cancel()
             self.state.mode = "settings"
@@ -3232,12 +3230,11 @@ class ConsoleUtilitiesApp:
                 self.state.confirm_modal.context = ""
             else:
                 self._stop_web_companion()
-        elif action == "clear_systems_cache":
+        elif action == "clear_game_list_cache":
             self.state.confirm_modal.show = True
-            self.state.confirm_modal.title = "Clear Systems Cache"
+            self.state.confirm_modal.title = "Clear Game List Cache"
             self.state.confirm_modal.message_lines = [
-                "This will clear cached game listings",
-                "and thumbnail data.",
+                "This will clear cached game listings.",
                 "",
                 "They will be re-downloaded when you",
                 "next browse a system.",
@@ -3245,7 +3242,7 @@ class ConsoleUtilitiesApp:
             self.state.confirm_modal.ok_label = "Clear"
             self.state.confirm_modal.cancel_label = "Cancel"
             self.state.confirm_modal.button_index = 0
-            self.state.confirm_modal.context = "clear_systems_cache"
+            self.state.confirm_modal.context = "clear_game_list_cache"
         elif action == "check_for_updates":
             self._check_for_updates()
 
@@ -5055,7 +5052,10 @@ class ConsoleUtilitiesApp:
         import threading
 
         def _do_load_games(sd=system_data):
-            games = list_files(sd, self.settings)
+            def _on_progress(msg):
+                self.state.loading.message = msg
+
+            games = list_files(sd, self.settings, progress_callback=_on_progress)
             self._hide_loading()
             if not games:
                 self.state.confirm_modal.show = True

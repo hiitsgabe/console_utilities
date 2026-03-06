@@ -183,7 +183,11 @@ def list_files(
         if progress_callback:
             progress_callback(f"Loading games for {system_name}...")
 
-        formats = system_data.get("file_format", [])
+        formats = list(system_data.get("file_format", []))
+        # Archives serve .zip files; include in listing when should_unzip is set
+        if system_data.get("should_unzip", False):
+            if ".zip" not in [f.lower() for f in formats]:
+                formats.append(".zip")
 
         # Check if this is the JSON API format
         if "list_url" in system_data:
