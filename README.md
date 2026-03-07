@@ -321,6 +321,12 @@ make clean     # 🧹 Clean build artifacts
 
 ---
 
+## 📜 License
+
+This project is licensed under [**CC BY-NC 4.0**](https://creativecommons.org/licenses/by-nc/4.0/). You're free to share, adapt, and build upon it for non-commercial purposes, with attribution. See the [LICENSE](LICENSE) file for details.
+
+---
+
 ## 🤝 Contributing
 
 Pull requests are welcome — from humans and AI agents alike! 🤖 For major changes, please open an issue first to discuss proposed modifications.
