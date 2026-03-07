@@ -25,7 +25,24 @@ if __name__ == "__main__":
                 Permission.INTERNET,
                 Permission.POST_NOTIFICATIONS,
             ])
-            
+
+            # Request MANAGE_EXTERNAL_STORAGE (All Files Access) on Android 11+.
+            # This uses a special intent, not the standard permission dialog.
+            try:
+                from jnius import autoclass
+                Environment = autoclass("android.os.Environment")
+                if not Environment.isExternalStorageManager():
+                    PythonActivity = autoclass("org.kivy.android.PythonActivity")
+                    Intent = autoclass("android.content.Intent")
+                    Settings = autoclass("android.provider.Settings")
+                    Uri = autoclass("android.net.Uri")
+                    activity = PythonActivity.mActivity
+                    intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                    intent.setData(Uri.parse("package:" + activity.getPackageName()))
+                    activity.startActivity(intent)
+            except Exception:
+                pass
+
             # Set Android-specific paths
             os.environ["ANDROID_STORAGE"] = app_storage_path()
         except ImportError:
