@@ -931,8 +931,12 @@ class ConsoleUtilitiesApp:
                             self._is_backgrounded = False
                             self._restore_android_display()
                         else:
-                            # Orientation change: landscape = resize, portrait = 800x600
-                            self._handle_android_orientation(event.w, event.h)
+                            # Only handle actual orientation changes, not keyboard/navbar resize
+                            cur_w, cur_h = self.screen.get_size()
+                            was_portrait = cur_h > cur_w
+                            is_portrait = event.h > event.w
+                            if was_portrait != is_portrait:
+                                self._handle_android_orientation(event.w, event.h)
                     else:
                         self._handle_resize(event.w, event.h)
 
@@ -1348,9 +1352,10 @@ class ConsoleUtilitiesApp:
                 system_name = system.get("name", "")
                 sys_settings = self.settings.get("system_settings", {})
                 is_hidden = sys_settings.get(system_name, {}).get("hidden", False)
-                max_items = system_settings_screen.get_max_items(system, is_hidden)
+                per_sys = sys_settings.get(system_name, {})
+                max_items = system_settings_screen.get_max_items(system, is_hidden, per_sys)
                 _, divider_indices = system_settings_screen._get_items(
-                    system, is_hidden
+                    system, is_hidden, per_sys
                 )
             else:
                 max_items = 0
@@ -4469,6 +4474,14 @@ class ConsoleUtilitiesApp:
         elif selection_type == "extract_7z":
             self._extract_7z_file(path)
             return
+        elif selection_type == "custom_folder":
+            system = self._get_system_for_settings()
+            if system:
+                system_name = system.get("name", "")
+                settings_map = self.settings.setdefault("system_settings", {})
+                sys_s = settings_map.setdefault(system_name, {})
+                sys_s["custom_folder"] = path
+                save_settings(self.settings)
         elif selection_type == "esde_media_path":
             self.settings["esde_media_path"] = path
             save_settings(self.settings)
@@ -4773,8 +4786,9 @@ class ConsoleUtilitiesApp:
         sys_settings = self.settings.get("system_settings", {})
         is_hidden = sys_settings.get(system_name, {}).get("hidden", False)
 
+        per_sys = sys_settings.get(system_name, {})
         action = system_settings_screen.get_setting_action(
-            self.state.system_settings_highlighted, system, is_hidden
+            self.state.system_settings_highlighted, system, is_hidden, per_sys
         )
 
         if action in ("divider", "noop", "unknown"):
@@ -4784,6 +4798,13 @@ class ConsoleUtilitiesApp:
             settings_map = self.settings.setdefault("system_settings", {})
             sys_s = settings_map.setdefault(system_name, {})
             sys_s["hidden"] = not sys_s.get("hidden", False)
+            save_settings(self.settings)
+
+        elif action == "toggle_should_unzip":
+            settings_map = self.settings.setdefault("system_settings", {})
+            sys_s = settings_map.setdefault(system_name, {})
+            current = sys_s.get("should_unzip", system.get("should_unzip", False))
+            sys_s["should_unzip"] = not current
             save_settings(self.settings)
 
         elif action == "set_custom_folder":

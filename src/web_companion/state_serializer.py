@@ -719,6 +719,8 @@ def serialize_web_state(state, settings=None, data=None):
         items.append({"name": "--- SETTINGS ---", "is_divider": True})
         items.append({"name": f"Hide System: {'ON' if hidden else 'OFF'}", "selected": False})
         items.append({"name": f"Custom Folder: {custom or 'Default'}", "selected": False})
+        should_unzip = sys_settings.get("should_unzip", system.get("should_unzip", False))
+        items.append({"name": f"Auto-extract ZIPs: {'ON' if should_unzip else 'OFF'}", "selected": False})
         # Auth section (only for token-based auth)
         auth = system.get("auth", {})
         if auth and auth.get("type") != "ia_s3" and ("token" in auth or auth.get("auth_message")):

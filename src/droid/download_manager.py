@@ -486,12 +486,19 @@ class AndroidDownloadManager:
 
         roms_folder = self._get_roms_folder(item.system_data)
 
+        # Merge per-system settings overrides into system_data for the service
+        effective_system_data = dict(item.system_data)
+        system_name = effective_system_data.get("name", "")
+        per_sys = self.settings.get("system_settings", {}).get(system_name, {})
+        if "should_unzip" in per_sys:
+            effective_system_data["should_unzip"] = per_sys["should_unzip"]
+
         task_info = {
             "file_path": file_path,
             "filename": filename,
             "work_dir": self.work_dir,
             "roms_folder": roms_folder,
-            "system_data": item.system_data,
+            "system_data": effective_system_data,
             "item_id": item_id,
         }
 

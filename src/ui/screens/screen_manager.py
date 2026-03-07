@@ -853,7 +853,8 @@ class ScreenManager:
         elif state.mode == "systems_settings":
             hidden_systems = self._get_hidden_system_names(data, settings)
             back_rect, item_rects, scroll_offset = self.systems_settings_screen.render(
-                screen, state.systems_settings_highlighted, data, hidden_systems
+                screen, state.systems_settings_highlighted, data, hidden_systems,
+                settings.get("system_settings", {}),
             )
             rects["back"] = back_rect
             rects["item_rects"] = item_rects
@@ -870,7 +871,8 @@ class ScreenManager:
                 is_hidden = system_settings.get(system_name, {}).get("hidden", False)
                 back_rect, item_rects, scroll_offset = (
                     self.system_settings_screen.render(
-                        screen, state.system_settings_highlighted, system, is_hidden
+                        screen, state.system_settings_highlighted, system, is_hidden,
+                        system_settings.get(system_name, {}),
                     )
                 )
                 rects["back"] = back_rect

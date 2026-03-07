@@ -64,11 +64,15 @@ class SystemSettingsScreen:
         self.template = ListScreenTemplate(theme)
 
     def _get_items(
-        self, system: Dict[str, Any], is_hidden: bool
+        self,
+        system: Dict[str, Any],
+        is_hidden: bool,
+        system_settings: Optional[Dict[str, Any]] = None,
     ) -> Tuple[List[Any], Set[int]]:
         """Build items list dynamically based on system config."""
         items = []
         divider_indices = set()
+        sys_s = system_settings or {}
 
         # Source info section
         divider_indices.add(len(items))
@@ -80,9 +84,11 @@ class SystemSettingsScreen:
         divider_indices.add(len(items))
         items.append("--- SETTINGS ---")
         items.append(("Hide System", "ON" if is_hidden else "OFF"))
-        custom_folder = system.get("custom_folder", "")
+        custom_folder = sys_s.get("custom_folder", "")
         folder_value = self._shorten_path(custom_folder) if custom_folder else "Default"
         items.append(("Set Custom Folder", folder_value))
+        should_unzip = sys_s.get("should_unzip", system.get("should_unzip", False))
+        items.append(("Auto-extract ZIPs", "ON" if should_unzip else "OFF"))
 
         # Auth section (only for token-based auth)
         if _has_api_auth(system):
@@ -108,6 +114,7 @@ class SystemSettingsScreen:
         highlighted: int,
         system: Dict[str, Any],
         is_hidden: bool = False,
+        system_settings: Optional[Dict[str, Any]] = None,
     ) -> Tuple[Optional[pygame.Rect], List[pygame.Rect], int]:
         """
         Render the system settings screen.
@@ -117,12 +124,13 @@ class SystemSettingsScreen:
             highlighted: Currently highlighted index
             system: System configuration dict
             is_hidden: Whether the system is currently hidden
+            system_settings: Per-system settings from config
 
         Returns:
             Tuple of (back_button_rect, item_rects, scroll_offset)
         """
         system_name = system.get("name", "Unknown System")
-        items, divider_indices = self._get_items(system, is_hidden)
+        items, divider_indices = self._get_items(system, is_hidden, system_settings)
 
         return self.template.render(
             screen,
@@ -157,7 +165,11 @@ class SystemSettingsScreen:
         return "..." + result if result else "..." + path[-max_length + 3 :]
 
     def get_setting_action(
-        self, index: int, system: Dict[str, Any], is_hidden: bool = False
+        self,
+        index: int,
+        system: Dict[str, Any],
+        is_hidden: bool = False,
+        system_settings: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Get the action for a settings item.
@@ -166,11 +178,12 @@ class SystemSettingsScreen:
             index: Selected index
             system: System configuration dict
             is_hidden: Whether the system is currently hidden
+            system_settings: Per-system settings from config
 
         Returns:
             Action string
         """
-        items, divider_indices = self._get_items(system, is_hidden)
+        items, divider_indices = self._get_items(system, is_hidden, system_settings)
 
         if index in divider_indices:
             return "divider"
@@ -182,6 +195,7 @@ class SystemSettingsScreen:
                 "Source": "noop",
                 "Hide System": "toggle_hide_system",
                 "Set Custom Folder": "set_custom_folder",
+                "Auto-extract ZIPs": "toggle_should_unzip",
                 "Edit Auth Token": "edit_auth_token",
             }
             return actions.get(label, "unknown")
@@ -189,10 +203,13 @@ class SystemSettingsScreen:
         return "unknown"
 
     def get_max_items(
-        self, system: Dict[str, Any], is_hidden: bool = False
+        self,
+        system: Dict[str, Any],
+        is_hidden: bool = False,
+        system_settings: Optional[Dict[str, Any]] = None,
     ) -> int:
         """Get total number of items."""
-        items, _ = self._get_items(system, is_hidden)
+        items, _ = self._get_items(system, is_hidden, system_settings)
         return len(items)
 
 
