@@ -156,6 +156,7 @@ def serialize_web_state(state, settings=None, data=None):
         is_file_select = sel_type in (
             "archive_json", "nsz_keys", "we_patcher_rom", "iss_patcher_rom",
             "nhl94_patcher_rom", "nhl94_gen_patcher_rom", "nhl07_patcher_rom",
+            "kgj_mlb_patcher_rom", "nbalive95_patcher_rom", "mvp_psp_patcher_rom",
             "extract_zip", "extract_rar", "extract_7z", "nsz_converter",
         )
         return {

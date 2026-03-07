@@ -86,12 +86,12 @@ class ISSPatcherScreen:
         # ── Select ROM ────────────────────────────────────────────────────
         step_rom = "4" if provider == "api_football" else "3"
         if iss.rom_path and iss.rom_valid:
-            rom_value = os.path.basename(iss.rom_path)
+            rom_value = os.path.basename(iss.zip_path or iss.rom_path)
         elif iss.rom_path:
             rom_value = "Invalid ROM"
         else:
             rom_value = "Not selected"
-        items.append((f"{step_rom}. Select ROM (.sfc)", rom_value, "select_rom"))
+        items.append((f"{step_rom}. Select ROM (.sfc/.zip)", rom_value, "select_rom"))
 
         # ── Patch ROM ─────────────────────────────────────────────────────
         step_patch = "5" if provider == "api_football" else "4"

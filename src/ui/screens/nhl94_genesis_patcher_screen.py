@@ -67,12 +67,12 @@ class NHL94GenesisPatcherScreen:
 
         # -- 3. Select ROM --
         if nhl.rom_path and nhl.rom_valid:
-            rom_value = os.path.basename(nhl.rom_path)
+            rom_value = os.path.basename(nhl.zip_path or nhl.rom_path)
         elif nhl.rom_path:
             rom_value = "Invalid ROM"
         else:
             rom_value = "Not selected"
-        items.append(("3. Select ROM (.bin)", rom_value, "select_rom"))
+        items.append(("3. Select ROM (.bin/.zip)", rom_value, "select_rom"))
 
         # -- 4. Patch ROM --
         if nhl.patch_complete:

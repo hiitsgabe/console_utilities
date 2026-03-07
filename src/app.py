@@ -111,6 +111,10 @@ class ConsoleUtilitiesApp:
         self._is_backgrounded = False
         self._needs_display_restore = False
 
+        # Set Android immersive mode (hide system bars)
+        if BUILD_TARGET == "android":
+            self._set_android_immersive_mode()
+
         # Initialize pygame
         pygame.init()
         pygame.display.set_caption("Console Utilities")
@@ -547,9 +551,35 @@ class ConsoleUtilitiesApp:
 
         return bezel
 
+    def _set_android_immersive_mode(self):
+        """Set Android immersive sticky mode to hide status bar and navigation bar."""
+        try:
+            from jnius import autoclass
+
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            View = autoclass("android.view.View")
+            activity = PythonActivity.mActivity
+
+            flags = (
+                View.SYSTEM_UI_FLAG_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+            )
+
+            def _apply():
+                activity.getWindow().getDecorView().setSystemUiVisibility(flags)
+
+            activity.runOnUiThread(_apply)
+        except Exception:
+            pass
+
     def _restore_android_display(self):
         """Restore display after returning from an external activity (SAF picker etc)."""
         try:
+            self._set_android_immersive_mode()
             w, h = self.screen.get_size()
             self.screen = pygame.display.set_mode(
                 (w, h), pygame.SCALED | pygame.FULLSCREEN
@@ -4123,6 +4153,16 @@ class ConsoleUtilitiesApp:
             path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "nhl07_patcher_rom":
             path = self.settings.get("roms_dir", SCRIPT_DIR)
+        elif selection_type == "custom_folder":
+            system = self._get_system_for_settings()
+            if system:
+                system_name = system.get("name", "")
+                custom = self.settings.get("system_settings", {}).get(
+                    system_name, {}
+                ).get("custom_folder", "")
+                path = custom if custom and os.path.exists(custom) else self.settings.get("roms_dir", SCRIPT_DIR)
+            else:
+                path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "steam_shortcut":
             path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "mvp_psp_patcher_rom":
@@ -4492,35 +4532,98 @@ class ConsoleUtilitiesApp:
             self.settings["retroarch_thumbnails_path"] = path
             save_settings(self.settings)
         elif selection_type == "we_patcher_rom":
+            from utils.zip_rom import is_zip, extract_rom_from_zip, cleanup_temp_dir as _zt_cleanup
+
+            we_st = self.state.we_patcher
+            # Clean up previous temp dir
+            _zt_cleanup(we_st.zip_temp_dir)
+            we_st.zip_path = ""
+            we_st.zip_temp_dir = ""
+
+            if is_zip(path):
+                try:
+                    rom, tmp = extract_rom_from_zip(path, [".bin", ".cue", ".img"])
+                    we_st.zip_path = path
+                    we_st.zip_temp_dir = tmp
+                    path = rom
+                except ValueError:
+                    we_st.rom_valid = False
+                    we_st.rom_info = None
+                    we_st.rom_path = path
+                    we_st.slot_mapping = []
+                    self.state.folder_browser.show = False
+                    return
+
             # If user picked a .cue file, resolve the data track binary from it
             if path.lower().endswith(".cue"):
                 path = self._resolve_cue_data_track(path) or path
-            self.state.we_patcher.rom_path = path
+            we_st.rom_path = path
             try:
                 from services.we_patcher import RomReader
 
                 reader = RomReader(path)
-                self.state.we_patcher.rom_info = reader.get_rom_info()
-                self.state.we_patcher.rom_valid = reader.validate_rom()
+                we_st.rom_info = reader.get_rom_info()
+                we_st.rom_valid = reader.validate_rom()
             except Exception:
-                self.state.we_patcher.rom_valid = False
-                self.state.we_patcher.rom_info = None
+                we_st.rom_valid = False
+                we_st.rom_info = None
             # Reset slot mapping when ROM changes
-            self.state.we_patcher.slot_mapping = []
+            we_st.slot_mapping = []
         elif selection_type == "iss_patcher_rom":
-            self.state.iss_patcher.rom_path = path
+            from utils.zip_rom import is_zip, extract_rom_from_zip, cleanup_temp_dir as _zt_cleanup
+
+            iss_st = self.state.iss_patcher
+            _zt_cleanup(iss_st.zip_temp_dir)
+            iss_st.zip_path = ""
+            iss_st.zip_temp_dir = ""
+
+            if is_zip(path):
+                try:
+                    rom, tmp = extract_rom_from_zip(path, [".sfc", ".smc"])
+                    iss_st.zip_path = path
+                    iss_st.zip_temp_dir = tmp
+                    path = rom
+                except ValueError:
+                    iss_st.rom_valid = False
+                    iss_st.rom_info = None
+                    iss_st.rom_path = path
+                    iss_st.slot_mapping = []
+                    self.state.folder_browser.show = False
+                    return
+
+            iss_st.rom_path = path
             try:
                 from services.iss_patcher import ISSRomReader
 
                 reader = ISSRomReader(path)
-                self.state.iss_patcher.rom_info = reader.get_rom_info()
-                self.state.iss_patcher.rom_valid = reader.validate_rom()
+                iss_st.rom_info = reader.get_rom_info()
+                iss_st.rom_valid = reader.validate_rom()
             except Exception:
-                self.state.iss_patcher.rom_valid = False
-                self.state.iss_patcher.rom_info = None
-            self.state.iss_patcher.slot_mapping = []
+                iss_st.rom_valid = False
+                iss_st.rom_info = None
+            iss_st.slot_mapping = []
         elif selection_type == "nhl94_patcher_rom":
-            self.state.nhl94_patcher.rom_path = path
+            from utils.zip_rom import is_zip, extract_rom_from_zip, cleanup_temp_dir as _zt_cleanup
+
+            nhl_st = self.state.nhl94_patcher
+            _zt_cleanup(nhl_st.zip_temp_dir)
+            nhl_st.zip_path = ""
+            nhl_st.zip_temp_dir = ""
+
+            if is_zip(path):
+                try:
+                    rom, tmp = extract_rom_from_zip(path, [".sfc", ".smc"])
+                    nhl_st.zip_path = path
+                    nhl_st.zip_temp_dir = tmp
+                    path = rom
+                except ValueError:
+                    nhl_st.rom_valid = False
+                    nhl_st.rom_info = None
+                    nhl_st.rom_path = path
+                    self.state.folder_browser.show = False
+                    return
+
+            nhl_st.rom_path = path
             try:
                 from services.nhl94_snes_patcher import NHL94SNESPatcher
 
@@ -4528,13 +4631,33 @@ class ConsoleUtilitiesApp:
                 cache_dir = os.path.join(cache_dir, "nhl_cache")
                 patcher = NHL94SNESPatcher(cache_dir)
                 rom_info = patcher.analyze_rom(path)
-                self.state.nhl94_patcher.rom_info = rom_info
-                self.state.nhl94_patcher.rom_valid = rom_info.is_valid
+                nhl_st.rom_info = rom_info
+                nhl_st.rom_valid = rom_info.is_valid
             except Exception:
-                self.state.nhl94_patcher.rom_valid = False
-                self.state.nhl94_patcher.rom_info = None
+                nhl_st.rom_valid = False
+                nhl_st.rom_info = None
         elif selection_type == "kgj_mlb_patcher_rom":
-            self.state.kgj_mlb_patcher.rom_path = path
+            from utils.zip_rom import is_zip, extract_rom_from_zip, cleanup_temp_dir as _zt_cleanup
+
+            kgj_st = self.state.kgj_mlb_patcher
+            _zt_cleanup(kgj_st.zip_temp_dir)
+            kgj_st.zip_path = ""
+            kgj_st.zip_temp_dir = ""
+
+            if is_zip(path):
+                try:
+                    rom, tmp = extract_rom_from_zip(path, [".sfc", ".smc"])
+                    kgj_st.zip_path = path
+                    kgj_st.zip_temp_dir = tmp
+                    path = rom
+                except ValueError:
+                    kgj_st.rom_valid = False
+                    kgj_st.rom_info = None
+                    kgj_st.rom_path = path
+                    self.state.folder_browser.show = False
+                    return
+
+            kgj_st.rom_path = path
             try:
                 from services.kgj_mlb_patcher import KGJMLBPatcher
 
@@ -4542,13 +4665,33 @@ class ConsoleUtilitiesApp:
                 cache_dir = os.path.join(cache_dir, "mlb_cache")
                 patcher = KGJMLBPatcher(cache_dir)
                 rom_info = patcher.analyze_rom(path)
-                self.state.kgj_mlb_patcher.rom_info = rom_info
-                self.state.kgj_mlb_patcher.rom_valid = rom_info.is_valid
+                kgj_st.rom_info = rom_info
+                kgj_st.rom_valid = rom_info.is_valid
             except Exception:
-                self.state.kgj_mlb_patcher.rom_valid = False
-                self.state.kgj_mlb_patcher.rom_info = None
+                kgj_st.rom_valid = False
+                kgj_st.rom_info = None
         elif selection_type == "nbalive95_patcher_rom":
-            self.state.nbalive95_patcher.rom_path = path
+            from utils.zip_rom import is_zip, extract_rom_from_zip, cleanup_temp_dir as _zt_cleanup
+
+            nba_st = self.state.nbalive95_patcher
+            _zt_cleanup(nba_st.zip_temp_dir)
+            nba_st.zip_path = ""
+            nba_st.zip_temp_dir = ""
+
+            if is_zip(path):
+                try:
+                    rom, tmp = extract_rom_from_zip(path, [".bin", ".md", ".gen"])
+                    nba_st.zip_path = path
+                    nba_st.zip_temp_dir = tmp
+                    path = rom
+                except ValueError:
+                    nba_st.rom_valid = False
+                    nba_st.rom_info = None
+                    nba_st.rom_path = path
+                    self.state.folder_browser.show = False
+                    return
+
+            nba_st.rom_path = path
             try:
                 from services.nbalive95_patcher import NBALive95Patcher
 
@@ -4556,13 +4699,33 @@ class ConsoleUtilitiesApp:
                 cache_dir = os.path.join(cache_dir, "nba_cache")
                 patcher = NBALive95Patcher(cache_dir)
                 rom_info = patcher.analyze_rom(path)
-                self.state.nbalive95_patcher.rom_info = rom_info
-                self.state.nbalive95_patcher.rom_valid = rom_info.is_valid
+                nba_st.rom_info = rom_info
+                nba_st.rom_valid = rom_info.is_valid
             except Exception:
-                self.state.nbalive95_patcher.rom_valid = False
-                self.state.nbalive95_patcher.rom_info = None
+                nba_st.rom_valid = False
+                nba_st.rom_info = None
         elif selection_type == "nhl94_gen_patcher_rom":
-            self.state.nhl94_gen_patcher.rom_path = path
+            from utils.zip_rom import is_zip, extract_rom_from_zip, cleanup_temp_dir as _zt_cleanup
+
+            nhl_gen_st = self.state.nhl94_gen_patcher
+            _zt_cleanup(nhl_gen_st.zip_temp_dir)
+            nhl_gen_st.zip_path = ""
+            nhl_gen_st.zip_temp_dir = ""
+
+            if is_zip(path):
+                try:
+                    rom, tmp = extract_rom_from_zip(path, [".bin", ".md", ".gen"])
+                    nhl_gen_st.zip_path = path
+                    nhl_gen_st.zip_temp_dir = tmp
+                    path = rom
+                except ValueError:
+                    nhl_gen_st.rom_valid = False
+                    nhl_gen_st.rom_info = None
+                    nhl_gen_st.rom_path = path
+                    self.state.folder_browser.show = False
+                    return
+
+            nhl_gen_st.rom_path = path
             try:
                 from services.nhl94_genesis_patcher import NHL94GenesisPatcher
 
@@ -4570,13 +4733,33 @@ class ConsoleUtilitiesApp:
                 cache_dir = os.path.join(cache_dir, "nhl_cache")
                 patcher = NHL94GenesisPatcher(cache_dir)
                 rom_info = patcher.analyze_rom(path)
-                self.state.nhl94_gen_patcher.rom_info = rom_info
-                self.state.nhl94_gen_patcher.rom_valid = rom_info.is_valid
+                nhl_gen_st.rom_info = rom_info
+                nhl_gen_st.rom_valid = rom_info.is_valid
             except Exception:
-                self.state.nhl94_gen_patcher.rom_valid = False
-                self.state.nhl94_gen_patcher.rom_info = None
+                nhl_gen_st.rom_valid = False
+                nhl_gen_st.rom_info = None
         elif selection_type == "nhl07_patcher_rom":
-            self.state.nhl07_psp_patcher.rom_path = path
+            from utils.zip_rom import is_zip, extract_rom_from_zip, cleanup_temp_dir as _zt_cleanup
+
+            nhl07_st = self.state.nhl07_psp_patcher
+            _zt_cleanup(nhl07_st.zip_temp_dir)
+            nhl07_st.zip_path = ""
+            nhl07_st.zip_temp_dir = ""
+
+            if is_zip(path):
+                try:
+                    rom, tmp = extract_rom_from_zip(path, [".iso", ".cso"])
+                    nhl07_st.zip_path = path
+                    nhl07_st.zip_temp_dir = tmp
+                    path = rom
+                except ValueError:
+                    nhl07_st.rom_valid = False
+                    nhl07_st.rom_info = None
+                    nhl07_st.rom_path = path
+                    self.state.folder_browser.show = False
+                    return
+
+            nhl07_st.rom_path = path
             try:
                 from services.nhl07_psp_patcher import NHL07PSPPatcher
 
@@ -4584,13 +4767,33 @@ class ConsoleUtilitiesApp:
                 cache_dir = os.path.join(cache_dir, "nhl_cache")
                 patcher = NHL07PSPPatcher(cache_dir)
                 rom_info = patcher.analyze_rom(path)
-                self.state.nhl07_psp_patcher.rom_info = rom_info
-                self.state.nhl07_psp_patcher.rom_valid = rom_info.is_valid
+                nhl07_st.rom_info = rom_info
+                nhl07_st.rom_valid = rom_info.is_valid
             except Exception:
-                self.state.nhl07_psp_patcher.rom_valid = False
-                self.state.nhl07_psp_patcher.rom_info = None
+                nhl07_st.rom_valid = False
+                nhl07_st.rom_info = None
         elif selection_type == "mvp_psp_patcher_rom":
-            self.state.mvp_psp_patcher.rom_path = path
+            from utils.zip_rom import is_zip, extract_rom_from_zip, cleanup_temp_dir as _zt_cleanup
+
+            mvp_st = self.state.mvp_psp_patcher
+            _zt_cleanup(mvp_st.zip_temp_dir)
+            mvp_st.zip_path = ""
+            mvp_st.zip_temp_dir = ""
+
+            if is_zip(path):
+                try:
+                    rom, tmp = extract_rom_from_zip(path, [".iso", ".cso"])
+                    mvp_st.zip_path = path
+                    mvp_st.zip_temp_dir = tmp
+                    path = rom
+                except ValueError:
+                    mvp_st.rom_valid = False
+                    mvp_st.rom_info = None
+                    mvp_st.rom_path = path
+                    self.state.folder_browser.show = False
+                    return
+
+            mvp_st.rom_path = path
             try:
                 from services.mvp_psp_patcher import MVPPSPPatcher
 
@@ -4598,11 +4801,11 @@ class ConsoleUtilitiesApp:
                 cache_dir = os.path.join(cache_dir, "mlb_cache")
                 patcher = MVPPSPPatcher(cache_dir)
                 rom_info = patcher.analyze_rom(path)
-                self.state.mvp_psp_patcher.rom_info = rom_info
-                self.state.mvp_psp_patcher.rom_valid = rom_info.is_valid
+                mvp_st.rom_info = rom_info
+                mvp_st.rom_valid = rom_info.is_valid
             except Exception:
-                self.state.mvp_psp_patcher.rom_valid = False
-                self.state.mvp_psp_patcher.rom_info = None
+                mvp_st.rom_valid = False
+                mvp_st.rom_info = None
 
         # Close the modal
         self.state.folder_browser.show = False
@@ -8277,6 +8480,23 @@ class ConsoleUtilitiesApp:
 
                 we.patch_output_path = output_bin
 
+                # If input was from ZIP, re-zip all output files
+                if we.zip_path:
+                    from utils.zip_rom import create_output_zip, cleanup_temp_dir as _zclean
+
+                    zip_dir = os.path.dirname(we.zip_path)
+                    # Collect all output files with new_prefix
+                    out_files = []
+                    for entry in os.listdir(game_dir):
+                        if entry.startswith(new_prefix):
+                            out_files.append(os.path.join(game_dir, entry))
+                    zip_name = new_prefix + ".zip"
+                    output_zip = os.path.join(zip_dir, zip_name)
+                    create_output_zip(out_files, output_zip)
+                    we.patch_output_path = output_zip
+                    _zclean(we.zip_temp_dir)
+                    we.zip_temp_dir = ""
+
                 # Capture verification report
                 report = getattr(patcher, "_last_verify_report", "")
                 we.patch_verify_report = report
@@ -8784,6 +9004,18 @@ class ConsoleUtilitiesApp:
                 nhl.patch_complete = result.success
                 nhl.patch_error = result.error if not result.success else ""
                 nhl.patch_output_path = result.output_path if result.success else ""
+
+                # If input was from ZIP, re-zip output
+                if result.success and nhl.zip_path:
+                    from utils.zip_rom import create_output_zip, cleanup_temp_dir as _zclean
+
+                    zip_dir = os.path.dirname(nhl.zip_path)
+                    zip_name = os.path.splitext(os.path.basename(output_path))[0] + ".zip"
+                    output_zip = os.path.join(zip_dir, zip_name)
+                    create_output_zip([output_path], output_zip)
+                    nhl.patch_output_path = output_zip
+                    _zclean(nhl.zip_temp_dir)
+                    nhl.zip_temp_dir = ""
             except Exception as e:
                 nhl.patch_error = str(e)
                 nhl.patch_complete = False
@@ -8950,6 +9182,17 @@ class ConsoleUtilitiesApp:
                 kgj.patch_complete = result.success
                 kgj.patch_error = result.error if not result.success else ""
                 kgj.patch_output_path = result.output_path if result.success else ""
+
+                if result.success and kgj.zip_path:
+                    from utils.zip_rom import create_output_zip, cleanup_temp_dir as _zclean
+
+                    zip_dir = os.path.dirname(kgj.zip_path)
+                    zip_name = os.path.splitext(os.path.basename(output_path))[0] + ".zip"
+                    output_zip = os.path.join(zip_dir, zip_name)
+                    create_output_zip([output_path], output_zip)
+                    kgj.patch_output_path = output_zip
+                    _zclean(kgj.zip_temp_dir)
+                    kgj.zip_temp_dir = ""
             except Exception as e:
                 kgj.patch_error = str(e)
                 kgj.patch_complete = False
@@ -9116,6 +9359,17 @@ class ConsoleUtilitiesApp:
                 nba.patch_complete = result.success
                 nba.patch_error = result.error if not result.success else ""
                 nba.patch_output_path = result.output_path if result.success else ""
+
+                if result.success and nba.zip_path:
+                    from utils.zip_rom import create_output_zip, cleanup_temp_dir as _zclean
+
+                    zip_dir = os.path.dirname(nba.zip_path)
+                    zip_name = os.path.splitext(os.path.basename(output_path))[0] + ".zip"
+                    output_zip = os.path.join(zip_dir, zip_name)
+                    create_output_zip([output_path], output_zip)
+                    nba.patch_output_path = output_zip
+                    _zclean(nba.zip_temp_dir)
+                    nba.zip_temp_dir = ""
             except Exception as e:
                 nba.patch_error = str(e)
                 nba.patch_complete = False
@@ -9282,6 +9536,17 @@ class ConsoleUtilitiesApp:
                 mvp.patch_complete = result.success
                 mvp.patch_error = result.error if not result.success else ""
                 mvp.patch_output_path = result.output_path if result.success else ""
+
+                if result.success and mvp.zip_path:
+                    from utils.zip_rom import create_output_zip, cleanup_temp_dir as _zclean
+
+                    zip_dir = os.path.dirname(mvp.zip_path)
+                    zip_name = os.path.splitext(os.path.basename(output_path))[0] + ".zip"
+                    output_zip = os.path.join(zip_dir, zip_name)
+                    create_output_zip([output_path], output_zip)
+                    mvp.patch_output_path = output_zip
+                    _zclean(mvp.zip_temp_dir)
+                    mvp.zip_temp_dir = ""
             except Exception as e:
                 mvp.patch_error = str(e)
                 mvp.patch_complete = False
@@ -9462,6 +9727,17 @@ class ConsoleUtilitiesApp:
                 nhl.patch_complete = result.success
                 nhl.patch_error = result.error if not result.success else ""
                 nhl.patch_output_path = result.output_path if result.success else ""
+
+                if result.success and nhl.zip_path:
+                    from utils.zip_rom import create_output_zip, cleanup_temp_dir as _zclean
+
+                    zip_dir = os.path.dirname(nhl.zip_path)
+                    zip_name = os.path.splitext(os.path.basename(output_path))[0] + ".zip"
+                    output_zip = os.path.join(zip_dir, zip_name)
+                    create_output_zip([output_path], output_zip)
+                    nhl.patch_output_path = output_zip
+                    _zclean(nhl.zip_temp_dir)
+                    nhl.zip_temp_dir = ""
             except Exception as e:
                 nhl.patch_error = str(e)
                 nhl.patch_complete = False
@@ -9642,6 +9918,17 @@ class ConsoleUtilitiesApp:
                 nhl.patch_complete = result.success
                 nhl.patch_error = result.error if not result.success else ""
                 nhl.patch_output_path = result.output_path if result.success else ""
+
+                if result.success and nhl.zip_path:
+                    from utils.zip_rom import create_output_zip, cleanup_temp_dir as _zclean
+
+                    zip_dir = os.path.dirname(nhl.zip_path)
+                    zip_name = os.path.splitext(os.path.basename(output_path))[0] + ".zip"
+                    output_zip = os.path.join(zip_dir, zip_name)
+                    create_output_zip([output_path], output_zip)
+                    nhl.patch_output_path = output_zip
+                    _zclean(nhl.zip_temp_dir)
+                    nhl.zip_temp_dir = ""
             except Exception as e:
                 nhl.patch_error = str(e)
                 nhl.patch_complete = False
@@ -9718,6 +10005,19 @@ class ConsoleUtilitiesApp:
                 )
 
                 iss.patch_output_path = output_path
+
+                # If input was from ZIP, re-zip output
+                if iss.zip_path:
+                    from utils.zip_rom import create_output_zip, cleanup_temp_dir as _zclean
+
+                    zip_dir = os.path.dirname(iss.zip_path)
+                    zip_name = os.path.splitext(os.path.basename(output_path))[0] + ".zip"
+                    output_zip = os.path.join(zip_dir, zip_name)
+                    create_output_zip([output_path], output_zip)
+                    iss.patch_output_path = output_zip
+                    _zclean(iss.zip_temp_dir)
+                    iss.zip_temp_dir = ""
+
                 iss.patch_complete = True
             except Exception as e:
                 iss.patch_error = str(e)

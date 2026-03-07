@@ -46,6 +46,9 @@ SELECTION_CONFIG = {
     "nhl94_patcher_rom": "file",
     "nhl94_gen_patcher_rom": "file",
     "nhl07_patcher_rom": "file",
+    "kgj_mlb_patcher_rom": "file",
+    "nbalive95_patcher_rom": "file",
+    "mvp_psp_patcher_rom": "file",
 }
 
 # MIME types for file picker
@@ -61,6 +64,9 @@ _MIME_TYPES = {
     "nhl94_patcher_rom": ["*/*"],
     "nhl94_gen_patcher_rom": ["*/*"],
     "nhl07_patcher_rom": ["*/*"],
+    "kgj_mlb_patcher_rom": ["*/*"],
+    "nbalive95_patcher_rom": ["*/*"],
+    "mvp_psp_patcher_rom": ["*/*"],
 }
 
 # Post-selection extension validation for types using */* MIME
@@ -69,11 +75,14 @@ VALID_EXTENSIONS = {
     "nsz_converter": [".nsz", ".nsp", ".xci", ".xcz"],
     "extract_rar": [".rar"],
     "extract_7z": [".7z"],
-    "we_patcher_rom": [".bin", ".cue", ".img"],
-    "iss_patcher_rom": [".sfc", ".smc"],
-    "nhl94_patcher_rom": [".sfc", ".smc"],
-    "nhl94_gen_patcher_rom": [".bin", ".md", ".gen"],
-    "nhl07_patcher_rom": [".iso", ".cso"],
+    "we_patcher_rom": [".bin", ".cue", ".img", ".zip"],
+    "iss_patcher_rom": [".sfc", ".smc", ".zip"],
+    "nhl94_patcher_rom": [".sfc", ".smc", ".zip"],
+    "nhl94_gen_patcher_rom": [".bin", ".md", ".gen", ".zip"],
+    "nhl07_patcher_rom": [".iso", ".cso", ".zip"],
+    "kgj_mlb_patcher_rom": [".sfc", ".smc", ".zip"],
+    "nbalive95_patcher_rom": [".bin", ".md", ".gen", ".zip"],
+    "mvp_psp_patcher_rom": [".iso", ".cso", ".zip"],
 }
 
 

@@ -54,12 +54,12 @@ class KGJMLBPatcherScreen:
 
         # -- 3. Select ROM --
         if kgj.rom_path and kgj.rom_valid:
-            rom_value = os.path.basename(kgj.rom_path)
+            rom_value = os.path.basename(kgj.zip_path or kgj.rom_path)
         elif kgj.rom_path:
             rom_value = "Invalid ROM"
         else:
             rom_value = "Not selected"
-        items.append(("3. Select ROM (.sfc)", rom_value, "select_rom"))
+        items.append(("3. Select ROM (.sfc/.zip)", rom_value, "select_rom"))
 
         # -- 4. Patch ROM --
         if kgj.patch_complete:
