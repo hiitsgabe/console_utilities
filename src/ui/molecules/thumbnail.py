@@ -66,7 +66,7 @@ class Thumbnail:
             img_rect = scaled_img.get_rect(center=rect.center)
             if fill:
                 old_clip = screen.get_clip()
-                screen.set_clip(rect)
+                screen.set_clip(rect.clip(old_clip))
             screen.blit(scaled_img, img_rect)
             if fill:
                 screen.set_clip(old_clip)
