@@ -93,6 +93,12 @@ class SettingsScreen:
         "Web Companion",
     ]
 
+    # Android section
+    ANDROID_SECTION = [
+        "--- ANDROID ---",
+        "Storage Permission",
+    ]
+
     # App section (last)
     APP_SECTION = [
         "--- APP ---",
@@ -190,6 +196,11 @@ class SettingsScreen:
         if BUILD_TARGET not in ("macos", "windows"):
             divider_indices.add(len(items))
             items.extend(self.WEB_COMPANION_SECTION)
+
+        # Add Android section (only on Android)
+        if BUILD_TARGET == "android":
+            divider_indices.add(len(items))
+            items.extend(self.ANDROID_SECTION)
 
         # Add App section (last)
         divider_indices.add(len(items))
@@ -314,6 +325,8 @@ class SettingsScreen:
             elif item == "Web Companion":
                 value = "ON" if settings.get("web_companion_enabled", False) else "OFF"
                 items.append((item, value))
+            elif item == "Storage Permission":
+                items.append((item, "Request"))
             elif item == "Check for Updates":
                 items.append((item, APP_VERSION))
             else:
@@ -401,6 +414,7 @@ class SettingsScreen:
                 "Scraper Frontend": "toggle_scraper_frontend",
                 "Enable NSZ": "toggle_nsz_enabled",
                 "Web Companion": "toggle_web_companion",
+                "Storage Permission": "request_storage_permission",
                 "Check for Updates": "check_for_updates",
             }
             return actions.get(item, "unknown")

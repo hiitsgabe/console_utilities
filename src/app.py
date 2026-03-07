@@ -3509,6 +3509,8 @@ class ConsoleUtilitiesApp:
             self.state.confirm_modal.cancel_label = "Cancel"
             self.state.confirm_modal.button_index = 0
             self.state.confirm_modal.context = "clear_game_list_cache"
+        elif action == "request_storage_permission":
+            self._request_storage_permission()
         elif action == "check_for_updates":
             self._check_for_updates()
 
@@ -3660,6 +3662,27 @@ class ConsoleUtilitiesApp:
         self.state.confirm_modal.cancel_label = ""
         self.state.confirm_modal.button_index = 0
         self.state.confirm_modal.context = ""
+
+    def _request_storage_permission(self):
+        """Request MANAGE_EXTERNAL_STORAGE permission on Android."""
+        try:
+            from jnius import autoclass
+
+            Environment = autoclass("android.os.Environment")
+            if Environment.isExternalStorageManager():
+                self._show_error("Storage permission already granted.")
+                return
+
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            Intent = autoclass("android.content.Intent")
+            Settings = autoclass("android.provider.Settings")
+            Uri = autoclass("android.net.Uri")
+            activity = PythonActivity.mActivity
+            intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+            intent.setData(Uri.parse("package:" + activity.getPackageName()))
+            activity.startActivity(intent)
+        except Exception as e:
+            self._show_error(f"Failed to request permission: {e}")
 
     def _check_for_updates(self):
         """Check GitHub releases for a newer version."""
