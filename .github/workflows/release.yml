@@ -234,6 +234,11 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Download pygame bundle
         uses: actions/download-artifact@v4
         with:
@@ -267,6 +272,59 @@ jobs:
             echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
           fi
 
+      - name: Generate release notes with AI
+        id: ai_notes
+        run: |
+          # Get commits since the previous tag
+          PREV_TAG=$(git tag --sort=-v:refname | grep '^v' | head -2 | tail -1)
+          CURRENT_TAG=${{ steps.version.outputs.VERSION }}
+
+          if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "$CURRENT_TAG" ]; then
+            COMMITS=$(git log "$PREV_TAG".."$CURRENT_TAG" --pretty=format:"- %s" --no-merges 2>/dev/null || git log --pretty=format:"- %s" --no-merges -20)
+          else
+            COMMITS=$(git log --pretty=format:"- %s" --no-merges -20)
+          fi
+
+          echo "Commits since $PREV_TAG:"
+          echo "$COMMITS"
+
+          # Call OpenRouter API to generate changelog
+          RESPONSE=$(curl -s -X POST "https://openrouter.ai/api/v1/chat/completions" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.OPENROUTER_API_KEY }}" \
+            -d "$(jq -n \
+              --arg commits "$COMMITS" \
+              --arg version "$CURRENT_TAG" \
+              '{
+                "model": "anthropic/claude-sonnet-4",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": ("Generate concise release notes for " + $version + " of Console Utilities (a PyGame app for handheld gaming consoles). Group changes by category (New Features, Improvements, Bug Fixes). Use markdown with emoji prefixes. Be brief — one line per change, no fluff. Only include what the commits describe, do not invent features.\n\nCommits:\n" + $commits)
+                  }
+                ],
+                "max_tokens": 1024
+              }')")
+
+          # Extract the AI response
+          AI_NOTES=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // empty')
+
+          if [ -z "$AI_NOTES" ]; then
+            echo "⚠️ AI generation failed, using commit list as fallback"
+            AI_NOTES=$(printf "### Changes\n\n%s" "$COMMITS")
+          fi
+
+          # Set as step output (multiline-safe via delimiter)
+          EOF_MARKER=$(dd if=/dev/urandom bs=15 count=1 2>/dev/null | base64)
+          echo "notes<<${EOF_MARKER}" >> $GITHUB_OUTPUT
+          echo "$AI_NOTES" >> $GITHUB_OUTPUT
+          echo "${EOF_MARKER}" >> $GITHUB_OUTPUT
+
+          echo "Generated release notes:"
+          echo "$AI_NOTES"
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
@@ -274,6 +332,8 @@ jobs:
           name: Console Utilities ${{ steps.version.outputs.VERSION }}
           body: |
             ## Console Utilities ${{ steps.version.outputs.VERSION }}
+
+            ${{ steps.ai_notes.outputs.notes || '' }}
 
             ### Downloads
 
