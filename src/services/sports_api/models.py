@@ -28,7 +28,8 @@ class Player:
     photo_url: str
     # Optional hockey fields
     weight: float = 0.0  # lbs
-    handedness: str = ""  # "L" or "R"
+    handedness: str = ""  # "L" or "R" (throw hand)
+    bats: str = ""  # "L", "R", or "B" (bat hand, baseball only)
 
 
 @dataclass

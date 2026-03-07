@@ -44,6 +44,8 @@ from .sports_patcher_screen import SportsPatcherScreen
 from .we_patcher_screen import WePatcherScreen
 from .iss_patcher_screen import ISSPatcherScreen
 from .kgj_mlb_patcher_screen import KGJMLBPatcherScreen
+from .nbalive95_patcher_screen import NBALive95PatcherScreen
+from .mvp_psp_patcher_screen import MVPPSPPatcherScreen
 from .nhl94_snes_patcher_screen import NHL94SNESPatcherScreen
 from .nhl94_genesis_patcher_screen import NHL94GenesisPatcherScreen
 from .nhl07_psp_patcher_screen import NHL07PSPPatcherScreen
@@ -80,6 +82,8 @@ class ScreenManager:
         self.we_patcher_screen = WePatcherScreen(theme)
         self.iss_patcher_screen = ISSPatcherScreen(theme)
         self.kgj_mlb_patcher_screen = KGJMLBPatcherScreen(theme)
+        self.nbalive95_patcher_screen = NBALive95PatcherScreen(theme)
+        self.mvp_psp_patcher_screen = MVPPSPPatcherScreen(theme)
         self.nhl94_patcher_screen = NHL94SNESPatcherScreen(theme)
         self.nhl94_gen_patcher_screen = NHL94GenesisPatcherScreen(theme)
         self.nhl07_psp_patcher_screen = NHL07PSPPatcherScreen(theme)
@@ -685,6 +689,44 @@ class ScreenManager:
             rects["item_rects"] = item_rects
             return rects
 
+        # MVP Baseball PSP Patcher modals
+        if state.mvp_psp_patcher.active_modal == "roster_preview":
+            modal_rect, content_rect, close_rect, item_rects = (
+                self.roster_preview_modal.render(screen, state)
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["item_rects"] = item_rects
+            return rects
+
+        if state.mvp_psp_patcher.active_modal == "patch_progress":
+            modal_rect, content_rect, close_rect, item_rects = (
+                self.patch_progress_modal.render(screen, state)
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["item_rects"] = item_rects
+            return rects
+
+        # NBA Live 95 Patcher modals
+        if state.nbalive95_patcher.active_modal == "roster_preview":
+            modal_rect, content_rect, close_rect, item_rects = (
+                self.roster_preview_modal.render(screen, state)
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["item_rects"] = item_rects
+            return rects
+
+        if state.nbalive95_patcher.active_modal == "patch_progress":
+            modal_rect, content_rect, close_rect, item_rects = (
+                self.patch_progress_modal.render(screen, state)
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["item_rects"] = item_rects
+            return rects
+
         # NHL94 Genesis Patcher modals
         if state.nhl94_gen_patcher.active_modal == "roster_preview":
             modal_rect, content_rect, close_rect, item_rects = (
@@ -922,6 +964,22 @@ class ScreenManager:
 
         elif state.mode == "kgj_mlb_patcher":
             back_rect, item_rects, scroll_offset = self.kgj_mlb_patcher_screen.render(
+                screen, state.highlighted, state, settings
+            )
+            rects["back"] = back_rect
+            rects["item_rects"] = item_rects
+            rects["scroll_offset"] = scroll_offset
+
+        elif state.mode == "nbalive95_patcher":
+            back_rect, item_rects, scroll_offset = self.nbalive95_patcher_screen.render(
+                screen, state.highlighted, state, settings
+            )
+            rects["back"] = back_rect
+            rects["item_rects"] = item_rects
+            rects["scroll_offset"] = scroll_offset
+
+        elif state.mode == "mvp_psp_patcher":
+            back_rect, item_rects, scroll_offset = self.mvp_psp_patcher_screen.render(
                 screen, state.highlighted, state, settings
             )
             rects["back"] = back_rect
