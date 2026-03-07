@@ -45,6 +45,12 @@ class UtilsScreen:
         "Ghost File Cleaner",
     ]
 
+    # Steam section items
+    STEAM_SECTION_ITEMS = [
+        "--- STEAM ---",  # Divider
+        "Steam Shortcut Creator",
+    ]
+
     # NSZ section items (only shown when NSZ is enabled)
     NSZ_SECTION_ITEMS = [
         "--- NSZ ---",  # Divider
@@ -83,6 +89,10 @@ class UtilsScreen:
         # Add file management section
         divider_indices.add(len(items))
         items.extend(self.FILE_MANAGEMENT_SECTION_ITEMS)
+
+        # Add Steam section
+        divider_indices.add(len(items))
+        items.extend(self.STEAM_SECTION_ITEMS)
 
         # Add NSZ section if enabled
         if settings.get("nsz_enabled", False):
@@ -146,6 +156,7 @@ class UtilsScreen:
                 "Dedupe Games": "dedupe_games",
                 "Clean File Names": "clean_filenames",
                 "Ghost File Cleaner": "ghost_cleaner",
+                "Steam Shortcut Creator": "steam_shortcut",
                 "NSZ to NSP Converter": "nsz_converter",
             }
             return actions.get(item, "unknown")

@@ -89,7 +89,7 @@ class FolderBrowserModal:
             "esde_media_path", "esde_gamelists_path", "retroarch_thumbnails",
             "add_system_folder", "ia_collection_folder",
             "dedupe_folder", "rename_folder", "ghost_cleaner_folder",
-            "ia_download_folder", "folder",
+            "ia_download_folder", "steam_shortcut", "folder",
         )
 
         # List area (below path, above buttons if shown)
@@ -204,6 +204,7 @@ class FolderBrowserModal:
             "nsz": "Convert",
             "archive_json": "Select JSON",
             "nsz_keys": "Select Keys",
+            "steam_shortcut": "Save Here",
             "system_folder": "Select",
             "extract_zip": "Extract",
             "extract_rar": "Extract",

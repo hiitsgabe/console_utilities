@@ -37,6 +37,7 @@ from .modals.roster_preview_modal import RosterPreviewModal
 from .modals.patch_progress_modal import PatchProgressModal
 from .modals.color_picker_modal import ColorPickerModal
 from .modals.auth_token_modal import AuthTokenModal
+from .modals.steam_search_modal import SteamSearchModal
 from .portmaster_screen import PortMasterScreen
 from .scraper_menu_screen import ScraperMenuScreen
 from .sports_patcher_screen import SportsPatcherScreen
@@ -106,6 +107,7 @@ class ScreenManager:
         self.patch_progress_modal = PatchProgressModal(theme)
         self.color_picker_modal = ColorPickerModal(theme)
         self.auth_token_modal = AuthTokenModal(theme)
+        self.steam_search_modal = SteamSearchModal(theme)
 
         # Initialize generic status footer
         self.status_footer = StatusFooter(theme)
@@ -226,6 +228,40 @@ class ScreenManager:
                 rects["text_cancel"] = self.folder_name_modal.cancel_rect
             if getattr(self.folder_name_modal, "backspace_rect", None):
                 rects["text_backspace"] = self.folder_name_modal.backspace_rect
+            return rects
+
+        if state.steam_shortcut.show and state.steam_shortcut.step == "results":
+            steam_get_image = (
+                (lambda game: get_thumbnail(game, system_data=None))
+                if get_thumbnail
+                else None
+            )
+            modal_rect, item_rects, close_rect, scroll_off = (
+                self.steam_search_modal.render_results(
+                    screen,
+                    state.steam_shortcut.search_results,
+                    state.steam_shortcut.selected_index,
+                    state.steam_shortcut.search_query,
+                    get_image=steam_get_image,
+                    loading_more=state.steam_shortcut.loading_more,
+                )
+            )
+            rects["modal"] = modal_rect
+            rects["item_rects"] = item_rects
+            rects["close"] = close_rect
+            rects["scroll_offset"] = scroll_off
+            return rects
+
+        if state.steam_shortcut.show and state.steam_shortcut.step == "complete":
+            modal_rect, close_rect, ok_rect = self.steam_search_modal.render_complete(
+                screen,
+                state.steam_shortcut.selected_game.get("name", ""),
+                state.steam_shortcut.output_folder,
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            if ok_rect:
+                rects["steam_ok"] = ok_rect
             return rects
 
         if state.folder_browser.show:
