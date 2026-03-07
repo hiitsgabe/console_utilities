@@ -210,17 +210,22 @@ jobs:
           docker cp rom-build:/dist/. ./dist/android/
           docker rm rom-build
 
-      - name: Create Android zip
+      - name: Rename APK for release
         run: |
-          cp assets/docs/android.md dist/android/README.md || true
-          cp assets/examples/archive_example.json dist/android/example.json || true
-          cd dist/android && zip -r ../android.zip *
+          APK=$(find dist/android -name '*.apk' | head -1)
+          if [ -n "$APK" ]; then
+            cp "$APK" dist/consoleutils.apk
+            echo "✅ APK ready: dist/consoleutils.apk"
+          else
+            echo "❌ No APK found in dist/android/"
+            exit 1
+          fi
 
       - name: Upload Android bundle
         uses: actions/upload-artifact@v4
         with:
           name: android-bundle
-          path: dist/android.zip
+          path: dist/consoleutils.apk
           retention-days: 30
 
   release:
@@ -277,7 +282,7 @@ jobs:
             | 🎮 Pygame | `pygame.zip` | For systems with pygame installed |
             | 🍎 macOS | `macos.zip` | Standalone .app bundle |
             | 🪟 Windows | `windows.zip` | Standalone .exe bundle |
-            | 🤖 Android | `android.zip` | APK for Android devices |
+            | 🤖 Android | `consoleutils.apk` | APK for Android devices |
 
             ### Pygame Bundle Installation
             1. Download `pygame.zip`
@@ -295,8 +300,8 @@ jobs:
             3. Run `Console Utilities.exe`
 
             ### Android Installation
-            1. Download `android.zip`
-            2. Extract and install the APK
+            1. Download `consoleutils.apk`
+            2. Install the APK
             3. Enable "Install from unknown sources" if needed
 
             ### Requirements (Pygame bundle only)
@@ -307,7 +312,7 @@ jobs:
             dist/pygame.zip
             dist/macos.zip
             dist/windows.zip
-            dist/android.zip
+            dist/consoleutils.apk
           draft: false
           prerelease: false
         env:

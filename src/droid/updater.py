@@ -3,10 +3,8 @@ Android auto-update: download APK from GitHub release and launch system installe
 """
 
 import os
-import shutil
 import threading
 import traceback
-from zipfile import ZipFile
 
 import pygame
 import requests
@@ -25,11 +23,11 @@ def apply_android_update(
     """
     Download and apply an Android APK update.
 
-    Downloads android.zip from GitHub, extracts the APK, and launches the
-    system package installer via Intent.
+    Downloads consoleutils.apk from GitHub and launches the system
+    package installer via Intent.
 
     Args:
-        asset_url: URL to download the android.zip asset
+        asset_url: URL to download the consoleutils.apk asset
         on_progress: Callback(progress_float, status_str) for progress updates
         on_complete: Callback() when update is ready to install
         on_error: Callback(error_str) on failure
@@ -46,9 +44,7 @@ def apply_android_update(
             PythonActivity = autoclass("org.kivy.android.PythonActivity")
             cache_dir = PythonActivity.mActivity.getCacheDir().getAbsolutePath()
 
-            tmp_dir = os.path.join(cache_dir, "update_tmp")
-            os.makedirs(tmp_dir, exist_ok=True)
-            tmp_zip = os.path.join(tmp_dir, "update.zip")
+            final_apk = os.path.join(cache_dir, "console_utilities_update.apk")
 
             # Stream download with progress (SSL fallback for Android cert issues)
             dl_headers = {"User-Agent": "ConsoleUtilities/1.0"}
@@ -69,39 +65,12 @@ def apply_android_update(
             total = int(response.headers.get("content-length", 0))
             downloaded = 0
 
-            with open(tmp_zip, "wb") as f:
+            with open(final_apk, "wb") as f:
                 for chunk in response.iter_content(chunk_size=1024 * 1024):
                     f.write(chunk)
                     downloaded += len(chunk)
                     if total > 0 and on_progress:
-                        on_progress(downloaded / total * 0.7, "Downloading update...")
-
-            if on_progress:
-                on_progress(0.7, "Extracting APK...")
-
-            # Extract the zip and find the APK
-            extract_dir = os.path.join(tmp_dir, "extracted")
-            with ZipFile(tmp_zip, "r") as zip_ref:
-                zip_ref.extractall(extract_dir)
-
-            apk_path = None
-            for root, dirs, files in os.walk(extract_dir):
-                for f in files:
-                    if f.endswith(".apk"):
-                        apk_path = os.path.join(root, f)
-                        break
-                if apk_path:
-                    break
-
-            if not apk_path:
-                raise FileNotFoundError("No APK found in update archive")
-
-            # Move APK to cache root for FileProvider access
-            final_apk = os.path.join(cache_dir, "console_utilities_update.apk")
-            shutil.copy2(apk_path, final_apk)
-
-            # Clean up temp files
-            shutil.rmtree(tmp_dir, ignore_errors=True)
+                        on_progress(downloaded / total * 0.9, "Downloading update...")
 
             if on_progress:
                 on_progress(0.9, "Launching installer...")
@@ -121,16 +90,8 @@ def apply_android_update(
             log_error(
                 "Android update failed", type(e).__name__, traceback.format_exc()
             )
-            if cache_dir:
-                try:
-                    shutil.rmtree(
-                        os.path.join(cache_dir, "update_tmp"), ignore_errors=True
-                    )
-                except Exception:
-                    pass
             if on_error:
                 msg = str(e)
-                # Provide friendlier messages for common errors
                 if "SSLError" in type(e).__name__ or "SSL" in msg:
                     msg = "SSL connection error. Check your internet connection."
                 elif "ConnectionError" in type(e).__name__:
