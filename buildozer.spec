@@ -10,7 +10,7 @@ requirements = python3==3.10.12,kivy==2.3.0,pyjnius==1.5.0,hostpython3==3.10.12,
 orientation = landscape, portrait
 osx.python_version = 3
 osx.kivy_version = 1.9.1
-fullscreen = 0
+fullscreen = 1
 android.archs = arm64-v8a, armeabi-v7a
 android.allow_backup = True
 ios.kivy_ios_url = https://github.com/kivy/kivy-ios

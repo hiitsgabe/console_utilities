@@ -467,6 +467,8 @@ class ISSPatcherState:
     rom_path: str = ""
     rom_info: Any = None
     rom_valid: bool = False
+    zip_path: str = ""  # Original ZIP path if ROM was extracted from ZIP
+    zip_temp_dir: str = ""  # Temp dir for extracted ZIP contents
     # Slot mapping
     slot_mapping: List[Any] = field(default_factory=list)
     # Patching
@@ -511,6 +513,8 @@ class WePatcherState:
     rom_path: str = ""
     rom_info: Any = None
     rom_valid: bool = False
+    zip_path: str = ""  # Original ZIP path if ROM was extracted from ZIP
+    zip_temp_dir: str = ""  # Temp dir for extracted ZIP contents
     # Slot mapping
     slot_mapping: List[Any] = field(default_factory=list)
     # Patching
@@ -559,6 +563,8 @@ class NHL07PSPPatcherState:
     rom_path: str = ""
     rom_info: Any = None
     rom_valid: bool = False
+    zip_path: str = ""
+    zip_temp_dir: str = ""
 
     # Patching
     patch_progress: float = 0.0
@@ -602,6 +608,8 @@ class NHL94GenesisPatcherState:
     rom_path: str = ""
     rom_info: Any = None
     rom_valid: bool = False
+    zip_path: str = ""
+    zip_temp_dir: str = ""
 
     # Patching
     patch_progress: float = 0.0
@@ -642,6 +650,8 @@ class KGJMLBPatcherState:
     rom_path: str = ""
     rom_info: Any = None
     rom_valid: bool = False
+    zip_path: str = ""
+    zip_temp_dir: str = ""
 
     # Patching
     patch_progress: float = 0.0
@@ -686,6 +696,8 @@ class NBALive95PatcherState:
     rom_path: str = ""
     rom_info: Any = None
     rom_valid: bool = False
+    zip_path: str = ""
+    zip_temp_dir: str = ""
 
     # Patching
     patch_progress: float = 0.0
@@ -726,6 +738,8 @@ class MVPPSPPatcherState:
     rom_path: str = ""
     rom_info: Any = None
     rom_valid: bool = False
+    zip_path: str = ""
+    zip_temp_dir: str = ""
 
     # Patching
     patch_progress: float = 0.0
@@ -770,6 +784,8 @@ class NHL94SNESPatcherState:
     rom_path: str = ""
     rom_info: Any = None
     rom_valid: bool = False
+    zip_path: str = ""
+    zip_temp_dir: str = ""
 
     # Patching
     patch_progress: float = 0.0

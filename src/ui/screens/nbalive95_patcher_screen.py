@@ -52,12 +52,12 @@ class NBALive95PatcherScreen:
 
         # -- 3. Select ROM --
         if nba.rom_path and nba.rom_valid:
-            rom_value = os.path.basename(nba.rom_path)
+            rom_value = os.path.basename(nba.zip_path or nba.rom_path)
         elif nba.rom_path:
             rom_value = "Invalid ROM"
         else:
             rom_value = "Not selected"
-        items.append(("3. Select ROM (.md)", rom_value, "select_rom"))
+        items.append(("3. Select ROM (.md/.zip)", rom_value, "select_rom"))
 
         # -- 4. Patch ROM --
         if nba.patch_complete:

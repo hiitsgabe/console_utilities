@@ -96,12 +96,12 @@ class WePatcherScreen:
         # ── Select ROM ──────────────────────────────────────────────────────
         step_rom = "4" if provider == "api_football" else "3"
         if we.rom_path and we.rom_valid:
-            rom_value = os.path.basename(we.rom_path)
+            rom_value = os.path.basename(we.zip_path or we.rom_path)
         elif we.rom_path:
             rom_value = "Invalid ROM"
         else:
             rom_value = "Not selected"
-        items.append((f"{step_rom}. Select ROM", rom_value, "select_rom"))
+        items.append((f"{step_rom}. Select ROM (.bin/.zip)", rom_value, "select_rom"))
 
         # ── Patch ROM ───────────────────────────────────────────────────────
         step_patch = "5" if provider == "api_football" else "4"

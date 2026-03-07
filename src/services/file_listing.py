@@ -566,6 +566,7 @@ def load_psx_rom_folder_contents(path: str) -> List[Dict[str, Any]]:
 
     # Build game entries: .cue files as primary entries
     games = {}
+    zips = []
     for base, cue_path in cue_map.items():
         games[base.lower()] = {"name": base, "type": "psx_rom", "path": cue_path}
 
@@ -576,11 +577,23 @@ def load_psx_rom_folder_contents(path: str) -> List[Dict[str, Any]]:
         if not covered and base.lower() not in games:
             games[base.lower()] = {"name": base, "type": "psx_rom", "path": bin_path}
 
+    # Include .zip files
+    for entry in sorted(entries):
+        if entry.startswith("."):
+            continue
+        full_path = os.path.join(path, entry)
+        if not os.path.isdir(full_path):
+            ext = os.path.splitext(entry)[1].lower()
+            if ext == ".zip":
+                zips.append({"name": entry, "type": "zip_file", "path": full_path})
+
     dirs.sort(key=lambda x: x["name"].lower())
     game_list = sorted(games.values(), key=lambda x: x["name"].lower())
+    zips.sort(key=lambda x: x["name"].lower())
 
     items.extend(dirs)
     items.extend(game_list)
+    items.extend(zips)
     return items
 
 
@@ -588,7 +601,7 @@ def load_snes_rom_folder_contents(path: str) -> List[Dict[str, Any]]:
     """
     Load folder contents for SNES ROM selection.
 
-    Shows folders and .sfc/.smc ROM files.
+    Shows folders, .sfc/.smc ROM files, and .zip files.
     """
     path = os.path.abspath(path)
     items = []
@@ -614,6 +627,8 @@ def load_snes_rom_folder_contents(path: str) -> List[Dict[str, Any]]:
             ext = os.path.splitext(entry)[1].lower()
             if ext in (".sfc", ".smc"):
                 roms.append({"name": entry, "type": "snes_rom", "path": full_path})
+            elif ext == ".zip":
+                roms.append({"name": entry, "type": "zip_file", "path": full_path})
 
     dirs.sort(key=lambda x: x["name"].lower())
     roms.sort(key=lambda x: x["name"].lower())
@@ -627,7 +642,7 @@ def load_genesis_rom_folder_contents(path: str) -> List[Dict[str, Any]]:
     """
     Load folder contents for Genesis ROM selection.
 
-    Shows folders and .bin/.md/.gen ROM files.
+    Shows folders, .bin/.md/.gen ROM files, and .zip files.
     """
     path = os.path.abspath(path)
     items = []
@@ -653,6 +668,8 @@ def load_genesis_rom_folder_contents(path: str) -> List[Dict[str, Any]]:
             ext = os.path.splitext(entry)[1].lower()
             if ext in (".bin", ".md", ".gen"):
                 roms.append({"name": entry, "type": "genesis_rom", "path": full_path})
+            elif ext == ".zip":
+                roms.append({"name": entry, "type": "zip_file", "path": full_path})
 
     dirs.sort(key=lambda x: x["name"].lower())
     roms.sort(key=lambda x: x["name"].lower())
@@ -666,7 +683,7 @@ def load_psp_iso_folder_contents(path: str) -> List[Dict[str, Any]]:
     """
     Load folder contents for PSP ISO selection.
 
-    Shows folders and .iso/.cso PSP image files.
+    Shows folders, .iso/.cso PSP image files, and .zip files.
     """
     path = os.path.abspath(path)
     items = []
@@ -692,6 +709,8 @@ def load_psp_iso_folder_contents(path: str) -> List[Dict[str, Any]]:
             ext = os.path.splitext(entry)[1].lower()
             if ext in (".iso", ".cso"):
                 isos.append({"name": entry, "type": "psp_iso", "path": full_path})
+            elif ext == ".zip":
+                isos.append({"name": entry, "type": "zip_file", "path": full_path})
 
     dirs.sort(key=lambda x: x["name"].lower())
     isos.sort(key=lambda x: x["name"].lower())

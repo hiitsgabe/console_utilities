@@ -513,10 +513,17 @@ class DownloadManager:
             item.status = "moving"
             item.progress = 0.0
 
+            # Include .zip in move filter when not extracting
+            move_formats = list(formats)
+            if filename.endswith(".zip") and ".zip" not in [
+                ext.lower() for ext in move_formats
+            ]:
+                move_formats.append(".zip")
+
             files_to_move = [
                 f
                 for f in os.listdir(self.work_dir)
-                if any(f.lower().endswith(ext.lower()) for ext in formats)
+                if any(f.lower().endswith(ext.lower()) for ext in move_formats)
             ]
 
             for i, f in enumerate(files_to_move):

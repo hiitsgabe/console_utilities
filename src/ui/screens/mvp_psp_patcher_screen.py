@@ -52,12 +52,12 @@ class MVPPSPPatcherScreen:
 
         # -- 3. Select ISO --
         if mvp.rom_path and mvp.rom_valid:
-            rom_value = os.path.basename(mvp.rom_path)
+            rom_value = os.path.basename(mvp.zip_path or mvp.rom_path)
         elif mvp.rom_path:
             rom_value = "Invalid ISO"
         else:
             rom_value = "Not selected"
-        items.append(("3. Select ISO (.iso)", rom_value, "select_rom"))
+        items.append(("3. Select ISO (.iso/.zip)", rom_value, "select_rom"))
 
         # -- 4. Patch ISO --
         if mvp.patch_complete:

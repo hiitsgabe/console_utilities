@@ -139,10 +139,17 @@ def _process_file(service, item_id, file_path, filename, work_dir, roms_folder, 
     update_notification(service, f"Moving: {filename}", 0, 100)
     write_status(work_dir, item_id, {"status": "moving", "progress": 0.0})
 
+    # Include .zip in move filter when not extracting
+    move_formats = list(formats)
+    if filename.endswith(".zip") and ".zip" not in [
+        ext.lower() for ext in move_formats
+    ]:
+        move_formats.append(".zip")
+
     files_to_move = [
         f for f in os.listdir(work_dir)
         if f not in IPC_FILENAMES
-        and any(f.lower().endswith(ext.lower()) for ext in formats)
+        and any(f.lower().endswith(ext.lower()) for ext in move_formats)
         and os.path.isfile(os.path.join(work_dir, f))
     ]
 
