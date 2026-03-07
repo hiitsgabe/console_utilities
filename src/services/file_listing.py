@@ -238,7 +238,9 @@ def list_files(
 
         formats = list(system_data.get("file_format", []))
         # Archives serve .zip files; include in listing when should_unzip is set
-        if system_data.get("should_unzip", False):
+        per_sys = settings.get("system_settings", {}).get(system_name, {})
+        should_unzip = per_sys.get("should_unzip", system_data.get("should_unzip", False))
+        if should_unzip:
             if ".zip" not in [f.lower() for f in formats]:
                 formats.append(".zip")
 

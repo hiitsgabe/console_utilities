@@ -357,12 +357,13 @@ class DownloadManager:
             start_time = time.time()
             last_update = start_time
             last_downloaded = 0
+            speed_samples = []
 
             file_path = os.path.join(self.work_dir, filename)
             os.makedirs(self.work_dir, exist_ok=True)
 
             with open(file_path, "wb") as f:
-                for chunk in response.iter_content(chunk_size=1048576):
+                for chunk in response.iter_content(chunk_size=32768):
                     if self._cancel_current:
                         f.close()
                         if os.path.exists(file_path):
@@ -377,7 +378,11 @@ class DownloadManager:
                         current_time = time.time()
                         elapsed = current_time - last_update
                         if elapsed >= 0.5:
-                            item.speed = (item.downloaded - last_downloaded) / elapsed
+                            instant_speed = (item.downloaded - last_downloaded) / elapsed
+                            speed_samples.append(instant_speed)
+                            if len(speed_samples) > 4:
+                                speed_samples.pop(0)
+                            item.speed = sum(speed_samples) / len(speed_samples)
                             last_downloaded = item.downloaded
                             last_update = current_time
 
@@ -417,10 +422,13 @@ class DownloadManager:
             formats = item.system_data.get("file_format", [])
             os.makedirs(roms_folder, exist_ok=True)
 
-            # Handle ZIP extraction
-            if filename.endswith(".zip") and item.system_data.get(
-                "should_unzip", False
-            ):
+            # Handle ZIP extraction (per-system settings override system_data default)
+            system_name = item.system_data.get("name", "")
+            per_sys = self.settings.get("system_settings", {}).get(system_name, {})
+            should_unzip = per_sys.get(
+                "should_unzip", item.system_data.get("should_unzip", False)
+            )
+            if filename.endswith(".zip") and should_unzip:
                 item.status = "extracting"
                 extract_contents = item.system_data.get("extract_contents", True)
 

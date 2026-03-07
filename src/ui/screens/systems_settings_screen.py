@@ -27,6 +27,7 @@ class SystemsSettingsScreen:
         highlighted: int,
         systems: List[Dict[str, Any]],
         hidden_systems: Set[str] = None,
+        system_settings: Optional[Dict[str, Any]] = None,
     ) -> Tuple[Optional[pygame.Rect], List[pygame.Rect], int]:
         """
         Render the systems settings screen.
@@ -36,11 +37,13 @@ class SystemsSettingsScreen:
             highlighted: Currently highlighted index
             systems: List of system configurations
             hidden_systems: Set of hidden system names
+            system_settings: Per-system settings from config
 
         Returns:
             Tuple of (back_button_rect, item_rects, scroll_offset)
         """
         hidden_systems = hidden_systems or set()
+        system_settings = system_settings or {}
 
         # Build items with status
         items = []
@@ -52,7 +55,7 @@ class SystemsSettingsScreen:
             if name in hidden_systems:
                 status_parts.append("Hidden")
 
-            custom_folder = system.get("custom_folder")
+            custom_folder = system_settings.get(name, {}).get("custom_folder", "")
             if custom_folder:
                 status_parts.append("Custom Folder")
 
