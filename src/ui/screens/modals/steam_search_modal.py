@@ -70,6 +70,7 @@ class SteamSearchModal:
             cell_size=cell_size,
             get_label=lambda item: item.get("name", ""),
             get_image=get_image,
+            fill_image=True,
         )
 
         screen.set_clip(old_clip)

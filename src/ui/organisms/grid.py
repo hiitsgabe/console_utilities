@@ -33,6 +33,7 @@ class Grid:
         get_label: Optional[Callable[[Any], str]] = None,
         get_image: Optional[Callable[[Any], pygame.Surface]] = None,
         get_placeholder: Optional[Callable[[Any], str]] = None,
+        fill_image: bool = False,
     ) -> Tuple[List[pygame.Rect], int]:
         """
         Render a grid of items.
@@ -114,6 +115,7 @@ class Grid:
                     placeholder_text=placeholder,
                     selected=is_selected,
                     highlighted=(idx == highlighted),
+                    fill=fill_image,
                 )
 
                 # Draw checkbox overlay if selected
