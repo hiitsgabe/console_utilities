@@ -70,7 +70,7 @@ def apply_android_update(
             downloaded = 0
 
             with open(tmp_zip, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
+                for chunk in response.iter_content(chunk_size=1024 * 1024):
                     f.write(chunk)
                     downloaded += len(chunk)
                     if total > 0 and on_progress:
