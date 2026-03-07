@@ -625,7 +625,91 @@ class KGJMLBPatcherState:
 
     # MLB season year (e.g. 2025 = 2025 season)
     selected_season: int = field(
-        default_factory=lambda: datetime.now().year - 1
+        default_factory=lambda: datetime.now().year
+    )
+    selected_league: Any = None
+
+    # Fetched data
+    rosters: Any = None
+    team_stats: Any = None
+    league_data: Any = None
+    fetch_progress: float = 0.0
+    fetch_status: str = ""
+    is_fetching: bool = False
+    fetch_error: str = ""
+
+    # ROM
+    rom_path: str = ""
+    rom_info: Any = None
+    rom_valid: bool = False
+
+    # Patching
+    patch_progress: float = 0.0
+    patch_status: str = ""
+    is_patching: bool = False
+    patch_output_path: str = ""
+    patch_complete: bool = False
+    patch_error: str = ""
+
+    # Roster preview
+    roster_preview_team_index: int = 0
+    roster_preview_player_index: int = 0
+
+    # UI navigation
+    active_modal: Optional[str] = None
+
+
+@dataclass
+class NBALive95PatcherState:
+    """State for the NBA Live 95 (Genesis) Patcher feature."""
+
+    # NBA season (start year: 2025 = 2025-26 season)
+    # NBA season runs Oct-Jun; start year = current year if Oct+, else year-1
+    selected_season: int = field(
+        default_factory=lambda: (
+            datetime.now().year if datetime.now().month >= 10
+            else datetime.now().year - 1
+        )
+    )
+    selected_league: Any = None
+
+    # Fetched data
+    rosters: Any = None
+    team_stats: Any = None
+    league_data: Any = None
+    fetch_progress: float = 0.0
+    fetch_status: str = ""
+    is_fetching: bool = False
+    fetch_error: str = ""
+
+    # ROM
+    rom_path: str = ""
+    rom_info: Any = None
+    rom_valid: bool = False
+
+    # Patching
+    patch_progress: float = 0.0
+    patch_status: str = ""
+    is_patching: bool = False
+    patch_output_path: str = ""
+    patch_complete: bool = False
+    patch_error: str = ""
+
+    # Roster preview
+    roster_preview_team_index: int = 0
+    roster_preview_player_index: int = 0
+
+    # UI navigation
+    active_modal: Optional[str] = None
+
+
+@dataclass
+class MVPPSPPatcherState:
+    """State for the MVP Baseball PSP Patcher feature."""
+
+    # MLB season year (e.g. 2025 = 2025 season)
+    selected_season: int = field(
+        default_factory=lambda: datetime.now().year
     )
     selected_league: Any = None
 
@@ -828,6 +912,12 @@ class AppState:
         # ---- KGJ MLB Patcher ---- #
         self.kgj_mlb_patcher = KGJMLBPatcherState()
 
+        # ---- NBA Live 95 Patcher ---- #
+        self.nbalive95_patcher = NBALive95PatcherState()
+
+        # ---- MVP Baseball PSP Patcher ---- #
+        self.mvp_psp_patcher = MVPPSPPatcherState()
+
         # ---- NHL94 Patchers ---- #
         self.nhl94_patcher = NHL94SNESPatcherState()
         self.nhl94_gen_patcher = NHL94GenesisPatcherState()
@@ -860,6 +950,10 @@ class AppState:
         """
         if self.mode == "kgj_mlb_patcher":
             return self.kgj_mlb_patcher
+        if self.mode == "nbalive95_patcher":
+            return self.nbalive95_patcher
+        if self.mode == "mvp_psp_patcher":
+            return self.mvp_psp_patcher
         if self.mode == "iss_patcher":
             return self.iss_patcher
         if self.mode == "nhl94_patcher":

@@ -68,7 +68,7 @@ class KGJStatMapper:
     ) -> KGJPlayerRecord:
         """Map an MLB batter to a KGJ player record."""
         pos = self._normalize_position(player.position, is_pitcher=False)
-        hand = self._map_bat_hand(player.handedness)
+        hand = self._map_bat_hand(player.bats or player.handedness)
 
         if stats:
             attrs = self._map_batter_stats(stats, pos)
@@ -104,7 +104,7 @@ class KGJStatMapper:
         is_starter: bool = True,
     ) -> KGJPlayerRecord:
         """Map an MLB pitcher to a KGJ player record."""
-        hand = self._map_bat_hand(player.handedness)
+        hand = self._map_bat_hand(player.bats or player.handedness)
         pitch_hand = 1 if player.handedness == "L" else 0
 
         if stats:

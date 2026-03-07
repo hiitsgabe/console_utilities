@@ -12,9 +12,11 @@ class SportsPatcherScreen:
         ("WE2002 - Winning Eleven 2002 (PS1)", "we_patcher"),
         ("ISS - Int. Superstar Soccer (SNES)", "iss_patcher"),
         ("KGJ MLB - Ken Griffey Jr. MLB (SNES)", "kgj_mlb_patcher"),
+        ("NBA Live 95 (Genesis)", "nbalive95_patcher"),
         ("NHL 94 - NHL Hockey '94 (SNES)", "nhl94_patcher"),
         ("NHL 94 - NHL Hockey '94 (Genesis)", "nhl94_gen_patcher"),
         ("NHL 07 - NHL 07 (PSP)", "nhl07_patcher"),
+        ("MVP Baseball (PSP)", "mvp_psp_patcher"),
     ]
 
     def __init__(self, theme: Theme = default_theme):

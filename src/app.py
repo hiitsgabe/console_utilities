@@ -1430,6 +1430,12 @@ class ConsoleUtilitiesApp:
         elif self.state.mode == "kgj_mlb_patcher":
             self._handle_kgj_mlb_patcher_navigation(direction)
 
+        elif self.state.mode == "nbalive95_patcher":
+            self._handle_nbalive95_patcher_navigation(direction)
+
+        elif self.state.mode == "mvp_psp_patcher":
+            self._handle_mvp_psp_patcher_navigation(direction)
+
         elif self.state.mode == "nhl94_gen_patcher":
             self._handle_nhl94_gen_patcher_navigation(direction)
 
@@ -1649,6 +1655,100 @@ class ConsoleUtilitiesApp:
             from ui.screens.kgj_mlb_patcher_screen import kgj_mlb_patcher_screen
 
             max_items = kgj_mlb_patcher_screen.get_count(
+                self.state, self.settings
+            )
+            if direction in ("up", "left"):
+                self.state.highlighted = (self.state.highlighted - 1) % max_items
+            elif direction in ("down", "right"):
+                self.state.highlighted = (self.state.highlighted + 1) % max_items
+
+    def _handle_mvp_psp_patcher_navigation(self, direction):
+        """Handle D-pad navigation for mvp_psp_patcher mode and its modals."""
+        mvp = self.state.mvp_psp_patcher
+
+        if mvp.active_modal == "roster_preview":
+            league_data = mvp.league_data
+            if not league_data or not hasattr(league_data, "teams"):
+                return
+            teams = league_data.teams
+            if direction == "left":
+                mvp.roster_preview_team_index = (
+                    mvp.roster_preview_team_index - 1
+                ) % max(len(teams), 1)
+                mvp.roster_preview_player_index = 0
+            elif direction == "right":
+                mvp.roster_preview_team_index = (
+                    mvp.roster_preview_team_index + 1
+                ) % max(len(teams), 1)
+                mvp.roster_preview_player_index = 0
+            elif direction == "up":
+                mvp.roster_preview_player_index = max(
+                    0, mvp.roster_preview_player_index - 1
+                )
+            elif direction == "down":
+                team_idx = mvp.roster_preview_team_index
+                if 0 <= team_idx < len(teams):
+                    players = (
+                        teams[team_idx].players
+                        if hasattr(teams[team_idx], "players")
+                        else []
+                    )
+                    mvp.roster_preview_player_index = min(
+                        mvp.roster_preview_player_index + 1,
+                        max(len(players) - 1, 0),
+                    )
+
+        elif mvp.active_modal is None:
+            from ui.screens.mvp_psp_patcher_screen import mvp_psp_patcher_screen
+
+            max_items = mvp_psp_patcher_screen.get_count(
+                self.state, self.settings
+            )
+            if direction in ("up", "left"):
+                self.state.highlighted = (self.state.highlighted - 1) % max_items
+            elif direction in ("down", "right"):
+                self.state.highlighted = (self.state.highlighted + 1) % max_items
+
+    def _handle_nbalive95_patcher_navigation(self, direction):
+        """Handle D-pad navigation for nbalive95_patcher mode and its modals."""
+        nba = self.state.nbalive95_patcher
+
+        if nba.active_modal == "roster_preview":
+            league_data = nba.league_data
+            if not league_data or not hasattr(league_data, "teams"):
+                return
+            teams = league_data.teams
+            if direction == "left":
+                nba.roster_preview_team_index = (
+                    nba.roster_preview_team_index - 1
+                ) % max(len(teams), 1)
+                nba.roster_preview_player_index = 0
+            elif direction == "right":
+                nba.roster_preview_team_index = (
+                    nba.roster_preview_team_index + 1
+                ) % max(len(teams), 1)
+                nba.roster_preview_player_index = 0
+            elif direction == "up":
+                nba.roster_preview_player_index = max(
+                    0, nba.roster_preview_player_index - 1
+                )
+            elif direction == "down":
+                team_idx = nba.roster_preview_team_index
+                if 0 <= team_idx < len(teams):
+                    players = (
+                        teams[team_idx].players
+                        if hasattr(teams[team_idx], "players")
+                        else []
+                    )
+                    nba.roster_preview_player_index = min(
+                        nba.roster_preview_player_index + 1,
+                        max(len(players) - 1, 0),
+                    )
+
+        elif nba.active_modal is None:
+            from ui.screens.nbalive95_patcher_screen import nbalive95_patcher_screen
+
+            max_items = nbalive95_patcher_screen.get_count(
                 self.state, self.settings
             )
             if direction in ("up", "left"):
@@ -2757,6 +2857,24 @@ class ConsoleUtilitiesApp:
                 self.state.kgj_mlb_patcher = KGJMLBPatcherState()
                 self.state.mode = "sports_patcher"
                 self.state.highlighted = 0
+        elif self.state.mode == "nbalive95_patcher":
+            if self.state.nbalive95_patcher.active_modal:
+                self.state.nbalive95_patcher.active_modal = None
+            else:
+                from state import NBALive95PatcherState
+
+                self.state.nbalive95_patcher = NBALive95PatcherState()
+                self.state.mode = "sports_patcher"
+                self.state.highlighted = 0
+        elif self.state.mode == "mvp_psp_patcher":
+            if self.state.mvp_psp_patcher.active_modal:
+                self.state.mvp_psp_patcher.active_modal = None
+            else:
+                from state import MVPPSPPatcherState
+
+                self.state.mvp_psp_patcher = MVPPSPPatcherState()
+                self.state.mode = "sports_patcher"
+                self.state.highlighted = 0
         elif self.state.mode == "nhl94_gen_patcher":
             if self.state.nhl94_gen_patcher.active_modal:
                 self.state.nhl94_gen_patcher.active_modal = None
@@ -3033,11 +3151,17 @@ class ConsoleUtilitiesApp:
             elif action == "kgj_mlb_patcher":
                 self.state.mode = "kgj_mlb_patcher"
                 self.state.highlighted = 0
+            elif action == "nbalive95_patcher":
+                self.state.mode = "nbalive95_patcher"
+                self.state.highlighted = 0
             elif action == "nhl94_gen_patcher":
                 self.state.mode = "nhl94_gen_patcher"
                 self.state.highlighted = 0
             elif action == "nhl07_patcher":
                 self.state.mode = "nhl07_patcher"
+                self.state.highlighted = 0
+            elif action == "mvp_psp_patcher":
+                self.state.mode = "mvp_psp_patcher"
                 self.state.highlighted = 0
 
         elif self.state.mode == "we_patcher":
@@ -3051,6 +3175,12 @@ class ConsoleUtilitiesApp:
 
         elif self.state.mode == "kgj_mlb_patcher":
             self._handle_kgj_mlb_patcher_selection()
+
+        elif self.state.mode == "nbalive95_patcher":
+            self._handle_nbalive95_patcher_selection()
+
+        elif self.state.mode == "mvp_psp_patcher":
+            self._handle_mvp_psp_patcher_selection()
 
         elif self.state.mode == "nhl94_gen_patcher":
             self._handle_nhl94_gen_patcher_selection()
@@ -3959,11 +4089,15 @@ class ConsoleUtilitiesApp:
             path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "kgj_mlb_patcher_rom":
             path = self.settings.get("roms_dir", SCRIPT_DIR)
+        elif selection_type == "nbalive95_patcher_rom":
+            path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "nhl94_gen_patcher_rom":
             path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "nhl07_patcher_rom":
             path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "steam_shortcut":
+            path = self.settings.get("roms_dir", SCRIPT_DIR)
+        elif selection_type == "mvp_psp_patcher_rom":
             path = self.settings.get("roms_dir", SCRIPT_DIR)
         else:
             path = SCRIPT_DIR
@@ -3987,11 +4121,19 @@ class ConsoleUtilitiesApp:
             from services.file_listing import load_snes_rom_folder_contents
 
             loader = load_snes_rom_folder_contents
+        elif selection_type == "nbalive95_patcher_rom":
+            from services.file_listing import load_genesis_rom_folder_contents
+
+            loader = load_genesis_rom_folder_contents
         elif selection_type == "nhl94_gen_patcher_rom":
             from services.file_listing import load_genesis_rom_folder_contents
 
             loader = load_genesis_rom_folder_contents
         elif selection_type == "nhl07_patcher_rom":
+            from services.file_listing import load_psp_iso_folder_contents
+
+            loader = load_psp_iso_folder_contents
+        elif selection_type == "mvp_psp_patcher_rom":
             from services.file_listing import load_psp_iso_folder_contents
 
             loader = load_psp_iso_folder_contents
@@ -4078,8 +4220,10 @@ class ConsoleUtilitiesApp:
             "iss_patcher_rom",
             "nhl94_patcher_rom",
             "kgj_mlb_patcher_rom",
+            "nbalive95_patcher_rom",
             "nhl94_gen_patcher_rom",
             "nhl07_patcher_rom",
+            "mvp_psp_patcher_rom",
         ):
             path = self.settings.get("roms_dir", "")
         elif selection_type in (
@@ -4205,8 +4349,8 @@ class ConsoleUtilitiesApp:
 
         is_psx_context = selection_type == "we_patcher_rom"
         is_snes_context = selection_type in ("iss_patcher_rom", "nhl94_patcher_rom", "kgj_mlb_patcher_rom")
-        is_genesis_context = selection_type == "nhl94_gen_patcher_rom"
-        is_psp_context = selection_type == "nhl07_patcher_rom"
+        is_genesis_context = selection_type in ("nhl94_gen_patcher_rom", "nbalive95_patcher_rom")
+        is_psp_context = selection_type in ("nhl07_patcher_rom", "mvp_psp_patcher_rom")
         if is_psx_context:
             nav_loader = load_psx_rom_folder_contents
         elif is_snes_context:
@@ -4367,6 +4511,20 @@ class ConsoleUtilitiesApp:
             except Exception:
                 self.state.kgj_mlb_patcher.rom_valid = False
                 self.state.kgj_mlb_patcher.rom_info = None
+        elif selection_type == "nbalive95_patcher_rom":
+            self.state.nbalive95_patcher.rom_path = path
+            try:
+                from services.nbalive95_patcher import NBALive95Patcher
+
+                cache_dir = self.settings.get("work_dir", "workdir")
+                cache_dir = os.path.join(cache_dir, "nba_cache")
+                patcher = NBALive95Patcher(cache_dir)
+                rom_info = patcher.analyze_rom(path)
+                self.state.nbalive95_patcher.rom_info = rom_info
+                self.state.nbalive95_patcher.rom_valid = rom_info.is_valid
+            except Exception:
+                self.state.nbalive95_patcher.rom_valid = False
+                self.state.nbalive95_patcher.rom_info = None
         elif selection_type == "nhl94_gen_patcher_rom":
             self.state.nhl94_gen_patcher.rom_path = path
             try:
@@ -4395,6 +4553,20 @@ class ConsoleUtilitiesApp:
             except Exception:
                 self.state.nhl07_psp_patcher.rom_valid = False
                 self.state.nhl07_psp_patcher.rom_info = None
+        elif selection_type == "mvp_psp_patcher_rom":
+            self.state.mvp_psp_patcher.rom_path = path
+            try:
+                from services.mvp_psp_patcher import MVPPSPPatcher
+
+                cache_dir = self.settings.get("work_dir", "workdir")
+                cache_dir = os.path.join(cache_dir, "mlb_cache")
+                patcher = MVPPSPPatcher(cache_dir)
+                rom_info = patcher.analyze_rom(path)
+                self.state.mvp_psp_patcher.rom_info = rom_info
+                self.state.mvp_psp_patcher.rom_valid = rom_info.is_valid
+            except Exception:
+                self.state.mvp_psp_patcher.rom_valid = False
+                self.state.mvp_psp_patcher.rom_info = None
 
         # Close the modal
         self.state.folder_browser.show = False
@@ -8739,6 +8911,338 @@ class ConsoleUtilitiesApp:
                 kgj.patch_complete = False
             finally:
                 kgj.is_patching = False
+
+        threading.Thread(target=_patch, daemon=True).start()
+
+    def _handle_nbalive95_patcher_selection(self):
+        """Handle item selection on the nbalive95_patcher main menu."""
+        nba = self.state.nbalive95_patcher
+
+        if nba.active_modal == "roster_preview":
+            return
+        if nba.active_modal == "patch_progress":
+            if nba.patch_complete or nba.patch_error:
+                nba.active_modal = None
+            return
+
+        from ui.screens.nbalive95_patcher_screen import nbalive95_patcher_screen
+
+        action = nbalive95_patcher_screen.get_action(
+            self.state.highlighted, self.state, self.settings
+        )
+
+        if action == "fetch_rosters":
+            self._start_nbalive95_roster_fetch()
+        elif action == "preview_rosters":
+            nba.active_modal = "roster_preview"
+            nba.roster_preview_team_index = 0
+            nba.roster_preview_player_index = 0
+            if not nba.rosters and not nba.is_fetching:
+                self._start_nbalive95_roster_fetch()
+        elif action == "select_rom":
+            self._open_folder_browser("nbalive95_patcher_rom")
+        elif action == "patch_rom":
+            nba.active_modal = "patch_progress"
+            self._start_nbalive95_patching()
+
+    def _start_nbalive95_roster_fetch(self):
+        """Start background NBA Live 95 roster fetch thread."""
+        import threading
+
+        nba = self.state.nbalive95_patcher
+
+        if nba.is_fetching:
+            return
+
+        nba.is_fetching = True
+        nba.fetch_error = ""
+        nba.rosters = None
+
+        cache_dir = self.settings.get("work_dir", "workdir")
+        cache_dir = os.path.join(cache_dir, "nba_cache")
+        season = nba.selected_season
+
+        def _fetch():
+            from services.nbalive95_patcher import NBALive95Patcher
+            from services.sports_api.models import League, Team, TeamRoster, LeagueData
+
+            try:
+
+                def on_status(msg):
+                    nba.fetch_status = msg
+
+                patcher = NBALive95Patcher(cache_dir, on_status=on_status)
+
+                def progress(p, msg):
+                    nba.fetch_progress = p
+                    nba.fetch_status = msg
+
+                rosters = patcher.fetch_rosters(
+                    on_progress=progress,
+                    season=season,
+                )
+                nba.rosters = rosters
+                nba.team_stats = getattr(patcher, "team_stats", {})
+
+                # Build LeagueData for roster preview modal
+                team_rosters = []
+                for team_code, players in sorted(rosters.items()):
+                    team_name = team_code
+                    team = Team(
+                        id=0,
+                        name=team_name,
+                        short_name=team_code,
+                        code=team_code,
+                        logo_url="",
+                        country="",
+                    )
+                    team_rosters.append(
+                        TeamRoster(
+                            team=team,
+                            players=players,
+                            player_stats={},
+                        )
+                    )
+                nba.league_data = LeagueData(
+                    league=League(
+                        id=0,
+                        name="NBA",
+                        country="USA",
+                        country_code="US",
+                        logo_url="",
+                        season=season,
+                        teams_count=len(team_rosters),
+                    ),
+                    teams=team_rosters,
+                )
+            except Exception as e:
+                nba.fetch_error = str(e)
+            finally:
+                nba.is_fetching = False
+
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def _start_nbalive95_patching(self):
+        """Start background NBA Live 95 patching thread."""
+        import threading
+        import os
+
+        nba = self.state.nbalive95_patcher
+
+        if not nba.rosters or not nba.rom_path:
+            nba.patch_error = "Missing rosters or ROM"
+            return
+
+        if not nba.rom_valid:
+            nba.patch_error = "Invalid ROM"
+            return
+
+        nba.is_patching = True
+        nba.patch_error = ""
+        nba.patch_complete = False
+        nba.patch_output_path = ""
+
+        input_path = nba.rom_path
+        game_dir = os.path.dirname(input_path)
+        base_name = os.path.splitext(os.path.basename(input_path))[0]
+        ext = os.path.splitext(input_path)[1]
+        season = nba.selected_season
+        output_path = os.path.join(game_dir, f"{base_name} - NBA {season}-{str(season + 1)[-2:]}{ext}")
+
+        cache_dir = self.settings.get("work_dir", "workdir")
+        cache_dir = os.path.join(cache_dir, "nba_cache")
+
+        def _patch():
+            try:
+                from services.nbalive95_patcher import NBALive95Patcher
+
+                patcher = NBALive95Patcher(cache_dir)
+                patcher.team_stats = nba.team_stats or {}
+
+                def progress(p, msg):
+                    nba.patch_progress = p
+                    nba.patch_status = msg
+
+                result = patcher.patch_rom(
+                    input_path,
+                    output_path,
+                    nba.rosters,
+                    on_progress=progress,
+                )
+                nba.patch_complete = result.success
+                nba.patch_error = result.error if not result.success else ""
+                nba.patch_output_path = result.output_path if result.success else ""
+            except Exception as e:
+                nba.patch_error = str(e)
+                nba.patch_complete = False
+            finally:
+                nba.is_patching = False
+
+        threading.Thread(target=_patch, daemon=True).start()
+
+    def _handle_mvp_psp_patcher_selection(self):
+        """Handle item selection on the mvp_psp_patcher main menu."""
+        mvp = self.state.mvp_psp_patcher
+
+        if mvp.active_modal == "roster_preview":
+            return
+        if mvp.active_modal == "patch_progress":
+            if mvp.patch_complete or mvp.patch_error:
+                mvp.active_modal = None
+            return
+
+        from ui.screens.mvp_psp_patcher_screen import mvp_psp_patcher_screen
+
+        action = mvp_psp_patcher_screen.get_action(
+            self.state.highlighted, self.state, self.settings
+        )
+
+        if action == "fetch_rosters":
+            self._start_mvp_psp_roster_fetch()
+        elif action == "preview_rosters":
+            mvp.active_modal = "roster_preview"
+            mvp.roster_preview_team_index = 0
+            mvp.roster_preview_player_index = 0
+            if not mvp.rosters and not mvp.is_fetching:
+                self._start_mvp_psp_roster_fetch()
+        elif action == "select_rom":
+            self._open_folder_browser("mvp_psp_patcher_rom")
+        elif action == "patch_rom":
+            mvp.active_modal = "patch_progress"
+            self._start_mvp_psp_patching()
+
+    def _start_mvp_psp_roster_fetch(self):
+        """Start background MVP PSP roster fetch thread."""
+        import threading
+
+        mvp = self.state.mvp_psp_patcher
+
+        if mvp.is_fetching:
+            return
+
+        mvp.is_fetching = True
+        mvp.fetch_error = ""
+        mvp.rosters = None
+
+        cache_dir = self.settings.get("work_dir", "workdir")
+        cache_dir = os.path.join(cache_dir, "mlb_cache")
+        season = mvp.selected_season
+
+        def _fetch():
+            from services.mvp_psp_patcher import MVPPSPPatcher
+            from services.sports_api.models import League, Team, TeamRoster, LeagueData
+
+            try:
+
+                def on_status(msg):
+                    mvp.fetch_status = msg
+
+                patcher = MVPPSPPatcher(cache_dir, on_status=on_status)
+
+                def progress(p, msg):
+                    mvp.fetch_progress = p
+                    mvp.fetch_status = msg
+
+                rosters = patcher.fetch_rosters(
+                    on_progress=progress,
+                    season=season,
+                )
+                mvp.rosters = rosters
+                mvp.team_stats = getattr(patcher, "team_stats", {})
+
+                # Build LeagueData for roster preview modal
+                team_rosters = []
+                for team_code, players in sorted(rosters.items()):
+                    team_name = team_code
+                    team = Team(
+                        id=0,
+                        name=team_name,
+                        short_name=team_code,
+                        code=team_code,
+                        logo_url="",
+                        country="",
+                    )
+                    team_rosters.append(
+                        TeamRoster(
+                            team=team,
+                            players=players,
+                            player_stats={},
+                        )
+                    )
+                mvp.league_data = LeagueData(
+                    league=League(
+                        id=0,
+                        name="MLB",
+                        country="USA",
+                        country_code="US",
+                        logo_url="",
+                        season=season,
+                        teams_count=len(team_rosters),
+                    ),
+                    teams=team_rosters,
+                )
+            except Exception as e:
+                mvp.fetch_error = str(e)
+            finally:
+                mvp.is_fetching = False
+
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def _start_mvp_psp_patching(self):
+        """Start background MVP PSP patching thread."""
+        import threading
+        import os
+
+        mvp = self.state.mvp_psp_patcher
+
+        if not mvp.rosters or not mvp.rom_path:
+            mvp.patch_error = "Missing rosters or ISO"
+            return
+
+        if not mvp.rom_valid:
+            mvp.patch_error = "Invalid ISO"
+            return
+
+        mvp.is_patching = True
+        mvp.patch_error = ""
+        mvp.patch_complete = False
+        mvp.patch_output_path = ""
+
+        input_path = mvp.rom_path
+        game_dir = os.path.dirname(input_path)
+        base_name = os.path.splitext(os.path.basename(input_path))[0]
+        ext = os.path.splitext(input_path)[1]
+        season = mvp.selected_season
+        output_path = os.path.join(game_dir, f"{base_name} - MLB {season}{ext}")
+
+        cache_dir = self.settings.get("work_dir", "workdir")
+        cache_dir = os.path.join(cache_dir, "mlb_cache")
+
+        def _patch():
+            try:
+                from services.mvp_psp_patcher import MVPPSPPatcher
+
+                patcher = MVPPSPPatcher(cache_dir)
+                patcher.team_stats = mvp.team_stats or {}
+
+                def progress(p, msg):
+                    mvp.patch_progress = p
+                    mvp.patch_status = msg
+
+                result = patcher.patch_rom(
+                    input_path,
+                    output_path,
+                    mvp.rosters,
+                    on_progress=progress,
+                )
+                mvp.patch_complete = result.success
+                mvp.patch_error = result.error if not result.success else ""
+                mvp.patch_output_path = result.output_path if result.success else ""
+            except Exception as e:
+                mvp.patch_error = str(e)
+                mvp.patch_complete = False
+            finally:
+                mvp.is_patching = False
 
         threading.Thread(target=_patch, daemon=True).start()
 

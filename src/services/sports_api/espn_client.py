@@ -78,6 +78,10 @@ BASEBALL_BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/baseball"
 BASEBALL_CORE_URL = (
     "https://sports.core.api.espn.com/v2/sports/baseball/leagues/mlb"
 )
+BASKETBALL_BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/basketball"
+BASKETBALL_CORE_URL = (
+    "https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba"
+)
 
 
 class EspnClient:
@@ -326,12 +330,24 @@ class EspnClient:
                         last_name = parts[-1]
                         first_name = " ".join(parts[:-1])
 
-                # ESPN doesn't provide handedness for baseball
-                hand_info = athlete.get("hand", {})
-                hand = (
-                    hand_info.get("abbreviation", "")
-                    if isinstance(hand_info, dict) else ""
+                # Bats/throws from roster endpoint
+                bats_info = athlete.get("bats", {})
+                bat_hand = (
+                    bats_info.get("abbreviation", "")
+                    if isinstance(bats_info, dict) else ""
                 )
+                throws_info = athlete.get("throws", {})
+                throw_hand = (
+                    throws_info.get("abbreviation", "")
+                    if isinstance(throws_info, dict) else ""
+                )
+                # Fallback to generic hand field
+                if not throw_hand:
+                    hand_info = athlete.get("hand", {})
+                    throw_hand = (
+                        hand_info.get("abbreviation", "")
+                        if isinstance(hand_info, dict) else ""
+                    )
 
                 players.append(Player(
                     id=int(athlete.get("id", 0)),
@@ -343,8 +359,134 @@ class EspnClient:
                     position=pos_abbrev,
                     number=number,
                     photo_url="",
-                    handedness=hand,
+                    handedness=throw_hand,
+                    bats=bat_hand,
                 ))
+        return players
+
+    # ------------------------------------------------------------------
+    # Basketball / NBA
+    # ------------------------------------------------------------------
+
+    def get_nba_teams(self) -> List[Team]:
+        """Fetch all current NBA teams."""
+        cache_key = "espn_nba_teams"
+        cached = self._load_cache(cache_key)
+        if cached:
+            return self._parse_teams(cached)
+        data = self._request("/nba/teams", sport="basketball")
+        if data:
+            self._save_cache(cache_key, data)
+        return self._parse_teams(data)
+
+    def get_basketball_squad(self, team_id: int) -> List[Player]:
+        """Fetch current roster for an NBA team."""
+        cache_key = f"espn_basketball_squad_{team_id}"
+        cached = self._load_cache(cache_key)
+        if cached:
+            return self._parse_basketball_squad(cached)
+        data = self._request(
+            f"/nba/teams/{team_id}/roster", sport="basketball"
+        )
+        if data:
+            self._save_cache(cache_key, data)
+        return self._parse_basketball_squad(data)
+
+    def get_basketball_team_leaders(
+        self, team_id: int, season: int = 2026
+    ) -> dict:
+        """Fetch per-player stats via team leaders endpoint.
+
+        Returns dict mapping ESPN player ID (str) to stat dict,
+        e.g. {"4024123": {"PTS": 26.2, "REB": 8.1, "AST": 5.3, ...}}.
+        """
+        cache_key = f"espn_basketball_leaders_{team_id}_{season}"
+        cached = self._load_cache(cache_key)
+        if cached:
+            return cached
+
+        url = (
+            f"{BASKETBALL_CORE_URL}/seasons/{season}/types/2"
+            f"/teams/{team_id}/leaders"
+        )
+        try:
+            resp = requests.get(url, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception:
+            return {}
+
+        stats = {}
+        for cat in data.get("categories", []):
+            abbrev = cat.get("abbreviation", "")
+            for entry in cat.get("leaders", []):
+                athlete = entry.get("athlete", {})
+                pid = self._extract_pid(athlete)
+                if not pid:
+                    continue
+                if pid not in stats:
+                    stats[pid] = {}
+                val = entry.get("value", 0)
+                stats[pid][abbrev] = val
+
+        if stats:
+            self._save_cache(cache_key, stats)
+        return stats
+
+    def _parse_basketball_squad(self, data: dict) -> List[Player]:
+        """Parse NBA team roster.
+
+        ESPN basketball roster returns athletes as a flat list (not grouped):
+        athletes: [{id, displayName, position: {abbreviation: "PG"}, ...}, ...]
+        """
+        if not isinstance(data, dict):
+            return []
+
+        players = []
+        for athlete in data.get("athletes", []):
+            pos_info = athlete.get("position", {})
+            pos_abbrev = (
+                pos_info.get("abbreviation", "SF")
+                if isinstance(pos_info, dict) else "SF"
+            ).upper()
+
+            jersey = athlete.get("jersey")
+            number = (
+                int(jersey)
+                if jersey and str(jersey).isdigit()
+                else None
+            )
+
+            display_name = athlete.get(
+                "displayName", athlete.get("fullName", "")
+            )
+            first_name = athlete.get("firstName", "")
+            last_name = athlete.get("lastName", "")
+
+            if not last_name and display_name:
+                parts = display_name.split()
+                if len(parts) == 1:
+                    last_name = parts[0]
+                    first_name = ""
+                else:
+                    last_name = parts[-1]
+                    first_name = " ".join(parts[:-1])
+
+            ht = athlete.get("height", 0) or 0
+            wt = athlete.get("weight", 0) or 0
+
+            players.append(Player(
+                id=int(athlete.get("id", 0)),
+                name=display_name,
+                first_name=first_name,
+                last_name=last_name,
+                age=athlete.get("age", 25) or 25,
+                nationality=athlete.get("citizenship", ""),
+                position=pos_abbrev,
+                number=number,
+                photo_url="",
+                weight=float(wt),
+            ))
         return players
 
     def _extract_pid(self, athlete) -> Optional[str]:
@@ -378,6 +520,8 @@ class EspnClient:
             base = HOCKEY_BASE_URL
         elif sport == "baseball":
             base = BASEBALL_BASE_URL
+        elif sport == "basketball":
+            base = BASKETBALL_BASE_URL
         else:
             base = SOCCER_BASE_URL
         try:
