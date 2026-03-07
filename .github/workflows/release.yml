@@ -310,7 +310,7 @@ jobs:
                 "messages": [
                   {
                     "role": "user",
-                    "content": ("Generate concise release notes for " + $version + " of Console Utilities (a PyGame app for handheld gaming consoles). Group changes by category (New Features, Improvements, Bug Fixes). Use markdown with emoji prefixes. Be brief — one line per change, no fluff. Only include what the commits describe, do not invent features.\n\nCommits:\n" + $commits)
+                    "content": ("Generate concise release notes for " + $version + " of Console Utilities (a PyGame app for handheld gaming consoles). Group changes by category (New Features, Improvements, Bug Fixes). Use markdown with emoji prefixes. Be brief — one line per change, no fluff. Only include what the commits describe, do not invent features. Ignore commits that only change CI/CD pipelines, GitHub Actions workflows, README, docs, CLAUDE.md, .md files, or other non-functional changes — only include user-facing changes.\n\nCommits:\n" + $commits)
                   }
                 ],
                 "max_tokens": 1024
