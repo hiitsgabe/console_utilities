@@ -1090,6 +1090,26 @@ class ConsoleUtilitiesApp:
             )
             return
 
+        if self.state.steam_shortcut.show and self.state.steam_shortcut.step == "results":
+            results = self.state.steam_shortcut.search_results
+            if results:
+                columns = 3
+                idx = self.state.steam_shortcut.selected_index
+                n = len(results)
+                if direction == "right":
+                    idx = min(idx + 1, n - 1)
+                elif direction == "left":
+                    idx = max(idx - 1, 0)
+                elif direction == "down":
+                    idx = min(idx + columns, n - 1)
+                elif direction == "up":
+                    idx = max(idx - columns, 0)
+                self.state.steam_shortcut.selected_index = idx
+                # Load more results when nearing the end
+                if idx >= n - columns * 2 and self.state.steam_shortcut.has_more:
+                    self._load_more_steam_results()
+            return
+
         if self.state.folder_browser.show:
             self._navigate_folder_browser(direction)
             return
@@ -2284,6 +2304,22 @@ class ConsoleUtilitiesApp:
                     return
             return
 
+        # Check steam shortcut modal clicks
+        if self.state.steam_shortcut.show and self.state.steam_shortcut.step == "results":
+            for i, rect in enumerate(self.state.ui_rects.menu_items):
+                if rect.collidepoint(x, y):
+                    self.state.steam_shortcut.selected_index = i + self.state.ui_rects.scroll_offset
+                    self._handle_steam_result_selection()
+                    return
+            return
+
+        if self.state.steam_shortcut.show and self.state.steam_shortcut.step == "complete":
+            steam_ok = self.state.ui_rects.rects.get("steam_ok")
+            if steam_ok and steam_ok.collidepoint(x, y):
+                self.state.steam_shortcut.show = False
+                return
+            return
+
         # Check folder browser buttons (skip if folder name input is showing on top)
         if self.state.folder_browser.show and not self.state.folder_name_input.show:
             if self.state.ui_rects.folder_select_button:
@@ -2595,6 +2631,21 @@ class ConsoleUtilitiesApp:
             self.state.search.cursor_position = 0
             self.state.search.filtered_list = []
             self.state.highlighted = 0
+            if getattr(self.state.search, "_steam_mode", False):
+                self.state.search._steam_mode = False
+                self.state.steam_shortcut.show = False
+        elif self.state.steam_shortcut.show:
+            if self.state.steam_shortcut.step == "results":
+                # Go back to search
+                self.state.steam_shortcut.step = "search"
+                self.state.show_search_input = True
+                self.state.search.input_text = self.state.steam_shortcut.search_query
+                self.state.search.cursor_position = len(self.state.steam_shortcut.search_query)
+                self.state.search._steam_mode = True
+            elif self.state.steam_shortcut.step in ("complete", "error"):
+                self.state.steam_shortcut.show = False
+            else:
+                self.state.steam_shortcut.show = False
         elif self.state.auth_token_input.show:
             if self.state.auth_token_input.step == "input":
                 # Go back to message step
@@ -2620,6 +2671,9 @@ class ConsoleUtilitiesApp:
                 # Go back to name step in IA collection wizard
                 self.state.ia_collection_wizard.step = "name"
                 self.state.ia_collection_wizard.cursor_position = 0
+            elif selection_type == "steam_shortcut":
+                # Go back to results
+                self.state.steam_shortcut.step = "results"
         elif self.state.ia_login.show:
             self._close_ia_login()
         elif self.state.ia_download_wizard.show:
@@ -2779,6 +2833,14 @@ class ConsoleUtilitiesApp:
 
         if self.state.folder_name_input.show:
             self._handle_folder_name_input_selection()
+            return
+
+        if self.state.steam_shortcut.show and self.state.steam_shortcut.step == "results":
+            self._handle_steam_result_selection()
+            return
+
+        if self.state.steam_shortcut.show and self.state.steam_shortcut.step == "complete":
+            self.state.steam_shortcut.show = False
             return
 
         if self.state.folder_browser.show:
@@ -3641,6 +3703,112 @@ class ConsoleUtilitiesApp:
             self._show_rename_wizard()
         elif action == "ghost_cleaner":
             self._show_ghost_cleaner()
+        elif action == "steam_shortcut":
+            self._start_steam_shortcut()
+
+    def _start_steam_shortcut(self):
+        """Start the Steam shortcut creator flow."""
+        self.state.steam_shortcut.show = True
+        self.state.steam_shortcut.step = "search"
+        self.state.steam_shortcut.search_query = ""
+        self.state.steam_shortcut.search_results = []
+        self.state.steam_shortcut.selected_index = 0
+        self.state.steam_shortcut.selected_game = None
+        self.state.steam_shortcut.error_message = ""
+        self.state.steam_shortcut.has_more = False
+        self.state.steam_shortcut.loading_more = False
+        self.state.show_search_input = True
+        self.state.search.input_text = ""
+        self.state.search.cursor_position = 0
+        self.state.search.shift_active = False
+        self.state.search._steam_mode = True
+
+    def _handle_steam_search_submit(self):
+        """Handle search submission in Steam shortcut flow."""
+        from services.steam_search import search_steam_games
+
+        query = self.state.search.input_text.strip()
+        self.state.show_search_input = False
+        self.state.search._steam_mode = False
+
+        if not query:
+            self.state.steam_shortcut.show = False
+            return
+
+        self.state.steam_shortcut.search_query = query
+        self.state.steam_shortcut.has_more = False
+        self.state.steam_shortcut.loading_more = False
+        self._show_loading("Searching Steam...")
+
+        def on_results(results, has_more):
+            self._hide_loading()
+            self.state.steam_shortcut.search_results = results
+            self.state.steam_shortcut.selected_index = 0
+            self.state.steam_shortcut.has_more = has_more
+            self.state.steam_shortcut.step = "results"
+
+        def on_error(err):
+            self._hide_loading()
+            self.state.steam_shortcut.show = False
+            self._show_error(f"Steam search failed: {err}")
+
+        search_steam_games(query, start=0, on_results=on_results, on_error=on_error)
+
+    def _load_more_steam_results(self):
+        """Load more Steam search results (infinite scroll)."""
+        from services.steam_search import search_steam_games
+
+        if self.state.steam_shortcut.loading_more or not self.state.steam_shortcut.has_more:
+            return
+
+        self.state.steam_shortcut.loading_more = True
+        start = len(self.state.steam_shortcut.search_results)
+        query = self.state.steam_shortcut.search_query
+
+        def on_results(results, has_more):
+            self.state.steam_shortcut.search_results.extend(results)
+            self.state.steam_shortcut.has_more = has_more
+            self.state.steam_shortcut.loading_more = False
+
+        def on_error(err):
+            self.state.steam_shortcut.loading_more = False
+
+        search_steam_games(query, start=start, on_results=on_results, on_error=on_error)
+
+    def _handle_steam_result_selection(self):
+        """Handle game selection from Steam search results."""
+        results = self.state.steam_shortcut.search_results
+        idx = self.state.steam_shortcut.selected_index
+        if not results or idx >= len(results):
+            return
+
+        self.state.steam_shortcut.selected_game = results[idx]
+        self.state.steam_shortcut.step = "folder"
+        self._open_folder_browser("steam_shortcut")
+
+    def _create_steam_shortcut_file(self, folder_path: str):
+        """Create the .steam file in the selected folder."""
+        game = self.state.steam_shortcut.selected_game
+        if not game:
+            return
+
+        app_id = str(game["appid"])
+        game_name = game["name"]
+        # Sanitize filename
+        safe_name = "".join(
+            c if c.isalnum() or c in " -_()'" else "_" for c in game_name
+        ).strip()
+        file_path = os.path.join(folder_path, f"{safe_name}.steam")
+
+        try:
+            with open(file_path, "w") as f:
+                f.write(app_id)
+            self.state.steam_shortcut.output_folder = folder_path
+            self.state.steam_shortcut.step = "complete"
+        except Exception as e:
+            self.state.steam_shortcut.show = False
+            self.state.folder_browser.show = False
+            self._show_error(f"Failed to create shortcut: {e}")
 
     def _handle_scraper_menu_selection(self):
         """Handle scraper menu item selection."""
@@ -3776,6 +3944,8 @@ class ConsoleUtilitiesApp:
         elif selection_type == "nhl94_gen_patcher_rom":
             path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "nhl07_patcher_rom":
+            path = self.settings.get("roms_dir", SCRIPT_DIR)
+        elif selection_type == "steam_shortcut":
             path = self.settings.get("roms_dir", SCRIPT_DIR)
         else:
             path = SCRIPT_DIR
@@ -4074,7 +4244,7 @@ class ConsoleUtilitiesApp:
                 "esde_media_path", "esde_gamelists_path", "retroarch_thumbnails",
                 "add_system_folder", "ia_collection_folder",
                 "dedupe_folder", "rename_folder", "ghost_cleaner_folder",
-                "ia_download_folder", "folder",
+                "ia_download_folder", "steam_shortcut", "folder",
             )
             if selection_type not in folder_only_types:
                 self._complete_folder_browser_selection(item_path, selection_type)
@@ -4253,6 +4423,9 @@ class ConsoleUtilitiesApp:
             self.state.ia_download_wizard.output_folder = current_path
             self.state.folder_browser.show = False
             self.state.ia_download_wizard.step = "options"
+        elif selection_type == "steam_shortcut":
+            self.state.folder_browser.show = False
+            self._create_steam_shortcut_file(current_path)
         else:
             # For file selection types, select the currently highlighted file
             items = self.state.folder_browser.items
@@ -4665,7 +4838,10 @@ class ConsoleUtilitiesApp:
         self.state.search.query = new_text
 
         if is_done:
-            self._apply_search_filter()
+            if getattr(self.state.search, "_steam_mode", False):
+                self._handle_steam_search_submit()
+            else:
+                self._apply_search_filter()
 
     def _handle_auth_token_selection(self):
         """Handle selection in auth token modal."""
@@ -4758,6 +4934,9 @@ class ConsoleUtilitiesApp:
 
     def _submit_search_keyboard_input(self):
         """Handle search submission from physical keyboard."""
+        if getattr(self.state.search, "_steam_mode", False):
+            self._handle_steam_search_submit()
+            return
         self._apply_search_filter()
 
     def _submit_url_input(self):
@@ -5191,6 +5370,7 @@ class ConsoleUtilitiesApp:
             or self.state.rename_wizard.show
             or self.state.ghost_cleaner_wizard.show
             or self.state.auth_token_input.show
+            or self.state.steam_shortcut.show
         )
 
     # ---- PortMaster Handlers ---- #

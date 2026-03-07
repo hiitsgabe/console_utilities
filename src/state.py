@@ -418,6 +418,24 @@ class GhostCleanerWizardState:
 
 
 @dataclass
+class SteamShortcutState:
+    """State for Steam shortcut creator."""
+
+    show: bool = False
+    step: str = "search"  # search, results, folder, complete, error
+    search_query: str = ""
+    cursor_position: int = 0
+    shift_active: bool = False
+    search_results: List[Dict[str, Any]] = field(default_factory=list)
+    selected_index: int = 0
+    selected_game: Optional[Dict[str, Any]] = None
+    output_folder: str = ""
+    error_message: str = ""
+    has_more: bool = False
+    loading_more: bool = False
+
+
+@dataclass
 class ColorPickerState:
     """State for the team color picker modal."""
 
@@ -817,6 +835,9 @@ class AppState:
         # ---- NHL 07 PSP Patcher ---- #
         self.nhl07_psp_patcher = NHL07PSPPatcherState()
 
+        # ---- Steam Shortcut Creator ---- #
+        self.steam_shortcut = SteamShortcutState()
+
         # ---- Auth Token Input ---- #
         self.auth_token_input = AuthTokenInputState()
 
@@ -895,6 +916,7 @@ class AppState:
         self.ghost_cleaner_wizard.show = False
         self.port_details.show = False
         self.auth_token_input.show = False
+        self.steam_shortcut.show = False
         self.we_patcher.active_modal = None
 
     def get_current_game_list(self) -> List[Any]:
