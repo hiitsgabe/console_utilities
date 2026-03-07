@@ -54,9 +54,12 @@ class Thumbnail:
         pygame.draw.rect(screen, bg_color, rect, border_radius=border_radius)
 
         if image and isinstance(image, pygame.Surface):
-            # Scale image to fit
-            img_size = min(rect.width, rect.height)
-            scaled_img = pygame.transform.smoothscale(image, (img_size, img_size))
+            # Scale image to fit rect preserving aspect ratio
+            iw, ih = image.get_size()
+            scale = min(rect.width / iw, rect.height / ih)
+            new_w = max(1, int(iw * scale))
+            new_h = max(1, int(ih * scale))
+            scaled_img = pygame.transform.smoothscale(image, (new_w, new_h))
 
             # Center image in rect
             img_rect = scaled_img.get_rect(center=rect.center)

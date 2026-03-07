@@ -2820,11 +2820,17 @@ class ConsoleUtilitiesApp:
             return
 
         if self.state.auth_token_input.show:
-            self._handle_auth_token_selection()
+            if BUILD_TARGET == "android" and self.state.auth_token_input.step == "input":
+                self._handle_text_modal_ok_click()
+            else:
+                self._handle_auth_token_selection()
             return
 
         if self.state.show_search_input:
-            self._handle_search_input_selection()
+            if BUILD_TARGET == "android":
+                self._handle_text_modal_ok_click()
+            else:
+                self._handle_search_input_selection()
             return
 
         if self.state.game_details.show:
@@ -2832,7 +2838,10 @@ class ConsoleUtilitiesApp:
             return
 
         if self.state.folder_name_input.show:
-            self._handle_folder_name_input_selection()
+            if BUILD_TARGET == "android":
+                self._handle_text_modal_ok_click()
+            else:
+                self._handle_folder_name_input_selection()
             return
 
         if self.state.steam_shortcut.show and self.state.steam_shortcut.step == "results":
@@ -2851,12 +2860,18 @@ class ConsoleUtilitiesApp:
             return
 
         if self.state.url_input.show:
-            self._handle_url_input_selection()
+            if BUILD_TARGET == "android":
+                self._handle_text_modal_ok_click()
+            else:
+                self._handle_url_input_selection()
             return
 
         # Internet Archive modal selection
         if self.state.ia_login.show:
-            self._handle_ia_login_selection()
+            if BUILD_TARGET == "android":
+                self._handle_text_modal_ok_click()
+            else:
+                self._handle_ia_login_selection()
             return
 
         if self.state.ia_download_wizard.show:
@@ -2868,7 +2883,10 @@ class ConsoleUtilitiesApp:
             return
 
         if self.state.scraper_login.show:
-            self._handle_scraper_login_selection()
+            if BUILD_TARGET == "android":
+                self._handle_text_modal_ok_click()
+            else:
+                self._handle_scraper_login_selection()
             return
 
         if self.state.scraper_wizard.show:
