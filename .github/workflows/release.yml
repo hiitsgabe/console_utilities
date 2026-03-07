@@ -296,7 +296,7 @@ jobs:
               --arg commits "$COMMITS" \
               --arg version "$CURRENT_TAG" \
               '{
-                "model": "anthropic/claude-sonnet-4",
+                "model": "minimax/minimax-m1",
                 "messages": [
                   {
                     "role": "user",
