@@ -30,6 +30,7 @@ class Thumbnail:
         selected: bool = False,
         highlighted: bool = False,
         border_radius: Optional[int] = None,
+        fill: bool = False,
     ) -> pygame.Rect:
         """
         Render a thumbnail.
@@ -54,16 +55,21 @@ class Thumbnail:
         pygame.draw.rect(screen, bg_color, rect, border_radius=border_radius)
 
         if image and isinstance(image, pygame.Surface):
-            # Scale image to fit rect preserving aspect ratio
+            # Scale image preserving aspect ratio
             iw, ih = image.get_size()
-            scale = min(rect.width / iw, rect.height / ih)
+            scale = max(rect.width / iw, rect.height / ih) if fill else min(rect.width / iw, rect.height / ih)
             new_w = max(1, int(iw * scale))
             new_h = max(1, int(ih * scale))
             scaled_img = pygame.transform.smoothscale(image, (new_w, new_h))
 
-            # Center image in rect
+            # Center image in rect (fill mode crops overflow)
             img_rect = scaled_img.get_rect(center=rect.center)
+            if fill:
+                old_clip = screen.get_clip()
+                screen.set_clip(rect)
             screen.blit(scaled_img, img_rect)
+            if fill:
+                screen.set_clip(old_clip)
         else:
             # Draw placeholder text
             self.text.render(
@@ -112,6 +118,7 @@ class Thumbnail:
         placeholder_text: str = "?",
         selected: bool = False,
         highlighted: bool = False,
+        fill: bool = False,
     ) -> pygame.Rect:
         """
         Render a thumbnail with a label below.
@@ -142,6 +149,7 @@ class Thumbnail:
             placeholder_text=placeholder_text,
             selected=selected,
             highlighted=highlighted,
+            fill=fill,
         )
 
         # Render label
