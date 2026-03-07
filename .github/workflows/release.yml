@@ -195,6 +195,16 @@ jobs:
         run: |
           sed -i 's/^APP_VERSION = .*/APP_VERSION = "${{ steps.version.outputs.VERSION }}"/' src/constants.py
           sed -i 's/^BUILD_TARGET = .*/BUILD_TARGET = "android"/' src/constants.py
+          # Strip 'v' prefix for buildozer (e.g. v1.2.3 -> 1.2.3)
+          CLEAN_VERSION=$(echo "${{ steps.version.outputs.VERSION }}" | sed 's/^v//')
+          sed -i "s/^version = .*/version = ${CLEAN_VERSION}/" buildozer.spec
+          # Generate numeric version code from version (1.2.3 -> 10203)
+          NUMERIC_VERSION=$(echo "$CLEAN_VERSION" | awk -F. '{printf "%d%02d%02d", $1, $2, $3}')
+          if grep -q '^android.numeric_version' buildozer.spec; then
+            sed -i "s/^android.numeric_version = .*/android.numeric_version = ${NUMERIC_VERSION}/" buildozer.spec
+          else
+            sed -i "/^version = /a android.numeric_version = ${NUMERIC_VERSION}" buildozer.spec
+          fi
 
       - name: Disable buildx alias
         run: docker buildx rm default 2>/dev/null || true
