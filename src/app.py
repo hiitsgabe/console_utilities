@@ -1498,11 +1498,20 @@ class ConsoleUtilitiesApp:
 
         elif self.state.mode == "syncthing":
             step = self.state.syncthing.step
+            divider_indices = set()
             if step == "not_found":
                 max_items = 4
+                divider_indices = {0, 1, 2}
             elif step == "role_select":
                 max_items = 3
+                divider_indices = {0}
             elif step == "configured":
+                _, _, divider_indices = (
+                    self.screen_manager.syncthing_screen._build_configured_items(
+                        self.settings, "", self.state.syncthing.system_statuses,
+                        self.state.syncthing.status_message,
+                    )
+                )
                 max_items = self.screen_manager.syncthing_screen.get_configured_item_count(
                     self.settings,
                     status_message=self.state.syncthing.status_message,
@@ -1510,14 +1519,16 @@ class ConsoleUtilitiesApp:
             else:
                 max_items = 1
 
-            if direction == "up":
-                self.state.syncthing.highlighted = (
-                    self.state.syncthing.highlighted - 1
-                ) % max_items
-            elif direction == "down":
-                self.state.syncthing.highlighted = (
-                    self.state.syncthing.highlighted + 1
-                ) % max_items
+            if direction in ("up", "left"):
+                new_pos = (self.state.syncthing.highlighted - 1) % max_items
+                while new_pos in divider_indices and max_items > len(divider_indices):
+                    new_pos = (new_pos - 1) % max_items
+                self.state.syncthing.highlighted = new_pos
+            elif direction in ("down", "right"):
+                new_pos = (self.state.syncthing.highlighted + 1) % max_items
+                while new_pos in divider_indices and max_items > len(divider_indices):
+                    new_pos = (new_pos + 1) % max_items
+                self.state.syncthing.highlighted = new_pos
 
     def _handle_we_patcher_navigation(self, direction):
         """Handle D-pad navigation for we_patcher mode and its modals."""
@@ -2850,6 +2861,8 @@ class ConsoleUtilitiesApp:
                     and self.state.iss_patcher.active_modal == "league_browser"
                 ):
                     self.state.iss_patcher.leagues_highlighted = actual_index
+                elif self.state.mode == "syncthing":
+                    self.state.syncthing.highlighted = actual_index
                 else:
                     self.state.highlighted = actual_index
                 self._select_item()
@@ -3469,6 +3482,11 @@ class ConsoleUtilitiesApp:
         elif context == "install_portmaster":
             self._install_portmaster_base()
             return  # Don't close modal - _install_portmaster_base manages UI
+        elif context == "syncthing_reconfigure":
+            self.settings["syncthing_role"] = ""
+            self.settings["syncthing_host_device_id"] = ""
+            save_settings(self.settings)
+            self._enter_syncthing()
         elif context == "apply_update" and data:
             self._apply_update(data)
             return  # Don't close modal yet - _apply_update manages its own UI
@@ -6231,12 +6249,19 @@ class ConsoleUtilitiesApp:
                 status_message=self.state.syncthing.status_message,
             )
             if action == "sync_all":
-                self._syncthing_sync_all()
+                if not self.state.syncthing.configuring:
+                    self._syncthing_sync_all()
             elif action == "reconfigure":
-                self.settings["syncthing_role"] = ""
-                self.settings["syncthing_host_device_id"] = ""
-                save_settings(self.settings)
-                self._enter_syncthing()
+                self.state.confirm_modal.show = True
+                self.state.confirm_modal.title = "Reconfigure Syncthing"
+                self.state.confirm_modal.message_lines = [
+                    "This will reset your role and",
+                    "device pairing. Continue?",
+                ]
+                self.state.confirm_modal.ok_label = "Reset"
+                self.state.confirm_modal.cancel_label = "Cancel"
+                self.state.confirm_modal.button_index = 0
+                self.state.confirm_modal.context = "syncthing_reconfigure"
             elif action == "change_base_path":
                 self._open_folder_browser("syncthing_base_path")
             elif action and action.startswith("configure_"):
