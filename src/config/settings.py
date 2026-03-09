@@ -61,6 +61,13 @@ class Settings:
     )
     # Web Companion
     web_companion_enabled: bool = False
+    # Syncthing Save Sync
+    syncthing_enabled: bool = False
+    syncthing_role: str = ""  # "host" or "console"
+    syncthing_host_device_id: str = ""
+    syncthing_base_path: str = ""  # host only, default ~/game-saves/
+    syncthing_api_key: str = ""
+    syncthing_folder_overrides: Dict[str, str] = field(default_factory=dict)  # android per-system path overrides
     # Frontend-specific paths
     esde_media_path: str = ""
     esde_gamelists_path: str = ""
