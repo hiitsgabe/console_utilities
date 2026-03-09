@@ -836,6 +836,19 @@ class SyncthingState:
     configuring: bool = False  # True during async configure
     configure_result: str = ""  # "success", "partial", "error"
 
+    # Custom saves
+    custom_saves: List[Dict[str, Any]] = field(default_factory=list)  # loaded from settings/discovery
+    custom_statuses: Dict[str, str] = field(default_factory=dict)  # folder_id -> sync status
+    custom_highlighted: int = 0
+    custom_step: str = ""  # "", "name_input", "folder_browse", "file_select", "mapping"
+    custom_name_input: str = ""
+    custom_name_cursor: int = 0
+    custom_name_shift: bool = False
+    custom_source_path: str = ""
+    custom_selected_files: Set[str] = field(default_factory=set)  # filenames selected in file mode
+    custom_file_list: List[str] = field(default_factory=list)  # files in source folder
+    custom_file_highlighted: int = 0
+
 
 @dataclass
 class UIRects:
