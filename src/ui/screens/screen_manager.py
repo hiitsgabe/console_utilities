@@ -1045,7 +1045,17 @@ class ScreenManager:
             )
 
         elif state.mode == "syncthing":
-            if state.syncthing.step == "checking":
+            if state.syncthing.custom_step == "file_select":
+                import os
+                folder_name = os.path.basename(state.syncthing.custom_source_path)
+                back_rect, item_rects, scroll_offset = self.syncthing_screen.render_file_select(
+                    screen,
+                    state.syncthing.custom_file_highlighted,
+                    folder_name,
+                    state.syncthing.custom_file_list,
+                    state.syncthing.custom_selected_files,
+                )
+            elif state.syncthing.step == "checking":
                 back_rect, item_rects, scroll_offset = self.syncthing_screen.render_checking(screen)
             elif state.syncthing.step == "not_found":
                 back_rect, item_rects, scroll_offset = self.syncthing_screen.render_not_found(

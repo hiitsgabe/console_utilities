@@ -225,6 +225,43 @@ class SyncthingScreen:
             divider_indices=divider_indices,
         )
 
+    def render_file_select(
+        self,
+        screen: pygame.Surface,
+        highlighted: int,
+        folder_name: str,
+        files: List[str],
+        selected: Set[str],
+    ) -> Tuple[Optional[pygame.Rect], List[pygame.Rect], int]:
+        """Render file selection for custom save."""
+        items = []
+        divider_indices = set()
+        selected_indices = set()
+
+        # Header
+        divider_indices.add(0)
+        items.append(f"--- Select files in {folder_name} ---")
+
+        for i, filename in enumerate(files):
+            items.append(filename)
+            if filename in selected:
+                selected_indices.add(i + 1)  # +1 for header
+
+        # Confirm button
+        items.append(f"Confirm ({len(selected)} files)")
+
+        return self.template.render(
+            screen,
+            title="Custom Save - Files",
+            items=items,
+            highlighted=highlighted,
+            selected=selected_indices,
+            show_back=True,
+            item_height=40,
+            item_spacing=8,
+            divider_indices=divider_indices,
+        )
+
     def get_not_found_action(self, index: int) -> str:
         """Get action for not found screen."""
         # items: [divider, divider, divider, "Retry Connection"]

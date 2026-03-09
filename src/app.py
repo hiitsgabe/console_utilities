@@ -1493,6 +1493,22 @@ class ConsoleUtilitiesApp:
             self._handle_nhl07_patcher_navigation(direction)
 
         elif self.state.mode == "syncthing":
+            # Check custom save sub-steps first
+            if self.state.syncthing.custom_step == "file_select":
+                max_items = len(self.state.syncthing.custom_file_list) + 2  # header + files + confirm
+                divider_indices = {0}
+                if direction in ("up", "left"):
+                    new_pos = (self.state.syncthing.custom_file_highlighted - 1) % max_items
+                    while new_pos in divider_indices and max_items > len(divider_indices):
+                        new_pos = (new_pos - 1) % max_items
+                    self.state.syncthing.custom_file_highlighted = new_pos
+                elif direction in ("down", "right"):
+                    new_pos = (self.state.syncthing.custom_file_highlighted + 1) % max_items
+                    while new_pos in divider_indices and max_items > len(divider_indices):
+                        new_pos = (new_pos + 1) % max_items
+                    self.state.syncthing.custom_file_highlighted = new_pos
+                return  # Don't fall through to regular syncthing nav
+
             step = self.state.syncthing.step
             divider_indices = set()
             if step == "not_found":
@@ -2861,7 +2877,10 @@ class ConsoleUtilitiesApp:
                 ):
                     self.state.iss_patcher.leagues_highlighted = actual_index
                 elif self.state.mode == "syncthing":
-                    self.state.syncthing.highlighted = actual_index
+                    if self.state.syncthing.custom_step == "file_select":
+                        self.state.syncthing.custom_file_highlighted = actual_index
+                    else:
+                        self.state.syncthing.highlighted = actual_index
                 else:
                     self.state.highlighted = actual_index
                 self._select_item()
@@ -2993,8 +3012,11 @@ class ConsoleUtilitiesApp:
             self.state.mode = "systems"
             self.state.highlighted = 0
         elif self.state.mode == "syncthing":
-            self.state.mode = "systems"
-            self.state.highlighted = 0
+            if self.state.syncthing.custom_step == "file_select":
+                self.state.syncthing.custom_step = ""
+            else:
+                self.state.mode = "systems"
+                self.state.highlighted = 0
         elif self.state.mode == "sports_patcher":
             self.state.mode = "systems"
             self.state.highlighted = 0
@@ -6083,6 +6105,24 @@ class ConsoleUtilitiesApp:
 
     def _handle_syncthing_select(self):
         """Handle selection on the syncthing screen."""
+        # Custom save file selection takes priority
+        if self.state.syncthing.custom_step == "file_select":
+            idx = self.state.syncthing.custom_file_highlighted
+            if idx == 0:
+                return  # Header divider
+            elif idx <= len(self.state.syncthing.custom_file_list):
+                # Toggle file selection
+                filename = self.state.syncthing.custom_file_list[idx - 1]
+                if filename in self.state.syncthing.custom_selected_files:
+                    self.state.syncthing.custom_selected_files.discard(filename)
+                else:
+                    self.state.syncthing.custom_selected_files.add(filename)
+            else:
+                # Confirm button
+                if self.state.syncthing.custom_selected_files:
+                    self._create_custom_save("files")
+            return
+
         step = self.state.syncthing.step
 
         if step == "not_found":
