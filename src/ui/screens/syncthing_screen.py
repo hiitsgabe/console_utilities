@@ -118,21 +118,21 @@ class SyncthingScreen:
             items.append(display)
             actions.append(action)
 
-        # Status header
+        # Status header — all info rows are dividers (non-interactive)
         _add_divider("--- STATUS ---")
         role_label = "Host" if role == "host" else "Console"
-        _add_item(("Role", role_label), "none")
+        _add_divider(f"--- Role: {role_label} ---")
 
         if role == "host":
             short_id = device_id[:20] + "..." if len(device_id) > 20 else device_id
-            _add_item(("Device ID", short_id), "copy_device_id")
+            _add_divider(f"--- ID: {short_id} ---")
         else:
             host_id = settings.get("syncthing_host_device_id", "")
             short_id = host_id[:20] + "..." if len(host_id) > 20 else host_id
-            _add_item(("Host", short_id or "Not set"), "none")
+            _add_divider(f"--- Host: {short_id or 'Not set'} ---")
 
         if status_message:
-            _add_item(("Status", status_message), "none")
+            _add_divider(f"--- {status_message} ---")
 
         # Actions
         _add_divider("--- ACTIONS ---")
@@ -154,7 +154,8 @@ class SyncthingScreen:
                 "unknown": "?",
             }
             label = status_labels.get(status, status)
-            if BUILD_TARGET == "android" and status == "not_configured":
+            if BUILD_TARGET == "android":
+                # Android: always allow folder selection
                 _add_item((system.upper(), label), f"configure_{system}")
             else:
                 _add_item((system.upper(), label), f"system_{system}")
