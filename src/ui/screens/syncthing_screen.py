@@ -124,12 +124,10 @@ class SyncthingScreen:
         _add_item(("Role", role_label), "none")
 
         if role == "host":
-            short_id = device_id[:20] + "..." if len(device_id) > 20 else device_id
-            _add_item(("Device ID", short_id), "none")
+            _add_item(("Device ID", device_id), "none")
         else:
             host_id = settings.get("syncthing_host_device_id", "")
-            short_id = host_id[:20] + "..." if len(host_id) > 20 else host_id
-            _add_item(("Host", short_id or "Not set"), "none")
+            _add_item(("Host", host_id or "Not set"), "none")
 
         if status_message:
             _add_item(("Status", status_message), "none")
