@@ -268,6 +268,7 @@ def _download_single(
             # Check cancel
             if _check_cancel(work_dir, item_id):
                 f.close()
+                resp.close()
                 if os.path.exists(file_path):
                     os.remove(file_path)
                 return None
@@ -329,6 +330,8 @@ def _download_parallel(
         end = (total_size - 1) if i == num_workers - 1 else ((i + 1) * chunk_size - 1)
         chunks.append((start, end))
 
+    # Thread safety: each worker writes only to its own index, and
+    # CPython's GIL ensures sum() reads are atomic at the element level.
     progress_array = [0] * num_workers
     chunk_paths = [
         os.path.join(work_dir, f".{filename}.part{i}") for i in range(num_workers)
