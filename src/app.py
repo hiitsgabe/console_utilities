@@ -6162,6 +6162,8 @@ class ConsoleUtilitiesApp:
                 # Confirm button
                 if self.state.syncthing.custom_selected_files:
                     self._create_custom_save("files")
+                else:
+                    self.state.syncthing.status_message = "Select at least one file"
             return
 
         step = self.state.syncthing.step
@@ -6326,6 +6328,8 @@ class ConsoleUtilitiesApp:
     def _enter_custom_file_select(self):
         """Enter file selection mode for custom save."""
         path = self.state.syncthing.custom_source_path
+        if not path:
+            return
         try:
             files = [
                 f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))
@@ -6346,6 +6350,8 @@ class ConsoleUtilitiesApp:
             return
 
         name = self.state.syncthing.custom_name_input
+        if not name:
+            return
         source_path = self.state.syncthing.custom_source_path
         sync_files = (
             list(self.state.syncthing.custom_selected_files)
