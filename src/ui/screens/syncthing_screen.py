@@ -207,8 +207,12 @@ class SyncthingScreen:
     ) -> Tuple[Optional[pygame.Rect], List[pygame.Rect], int]:
         """Render configured state with system list."""
         items, _, divider_indices = self._build_configured_items(
-            settings, device_id, system_statuses, status_message,
-            custom_saves=custom_saves, custom_statuses=custom_statuses,
+            settings,
+            device_id,
+            system_statuses,
+            status_message,
+            custom_saves=custom_saves,
+            custom_statuses=custom_statuses,
         )
 
         return self.template.render(
@@ -289,8 +293,12 @@ class SyncthingScreen:
     ) -> str:
         """Get action for configured screen."""
         _, actions, _ = self._build_configured_items(
-            settings, "", system_statuses, status_message,
-            custom_saves=custom_saves, custom_statuses=custom_statuses,
+            settings,
+            "",
+            system_statuses,
+            status_message,
+            custom_saves=custom_saves,
+            custom_statuses=custom_statuses,
         )
         if index < len(actions):
             return actions[index]
@@ -304,7 +312,11 @@ class SyncthingScreen:
     ) -> int:
         """Get total item count for configured screen."""
         items, _, _ = self._build_configured_items(
-            settings, "", {}, status_message, custom_saves=custom_saves,
+            settings,
+            "",
+            {},
+            status_message,
+            custom_saves=custom_saves,
         )
         return len(items)
 
