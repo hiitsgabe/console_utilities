@@ -4386,6 +4386,8 @@ class ConsoleUtilitiesApp:
             path = self.settings.get("syncthing_base_path", SCRIPT_DIR)
         elif selection_type.startswith("syncthing_override_"):
             path = self.settings.get("roms_dir", SCRIPT_DIR)
+        elif selection_type == "custom_save_source":
+            path = self.settings.get("roms_dir", SCRIPT_DIR)
         else:
             path = SCRIPT_DIR
 
@@ -5374,6 +5376,13 @@ class ConsoleUtilitiesApp:
                     self.state.syncthing.system_statuses = (
                         self.syncthing_service.get_system_sync_status()
                     )
+            elif self.state.url_input.context == "custom_save_name":
+                name = self.state.url_input.input_text.strip()
+                self.state.url_input.show = False
+                if name:
+                    self.state.syncthing.custom_name_input = name
+                    # Open folder browser to pick source folder
+                    self._open_folder_browser("custom_save_source")
             else:
                 self.state.url_input.show = False
 
@@ -6107,6 +6116,12 @@ class ConsoleUtilitiesApp:
                 self.state.confirm_modal.context = "syncthing_reconfigure"
             elif action == "change_base_path":
                 self._open_folder_browser("syncthing_base_path")
+            elif action == "add_custom_save":
+                # Open name input using the URL input modal (reused for text entry)
+                self.state.url_input.show = True
+                self.state.url_input.input_text = ""
+                self.state.url_input.cursor_position = 0
+                self.state.url_input.context = "custom_save_name"
             elif action and action.startswith("configure_"):
                 system = action.replace("configure_", "")
                 self._open_folder_browser(f"syncthing_override_{system}")
