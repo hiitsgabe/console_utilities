@@ -3496,6 +3496,9 @@ class ConsoleUtilitiesApp:
             listings_dir = os.path.join(SYSTEMS_CACHE_DIR, "listings")
             shutil.rmtree(listings_dir, ignore_errors=True)
             os.makedirs(listings_dir, exist_ok=True)
+        elif context == "custom_save_mode":
+            # "Entire Folder" chosen
+            self._create_custom_save("folder")
         elif context == "go_to_ia_settings":
             self._handle_confirm_modal_cancel()
             self.state.mode = "settings"
@@ -3507,6 +3510,14 @@ class ConsoleUtilitiesApp:
 
     def _handle_confirm_modal_cancel(self):
         """Handle confirm modal Cancel button."""
+        # Context-specific cancel actions
+        if self.state.confirm_modal.context == "custom_save_mode":
+            # "Select Files" chosen
+            self.state.confirm_modal.show = False
+            self.state.confirm_modal.context = ""
+            self._enter_custom_file_select()
+            return
+        # Generic close
         self.state.confirm_modal.show = False
         self.state.confirm_modal.title = ""
         self.state.confirm_modal.message_lines = []
@@ -4580,6 +4591,22 @@ class ConsoleUtilitiesApp:
             overrides[system] = path
             self.settings["syncthing_folder_overrides"] = overrides
             save_settings(self.settings)
+        elif selection_type == "custom_save_source":
+            self.state.folder_browser.show = False
+            self.state.syncthing.custom_source_path = current_path
+            # Ask: entire folder or select files?
+            self.state.confirm_modal.show = True
+            self.state.confirm_modal.title = "Sync Mode"
+            self.state.confirm_modal.message_lines = [
+                f"Folder: {os.path.basename(current_path)}",
+                "",
+                "Sync the entire folder, or",
+                "select specific files?",
+            ]
+            self.state.confirm_modal.ok_label = "Entire Folder"
+            self.state.confirm_modal.cancel_label = "Select Files"
+            self.state.confirm_modal.button_index = 0
+            self.state.confirm_modal.context = "custom_save_mode"
         elif selection_type == "syncthing_base_path":
             self.settings["syncthing_base_path"] = path
             save_settings(self.settings)
@@ -4953,7 +4980,7 @@ class ConsoleUtilitiesApp:
             "esde_gamelists_path",
             "retroarch_thumbnails",
             "syncthing_base_path",
-        ) or selection_type.startswith("syncthing_override_"):
+        ) or selection_type.startswith("syncthing_override_") or selection_type == "custom_save_source" or selection_type.startswith("custom_save_map_"):
             self._complete_folder_browser_selection(current_path, selection_type)
         elif selection_type == "add_system_folder":
             self.state.folder_browser.show = False
@@ -6188,6 +6215,80 @@ class ConsoleUtilitiesApp:
                 self.state.syncthing.status_message = f"Configured {success} systems"
 
         threading.Thread(target=do_sync, daemon=True).start()
+
+    def _enter_custom_file_select(self):
+        """Enter file selection mode for custom save."""
+        path = self.state.syncthing.custom_source_path
+        try:
+            files = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
+            files.sort()
+        except Exception:
+            files = []
+        self.state.syncthing.custom_file_list = files
+        self.state.syncthing.custom_selected_files = set()
+        self.state.syncthing.custom_file_highlighted = 0
+        self.state.syncthing.custom_step = "file_select"
+
+    def _create_custom_save(self, sync_mode: str):
+        """Create a custom save sync in Syncthing."""
+        import threading
+
+        if not self.syncthing_service:
+            return
+
+        name = self.state.syncthing.custom_name_input
+        source_path = self.state.syncthing.custom_source_path
+        sync_files = list(self.state.syncthing.custom_selected_files) if sync_mode == "files" else None
+        device_id = self.state.syncthing.device_id
+
+        role = self.settings.get("syncthing_role", "")
+        host_device_id = self.settings.get("syncthing_host_device_id", "")
+
+        if role == "host":
+            config = self.syncthing_service.get_config()
+            my_id = self.syncthing_service.get_device_id()
+            device_ids = [d["deviceID"] for d in config.get("devices", []) if d["deviceID"] != my_id]
+        else:
+            device_ids = [host_device_id] if host_device_id else []
+
+        if not device_ids:
+            self.state.syncthing.status_message = "No devices paired"
+            return
+
+        self.state.syncthing.status_message = "Creating custom save..."
+
+        def do_create():
+            folder_id = self.syncthing_service.add_custom_save(
+                name=name,
+                source_path=source_path,
+                source_device=device_id,
+                device_ids=device_ids,
+                sync_mode=sync_mode,
+                sync_files=sync_files,
+            )
+            if folder_id:
+                saves = self.settings.get("syncthing_custom_saves", [])
+                saves.append({
+                    "name": name,
+                    "folder_id": folder_id,
+                    "local_path": source_path,
+                    "mapped": True,
+                    "sync_mode": sync_mode,
+                    "sync_files": sync_files or [],
+                })
+                self.settings["syncthing_custom_saves"] = saves
+                save_settings(self.settings)
+                self.state.syncthing.custom_saves = saves
+                self.state.syncthing.status_message = f"Created: {name}"
+            else:
+                self.state.syncthing.status_message = f"Failed to create: {name}"
+
+            self.state.syncthing.custom_step = ""
+            self.state.syncthing.custom_name_input = ""
+            self.state.syncthing.custom_source_path = ""
+            self.state.syncthing.custom_selected_files = set()
+
+        threading.Thread(target=do_create, daemon=True).start()
 
     def _enter_portmaster(self):
         """Fetch ports from PortMaster and enter portmaster mode."""
