@@ -97,6 +97,7 @@ class SettingsScreen:
     ANDROID_SECTION = [
         "--- ANDROID ---",
         "Use Python Downloader",
+        "Redraw UI",
         "Storage Permission",
     ]
 
@@ -329,6 +330,8 @@ class SettingsScreen:
             elif item == "Use Python Downloader":
                 value = "ON" if settings.get("use_python_downloader", False) else "OFF"
                 items.append((item, value))
+            elif item == "Redraw UI":
+                items.append((item, "Refresh"))
             elif item == "Storage Permission":
                 items.append((item, "Request"))
             elif item == "Check for Updates":
@@ -419,6 +422,7 @@ class SettingsScreen:
                 "Enable NSZ": "toggle_nsz_enabled",
                 "Web Companion": "toggle_web_companion",
                 "Use Python Downloader": "toggle_python_downloader",
+                "Redraw UI": "redraw_ui",
                 "Storage Permission": "request_storage_permission",
                 "Check for Updates": "check_for_updates",
             }

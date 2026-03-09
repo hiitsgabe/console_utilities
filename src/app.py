@@ -3541,6 +3541,8 @@ class ConsoleUtilitiesApp:
             save_settings(self.settings)
             # Re-initialize download manager with the new setting
             self._init_download_manager()
+        elif action == "redraw_ui":
+            self._restore_android_display()
         elif action == "request_storage_permission":
             self._request_storage_permission()
         elif action == "check_for_updates":
@@ -4169,14 +4171,20 @@ class ConsoleUtilitiesApp:
             path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "custom_folder":
             system = self._get_system_for_settings()
+            roms_dir = self.settings.get("roms_dir", SCRIPT_DIR)
+            path = roms_dir
             if system:
                 system_name = system.get("name", "")
                 custom = self.settings.get("system_settings", {}).get(
                     system_name, {}
                 ).get("custom_folder", "")
-                path = custom if custom and os.path.exists(custom) else self.settings.get("roms_dir", SCRIPT_DIR)
-            else:
-                path = self.settings.get("roms_dir", SCRIPT_DIR)
+                if custom:
+                    # Open inside the saved custom folder
+                    if os.path.isdir(custom):
+                        path = custom
+                    # If folder was deleted, try its parent
+                    elif os.path.isdir(os.path.dirname(custom)):
+                        path = os.path.dirname(custom)
         elif selection_type == "steam_shortcut":
             path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "mvp_psp_patcher_rom":
@@ -4187,7 +4195,12 @@ class ConsoleUtilitiesApp:
         if os.path.exists(path):
             self.state.folder_browser.current_path = path
         else:
-            self.state.folder_browser.current_path = SCRIPT_DIR
+            # Fallback to roms dir, then script dir
+            roms_fallback = self.settings.get("roms_dir", "")
+            if roms_fallback and os.path.exists(roms_fallback):
+                self.state.folder_browser.current_path = roms_fallback
+            else:
+                self.state.folder_browser.current_path = SCRIPT_DIR
 
         if selection_type == "we_patcher_rom":
             loader = load_psx_rom_folder_contents
