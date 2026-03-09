@@ -33,8 +33,11 @@ from ui.atoms.text import Text
 from ui.atoms.progress import ProgressBar
 from ui.molecules.action_button import ActionButton
 from utils.button_hints import get_combined_hints
+from constants import BUILD_TARGET
 
 THUMB_SIZE = (64, 64)
+IS_ANDROID = BUILD_TARGET == "android"
+NAV_BAR_HEIGHT = 44
 
 
 class ScraperWizardModal:
@@ -58,6 +61,12 @@ class ScraperWizardModal:
         self.done_button_rect: Optional[pygame.Rect] = None
         self.retry_button_rect: Optional[pygame.Rect] = None
         self._scroll_offset: int = 0
+        # Android on-screen nav button rects
+        self.nav_up_rect: Optional[pygame.Rect] = None
+        self.nav_down_rect: Optional[pygame.Rect] = None
+        self.nav_select_rect: Optional[pygame.Rect] = None
+        self.nav_back_rect: Optional[pygame.Rect] = None
+        self.backspace_rect: Optional[pygame.Rect] = None
 
     def render(
         self,
@@ -88,6 +97,8 @@ class ScraperWizardModal:
         mixed_images_enabled: bool = False,
         download_video: bool = False,
         batch_system: str = "",
+        search_name: str = "",
+        search_name_cursor: int = 0,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[pygame.Rect]]:
         """
         Render the scraper wizard modal.
@@ -102,6 +113,11 @@ class ScraperWizardModal:
         self.start_button_rect = None
         self.done_button_rect = None
         self.retry_button_rect = None
+        self.nav_up_rect = None
+        self.nav_down_rect = None
+        self.nav_select_rect = None
+        self.nav_back_rect = None
+        self.backspace_rect = None
         self._scroll_offset = 0
 
         if step == "rom_select":
@@ -111,6 +127,10 @@ class ScraperWizardModal:
                 folder_highlighted,
                 folder_current_path,
                 input_mode,
+            )
+        elif step == "edit_name":
+            return self._render_edit_name(
+                screen, search_name, search_name_cursor, input_mode
             )
         elif step == "searching":
             return self._render_searching(screen, selected_rom_name)
@@ -205,6 +225,10 @@ class ScraperWizardModal:
         padding = self.theme.padding_sm
         y = content_rect.top + padding
 
+        # Android nav buttons
+        nav_h = self._render_nav_bar(screen, content_rect, show_select=True)
+        y += nav_h
+
         # Current path
         short_path = current_path
         if len(short_path) > 55:
@@ -272,6 +296,114 @@ class ScraperWizardModal:
 
         return modal_rect, content_rect, close_rect, item_rects
 
+    def _render_edit_name(
+        self,
+        screen: pygame.Surface,
+        search_name: str,
+        cursor: int,
+        input_mode: str,
+    ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[pygame.Rect]]:
+        """Render editable game name step before searching."""
+        width = min(500, screen.get_width() - 40)
+        height = 220 if not IS_ANDROID else 260
+
+        use_top = IS_ANDROID
+        if use_top:
+            modal_rect, content_rect, close_rect = self.modal_frame.render_top_aligned(
+                screen, width, height, title="Edit Search Name", show_close=True
+            )
+        else:
+            modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
+                screen, width, height, title="Edit Search Name", show_close=True
+            )
+
+        padding = self.theme.padding_sm
+        y = content_rect.top + padding
+
+        self.text.render(
+            screen,
+            "Edit game name for search:",
+            (content_rect.left + padding, y),
+            color=self.theme.text_secondary,
+            size=self.theme.font_size_sm,
+        )
+        y += 25
+
+        # Text input field
+        field_height = 44
+        bksp_width = 48 if IS_ANDROID else 0
+        field_rect = pygame.Rect(
+            content_rect.left + padding,
+            y,
+            content_rect.width - padding * 2 - (bksp_width + padding if bksp_width else 0),
+            field_height,
+        )
+        pygame.draw.rect(
+            screen, self.theme.surface_hover, field_rect,
+            border_radius=self.theme.radius_sm,
+        )
+        pygame.draw.rect(
+            screen, self.theme.border, field_rect,
+            width=1, border_radius=self.theme.radius_sm,
+        )
+
+        # Backspace button for Android
+        if IS_ANDROID:
+            bksp_rect = pygame.Rect(
+                field_rect.right + padding, y, bksp_width, field_height,
+            )
+            pygame.draw.rect(
+                screen, self.theme.surface_hover, bksp_rect,
+                border_radius=self.theme.radius_sm,
+            )
+            pygame.draw.rect(
+                screen, self.theme.border, bksp_rect,
+                width=1, border_radius=self.theme.radius_sm,
+            )
+            self.text.render(
+                screen, "<x]",
+                (bksp_rect.centerx, bksp_rect.centery - self.theme.font_size_md // 2),
+                color=self.theme.text_primary,
+                size=self.theme.font_size_md,
+                align="center",
+            )
+            self.backspace_rect = bksp_rect
+
+        # Render text with cursor
+        display_text = search_name if search_name else ""
+        self.text.render(
+            screen, display_text,
+            (field_rect.left + padding, field_rect.centery - self.theme.font_size_md // 2),
+            color=self.theme.text_primary,
+            size=self.theme.font_size_md,
+            max_width=field_rect.width - padding * 2,
+        )
+
+        # Cursor
+        if display_text:
+            text_before_cursor = display_text[:cursor]
+            cursor_x = field_rect.left + padding + self.text.measure(
+                text_before_cursor, self.theme.font_size_md
+            )[0] + 2
+        else:
+            cursor_x = field_rect.left + padding + 2
+        cursor_x = min(cursor_x, field_rect.right - padding)
+        pygame.draw.line(
+            screen, self.theme.text_primary,
+            (cursor_x, field_rect.top + 8),
+            (cursor_x, field_rect.bottom - 8),
+            2,
+        )
+
+        y += field_height + 15
+
+        # Search button
+        self._render_action_buttons(
+            screen, content_rect, [("Search", "start")]
+        )
+
+        return modal_rect, content_rect, close_rect, []
+
     def _render_searching(
         self, screen: pygame.Surface, rom_name: str
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[pygame.Rect]]:
@@ -323,6 +455,10 @@ class ScraperWizardModal:
 
         padding = self.theme.padding_sm
         y = content_rect.top + padding
+
+        # Android nav buttons
+        nav_h = self._render_nav_bar(screen, content_rect, show_select=True)
+        y += nav_h
 
         # Process any thumbnails that finished loading
         self.update_thumbs()
@@ -453,9 +589,9 @@ class ScraperWizardModal:
         highlighted: int,
         input_mode: str,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[pygame.Rect]]:
-        """Render image type selection (checkboxes)."""
-        width = min(500, screen.get_width() - 40)
-        height = min(400, screen.get_height() - 60)
+        """Render image type selection with preview (two-column layout)."""
+        width = min(700, screen.get_width() - 40)
+        height = min(450, screen.get_height() - 60)
 
         show_close = input_mode == "touch"
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
@@ -464,6 +600,10 @@ class ScraperWizardModal:
 
         padding = self.theme.padding_sm
         y = content_rect.top + padding
+
+        # Android nav buttons (select toggles checkbox)
+        nav_h = self._render_nav_bar(screen, content_rect, show_select=True)
+        y += nav_h
 
         if not available_images:
             self.text.render(
@@ -476,19 +616,72 @@ class ScraperWizardModal:
             )
             return modal_rect, content_rect, close_rect, []
 
+        # Two-column layout: left = checkboxes, right = preview
+        left_width = content_rect.width * 2 // 5
+        right_width = content_rect.width - left_width - padding
+
+        # Left panel header
         self.text.render(
             screen,
-            "Select images to download:",
+            "Select images:",
             (content_rect.left + padding, y),
             color=self.theme.text_secondary,
             size=self.theme.font_size_sm,
         )
-        y += 25
+        list_y = y + 25
 
-        # Image list with checkboxes
+        # Divider
+        div_x = content_rect.left + left_width
+        pygame.draw.line(
+            screen, self.theme.border,
+            (div_x, content_rect.top + padding),
+            (div_x, content_rect.bottom - 45),
+            1,
+        )
+
+        # Right panel: preview of highlighted image
+        preview_rect = pygame.Rect(
+            div_x + padding, y,
+            right_width - padding, content_rect.height - nav_h - 60,
+        )
+
+        # Process thumbnails
+        self.update_thumbs()
+
+        if 0 <= highlighted < len(available_images):
+            img = available_images[highlighted]
+            img_url = img.get("url", "")
+            label = img.get("label", img.get("type", ""))
+
+            # Preview header
+            self.text.render(
+                screen, label,
+                (preview_rect.left, y),
+                color=self.theme.text_secondary,
+                size=self.theme.font_size_sm,
+            )
+
+            if img_url:
+                preview = self._get_thumb_sized(img_url, preview_rect.width, preview_rect.height - 25)
+                if preview:
+                    # Center the preview in the available area
+                    px = preview_rect.left + (preview_rect.width - preview.get_width()) // 2
+                    py = y + 25 + (preview_rect.height - 25 - preview.get_height()) // 2
+                    screen.blit(preview, (px, py))
+                else:
+                    self.text.render(
+                        screen, "Loading...",
+                        (preview_rect.centerx, preview_rect.centery),
+                        color=self.theme.text_disabled,
+                        size=self.theme.font_size_sm,
+                        align="center",
+                    )
+
+        # Left panel: image list with checkboxes
         item_rects = []
         item_height = 40
-        visible_items = (content_rect.height - 100) // item_height
+        available_height = content_rect.bottom - list_y - 50
+        visible_items = available_height // item_height
         scroll_offset = max(0, highlighted - visible_items + 2)
 
         for i in range(
@@ -500,8 +693,8 @@ class ScraperWizardModal:
 
             item_rect = pygame.Rect(
                 content_rect.left + padding,
-                y,
-                content_rect.width - padding * 2,
+                list_y,
+                left_width - padding * 2,
                 item_height - 5,
             )
             item_rects.append(item_rect)
@@ -511,7 +704,6 @@ class ScraperWizardModal:
                 screen, bg_color, item_rect, border_radius=self.theme.radius_sm
             )
 
-            # Checkbox
             checkbox = "[X]" if is_checked else "[ ]"
             label = image.get("label", image.get("type", "Unknown"))
             region = image.get("region", "")
@@ -529,9 +721,10 @@ class ScraperWizardModal:
                     self.theme.background if is_selected else self.theme.text_primary
                 ),
                 size=self.theme.font_size_sm,
+                max_width=item_rect.width - padding * 2,
             )
 
-            y += item_height
+            list_y += item_height
 
         self._scroll_offset = scroll_offset
         self._render_action_buttons(
@@ -560,6 +753,10 @@ class ScraperWizardModal:
 
         padding = self.theme.padding_sm
         y = content_rect.top + padding
+
+        # Android nav buttons
+        nav_h = self._render_nav_bar(screen, content_rect, show_select=True)
+        y += nav_h
 
         self.text.render(
             screen,
@@ -789,6 +986,10 @@ class ScraperWizardModal:
         padding = self.theme.padding_sm
         y = content_rect.top + padding
 
+        # Android nav buttons
+        nav_h = self._render_nav_bar(screen, content_rect, show_select=True)
+        y += nav_h
+
         short_path = current_path
         if len(short_path) > 55:
             short_path = "..." + short_path[-52:]
@@ -875,6 +1076,10 @@ class ScraperWizardModal:
 
         padding = self.theme.padding_sm
         y = content_rect.top + padding
+
+        # Android nav buttons (select toggles skip)
+        nav_h = self._render_nav_bar(screen, content_rect, show_select=True)
+        y += nav_h
 
         self.text.render(
             screen,
@@ -963,6 +1168,10 @@ class ScraperWizardModal:
 
         padding = self.theme.padding_sm
         y = content_rect.top + padding
+
+        # Android nav buttons
+        nav_h = self._render_nav_bar(screen, content_rect, show_select=True)
+        y += nav_h
 
         if mixed_images_enabled:
             all_image_types = [
@@ -1255,6 +1464,60 @@ class ScraperWizardModal:
                 self.select_button_rect = btn_rect
             x += btn_width + spacing
 
+    def _render_nav_bar(
+        self, screen: pygame.Surface, content_rect: pygame.Rect,
+        show_select: bool = True,
+    ):
+        """Render on-screen navigation buttons at the top of the modal content for Android.
+
+        Draws Back, Up, Down, and optionally Select buttons in a horizontal bar.
+        """
+        if not IS_ANDROID:
+            return 0
+
+        padding = self.theme.padding_sm
+        btn_h = 36
+        btn_y = content_rect.top + padding
+        available_w = content_rect.width - padding * 2
+
+        buttons = [("< Back", "back"), ("Up", "up"), ("Down", "down")]
+        if show_select:
+            buttons.append(("OK", "select"))
+
+        btn_count = len(buttons)
+        spacing = 8
+        btn_w = (available_w - spacing * (btn_count - 1)) // btn_count
+        x = content_rect.left + padding
+
+        for label, nav_type in buttons:
+            btn_rect = pygame.Rect(x, btn_y, btn_w, btn_h)
+            pygame.draw.rect(
+                screen, self.theme.surface_hover, btn_rect,
+                border_radius=self.theme.radius_sm,
+            )
+            pygame.draw.rect(
+                screen, self.theme.border, btn_rect,
+                width=1, border_radius=self.theme.radius_sm,
+            )
+            self.text.render(
+                screen, label,
+                (btn_rect.centerx, btn_rect.centery - self.theme.font_size_sm // 2),
+                color=self.theme.text_primary,
+                size=self.theme.font_size_sm,
+                align="center",
+            )
+            if nav_type == "back":
+                self.nav_back_rect = btn_rect
+            elif nav_type == "up":
+                self.nav_up_rect = btn_rect
+            elif nav_type == "down":
+                self.nav_down_rect = btn_rect
+            elif nav_type == "select":
+                self.nav_select_rect = btn_rect
+            x += btn_w + spacing
+
+        return btn_h + padding
+
     # Thumbnail helpers
 
     def update_thumbs(self):
@@ -1300,6 +1563,42 @@ class ScraperWizardModal:
             self._thumb_queue.put((url, scaled))
         except Exception:
             self._thumb_queue.put((url, None))
+
+    def _get_thumb_sized(
+        self, url: str, max_w: int, max_h: int
+    ) -> Optional[pygame.Surface]:
+        """Get a preview image scaled to fit within max dimensions."""
+        cache_key = f"preview:{url}:{max_w}x{max_h}"
+        if cache_key in self._thumb_cache:
+            cached = self._thumb_cache[cache_key]
+            if cached == "loading":
+                return None
+            return cached
+        self._thumb_cache[cache_key] = "loading"
+        t = Thread(
+            target=self._load_thumb_sized,
+            args=(url, max_w, max_h, cache_key),
+            daemon=True,
+        )
+        t.start()
+        return None
+
+    def _load_thumb_sized(self, url: str, max_w: int, max_h: int, cache_key: str):
+        """Load preview image in background, scaled to fit."""
+        try:
+            resp = requests.get(url, timeout=15)
+            resp.raise_for_status()
+            img = pygame.image.load(BytesIO(resp.content))
+            img = img.convert_alpha()
+            w, h = img.get_size()
+            # Scale to fit within max_w x max_h while preserving aspect ratio
+            scale = min(max_w / max(w, 1), max_h / max(h, 1), 1.0)
+            new_w = max(1, int(w * scale))
+            new_h = max(1, int(h * scale))
+            scaled = pygame.transform.smoothscale(img, (new_w, new_h))
+            self._thumb_queue.put((cache_key, scaled))
+        except Exception:
+            self._thumb_queue.put((cache_key, None))
 
 
 # Default instance

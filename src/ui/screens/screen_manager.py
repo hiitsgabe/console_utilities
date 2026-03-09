@@ -467,6 +467,8 @@ class ScreenManager:
                     ),
                     download_video=state.scraper_queue.download_video,
                     batch_system=state.scraper_wizard.batch_system,
+                    search_name=state.scraper_wizard.search_name,
+                    search_name_cursor=state.scraper_wizard.search_name_cursor,
                 )
             )
             rects["modal"] = modal_rect
@@ -482,6 +484,16 @@ class ScreenManager:
                 rects["done_button"] = wm.done_button_rect
             if wm.retry_button_rect:
                 rects["retry_button"] = wm.retry_button_rect
+            if wm.nav_up_rect:
+                rects["nav_up"] = wm.nav_up_rect
+            if wm.nav_down_rect:
+                rects["nav_down"] = wm.nav_down_rect
+            if wm.nav_select_rect:
+                rects["nav_select"] = wm.nav_select_rect
+            if wm.nav_back_rect:
+                rects["nav_back"] = wm.nav_back_rect
+            if wm.backspace_rect:
+                rects["backspace"] = wm.backspace_rect
             return rects
 
         if state.dedupe_wizard.show:

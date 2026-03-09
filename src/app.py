@@ -1982,6 +1982,62 @@ class ConsoleUtilitiesApp:
                 self.state.search.query = self.state.search.input_text
             return
 
+        # Handle keyboard text input for scraper wizard edit_name step
+        if (
+            self.state.scraper_wizard.show
+            and self.state.scraper_wizard.step == "edit_name"
+            and (self.state.input_mode == "keyboard" or BUILD_TARGET == "android")
+        ):
+            wizard = self.state.scraper_wizard
+            if event.key == pygame.K_ESCAPE:
+                self._go_back()
+            elif event.key == pygame.K_RETURN:
+                self._search_scraper_game()
+            elif event.key == pygame.K_BACKSPACE:
+                if wizard.search_name and wizard.search_name_cursor > 0:
+                    wizard.search_name = (
+                        wizard.search_name[:wizard.search_name_cursor - 1]
+                        + wizard.search_name[wizard.search_name_cursor:]
+                    )
+                    wizard.search_name_cursor -= 1
+            elif event.key == pygame.K_DELETE:
+                if wizard.search_name_cursor < len(wizard.search_name):
+                    wizard.search_name = (
+                        wizard.search_name[:wizard.search_name_cursor]
+                        + wizard.search_name[wizard.search_name_cursor + 1:]
+                    )
+            elif event.key == pygame.K_LEFT:
+                wizard.search_name_cursor = max(0, wizard.search_name_cursor - 1)
+            elif event.key == pygame.K_RIGHT:
+                wizard.search_name_cursor = min(
+                    len(wizard.search_name), wizard.search_name_cursor + 1
+                )
+            elif event.key == pygame.K_HOME:
+                wizard.search_name_cursor = 0
+            elif event.key == pygame.K_END:
+                wizard.search_name_cursor = len(wizard.search_name)
+            elif self._is_paste_event(event):
+                clip = self._get_clipboard_text()
+                if clip:
+                    wizard.search_name = (
+                        wizard.search_name[:wizard.search_name_cursor]
+                        + clip
+                        + wizard.search_name[wizard.search_name_cursor:]
+                    )
+                    wizard.search_name_cursor += len(clip)
+            elif (
+                event.unicode
+                and event.unicode.isprintable()
+                and BUILD_TARGET != "android"
+            ):
+                wizard.search_name = (
+                    wizard.search_name[:wizard.search_name_cursor]
+                    + event.unicode
+                    + wizard.search_name[wizard.search_name_cursor:]
+                )
+                wizard.search_name_cursor += 1
+            return
+
         # Handle keyboard text input for IA login modal
         if self.state.ia_login.show and (
             self.state.input_mode == "keyboard" or BUILD_TARGET == "android"
@@ -2357,6 +2413,14 @@ class ConsoleUtilitiesApp:
             self.state.url_input.input_text += text
         elif self.state.folder_name_input.show:
             self.state.folder_name_input.input_text += text
+        elif self.state.scraper_wizard.show and self.state.scraper_wizard.step == "edit_name":
+            wizard = self.state.scraper_wizard
+            wizard.search_name = (
+                wizard.search_name[:wizard.search_name_cursor]
+                + text
+                + wizard.search_name[wizard.search_name_cursor:]
+            )
+            wizard.search_name_cursor += len(text)
 
     def _handle_joystick_event(self, event: pygame.event.Event):
         """Handle joystick button events."""
@@ -2484,6 +2548,34 @@ class ConsoleUtilitiesApp:
                 return
             if retry_btn and retry_btn.collidepoint(x, y):
                 self._handle_scraper_wizard_selection()
+                return
+            # Android on-screen nav buttons
+            nav_up = rects.get("nav_up")
+            nav_down = rects.get("nav_down")
+            nav_select = rects.get("nav_select")
+            nav_back = rects.get("nav_back")
+            if nav_up and nav_up.collidepoint(x, y):
+                self._navigate_scraper_wizard("up")
+                return
+            if nav_down and nav_down.collidepoint(x, y):
+                self._navigate_scraper_wizard("down")
+                return
+            if nav_select and nav_select.collidepoint(x, y):
+                self._handle_scraper_wizard_selection()
+                return
+            if nav_back and nav_back.collidepoint(x, y):
+                self._go_back()
+                return
+            # Backspace button (edit_name step)
+            bksp = rects.get("backspace")
+            if bksp and bksp.collidepoint(x, y):
+                wizard = self.state.scraper_wizard
+                if wizard.step == "edit_name" and wizard.search_name and wizard.search_name_cursor > 0:
+                    wizard.search_name = (
+                        wizard.search_name[:wizard.search_name_cursor - 1]
+                        + wizard.search_name[wizard.search_name_cursor:]
+                    )
+                    wizard.search_name_cursor -= 1
                 return
             # List item clicks
             wizard = self.state.scraper_wizard
@@ -2797,6 +2889,9 @@ class ConsoleUtilitiesApp:
                 # Go back to name step in IA collection wizard
                 self.state.ia_collection_wizard.step = "name"
                 self.state.ia_collection_wizard.cursor_position = 0
+            elif selection_type == "scraper_batch_folder":
+                # Close the scraper wizard too
+                self._close_scraper_wizard()
             elif selection_type == "steam_shortcut":
                 # Go back to results
                 self.state.steam_shortcut.step = "results"
@@ -2824,6 +2919,8 @@ class ConsoleUtilitiesApp:
         elif self.state.scraper_wizard.show:
             if self.state.scraper_wizard.step == "video_select":
                 self.state.scraper_wizard.step = "image_select"
+            elif self.state.scraper_wizard.step == "edit_name":
+                self.state.scraper_wizard.step = "rom_select"
             else:
                 self._close_scraper_wizard()
         elif self.state.dedupe_wizard.show:
@@ -4141,7 +4238,7 @@ class ConsoleUtilitiesApp:
         elif selection_type == "retroarch_thumbnails":
             current = self.settings.get("retroarch_thumbnails_path", "")
             path = current if current else SCRIPT_DIR
-        elif selection_type == "scraper_rom_select":
+        elif selection_type in ("scraper_rom_select", "scraper_batch_folder"):
             path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "dedupe_folder":
             path = self.settings.get("roms_dir", SCRIPT_DIR)
@@ -4875,6 +4972,18 @@ class ConsoleUtilitiesApp:
             self.state.ghost_cleaner_wizard.folder_path = current_path
             self.state.folder_browser.show = False
             self._start_ghost_scan()
+        elif selection_type == "scraper_batch_folder":
+            self.state.folder_browser.show = False
+            wizard = self.state.scraper_wizard
+            wizard.folder_current_path = current_path
+            # Scan folder for ROMs and go to rom_list step
+            roms = self.scraper_manager.scan_folder(current_path)
+            wizard.batch_roms = [
+                {"name": r["name"], "path": r["path"], "status": "pending"}
+                for r in roms
+            ]
+            wizard.batch_current_index = 0
+            wizard.step = "rom_list"
         elif selection_type == "ia_download_folder":
             self.state.ia_download_wizard.output_folder = current_path
             self.state.folder_browser.show = False
@@ -5636,10 +5745,13 @@ class ConsoleUtilitiesApp:
                 self.state.ia_collection_wizard.step = "confirm"
                 return
 
-        # Handle scraper wizard - start button triggers download on image_select step
+        # Handle scraper wizard - start button triggers actions based on step
         if self.state.scraper_wizard.show:
             step = self.state.scraper_wizard.step
-            if step == "image_select":
+            if step == "edit_name":
+                self._search_scraper_game()
+                return
+            elif step == "image_select":
                 wizard = self.state.scraper_wizard
                 if wizard.available_videos:
                     wizard.step = "video_select"
@@ -5813,6 +5925,7 @@ class ConsoleUtilitiesApp:
             or self.state.ia_login.show
             or self.state.scraper_login.show
             or (self.state.auth_token_input.show and self.state.auth_token_input.step == "input")
+            or (self.state.scraper_wizard.show and self.state.scraper_wizard.step == "edit_name")
         )
 
     def _any_modal_open(self) -> bool:
@@ -6636,8 +6749,14 @@ class ConsoleUtilitiesApp:
         wizard = self.state.scraper_wizard
         wizard.show = True
         wizard.batch_mode = batch_mode
-        wizard.step = "folder_select" if batch_mode else "rom_select"
         wizard.folder_current_path = self.settings.get("roms_dir", SCRIPT_DIR)
+
+        # On Android, use the default folder browser for batch folder selection
+        if batch_mode and BUILD_TARGET == "android":
+            wizard.step = "folder_select"  # Will be skipped by folder browser
+            self._open_folder_browser("scraper_batch_folder")
+        else:
+            wizard.step = "folder_select" if batch_mode else "rom_select"
         wizard.folder_items = load_folder_contents(wizard.folder_current_path)
         wizard.folder_highlighted = 0
         wizard.selected_rom_path = ""
@@ -6820,10 +6939,16 @@ class ConsoleUtilitiesApp:
             wizard.folder_highlighted = 0
 
         elif item_type in ("file", "zip_file"):
-            # ROM file selected, start searching
+            # ROM file selected, go to edit name step
             wizard.selected_rom_path = item_path
             wizard.selected_rom_name = item.get("name", os.path.basename(item_path))
-            self._search_scraper_game()
+            # Extract clean game name for editing
+            from services.scraper_service import get_scraper_service
+
+            service = get_scraper_service(self.settings)
+            wizard.search_name = service.extract_game_name(item_path)
+            wizard.search_name_cursor = len(wizard.search_name)
+            wizard.step = "edit_name"
 
     def _handle_scraper_folder_selection(self):
         """Handle folder selection in batch mode."""
@@ -6852,47 +6977,11 @@ class ConsoleUtilitiesApp:
         """Select current folder for batch scraping."""
         wizard = self.state.scraper_wizard
 
-        # Scan folder for ROM files
-        rom_extensions = {
-            ".nes",
-            ".sfc",
-            ".smc",
-            ".gba",
-            ".gbc",
-            ".gb",
-            ".n64",
-            ".z64",
-            ".nds",
-            ".3ds",
-            ".iso",
-            ".bin",
-            ".cue",
-            ".chd",
-            ".pbp",
-            ".zip",
-            ".7z",
-            ".rar",
-            ".nsz",
-            ".nsp",
-            ".xci",
-        }
-
-        roms = []
-        try:
-            for item in os.listdir(wizard.folder_current_path):
-                item_path = os.path.join(wizard.folder_current_path, item)
-                if os.path.isfile(item_path):
-                    ext = os.path.splitext(item)[1].lower()
-                    if ext in rom_extensions:
-                        roms.append(
-                            {
-                                "name": item,
-                                "path": item_path,
-                                "status": "pending",
-                            }
-                        )
-        except Exception:
-            pass
+        roms = self.scraper_manager.scan_folder(wizard.folder_current_path)
+        roms = [
+            {"name": r["name"], "path": r["path"], "status": "pending"}
+            for r in roms
+        ]
 
         if not roms:
             wizard.error_message = "No ROM files found in folder"
@@ -6960,7 +7049,8 @@ class ConsoleUtilitiesApp:
         service.reset_provider()
 
         rom_path = wizard.selected_rom_path
-        game_name = service.extract_game_name(rom_path)
+        # Use the user-edited search name if available
+        game_name = wizard.search_name or service.extract_game_name(rom_path)
         wizard.selected_rom_name = game_name
 
         def search():
