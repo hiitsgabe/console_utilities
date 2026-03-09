@@ -21,45 +21,208 @@ import struct
 # ROM offsets for the Kanji team name section
 # ---------------------------------------------------------------------------
 
-_OFS_NOMI_SQK  = 2_002_316   # Kanji names start (ML reverse, then nationals reverse)
-_OFS_NOMI_SQK1 = 2_003_928   # Sector boundary continuation (national i=58 split)
+_OFS_NOMI_SQK = 2_002_316  # Kanji names start (ML reverse, then nationals reverse)
+_OFS_NOMI_SQK1 = 2_003_928  # Sector boundary continuation (national i=58 split)
 
 # Kanji byte budget per team (number of 2-byte chars, *2 = raw byte count)
 _LUN_NOMIK = [
-    8,8,6,8,6,6,6,6,6,6,6,6,6,6,6,8,8,6,6,8,6,6,6,8,6,6,6,6,6,6,
-    6,6,6,8,6,6,6,6,6,6,6,6,6,6,6,6,8,6,6,6,6,6,8,8,
-    12,12,14,12,12,12,10,12,14,
-    6,6,6,8,8,6,10,8,6,8,8,8,8,8,6,8,
-    10,6,6,6,8,6,6,6,8,10,6,6,8,10,6,6,
+    8,
+    8,
+    6,
+    8,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    8,
+    8,
+    6,
+    6,
+    8,
+    6,
+    6,
+    6,
+    8,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    8,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    8,
+    6,
+    6,
+    6,
+    6,
+    6,
+    8,
+    8,
+    12,
+    12,
+    14,
+    12,
+    12,
+    12,
+    10,
+    12,
+    14,
+    6,
+    6,
+    6,
+    8,
+    8,
+    6,
+    10,
+    8,
+    6,
+    8,
+    8,
+    8,
+    8,
+    8,
+    6,
+    8,
+    10,
+    6,
+    6,
+    6,
+    8,
+    6,
+    6,
+    6,
+    8,
+    10,
+    6,
+    6,
+    8,
+    10,
+    6,
+    6,
 ]
 
 # Spanish team names — indices 0-62 = national/allstar, 63-94 = ML teams
 _TEAM_NAMES = [
     # National teams (0-53)
-    "Irlanda", "Escocia", "Gales", "Inglaterra", "Portugal",
-    "Espana", "Francia", "Belgica", "Holanda", "Suiza",
-    "Italia", "Rep. Checa", "Alemania", "Dinamarca", "Noruega",
-    "Suecia", "Islandia", "Polonia", "Eslovaquia", "Austria",
-    "Hungria", "Albania", "Croacia", "Serbia", "Rumania",
-    "Bosnia", "Grecia", "Turquia", "Ucrania", "Rusia",
-    "Marruecos", "C. de Marfil", "Egipto", "Nigeria", "Camerun",
-    "Argelia", "Ghana", "EE.UU.", "Mexico", "Venezuela",
-    "Colombia", "Brasil", "Peru", "Chile", "Paraguay",
-    "Uruguay", "Argentina", "Ecuador", "Japon", "Corea del Sur",
-    "China", "India", "Nueva Zelanda", "Australia",
+    "Irlanda",
+    "Escocia",
+    "Gales",
+    "Inglaterra",
+    "Portugal",
+    "Espana",
+    "Francia",
+    "Belgica",
+    "Holanda",
+    "Suiza",
+    "Italia",
+    "Rep. Checa",
+    "Alemania",
+    "Dinamarca",
+    "Noruega",
+    "Suecia",
+    "Islandia",
+    "Polonia",
+    "Eslovaquia",
+    "Austria",
+    "Hungria",
+    "Albania",
+    "Croacia",
+    "Serbia",
+    "Rumania",
+    "Bosnia",
+    "Grecia",
+    "Turquia",
+    "Ucrania",
+    "Rusia",
+    "Marruecos",
+    "C. de Marfil",
+    "Egipto",
+    "Nigeria",
+    "Camerun",
+    "Argelia",
+    "Ghana",
+    "EE.UU.",
+    "Mexico",
+    "Venezuela",
+    "Colombia",
+    "Brasil",
+    "Peru",
+    "Chile",
+    "Paraguay",
+    "Uruguay",
+    "Argentina",
+    "Ecuador",
+    "Japon",
+    "Corea del Sur",
+    "China",
+    "India",
+    "Nueva Zelanda",
+    "Australia",
     # Allstar/Classic teams (54-62)
-    "Estrellas Eur", "Estrellas Mun",
-    "Clas. Inglat.", "Clas. Francia", "Clas. Holanda",
-    "Clas. Italia", "Clas. Aleman.", "Clas. Brasil", "Clas. Argentina",
+    "Estrellas Eur",
+    "Estrellas Mun",
+    "Clas. Inglat.",
+    "Clas. Francia",
+    "Clas. Holanda",
+    "Clas. Italia",
+    "Clas. Aleman.",
+    "Clas. Brasil",
+    "Clas. Argentina",
     # Master League teams (63-94)
-    "Manchester U.", "Arsenal", "Chelsea", "Liverpool",
-    "Manchester City", "Tottenham", "Atletico Madrid", "Barcelona",
-    "Real Madrid", "Valencia", "Sevilla", "Monaco",
-    "Porto", "P.S.G.", "Benfica", "Ajax",
-    "CSKA Moscu", "Zenit", "Inter", "Juventus",
-    "Milan", "Lazio", "Napoles", "Fiorentina",
-    "Roma", "B. Dortmund", "B. Munich", "B. Leverkusen",
-    "Wolfsburgo", "Galatasaray", "Shakhtar Donetsk", "Basilea",
+    "Manchester U.",
+    "Arsenal",
+    "Chelsea",
+    "Liverpool",
+    "Manchester City",
+    "Tottenham",
+    "Atletico Madrid",
+    "Barcelona",
+    "Real Madrid",
+    "Valencia",
+    "Sevilla",
+    "Monaco",
+    "Porto",
+    "P.S.G.",
+    "Benfica",
+    "Ajax",
+    "CSKA Moscu",
+    "Zenit",
+    "Inter",
+    "Juventus",
+    "Milan",
+    "Lazio",
+    "Napoles",
+    "Fiorentina",
+    "Roma",
+    "B. Dortmund",
+    "B. Munich",
+    "B. Leverkusen",
+    "Wolfsburgo",
+    "Galatasaray",
+    "Shakhtar Donetsk",
+    "Basilea",
 ]
 
 
@@ -74,22 +237,22 @@ def _ascii_to_kanji(text: str, char_budget: int) -> bytes:
 
     for i in range(min(len(text), max_chars)):
         ch = ord(text[i])
-        if 65 <= ch <= 90:       # A-Z
+        if 65 <= ch <= 90:  # A-Z
             buf[i * 2] = 0x82
             buf[i * 2 + 1] = ch + 31
-        elif 97 <= ch <= 122:    # a-z
+        elif 97 <= ch <= 122:  # a-z
             buf[i * 2] = 0x82
             buf[i * 2 + 1] = ch + 32
-        elif 48 <= ch <= 57:     # 0-9
+        elif 48 <= ch <= 57:  # 0-9
             buf[i * 2] = 0x82
             buf[i * 2 + 1] = ch + 31
-        elif ch == 46:           # period '.'
+        elif ch == 46:  # period '.'
             buf[i * 2] = 0x81
             buf[i * 2 + 1] = 0x42
-        elif ch == 0:            # null
+        elif ch == 0:  # null
             buf[i * 2] = 0x00
             buf[i * 2 + 1] = 0x00
-        else:                    # space / default
+        else:  # space / default
             buf[i * 2] = 0x82
             buf[i * 2 + 1] = 0x80
 
@@ -175,6 +338,7 @@ def generate_spanish_ppf(assets_dir: str = "") -> bytes:
     records = _build_kanji_records()
     if assets_dir:
         from .menu_records import get_menu_records
+
         menu = get_menu_records(assets_dir, "es")
         if menu:
             records = menu + records  # team names written AFTER menus (override)

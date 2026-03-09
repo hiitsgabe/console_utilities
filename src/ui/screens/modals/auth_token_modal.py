@@ -146,34 +146,48 @@ class AuthTokenModal:
         # Input field
         field_height = 40
         field_rect = pygame.Rect(
-            content_rect.left + padding, y,
-            content_rect.width - padding * 2, field_height,
+            content_rect.left + padding,
+            y,
+            content_rect.width - padding * 2,
+            field_height,
         )
         pygame.draw.rect(
-            screen, self.theme.surface_hover, field_rect,
+            screen,
+            self.theme.surface_hover,
+            field_rect,
             border_radius=self.theme.radius_sm,
         )
 
         display_text = input_text if input_text else "Paste or type token..."
         text_color = self.theme.text_primary if input_text else self.theme.text_disabled
         self.text.render(
-            screen, display_text,
-            (field_rect.left + padding, field_rect.centery - self.theme.font_size_md // 2),
-            color=text_color, size=self.theme.font_size_md,
+            screen,
+            display_text,
+            (
+                field_rect.left + padding,
+                field_rect.centery - self.theme.font_size_md // 2,
+            ),
+            color=text_color,
+            size=self.theme.font_size_md,
             max_width=field_rect.width - padding * 2,
         )
 
         # Cursor
         if input_text:
             cursor_x = (
-                field_rect.left + padding
-                + self.text.measure(input_text, self.theme.font_size_md)[0] + 2
+                field_rect.left
+                + padding
+                + self.text.measure(input_text, self.theme.font_size_md)[0]
+                + 2
             )
         else:
             cursor_x = field_rect.left + padding
         pygame.draw.line(
-            screen, self.theme.primary,
-            (cursor_x, field_rect.top + 8), (cursor_x, field_rect.bottom - 8), 2,
+            screen,
+            self.theme.primary,
+            (cursor_x, field_rect.top + 8),
+            (cursor_x, field_rect.bottom - 8),
+            2,
         )
 
         y = field_rect.bottom + padding
@@ -181,10 +195,12 @@ class AuthTokenModal:
             [("select", "Confirm"), ("back", "Cancel")], "keyboard"
         )
         self.text.render(
-            screen, hints,
+            screen,
+            hints,
             (content_rect.centerx, y),
             color=self.theme.text_secondary,
-            size=self.theme.font_size_sm, align="center",
+            size=self.theme.font_size_sm,
+            align="center",
         )
 
         return modal_rect, content_rect, None, []
@@ -207,47 +223,66 @@ class AuthTokenModal:
         field_height = 48
         bksp_width = 48
         field_rect = pygame.Rect(
-            content_rect.left + padding, y,
-            content_rect.width - padding * 3 - bksp_width, field_height,
+            content_rect.left + padding,
+            y,
+            content_rect.width - padding * 3 - bksp_width,
+            field_height,
         )
         pygame.draw.rect(
-            screen, self.theme.surface_hover, field_rect,
+            screen,
+            self.theme.surface_hover,
+            field_rect,
             border_radius=self.theme.radius_sm,
         )
 
         # Backspace button
         bksp_rect = pygame.Rect(field_rect.right + padding, y, bksp_width, field_height)
         pygame.draw.rect(
-            screen, self.theme.surface_hover, bksp_rect,
+            screen,
+            self.theme.surface_hover,
+            bksp_rect,
             border_radius=self.theme.radius_sm,
         )
         self.text.render(
-            screen, "<x]",
+            screen,
+            "<x]",
             (bksp_rect.centerx, bksp_rect.centery - self.theme.font_size_md // 2),
-            color=self.theme.text_primary, size=self.theme.font_size_md, align="center",
+            color=self.theme.text_primary,
+            size=self.theme.font_size_md,
+            align="center",
         )
         self.backspace_rect = bksp_rect
 
         display_text = input_text if input_text else "Paste or type token..."
         text_color = self.theme.text_primary if input_text else self.theme.text_disabled
         self.text.render(
-            screen, display_text,
-            (field_rect.left + padding, field_rect.centery - self.theme.font_size_md // 2),
-            color=text_color, size=self.theme.font_size_md,
+            screen,
+            display_text,
+            (
+                field_rect.left + padding,
+                field_rect.centery - self.theme.font_size_md // 2,
+            ),
+            color=text_color,
+            size=self.theme.font_size_md,
             max_width=field_rect.width - padding * 2,
         )
 
         # Cursor
         if input_text:
             cursor_x = (
-                field_rect.left + padding
-                + self.text.measure(input_text, self.theme.font_size_md)[0] + 2
+                field_rect.left
+                + padding
+                + self.text.measure(input_text, self.theme.font_size_md)[0]
+                + 2
             )
         else:
             cursor_x = field_rect.left + padding
         pygame.draw.line(
-            screen, self.theme.primary,
-            (cursor_x, field_rect.top + 8), (cursor_x, field_rect.bottom - 8), 2,
+            screen,
+            self.theme.primary,
+            (cursor_x, field_rect.top + 8),
+            (cursor_x, field_rect.bottom - 8),
+            2,
         )
 
         # OK / Cancel buttons
@@ -257,12 +292,16 @@ class AuthTokenModal:
         button_spacing = self.theme.padding_lg
 
         ok_rect = pygame.Rect(
-            content_rect.centerx - button_width - button_spacing // 2, y,
-            button_width, button_height,
+            content_rect.centerx - button_width - button_spacing // 2,
+            y,
+            button_width,
+            button_height,
         )
         cancel_rect = pygame.Rect(
-            content_rect.centerx + button_spacing // 2, y,
-            button_width, button_height,
+            content_rect.centerx + button_spacing // 2,
+            y,
+            button_width,
+            button_height,
         )
         self.action_button.render(screen, ok_rect, "OK", hover=True)
         self.action_button.render_secondary(screen, cancel_rect, "Cancel", hover=False)
@@ -289,20 +328,30 @@ class AuthTokenModal:
         )
 
         char_rects, input_rect = self.char_keyboard.render(
-            screen, content_rect,
-            current_text=input_text, selected_index=cursor_position,
-            chars_per_row=13, char_set="url",
-            show_input_field=True, shift_active=shift_active,
+            screen,
+            content_rect,
+            current_text=input_text,
+            selected_index=cursor_position,
+            chars_per_row=13,
+            char_set="url",
+            show_input_field=True,
+            shift_active=shift_active,
         )
 
         return modal_rect, content_rect, close_rect, char_rects
 
     def handle_selection(
-        self, cursor_position: int, current_text: str, shift_active: bool = False,
+        self,
+        cursor_position: int,
+        current_text: str,
+        shift_active: bool = False,
     ) -> Tuple[str, bool, bool]:
         """Handle character selection on on-screen keyboard."""
         return self.char_keyboard.handle_selection(
-            cursor_position, current_text, char_set="url", shift_active=shift_active,
+            cursor_position,
+            current_text,
+            char_set="url",
+            shift_active=shift_active,
         )
 
     def _wrap_text(self, text: str, font, max_width: int) -> List[str]:

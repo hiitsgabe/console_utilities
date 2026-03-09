@@ -84,8 +84,7 @@ class MVPPSPRomWriter:
             if output_dir:
                 os.makedirs(output_dir, exist_ok=True)
             chunk_size = 4 * 1024 * 1024
-            with open(self.iso_path, "rb") as src, \
-                    open(self.output_path, "wb") as dst:
+            with open(self.iso_path, "rb") as src, open(self.output_path, "wb") as dst:
                 while True:
                     chunk = src.read(chunk_size)
                     if not chunk:
@@ -117,9 +116,7 @@ class MVPPSPRomWriter:
             if idx >= 0:
                 self.section_headers[name] = text[:idx]
 
-    def update_records(
-        self, table_name: str, records: Dict[str, Dict[int, str]]
-    ):
+    def update_records(self, table_name: str, records: Dict[str, Dict[int, str]]):
         """Replace all records in a table with new data."""
         self.reader.records[table_name] = records
         self._modified_tables.add(table_name)
@@ -195,10 +192,10 @@ class MVPPSPRomWriter:
                 continue
 
             # Write at original offset, zero-pad remainder
-            result[off:off + len(compressed)] = compressed
+            result[off : off + len(compressed)] = compressed
             if len(compressed) < alloc:
-                result[off + len(compressed):off + alloc] = (
-                    b"\x00" * (alloc - len(compressed))
+                result[off + len(compressed) : off + alloc] = b"\x00" * (
+                    alloc - len(compressed)
                 )
 
         return result

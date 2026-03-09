@@ -36,7 +36,7 @@ BANK = 0x9C
 SMC_HEADER_SIZE = 512
 
 # Expected ROM sizes
-ROM_SIZE_NO_HEADER = 649728    # 0x9EC00 — standard NHL94 SNES dump
+ROM_SIZE_NO_HEADER = 649728  # 0x9EC00 — standard NHL94 SNES dump
 ROM_SIZE_WITH_HEADER = 650240  # 0x9EE00 — with 512-byte SMC header
 
 # Stats bytes per player (jersey + 7 attribute bytes)
@@ -154,9 +154,7 @@ class NHL94SNESRomReader:
         # Convert SNES address to file offset and add header
         return self.header_offset + snes_to_file_offset(rom_addr)
 
-    def read_team_player_counts(
-        self, team_index: int
-    ) -> tuple:
+    def read_team_player_counts(self, team_index: int) -> tuple:
         """Read G/F/D counts from team header byte 17.
 
         Byte 17 of team data: high nibble = forwards,
@@ -197,11 +195,17 @@ class NHL94SNESRomReader:
             if file_off is not None and file_off < len(self.data):
                 name = self._read_team_city(file_off)
 
-            slots.append(NHL94TeamSlot(
-                index=i,
-                current_name=name or NHL94_TEAM_ORDER[i],
-                display_name=NHL94_TEAM_ORDER[i] if i < len(NHL94_TEAM_ORDER) else f"Team {i}",
-            ))
+            slots.append(
+                NHL94TeamSlot(
+                    index=i,
+                    current_name=name or NHL94_TEAM_ORDER[i],
+                    display_name=(
+                        NHL94_TEAM_ORDER[i]
+                        if i < len(NHL94_TEAM_ORDER)
+                        else f"Team {i}"
+                    ),
+                )
+            )
 
         return slots
 
@@ -224,7 +228,11 @@ class NHL94SNESRomReader:
             return "", 0
 
         try:
-            name = bytes(self.data[str_start:str_start + str_len]).decode("ascii", errors="replace").strip("\x00")
+            name = (
+                bytes(self.data[str_start : str_start + str_len])
+                .decode("ascii", errors="replace")
+                .strip("\x00")
+            )
             return name, length
         except Exception:
             return "", 0
@@ -238,7 +246,9 @@ class NHL94SNESRomReader:
         if team_data_offset + 2 > len(self.data):
             return team_data_offset
 
-        header_size = self.data[team_data_offset] | (self.data[team_data_offset + 1] << 8)
+        header_size = self.data[team_data_offset] | (
+            self.data[team_data_offset + 1] << 8
+        )
         return team_data_offset + header_size
 
     def _read_team_city(self, team_data_offset: int) -> str:
@@ -293,9 +303,11 @@ class NHL94SNESRomReader:
 
             # Read name
             try:
-                name = bytes(self.data[str_start:str_start + str_len]).decode(
-                    "ascii", errors="replace"
-                ).strip("\x00")
+                name = (
+                    bytes(self.data[str_start : str_start + str_len])
+                    .decode("ascii", errors="replace")
+                    .strip("\x00")
+                )
                 names.append(name)
             except Exception:
                 names.append("")
@@ -306,7 +318,7 @@ class NHL94SNESRomReader:
             if offset + STATS_SIZE > len(self.data):
                 break
 
-            stat_bytes.append(bytes(self.data[offset:offset + STATS_SIZE]))
+            stat_bytes.append(bytes(self.data[offset : offset + STATS_SIZE]))
             offset += STATS_SIZE
 
         return names, stat_bytes

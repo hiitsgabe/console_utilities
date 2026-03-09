@@ -143,9 +143,7 @@ class ScreenManager:
 
         # On Android, use "android" mode for text input modals:
         # native soft keyboard + touchable OK/Cancel buttons
-        modal_input_mode = (
-            "android" if BUILD_TARGET == "android" else state.input_mode
-        )
+        modal_input_mode = "android" if BUILD_TARGET == "android" else state.input_mode
 
         # Check for modals first (they overlay the current screen)
         # Loading modal has highest priority
@@ -469,11 +467,16 @@ class ScreenManager:
                     batch_system=state.scraper_wizard.batch_system,
                     search_name=state.scraper_wizard.search_name,
                     search_name_cursor=state.scraper_wizard.search_name_cursor,
+                    search_name_shift=state.scraper_wizard.search_name_shift,
+                    button_focused=state.scraper_wizard.button_focused,
                 )
             )
             rects["modal"] = modal_rect
             rects["close"] = close_rect
             rects["item_rects"] = item_rects
+            # edit_name step returns char_rects from CharKeyboard
+            if state.scraper_wizard.step == "edit_name":
+                rects["char_rects"] = item_rects
             rects["scroll_offset"] = self.scraper_wizard_modal._scroll_offset
             wm = self.scraper_wizard_modal
             if wm.select_button_rect:
@@ -779,8 +782,17 @@ class ScreenManager:
 
         # Render main screens based on mode
         if state.mode == "systems":
+            dl_count = sum(
+                1
+                for it in state.download_queue.items
+                if it.status in ("waiting", "downloading", "extracting", "moving")
+            )
             back_rect, item_rects, scroll_offset = self.systems_screen.render(
-                screen, [], state.highlighted, settings=settings
+                screen,
+                [],
+                state.highlighted,
+                settings=settings,
+                active_download_count=dl_count,
             )
             rects["back"] = back_rect
             rects["item_rects"] = item_rects
@@ -865,7 +877,10 @@ class ScreenManager:
         elif state.mode == "systems_settings":
             hidden_systems = self._get_hidden_system_names(data, settings)
             back_rect, item_rects, scroll_offset = self.systems_settings_screen.render(
-                screen, state.systems_settings_highlighted, data, hidden_systems,
+                screen,
+                state.systems_settings_highlighted,
+                data,
+                hidden_systems,
                 settings.get("system_settings", {}),
             )
             rects["back"] = back_rect
@@ -883,7 +898,10 @@ class ScreenManager:
                 is_hidden = system_settings.get(system_name, {}).get("hidden", False)
                 back_rect, item_rects, scroll_offset = (
                     self.system_settings_screen.render(
-                        screen, state.system_settings_highlighted, system, is_hidden,
+                        screen,
+                        state.system_settings_highlighted,
+                        system,
+                        is_hidden,
                         system_settings.get(system_name, {}),
                     )
                 )
@@ -1008,7 +1026,9 @@ class ScreenManager:
             rects["item_rects"] = item_rects
             rects["scroll_offset"] = scroll_offset
             rects["season_left_arrow"] = self.nhl94_gen_patcher_screen.season_arrow_left
-            rects["season_right_arrow"] = self.nhl94_gen_patcher_screen.season_arrow_right
+            rects["season_right_arrow"] = (
+                self.nhl94_gen_patcher_screen.season_arrow_right
+            )
 
         elif state.mode == "nhl07_patcher":
             back_rect, item_rects, scroll_offset = self.nhl07_psp_patcher_screen.render(
@@ -1018,7 +1038,9 @@ class ScreenManager:
             rects["item_rects"] = item_rects
             rects["scroll_offset"] = scroll_offset
             rects["season_left_arrow"] = self.nhl07_psp_patcher_screen.season_arrow_left
-            rects["season_right_arrow"] = self.nhl07_psp_patcher_screen.season_arrow_right
+            rects["season_right_arrow"] = (
+                self.nhl07_psp_patcher_screen.season_arrow_right
+            )
 
         # Render stacked status footers on non-download screens
         if state.mode not in ("downloads", "scraper_downloads"):

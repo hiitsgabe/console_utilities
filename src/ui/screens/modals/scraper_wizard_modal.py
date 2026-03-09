@@ -29,10 +29,11 @@ import requests
 
 from ui.theme import Theme, default_theme
 from ui.organisms.modal_frame import ModalFrame
+from ui.organisms.char_keyboard import CharKeyboard
 from ui.atoms.text import Text
 from ui.atoms.progress import ProgressBar
 from ui.molecules.action_button import ActionButton
-from utils.button_hints import get_combined_hints
+from utils.button_hints import get_combined_hints, get_button_hint
 from constants import BUILD_TARGET
 
 THUMB_SIZE = (64, 64)
@@ -51,6 +52,7 @@ class ScraperWizardModal:
     def __init__(self, theme: Theme = default_theme):
         self.theme = theme
         self.modal_frame = ModalFrame(theme)
+        self.char_keyboard = CharKeyboard(theme)
         self.text = Text(theme)
         self.progress_bar = ProgressBar(theme)
         self._thumb_cache: Dict[str, Any] = {}
@@ -99,6 +101,8 @@ class ScraperWizardModal:
         batch_system: str = "",
         search_name: str = "",
         search_name_cursor: int = 0,
+        search_name_shift: bool = False,
+        button_focused: bool = False,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[pygame.Rect]]:
         """
         Render the scraper wizard modal.
@@ -119,18 +123,18 @@ class ScraperWizardModal:
         self.nav_back_rect = None
         self.backspace_rect = None
         self._scroll_offset = 0
+        self._button_focused = button_focused
 
-        if step == "rom_select":
-            return self._render_rom_select(
-                screen,
-                folder_items,
-                folder_highlighted,
-                folder_current_path,
-                input_mode,
-            )
+        if step in ("rom_select", "folder_select"):
+            # These steps use the default folder browser modal
+            return pygame.Rect(0, 0, 0, 0), pygame.Rect(0, 0, 0, 0), None, []
         elif step == "edit_name":
             return self._render_edit_name(
-                screen, search_name, search_name_cursor, input_mode
+                screen,
+                search_name,
+                search_name_cursor,
+                input_mode,
+                search_name_shift,
             )
         elif step == "searching":
             return self._render_searching(screen, selected_rom_name)
@@ -163,14 +167,6 @@ class ScraperWizardModal:
         elif step == "error":
             return self._render_error(screen, error_message, input_mode)
         # Batch mode steps
-        elif step == "folder_select":
-            return self._render_folder_select(
-                screen,
-                folder_items,
-                folder_highlighted,
-                folder_current_path,
-                input_mode,
-            )
         elif step == "rom_list":
             return self._render_rom_list(
                 screen, batch_roms, batch_current_index, input_mode
@@ -197,104 +193,8 @@ class ScraperWizardModal:
         elif step == "batch_complete":
             return self._render_batch_complete(screen, batch_roms, input_mode)
         else:
-            return self._render_rom_select(
-                screen,
-                folder_items,
-                folder_highlighted,
-                folder_current_path,
-                input_mode,
-            )
-
-    def _render_rom_select(
-        self,
-        screen: pygame.Surface,
-        folder_items: List[Dict[str, Any]],
-        highlighted: int,
-        current_path: str,
-        input_mode: str,
-    ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[pygame.Rect]]:
-        """Render ROM selection step (file browser)."""
-        width = min(600, screen.get_width() - 40)
-        height = min(480, screen.get_height() - 60)
-
-        show_close = input_mode == "touch"
-        modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Select ROM to Scrape", show_close=show_close
-        )
-
-        padding = self.theme.padding_sm
-        y = content_rect.top + padding
-
-        # Android nav buttons
-        nav_h = self._render_nav_bar(screen, content_rect, show_select=True)
-        y += nav_h
-
-        # Current path
-        short_path = current_path
-        if len(short_path) > 55:
-            short_path = "..." + short_path[-52:]
-        self.text.render(
-            screen,
-            short_path,
-            (content_rect.left + padding, y),
-            color=self.theme.text_secondary,
-            size=self.theme.font_size_xs,
-        )
-        y += 22
-
-        # File list
-        item_rects = []
-        item_height = 38
-        visible_items = (content_rect.height - 90) // item_height
-        scroll_offset = max(0, highlighted - visible_items + 2)
-
-        for i in range(
-            scroll_offset, min(len(folder_items), scroll_offset + visible_items)
-        ):
-            item = folder_items[i]
-            is_selected = i == highlighted
-
-            item_rect = pygame.Rect(
-                content_rect.left + padding,
-                y,
-                content_rect.width - padding * 2,
-                item_height - 4,
-            )
-            item_rects.append(item_rect)
-
-            bg_color = self.theme.primary if is_selected else self.theme.surface_hover
-            pygame.draw.rect(
-                screen, bg_color, item_rect, border_radius=self.theme.radius_sm
-            )
-
-            # Icon and name
-            item_type = item.get("type", "")
-            icon = (
-                "[..]"
-                if item_type == "parent"
-                else "[ ]" if item_type == "folder" else " * "
-            )
-            name = item.get("name", "")
-
-            self.text.render(
-                screen,
-                f"{icon} {name}",
-                (
-                    item_rect.left + padding,
-                    item_rect.centery - self.theme.font_size_sm // 2,
-                ),
-                color=(
-                    self.theme.background if is_selected else self.theme.text_primary
-                ),
-                size=self.theme.font_size_sm,
-                max_width=item_rect.width - padding * 2,
-            )
-
-            y += item_height
-
-        self._scroll_offset = scroll_offset
-
-        return modal_rect, content_rect, close_rect, item_rects
+            # rom_select / folder_select steps use the default folder browser modal
+            return pygame.Rect(0, 0, 0, 0), pygame.Rect(0, 0, 0, 0), None, []
 
     def _render_edit_name(
         self,
@@ -302,107 +202,250 @@ class ScraperWizardModal:
         search_name: str,
         cursor: int,
         input_mode: str,
+        shift_active: bool = False,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[pygame.Rect]]:
-        """Render editable game name step before searching."""
-        width = min(500, screen.get_width() - 40)
-        height = 220 if not IS_ANDROID else 260
+        """Render editable game name step with on-screen keyboard."""
+        # Reset button rects
+        self.backspace_rect = None
 
-        use_top = IS_ANDROID
-        if use_top:
-            modal_rect, content_rect, close_rect = self.modal_frame.render_top_aligned(
-                screen, width, height, title="Edit Search Name", show_close=True
+        # Keyboard mode: simple text field, no on-screen keyboard
+        if input_mode == "keyboard":
+            return self._render_edit_name_keyboard(screen, search_name)
+
+        # Android mode: text field with OK/Cancel buttons
+        if input_mode == "android":
+            return self._render_edit_name_android(screen, search_name)
+
+        # Gamepad/touch: on-screen CharKeyboard
+        width = min(600, screen.get_width() - 40)
+        height = 350
+
+        show_close = input_mode == "touch"
+        modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
+            screen, width, height, title="Edit Search Name", show_close=show_close
+        )
+
+        char_rects, input_rect = self.char_keyboard.render(
+            screen,
+            content_rect,
+            current_text=search_name,
+            selected_index=cursor,
+            chars_per_row=13,
+            show_input_field=True,
+            shift_active=shift_active,
+        )
+
+        if input_mode == "gamepad":
+            hints = (
+                get_button_hint("select", "Select", input_mode)
+                + " | "
+                + get_button_hint("back", "Back", input_mode)
             )
-        else:
-            modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-                screen, width, height, title="Edit Search Name", show_close=True
+            self.text.render(
+                screen,
+                hints,
+                (content_rect.centerx, content_rect.bottom - self.theme.padding_sm),
+                color=self.theme.text_secondary,
+                size=self.theme.font_size_sm,
+                align="center",
             )
+
+        return modal_rect, content_rect, close_rect, char_rects
+
+    def _render_edit_name_keyboard(
+        self, screen: pygame.Surface, search_name: str
+    ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[pygame.Rect]]:
+        """Render edit name for keyboard input (no on-screen keyboard)."""
+        width = min(500, screen.get_width() - 40)
+        height = 150
+
+        modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
+            screen, width, height, title="Edit Search Name", show_close=False
+        )
 
         padding = self.theme.padding_sm
         y = content_rect.top + padding
 
-        self.text.render(
-            screen,
-            "Edit game name for search:",
-            (content_rect.left + padding, y),
-            color=self.theme.text_secondary,
-            size=self.theme.font_size_sm,
-        )
-        y += 25
-
-        # Text input field
-        field_height = 44
-        bksp_width = 48 if IS_ANDROID else 0
+        field_height = 40
         field_rect = pygame.Rect(
             content_rect.left + padding,
             y,
-            content_rect.width - padding * 2 - (bksp_width + padding if bksp_width else 0),
+            content_rect.width - padding * 2,
             field_height,
         )
         pygame.draw.rect(
-            screen, self.theme.surface_hover, field_rect,
+            screen,
+            self.theme.surface_hover,
+            field_rect,
             border_radius=self.theme.radius_sm,
         )
-        pygame.draw.rect(
-            screen, self.theme.border, field_rect,
-            width=1, border_radius=self.theme.radius_sm,
+
+        display_text = search_name if search_name else "Type to search..."
+        text_color = (
+            self.theme.text_primary if search_name else self.theme.text_disabled
         )
-
-        # Backspace button for Android
-        if IS_ANDROID:
-            bksp_rect = pygame.Rect(
-                field_rect.right + padding, y, bksp_width, field_height,
-            )
-            pygame.draw.rect(
-                screen, self.theme.surface_hover, bksp_rect,
-                border_radius=self.theme.radius_sm,
-            )
-            pygame.draw.rect(
-                screen, self.theme.border, bksp_rect,
-                width=1, border_radius=self.theme.radius_sm,
-            )
-            self.text.render(
-                screen, "<x]",
-                (bksp_rect.centerx, bksp_rect.centery - self.theme.font_size_md // 2),
-                color=self.theme.text_primary,
-                size=self.theme.font_size_md,
-                align="center",
-            )
-            self.backspace_rect = bksp_rect
-
-        # Render text with cursor
-        display_text = search_name if search_name else ""
         self.text.render(
-            screen, display_text,
-            (field_rect.left + padding, field_rect.centery - self.theme.font_size_md // 2),
-            color=self.theme.text_primary,
+            screen,
+            display_text,
+            (
+                field_rect.left + padding,
+                field_rect.centery - self.theme.font_size_md // 2,
+            ),
+            color=text_color,
             size=self.theme.font_size_md,
             max_width=field_rect.width - padding * 2,
         )
 
-        # Cursor
-        if display_text:
-            text_before_cursor = display_text[:cursor]
-            cursor_x = field_rect.left + padding + self.text.measure(
-                text_before_cursor, self.theme.font_size_md
-            )[0] + 2
+        if search_name:
+            cursor_x = (
+                field_rect.left
+                + padding
+                + self.text.measure(search_name, self.theme.font_size_md)[0]
+                + 2
+            )
         else:
-            cursor_x = field_rect.left + padding + 2
-        cursor_x = min(cursor_x, field_rect.right - padding)
+            cursor_x = field_rect.left + padding
         pygame.draw.line(
-            screen, self.theme.text_primary,
+            screen,
+            self.theme.primary,
             (cursor_x, field_rect.top + 8),
             (cursor_x, field_rect.bottom - 8),
             2,
         )
 
-        y += field_height + 15
-
-        # Search button
-        self._render_action_buttons(
-            screen, content_rect, [("Search", "start")]
+        y = field_rect.bottom + padding
+        hints = "Enter: Search | Esc: Back"
+        self.text.render(
+            screen,
+            hints,
+            (content_rect.centerx, y),
+            color=self.theme.text_secondary,
+            size=self.theme.font_size_sm,
+            align="center",
         )
 
-        return modal_rect, content_rect, close_rect, []
+        return modal_rect, content_rect, None, []
+
+    def _render_edit_name_android(
+        self, screen: pygame.Surface, search_name: str
+    ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[pygame.Rect]]:
+        """Render edit name for Android (with OK/Cancel buttons)."""
+        sw, sh = screen.get_size()
+        width = min(int(sw * 0.9), 600)
+        height = 230
+
+        modal_rect, content_rect, close_rect = self.modal_frame.render_top_aligned(
+            screen, width, height, title="Edit Search Name", show_close=False
+        )
+
+        padding = self.theme.padding_sm
+        y = content_rect.top + padding
+
+        field_height = 48
+        bksp_width = 48
+        field_rect = pygame.Rect(
+            content_rect.left + padding,
+            y,
+            content_rect.width - padding * 3 - bksp_width,
+            field_height,
+        )
+        pygame.draw.rect(
+            screen,
+            self.theme.surface_hover,
+            field_rect,
+            border_radius=self.theme.radius_sm,
+        )
+
+        bksp_rect = pygame.Rect(field_rect.right + padding, y, bksp_width, field_height)
+        pygame.draw.rect(
+            screen,
+            self.theme.surface_hover,
+            bksp_rect,
+            border_radius=self.theme.radius_sm,
+        )
+        self.text.render(
+            screen,
+            "<x]",
+            (bksp_rect.centerx, bksp_rect.centery - self.theme.font_size_md // 2),
+            color=self.theme.text_primary,
+            size=self.theme.font_size_md,
+            align="center",
+        )
+        self.backspace_rect = bksp_rect
+
+        display_text = search_name if search_name else "Type to search..."
+        text_color = (
+            self.theme.text_primary if search_name else self.theme.text_disabled
+        )
+        self.text.render(
+            screen,
+            display_text,
+            (
+                field_rect.left + padding,
+                field_rect.centery - self.theme.font_size_md // 2,
+            ),
+            color=text_color,
+            size=self.theme.font_size_md,
+            max_width=field_rect.width - padding * 2,
+        )
+
+        if search_name:
+            cursor_x = (
+                field_rect.left
+                + padding
+                + self.text.measure(search_name, self.theme.font_size_md)[0]
+                + 2
+            )
+        else:
+            cursor_x = field_rect.left + padding
+        pygame.draw.line(
+            screen,
+            self.theme.primary,
+            (cursor_x, field_rect.top + 8),
+            (cursor_x, field_rect.bottom - 8),
+            2,
+        )
+
+        # OK and Cancel buttons
+        y = field_rect.bottom + padding * 3
+        button_width = 120
+        button_height = 44
+        button_spacing = self.theme.padding_lg
+
+        ok_rect = pygame.Rect(
+            content_rect.centerx - button_width - button_spacing // 2,
+            y,
+            button_width,
+            button_height,
+        )
+        cancel_rect = pygame.Rect(
+            content_rect.centerx + button_spacing // 2,
+            y,
+            button_width,
+            button_height,
+        )
+
+        self.action_button.render(screen, ok_rect, "Search", hover=True)
+        self.action_button.render_secondary(screen, cancel_rect, "Cancel", hover=False)
+
+        self.start_button_rect = ok_rect
+
+        return modal_rect, content_rect, None, []
+
+    def handle_edit_name_selection(
+        self,
+        cursor_position: int,
+        current_text: str,
+        shift_active: bool = False,
+    ) -> Tuple[str, bool, bool]:
+        """Handle character selection on the edit name keyboard.
+
+        Returns:
+            Tuple of (new_text, is_done, toggle_shift)
+        """
+        return self.char_keyboard.handle_selection(
+            cursor_position, current_text, shift_active=shift_active
+        )
 
     def _render_searching(
         self, screen: pygame.Surface, rom_name: str
@@ -633,7 +676,8 @@ class ScraperWizardModal:
         # Divider
         div_x = content_rect.left + left_width
         pygame.draw.line(
-            screen, self.theme.border,
+            screen,
+            self.theme.text_secondary,
             (div_x, content_rect.top + padding),
             (div_x, content_rect.bottom - 45),
             1,
@@ -641,8 +685,10 @@ class ScraperWizardModal:
 
         # Right panel: preview of highlighted image
         preview_rect = pygame.Rect(
-            div_x + padding, y,
-            right_width - padding, content_rect.height - nav_h - 60,
+            div_x + padding,
+            y,
+            right_width - padding,
+            content_rect.height - nav_h - 60,
         )
 
         # Process thumbnails
@@ -655,22 +701,29 @@ class ScraperWizardModal:
 
             # Preview header
             self.text.render(
-                screen, label,
+                screen,
+                label,
                 (preview_rect.left, y),
                 color=self.theme.text_secondary,
                 size=self.theme.font_size_sm,
             )
 
             if img_url:
-                preview = self._get_thumb_sized(img_url, preview_rect.width, preview_rect.height - 25)
+                preview = self._get_thumb_sized(
+                    img_url, preview_rect.width, preview_rect.height - 25
+                )
                 if preview:
                     # Center the preview in the available area
-                    px = preview_rect.left + (preview_rect.width - preview.get_width()) // 2
+                    px = (
+                        preview_rect.left
+                        + (preview_rect.width - preview.get_width()) // 2
+                    )
                     py = y + 25 + (preview_rect.height - 25 - preview.get_height()) // 2
                     screen.blit(preview, (px, py))
                 else:
                     self.text.render(
-                        screen, "Loading...",
+                        screen,
+                        "Loading...",
                         (preview_rect.centerx, preview_rect.centery),
                         color=self.theme.text_disabled,
                         size=self.theme.font_size_sm,
@@ -728,8 +781,10 @@ class ScraperWizardModal:
 
         self._scroll_offset = scroll_offset
         self._render_action_buttons(
-            screen, content_rect,
+            screen,
+            content_rect,
             [("Download", "start")],
+            focused=self._button_focused,
         )
 
         return modal_rect, content_rect, close_rect, item_rects
@@ -838,8 +893,10 @@ class ScraperWizardModal:
             y += item_height
 
         self._render_action_buttons(
-            screen, content_rect,
+            screen,
+            content_rect,
             [("Download", "start")],
+            focused=self._button_focused,
         )
 
         return modal_rect, content_rect, close_rect, item_rects
@@ -930,7 +987,10 @@ class ScraperWizardModal:
         )
 
         self._render_action_buttons(
-            screen, content_rect, [("Done", "done")]
+            screen,
+            content_rect,
+            [("Done", "done")],
+            focused=self._button_focused,
         )
 
         return modal_rect, content_rect, close_rect, []
@@ -959,100 +1019,15 @@ class ScraperWizardModal:
         )
 
         self._render_action_buttons(
-            screen, content_rect, [("Try Again", "retry")]
+            screen,
+            content_rect,
+            [("Try Again", "retry")],
+            focused=self._button_focused,
         )
 
         return modal_rect, content_rect, close_rect, []
 
     # Batch mode rendering methods
-
-    def _render_folder_select(
-        self,
-        screen: pygame.Surface,
-        folder_items: List[Dict[str, Any]],
-        highlighted: int,
-        current_path: str,
-        input_mode: str,
-    ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[pygame.Rect]]:
-        """Render batch folder selection step."""
-        width = min(600, screen.get_width() - 40)
-        height = min(480, screen.get_height() - 60)
-
-        show_close = input_mode == "touch"
-        modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Select ROM Folder", show_close=show_close
-        )
-
-        padding = self.theme.padding_sm
-        y = content_rect.top + padding
-
-        # Android nav buttons
-        nav_h = self._render_nav_bar(screen, content_rect, show_select=True)
-        y += nav_h
-
-        short_path = current_path
-        if len(short_path) > 55:
-            short_path = "..." + short_path[-52:]
-        self.text.render(
-            screen,
-            short_path,
-            (content_rect.left + padding, y),
-            color=self.theme.text_secondary,
-            size=self.theme.font_size_xs,
-        )
-        y += 22
-
-        item_rects = []
-        item_height = 38
-        visible_items = (content_rect.height - 90) // item_height
-        scroll_offset = max(0, highlighted - visible_items + 2)
-
-        for i in range(
-            scroll_offset, min(len(folder_items), scroll_offset + visible_items)
-        ):
-            item = folder_items[i]
-            is_selected = i == highlighted
-
-            item_rect = pygame.Rect(
-                content_rect.left + padding,
-                y,
-                content_rect.width - padding * 2,
-                item_height - 4,
-            )
-            item_rects.append(item_rect)
-
-            bg_color = self.theme.primary if is_selected else self.theme.surface_hover
-            pygame.draw.rect(
-                screen, bg_color, item_rect, border_radius=self.theme.radius_sm
-            )
-
-            item_type = item.get("type", "")
-            icon = "[..]" if item_type == "parent" else "[ ]"
-            name = item.get("name", "")
-
-            self.text.render(
-                screen,
-                f"{icon} {name}",
-                (
-                    item_rect.left + padding,
-                    item_rect.centery - self.theme.font_size_sm // 2,
-                ),
-                color=(
-                    self.theme.background if is_selected else self.theme.text_primary
-                ),
-                size=self.theme.font_size_sm,
-                max_width=item_rect.width - padding * 2,
-            )
-
-            y += item_height
-
-        self._scroll_offset = scroll_offset
-        self._render_action_buttons(
-            screen, content_rect,
-            [("Select Folder", "select_folder")],
-        )
-
-        return modal_rect, content_rect, close_rect, item_rects
 
     def _render_rom_list(
         self,
@@ -1140,8 +1115,10 @@ class ScraperWizardModal:
 
         self._scroll_offset = scroll_offset
         self._render_action_buttons(
-            screen, content_rect,
+            screen,
+            content_rect,
             [("Continue", "start")],
+            focused=self._button_focused,
         )
 
         return modal_rect, content_rect, close_rect, item_rects
@@ -1264,8 +1241,10 @@ class ScraperWizardModal:
 
         self._scroll_offset = scroll_offset
         self._render_action_buttons(
-            screen, content_rect,
+            screen,
+            content_rect,
             [("Start Batch", "start")],
+            focused=self._button_focused,
         )
 
         return modal_rect, content_rect, close_rect, item_rects
@@ -1412,7 +1391,10 @@ class ScraperWizardModal:
             )
 
         self._render_action_buttons(
-            screen, content_rect, [("Done", "done")]
+            screen,
+            content_rect,
+            [("Done", "done")],
+            focused=self._button_focused,
         )
 
         return modal_rect, content_rect, close_rect, []
@@ -1420,21 +1402,23 @@ class ScraperWizardModal:
     # Button helpers
 
     def _render_action_buttons(
-        self, screen: pygame.Surface, content_rect: pygame.Rect,
+        self,
+        screen: pygame.Surface,
+        content_rect: pygame.Rect,
         buttons: List[Tuple[str, str]],
+        focused: bool = False,
     ):
         """Render action buttons at the bottom of a modal.
 
         Args:
             buttons: List of (label, button_type) tuples.
                      button_type: "start", "done", "retry", "select_folder"
+            focused: Whether the button area is focused (for joystick nav)
         """
         padding = self.theme.padding_sm
         btn_height = 32
         btn_y = content_rect.bottom - padding - btn_height - 2
-        total_width = sum(
-            min(160, len(b[0]) * 10 + 30) for b in buttons
-        )
+        total_width = sum(min(160, len(b[0]) * 10 + 30) for b in buttons)
         spacing = 10
         total_width += spacing * (len(buttons) - 1)
         x = content_rect.centerx - total_width // 2
@@ -1444,28 +1428,30 @@ class ScraperWizardModal:
             btn_rect = pygame.Rect(x, btn_y, btn_width, btn_height)
             if btn_type == "retry":
                 self.action_button.render_secondary(
-                    screen, btn_rect, label
+                    screen, btn_rect, label, hover=focused
                 )
                 self.retry_button_rect = btn_rect
             elif btn_type == "done":
                 self.action_button.render_success(
-                    screen, btn_rect, label
+                    screen, btn_rect, label, hover=focused
                 )
                 self.done_button_rect = btn_rect
             elif btn_type == "start":
                 self.action_button.render_success(
-                    screen, btn_rect, label
+                    screen, btn_rect, label, hover=focused
                 )
                 self.start_button_rect = btn_rect
             elif btn_type == "select_folder":
                 self.action_button.render_success(
-                    screen, btn_rect, label
+                    screen, btn_rect, label, hover=focused
                 )
                 self.select_button_rect = btn_rect
             x += btn_width + spacing
 
     def _render_nav_bar(
-        self, screen: pygame.Surface, content_rect: pygame.Rect,
+        self,
+        screen: pygame.Surface,
+        content_rect: pygame.Rect,
         show_select: bool = True,
     ):
         """Render on-screen navigation buttons at the top of the modal content for Android.
@@ -1492,15 +1478,21 @@ class ScraperWizardModal:
         for label, nav_type in buttons:
             btn_rect = pygame.Rect(x, btn_y, btn_w, btn_h)
             pygame.draw.rect(
-                screen, self.theme.surface_hover, btn_rect,
+                screen,
+                self.theme.surface_hover,
+                btn_rect,
                 border_radius=self.theme.radius_sm,
             )
             pygame.draw.rect(
-                screen, self.theme.border, btn_rect,
-                width=1, border_radius=self.theme.radius_sm,
+                screen,
+                self.theme.text_secondary,
+                btn_rect,
+                width=1,
+                border_radius=self.theme.radius_sm,
             )
             self.text.render(
-                screen, label,
+                screen,
+                label,
                 (btn_rect.centerx, btn_rect.centery - self.theme.font_size_sm // 2),
                 color=self.theme.text_primary,
                 size=self.theme.font_size_sm,

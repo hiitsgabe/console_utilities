@@ -102,6 +102,7 @@ class ConsoleUtilitiesApp:
             # Set SSL certificate bundle for requests/urllib on Android
             try:
                 import certifi
+
                 os.environ["SSL_CERT_FILE"] = certifi.where()
                 os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
             except ImportError:
@@ -134,7 +135,8 @@ class ConsoleUtilitiesApp:
             else:
                 # Landscape: use native resolution
                 self.screen = pygame.display.set_mode(
-                    (native_w, native_h), pygame.SCALED | pygame.FULLSCREEN,
+                    (native_w, native_h),
+                    pygame.SCALED | pygame.FULLSCREEN,
                 )
         else:
             display_info = pygame.display.Info()
@@ -596,6 +598,7 @@ class ConsoleUtilitiesApp:
             self._is_backgrounded = True
             self._needs_display_restore = True
             from utils.logging import log_error
+
             log_error(f"[restore_display] Error, will retry: {e}")
 
     def _handle_android_orientation(self, new_w: int, new_h: int):
@@ -620,9 +623,7 @@ class ConsoleUtilitiesApp:
             sw, sh = self.screen.get_size()
             self.scanline_surface = pygame.Surface((sw, sh), pygame.SRCALPHA)
             for y in range(0, sh, 3):
-                pygame.draw.line(
-                    self.scanline_surface, (0, 0, 0, 40), (0, y), (sw, y)
-                )
+                pygame.draw.line(self.scanline_surface, (0, 0, 0, 40), (0, y), (sw, y))
         self.bezel_surface = self._create_crt_bezel()
         self.vignette_surface = self._create_vignette()
         self.image_cache.clear()
@@ -1001,7 +1002,6 @@ class ConsoleUtilitiesApp:
                                 traceback.format_exc(),
                             )
 
-
             # Update image cache (process loaded images from background threads)
             self.image_cache.update()
 
@@ -1018,8 +1018,7 @@ class ConsoleUtilitiesApp:
 
             # Draw (skip when backgrounded or display surface is gone)
             _surface_ok = (
-                not self._is_backgrounded
-                and pygame.display.get_surface() is not None
+                not self._is_backgrounded and pygame.display.get_surface() is not None
             )
             if _surface_ok:
                 try:
@@ -1042,10 +1041,16 @@ class ConsoleUtilitiesApp:
                     self.state.ui_rects.close_button = rects.get("close")
                     self.state.ui_rects.modal_char_rects = rects.get("char_rects", [])
                     self.state.ui_rects.scroll_offset = rects.get("scroll_offset", 0)
-                    self.state.ui_rects.folder_select_button = rects.get("select_button")
-                    self.state.ui_rects.folder_cancel_button = rects.get("cancel_button")
+                    self.state.ui_rects.folder_select_button = rects.get(
+                        "select_button"
+                    )
+                    self.state.ui_rects.folder_cancel_button = rects.get(
+                        "cancel_button"
+                    )
                     self.state.ui_rects.confirm_ok_button = rects.get("confirm_ok")
-                    self.state.ui_rects.confirm_cancel_button = rects.get("confirm_cancel")
+                    self.state.ui_rects.confirm_cancel_button = rects.get(
+                        "confirm_cancel"
+                    )
                     self.state.ui_rects.rects = rects
 
                     if self.scanline_surface:
@@ -1115,7 +1120,10 @@ class ConsoleUtilitiesApp:
             )
             return
 
-        if self.state.steam_shortcut.show and self.state.steam_shortcut.step == "results":
+        if (
+            self.state.steam_shortcut.show
+            and self.state.steam_shortcut.step == "results"
+        ):
             results = self.state.steam_shortcut.search_results
             if results:
                 columns = 3
@@ -1220,7 +1228,14 @@ class ConsoleUtilitiesApp:
         if self.state.mode == "systems":
             from ui.screens.systems_screen import systems_screen
 
-            max_items = systems_screen.get_root_menu_count(self.settings)
+            dl_count = sum(
+                1
+                for it in self.state.download_queue.items
+                if it.status in ("waiting", "downloading", "extracting", "moving")
+            )
+            max_items = systems_screen.get_root_menu_count(
+                self.settings, active_download_count=dl_count
+            )
 
             if direction in ("up", "left"):
                 self.state.highlighted = (self.state.highlighted - 1) % max_items
@@ -1269,7 +1284,10 @@ class ConsoleUtilitiesApp:
                     if new_pos < 0:
                         # Wrap to last row
                         last_row_start = (max_items - 1) // columns * columns
-                        new_pos = min(last_row_start + (self.state.highlighted % columns), max_items - 1)
+                        new_pos = min(
+                            last_row_start + (self.state.highlighted % columns),
+                            max_items - 1,
+                        )
                     self.state.highlighted = new_pos
                 elif direction == "down":
                     new_pos = self.state.highlighted + columns
@@ -1374,7 +1392,9 @@ class ConsoleUtilitiesApp:
                 sys_settings = self.settings.get("system_settings", {})
                 is_hidden = sys_settings.get(system_name, {}).get("hidden", False)
                 per_sys = sys_settings.get(system_name, {})
-                max_items = system_settings_screen.get_max_items(system, is_hidden, per_sys)
+                max_items = system_settings_screen.get_max_items(
+                    system, is_hidden, per_sys
+                )
                 _, divider_indices = system_settings_screen._get_items(
                     system, is_hidden, per_sys
                 )
@@ -1385,12 +1405,16 @@ class ConsoleUtilitiesApp:
             if max_items > 0:
                 if direction in ("up", "left"):
                     new_pos = (self.state.system_settings_highlighted - 1) % max_items
-                    while new_pos in divider_indices and max_items > len(divider_indices):
+                    while new_pos in divider_indices and max_items > len(
+                        divider_indices
+                    ):
                         new_pos = (new_pos - 1) % max_items
                     self.state.system_settings_highlighted = new_pos
                 elif direction in ("down", "right"):
                     new_pos = (self.state.system_settings_highlighted + 1) % max_items
-                    while new_pos in divider_indices and max_items > len(divider_indices):
+                    while new_pos in divider_indices and max_items > len(
+                        divider_indices
+                    ):
                         new_pos = (new_pos + 1) % max_items
                     self.state.system_settings_highlighted = new_pos
 
@@ -1680,9 +1704,7 @@ class ConsoleUtilitiesApp:
         elif kgj.active_modal is None:
             from ui.screens.kgj_mlb_patcher_screen import kgj_mlb_patcher_screen
 
-            max_items = kgj_mlb_patcher_screen.get_count(
-                self.state, self.settings
-            )
+            max_items = kgj_mlb_patcher_screen.get_count(self.state, self.settings)
             if direction in ("up", "left"):
                 self.state.highlighted = (self.state.highlighted - 1) % max_items
             elif direction in ("down", "right"):
@@ -1727,9 +1749,7 @@ class ConsoleUtilitiesApp:
         elif mvp.active_modal is None:
             from ui.screens.mvp_psp_patcher_screen import mvp_psp_patcher_screen
 
-            max_items = mvp_psp_patcher_screen.get_count(
-                self.state, self.settings
-            )
+            max_items = mvp_psp_patcher_screen.get_count(self.state, self.settings)
             if direction in ("up", "left"):
                 self.state.highlighted = (self.state.highlighted - 1) % max_items
             elif direction in ("down", "right"):
@@ -1774,9 +1794,7 @@ class ConsoleUtilitiesApp:
         elif nba.active_modal is None:
             from ui.screens.nbalive95_patcher_screen import nbalive95_patcher_screen
 
-            max_items = nbalive95_patcher_screen.get_count(
-                self.state, self.settings
-            )
+            max_items = nbalive95_patcher_screen.get_count(self.state, self.settings)
             if direction in ("up", "left"):
                 self.state.highlighted = (self.state.highlighted - 1) % max_items
             elif direction in ("down", "right"):
@@ -1994,48 +2012,18 @@ class ConsoleUtilitiesApp:
             elif event.key == pygame.K_RETURN:
                 self._search_scraper_game()
             elif event.key == pygame.K_BACKSPACE:
-                if wizard.search_name and wizard.search_name_cursor > 0:
-                    wizard.search_name = (
-                        wizard.search_name[:wizard.search_name_cursor - 1]
-                        + wizard.search_name[wizard.search_name_cursor:]
-                    )
-                    wizard.search_name_cursor -= 1
-            elif event.key == pygame.K_DELETE:
-                if wizard.search_name_cursor < len(wizard.search_name):
-                    wizard.search_name = (
-                        wizard.search_name[:wizard.search_name_cursor]
-                        + wizard.search_name[wizard.search_name_cursor + 1:]
-                    )
-            elif event.key == pygame.K_LEFT:
-                wizard.search_name_cursor = max(0, wizard.search_name_cursor - 1)
-            elif event.key == pygame.K_RIGHT:
-                wizard.search_name_cursor = min(
-                    len(wizard.search_name), wizard.search_name_cursor + 1
-                )
-            elif event.key == pygame.K_HOME:
-                wizard.search_name_cursor = 0
-            elif event.key == pygame.K_END:
-                wizard.search_name_cursor = len(wizard.search_name)
+                if wizard.search_name:
+                    wizard.search_name = wizard.search_name[:-1]
             elif self._is_paste_event(event):
                 clip = self._get_clipboard_text()
                 if clip:
-                    wizard.search_name = (
-                        wizard.search_name[:wizard.search_name_cursor]
-                        + clip
-                        + wizard.search_name[wizard.search_name_cursor:]
-                    )
-                    wizard.search_name_cursor += len(clip)
+                    wizard.search_name += clip
             elif (
                 event.unicode
                 and event.unicode.isprintable()
                 and BUILD_TARGET != "android"
             ):
-                wizard.search_name = (
-                    wizard.search_name[:wizard.search_name_cursor]
-                    + event.unicode
-                    + wizard.search_name[wizard.search_name_cursor:]
-                )
-                wizard.search_name_cursor += 1
+                wizard.search_name += event.unicode
             return
 
         # Handle keyboard text input for IA login modal
@@ -2277,10 +2265,14 @@ class ConsoleUtilitiesApp:
                 return
 
         # Handle keyboard/web-companion text input for auth token input
-        if self.state.auth_token_input.show and self.state.auth_token_input.step == "input" and (
-            self.state.input_mode == "keyboard"
-            or BUILD_TARGET == "android"
-            or getattr(event, "web_companion", False)
+        if (
+            self.state.auth_token_input.show
+            and self.state.auth_token_input.step == "input"
+            and (
+                self.state.input_mode == "keyboard"
+                or BUILD_TARGET == "android"
+                or getattr(event, "web_companion", False)
+            )
         ):
             if event.key == pygame.K_ESCAPE:
                 self._go_back()
@@ -2407,20 +2399,20 @@ class ConsoleUtilitiesApp:
                 self.state.scraper_login.password += text
             elif step == "api_key":
                 self.state.scraper_login.api_key += text
-        elif self.state.auth_token_input.show and self.state.auth_token_input.step == "input":
+        elif (
+            self.state.auth_token_input.show
+            and self.state.auth_token_input.step == "input"
+        ):
             self.state.auth_token_input.input_text += text
         elif self.state.url_input.show:
             self.state.url_input.input_text += text
         elif self.state.folder_name_input.show:
             self.state.folder_name_input.input_text += text
-        elif self.state.scraper_wizard.show and self.state.scraper_wizard.step == "edit_name":
-            wizard = self.state.scraper_wizard
-            wizard.search_name = (
-                wizard.search_name[:wizard.search_name_cursor]
-                + text
-                + wizard.search_name[wizard.search_name_cursor:]
-            )
-            wizard.search_name_cursor += len(text)
+        elif (
+            self.state.scraper_wizard.show
+            and self.state.scraper_wizard.step == "edit_name"
+        ):
+            self.state.scraper_wizard.search_name += text
 
     def _handle_joystick_event(self, event: pygame.event.Event):
         """Handle joystick button events."""
@@ -2495,15 +2487,23 @@ class ConsoleUtilitiesApp:
             return
 
         # Check steam shortcut modal clicks
-        if self.state.steam_shortcut.show and self.state.steam_shortcut.step == "results":
+        if (
+            self.state.steam_shortcut.show
+            and self.state.steam_shortcut.step == "results"
+        ):
             for i, rect in enumerate(self.state.ui_rects.menu_items):
                 if rect.collidepoint(x, y):
-                    self.state.steam_shortcut.selected_index = i + self.state.ui_rects.scroll_offset
+                    self.state.steam_shortcut.selected_index = (
+                        i + self.state.ui_rects.scroll_offset
+                    )
                     self._handle_steam_result_selection()
                     return
             return
 
-        if self.state.steam_shortcut.show and self.state.steam_shortcut.step == "complete":
+        if (
+            self.state.steam_shortcut.show
+            and self.state.steam_shortcut.step == "complete"
+        ):
             steam_ok = self.state.ui_rects.rects.get("steam_ok")
             if steam_ok and steam_ok.collidepoint(x, y):
                 self.state.steam_shortcut.show = False
@@ -2524,7 +2524,9 @@ class ConsoleUtilitiesApp:
             # Check folder browser items (account for scroll offset)
             for i, rect in enumerate(self.state.ui_rects.menu_items):
                 if rect.collidepoint(x, y):
-                    self.state.folder_browser.highlighted = i + self.state.ui_rects.scroll_offset
+                    self.state.folder_browser.highlighted = (
+                        i + self.state.ui_rects.scroll_offset
+                    )
                     self._handle_folder_browser_selection()
                     return
             return
@@ -2570,10 +2572,14 @@ class ConsoleUtilitiesApp:
             bksp = rects.get("backspace")
             if bksp and bksp.collidepoint(x, y):
                 wizard = self.state.scraper_wizard
-                if wizard.step == "edit_name" and wizard.search_name and wizard.search_name_cursor > 0:
+                if (
+                    wizard.step == "edit_name"
+                    and wizard.search_name
+                    and wizard.search_name_cursor > 0
+                ):
                     wizard.search_name = (
-                        wizard.search_name[:wizard.search_name_cursor - 1]
-                        + wizard.search_name[wizard.search_name_cursor:]
+                        wizard.search_name[: wizard.search_name_cursor - 1]
+                        + wizard.search_name[wizard.search_name_cursor :]
                     )
                     wizard.search_name_cursor -= 1
                 return
@@ -2583,13 +2589,7 @@ class ConsoleUtilitiesApp:
             for i, rect in enumerate(self.state.ui_rects.menu_items):
                 if rect.collidepoint(x, y):
                     idx = i + self.state.ui_rects.scroll_offset
-                    if step in ("rom_select", "folder_select"):
-                        wizard.folder_highlighted = idx
-                        if step == "rom_select":
-                            self._handle_scraper_rom_selection()
-                        else:
-                            self._handle_scraper_folder_selection()
-                    elif step == "game_select":
+                    if step == "game_select":
                         wizard.selected_game_index = idx
                         self._handle_scraper_wizard_selection()
                     elif step == "rom_list":
@@ -2663,7 +2663,10 @@ class ConsoleUtilitiesApp:
             for char_rect, char_index, char in self.state.ui_rects.modal_char_rects:
                 if char_rect.collidepoint(x, y):
                     # Set cursor position and trigger selection based on active modal
-                    if self.state.auth_token_input.show and self.state.auth_token_input.step == "input":
+                    if (
+                        self.state.auth_token_input.show
+                        and self.state.auth_token_input.step == "input"
+                    ):
                         self.state.auth_token_input.cursor_position = char_index
                         self._handle_auth_token_selection()
                     elif self.state.show_search_input:
@@ -2687,6 +2690,12 @@ class ConsoleUtilitiesApp:
                     elif self.state.scraper_login.show:
                         self.state.scraper_login.cursor_position = char_index
                         self._handle_scraper_login_selection()
+                    elif (
+                        self.state.scraper_wizard.show
+                        and self.state.scraper_wizard.step == "edit_name"
+                    ):
+                        self.state.scraper_wizard.search_name_cursor = char_index
+                        self._handle_scraper_wizard_selection()
                     elif (
                         self.state.mode == "we_patcher"
                         and self.state.we_patcher.active_modal == "league_browser"
@@ -2858,7 +2867,9 @@ class ConsoleUtilitiesApp:
                 self.state.steam_shortcut.step = "search"
                 self.state.show_search_input = True
                 self.state.search.input_text = self.state.steam_shortcut.search_query
-                self.state.search.cursor_position = len(self.state.steam_shortcut.search_query)
+                self.state.search.cursor_position = len(
+                    self.state.steam_shortcut.search_query
+                )
                 self.state.search._steam_mode = True
             elif self.state.steam_shortcut.step in ("complete", "error"):
                 self.state.steam_shortcut.show = False
@@ -2921,6 +2932,7 @@ class ConsoleUtilitiesApp:
                 self.state.scraper_wizard.step = "image_select"
             elif self.state.scraper_wizard.step == "edit_name":
                 self.state.scraper_wizard.step = "rom_select"
+                self._open_folder_browser("scraper_rom_select")
             else:
                 self._close_scraper_wizard()
         elif self.state.dedupe_wizard.show:
@@ -3061,7 +3073,10 @@ class ConsoleUtilitiesApp:
             return
 
         if self.state.auth_token_input.show:
-            if BUILD_TARGET == "android" and self.state.auth_token_input.step == "input":
+            if (
+                BUILD_TARGET == "android"
+                and self.state.auth_token_input.step == "input"
+            ):
                 self._handle_text_modal_ok_click()
             else:
                 self._handle_auth_token_selection()
@@ -3085,11 +3100,17 @@ class ConsoleUtilitiesApp:
                 self._handle_folder_name_input_selection()
             return
 
-        if self.state.steam_shortcut.show and self.state.steam_shortcut.step == "results":
+        if (
+            self.state.steam_shortcut.show
+            and self.state.steam_shortcut.step == "results"
+        ):
             self._handle_steam_result_selection()
             return
 
-        if self.state.steam_shortcut.show and self.state.steam_shortcut.step == "complete":
+        if (
+            self.state.steam_shortcut.show
+            and self.state.steam_shortcut.step == "complete"
+        ):
             self.state.steam_shortcut.show = False
             return
 
@@ -3154,10 +3175,20 @@ class ConsoleUtilitiesApp:
         if self.state.mode == "systems":
             from ui.screens.systems_screen import systems_screen
 
-            action = systems_screen.get_root_menu_action(
-                self.state.highlighted, self.settings
+            dl_count = sum(
+                1
+                for it in self.state.download_queue.items
+                if it.status in ("waiting", "downloading", "extracting", "moving")
             )
-            if action == "systems_list":
+            action = systems_screen.get_root_menu_action(
+                self.state.highlighted,
+                self.settings,
+                active_download_count=dl_count,
+            )
+            if action == "downloads":
+                self.state.mode = "downloads"
+                self.state.download_queue.highlighted = 0
+            elif action == "systems_list":
                 self.state.mode = "systems_list"
                 # Don't reset systems_list_highlighted to preserve position
             elif action == "portmaster":
@@ -3181,15 +3212,15 @@ class ConsoleUtilitiesApp:
             visible = get_visible_systems(self.data, self.settings)
             if visible and self.state.systems_list_highlighted < len(visible):
                 system = visible[self.state.systems_list_highlighted]
-                system_index = get_system_index_by_name(
-                    self.data, system["name"]
-                )
+                system_index = get_system_index_by_name(self.data, system["name"])
                 self.state.selected_system = system_index
 
                 system_data = self.data[system_index]
 
                 # Check if NSZ system requires NSZ to be enabled
-                if is_nsz_system(system_data) and not self.settings.get("nsz_enabled", False):
+                if is_nsz_system(system_data) and not self.settings.get(
+                    "nsz_enabled", False
+                ):
                     self.state.confirm_modal.show = True
                     self.state.confirm_modal.title = "NSZ Not Enabled"
                     self.state.confirm_modal.message_lines = [
@@ -3477,8 +3508,11 @@ class ConsoleUtilitiesApp:
                 "enable_boxart", True
             )
             save_settings(self.settings)
-        elif action == "toggle_usa_only":
-            self.settings["usa_only"] = not self.settings.get("usa_only", False)
+        elif action == "cycle_filter_region":
+            regions = ["none", "usa", "europe", "japan", "world", "other"]
+            current = self.settings.get("filter_region", "none")
+            idx = regions.index(current) if current in regions else 0
+            self.settings["filter_region"] = regions[(idx + 1) % len(regions)]
             save_settings(self.settings)
         elif action == "toggle_dedupe_game_list":
             self.settings["dedupe_game_list"] = not self.settings.get(
@@ -3796,9 +3830,8 @@ class ConsoleUtilitiesApp:
 
     def _init_download_manager(self):
         """Initialize the download manager based on platform and settings."""
-        use_android_native = (
-            BUILD_TARGET == "android"
-            and not self.settings.get("use_python_downloader", False)
+        use_android_native = BUILD_TARGET == "android" and not self.settings.get(
+            "use_python_downloader", False
         )
         if use_android_native:
             from droid.download_manager import AndroidDownloadManager
@@ -3891,9 +3924,10 @@ class ConsoleUtilitiesApp:
                 "",
             ]
 
-            can_auto_update = BUILD_TARGET in ("pygame", "android") and release_info.get(
-                "asset_url"
-            )
+            can_auto_update = BUILD_TARGET in (
+                "pygame",
+                "android",
+            ) and release_info.get("asset_url")
 
             if can_auto_update:
                 size = release_info.get("asset_size", 0)
@@ -4077,7 +4111,10 @@ class ConsoleUtilitiesApp:
         """Load more Steam search results (infinite scroll)."""
         from services.steam_search import search_steam_games
 
-        if self.state.steam_shortcut.loading_more or not self.state.steam_shortcut.has_more:
+        if (
+            self.state.steam_shortcut.loading_more
+            or not self.state.steam_shortcut.has_more
+        ):
             return
 
         self.state.steam_shortcut.loading_more = True
@@ -4272,9 +4309,11 @@ class ConsoleUtilitiesApp:
             path = roms_dir
             if system:
                 system_name = system.get("name", "")
-                custom = self.settings.get("system_settings", {}).get(
-                    system_name, {}
-                ).get("custom_folder", "")
+                custom = (
+                    self.settings.get("system_settings", {})
+                    .get(system_name, {})
+                    .get("custom_folder", "")
+                )
                 if custom:
                     # Open inside the saved custom folder
                     if os.path.isdir(custom):
@@ -4540,8 +4579,15 @@ class ConsoleUtilitiesApp:
         )
 
         is_psx_context = selection_type == "we_patcher_rom"
-        is_snes_context = selection_type in ("iss_patcher_rom", "nhl94_patcher_rom", "kgj_mlb_patcher_rom")
-        is_genesis_context = selection_type in ("nhl94_gen_patcher_rom", "nbalive95_patcher_rom")
+        is_snes_context = selection_type in (
+            "iss_patcher_rom",
+            "nhl94_patcher_rom",
+            "kgj_mlb_patcher_rom",
+        )
+        is_genesis_context = selection_type in (
+            "nhl94_gen_patcher_rom",
+            "nbalive95_patcher_rom",
+        )
         is_psp_context = selection_type in ("nhl07_patcher_rom", "mvp_psp_patcher_rom")
         if is_psx_context:
             nav_loader = load_psx_rom_folder_contents
@@ -4594,11 +4640,20 @@ class ConsoleUtilitiesApp:
         ):
             # Only allow file selection for file-type selection modes
             folder_only_types = (
-                "work_dir", "roms_dir", "custom_folder",
-                "esde_media_path", "esde_gamelists_path", "retroarch_thumbnails",
-                "add_system_folder", "ia_collection_folder",
-                "dedupe_folder", "rename_folder", "ghost_cleaner_folder",
-                "ia_download_folder", "steam_shortcut", "scraper_batch_folder",
+                "work_dir",
+                "roms_dir",
+                "custom_folder",
+                "esde_media_path",
+                "esde_gamelists_path",
+                "retroarch_thumbnails",
+                "add_system_folder",
+                "ia_collection_folder",
+                "dedupe_folder",
+                "rename_folder",
+                "ghost_cleaner_folder",
+                "ia_download_folder",
+                "steam_shortcut",
+                "scraper_batch_folder",
                 "folder",
             )
             if selection_type not in folder_only_types:
@@ -4637,7 +4692,8 @@ class ConsoleUtilitiesApp:
 
             service = get_scraper_service(self.settings)
             wizard.search_name = service.extract_game_name(path)
-            wizard.search_name_cursor = len(wizard.search_name)
+            wizard.search_name_cursor = 0
+            wizard.search_name_shift = False
             wizard.step = "edit_name"
         elif selection_type == "extract_zip":
             # Extract ZIP file to same folder
@@ -4668,7 +4724,11 @@ class ConsoleUtilitiesApp:
             self.settings["retroarch_thumbnails_path"] = path
             save_settings(self.settings)
         elif selection_type == "we_patcher_rom":
-            from utils.zip_rom import is_zip, extract_rom_from_zip, cleanup_temp_dir as _zt_cleanup
+            from utils.zip_rom import (
+                is_zip,
+                extract_rom_from_zip,
+                cleanup_temp_dir as _zt_cleanup,
+            )
 
             we_st = self.state.we_patcher
             # Clean up previous temp dir
@@ -4706,7 +4766,11 @@ class ConsoleUtilitiesApp:
             # Reset slot mapping when ROM changes
             we_st.slot_mapping = []
         elif selection_type == "iss_patcher_rom":
-            from utils.zip_rom import is_zip, extract_rom_from_zip, cleanup_temp_dir as _zt_cleanup
+            from utils.zip_rom import (
+                is_zip,
+                extract_rom_from_zip,
+                cleanup_temp_dir as _zt_cleanup,
+            )
 
             iss_st = self.state.iss_patcher
             _zt_cleanup(iss_st.zip_temp_dir)
@@ -4739,7 +4803,11 @@ class ConsoleUtilitiesApp:
                 iss_st.rom_info = None
             iss_st.slot_mapping = []
         elif selection_type == "nhl94_patcher_rom":
-            from utils.zip_rom import is_zip, extract_rom_from_zip, cleanup_temp_dir as _zt_cleanup
+            from utils.zip_rom import (
+                is_zip,
+                extract_rom_from_zip,
+                cleanup_temp_dir as _zt_cleanup,
+            )
 
             nhl_st = self.state.nhl94_patcher
             _zt_cleanup(nhl_st.zip_temp_dir)
@@ -4773,7 +4841,11 @@ class ConsoleUtilitiesApp:
                 nhl_st.rom_valid = False
                 nhl_st.rom_info = None
         elif selection_type == "kgj_mlb_patcher_rom":
-            from utils.zip_rom import is_zip, extract_rom_from_zip, cleanup_temp_dir as _zt_cleanup
+            from utils.zip_rom import (
+                is_zip,
+                extract_rom_from_zip,
+                cleanup_temp_dir as _zt_cleanup,
+            )
 
             kgj_st = self.state.kgj_mlb_patcher
             _zt_cleanup(kgj_st.zip_temp_dir)
@@ -4807,7 +4879,11 @@ class ConsoleUtilitiesApp:
                 kgj_st.rom_valid = False
                 kgj_st.rom_info = None
         elif selection_type == "nbalive95_patcher_rom":
-            from utils.zip_rom import is_zip, extract_rom_from_zip, cleanup_temp_dir as _zt_cleanup
+            from utils.zip_rom import (
+                is_zip,
+                extract_rom_from_zip,
+                cleanup_temp_dir as _zt_cleanup,
+            )
 
             nba_st = self.state.nbalive95_patcher
             _zt_cleanup(nba_st.zip_temp_dir)
@@ -4841,7 +4917,11 @@ class ConsoleUtilitiesApp:
                 nba_st.rom_valid = False
                 nba_st.rom_info = None
         elif selection_type == "nhl94_gen_patcher_rom":
-            from utils.zip_rom import is_zip, extract_rom_from_zip, cleanup_temp_dir as _zt_cleanup
+            from utils.zip_rom import (
+                is_zip,
+                extract_rom_from_zip,
+                cleanup_temp_dir as _zt_cleanup,
+            )
 
             nhl_gen_st = self.state.nhl94_gen_patcher
             _zt_cleanup(nhl_gen_st.zip_temp_dir)
@@ -4875,7 +4955,11 @@ class ConsoleUtilitiesApp:
                 nhl_gen_st.rom_valid = False
                 nhl_gen_st.rom_info = None
         elif selection_type == "nhl07_patcher_rom":
-            from utils.zip_rom import is_zip, extract_rom_from_zip, cleanup_temp_dir as _zt_cleanup
+            from utils.zip_rom import (
+                is_zip,
+                extract_rom_from_zip,
+                cleanup_temp_dir as _zt_cleanup,
+            )
 
             nhl07_st = self.state.nhl07_psp_patcher
             _zt_cleanup(nhl07_st.zip_temp_dir)
@@ -4909,7 +4993,11 @@ class ConsoleUtilitiesApp:
                 nhl07_st.rom_valid = False
                 nhl07_st.rom_info = None
         elif selection_type == "mvp_psp_patcher_rom":
-            from utils.zip_rom import is_zip, extract_rom_from_zip, cleanup_temp_dir as _zt_cleanup
+            from utils.zip_rom import (
+                is_zip,
+                extract_rom_from_zip,
+                cleanup_temp_dir as _zt_cleanup,
+            )
 
             mvp_st = self.state.mvp_psp_patcher
             _zt_cleanup(mvp_st.zip_temp_dir)
@@ -5255,14 +5343,24 @@ class ConsoleUtilitiesApp:
         max_items = len(fb.items) or 1
         selection_type = (
             fb.selected_system_to_add.get("type", "folder")
-            if fb.selected_system_to_add else "folder"
+            if fb.selected_system_to_add
+            else "folder"
         )
         is_folder_selection = selection_type in (
-            "work_dir", "roms_dir", "custom_folder",
-            "esde_media_path", "esde_gamelists_path", "retroarch_thumbnails",
-            "add_system_folder", "ia_collection_folder",
-            "dedupe_folder", "rename_folder", "ghost_cleaner_folder",
-            "ia_download_folder", "folder",
+            "work_dir",
+            "roms_dir",
+            "custom_folder",
+            "esde_media_path",
+            "esde_gamelists_path",
+            "retroarch_thumbnails",
+            "add_system_folder",
+            "ia_collection_folder",
+            "dedupe_folder",
+            "rename_folder",
+            "ghost_cleaner_folder",
+            "ia_download_folder",
+            "scraper_batch_folder",
+            "folder",
         )
 
         if fb.focus_area == "list":
@@ -5530,7 +5628,10 @@ class ConsoleUtilitiesApp:
 
     def _handle_text_modal_ok_click(self):
         """Handle OK button click on text input modals."""
-        if self.state.auth_token_input.show and self.state.auth_token_input.step == "input":
+        if (
+            self.state.auth_token_input.show
+            and self.state.auth_token_input.step == "input"
+        ):
             self._submit_auth_token()
             return
         if self.state.show_search_input:
@@ -5566,7 +5667,10 @@ class ConsoleUtilitiesApp:
 
     def _handle_text_modal_backspace(self):
         """Handle backspace button tap on Android text input modals."""
-        if self.state.auth_token_input.show and self.state.auth_token_input.step == "input":
+        if (
+            self.state.auth_token_input.show
+            and self.state.auth_token_input.step == "input"
+        ):
             if self.state.auth_token_input.input_text:
                 self.state.auth_token_input.input_text = (
                     self.state.auth_token_input.input_text[:-1]
@@ -5580,9 +5684,13 @@ class ConsoleUtilitiesApp:
         elif self.state.scraper_login.show:
             step = self.state.scraper_login.step
             if step == "username" and self.state.scraper_login.username:
-                self.state.scraper_login.username = self.state.scraper_login.username[:-1]
+                self.state.scraper_login.username = self.state.scraper_login.username[
+                    :-1
+                ]
             elif step == "password" and self.state.scraper_login.password:
-                self.state.scraper_login.password = self.state.scraper_login.password[:-1]
+                self.state.scraper_login.password = self.state.scraper_login.password[
+                    :-1
+                ]
             elif step == "api_key" and self.state.scraper_login.api_key:
                 self.state.scraper_login.api_key = self.state.scraper_login.api_key[:-1]
         elif self.state.show_search_input:
@@ -5765,6 +5873,7 @@ class ConsoleUtilitiesApp:
                 return
             elif step == "image_select":
                 wizard = self.state.scraper_wizard
+                wizard.button_focused = False
                 if wizard.available_videos:
                     wizard.step = "video_select"
                     wizard.video_highlighted = 0
@@ -5772,15 +5881,13 @@ class ConsoleUtilitiesApp:
                     self._start_scraper_download()
                 return
             elif step == "video_select":
+                self.state.scraper_wizard.button_focused = False
                 self._start_scraper_download()
-                return
-            elif step == "folder_select":
-                # Select current folder for batch mode
-                self._select_batch_folder()
                 return
             elif step == "rom_list":
                 # Continue to batch options — auto-detect system from folder
                 wizard = self.state.scraper_wizard
+                wizard.button_focused = False
                 wizard.step = "batch_options"
                 wizard.image_highlighted = 0
                 if not wizard.batch_system:
@@ -5936,8 +6043,14 @@ class ConsoleUtilitiesApp:
             or self.state.url_input.show
             or self.state.ia_login.show
             or self.state.scraper_login.show
-            or (self.state.auth_token_input.show and self.state.auth_token_input.step == "input")
-            or (self.state.scraper_wizard.show and self.state.scraper_wizard.step == "edit_name")
+            or (
+                self.state.auth_token_input.show
+                and self.state.auth_token_input.step == "input"
+            )
+            or (
+                self.state.scraper_wizard.show
+                and self.state.scraper_wizard.step == "edit_name"
+            )
         )
 
     def _any_modal_open(self) -> bool:
@@ -6763,18 +6876,13 @@ class ConsoleUtilitiesApp:
         wizard.batch_mode = batch_mode
         wizard.folder_current_path = self.settings.get("roms_dir", SCRIPT_DIR)
 
-        # On Android, use the default folder browser (scoped storage)
-        if BUILD_TARGET == "android":
-            if batch_mode:
-                wizard.step = "folder_select"
-                self._open_folder_browser("scraper_batch_folder")
-            else:
-                wizard.step = "rom_select"
-                self._open_folder_browser("scraper_rom_select")
-            wizard.folder_items = []
+        if batch_mode:
+            wizard.step = "folder_select"
+            self._open_folder_browser("scraper_batch_folder")
         else:
-            wizard.step = "folder_select" if batch_mode else "rom_select"
-            wizard.folder_items = load_folder_contents(wizard.folder_current_path)
+            wizard.step = "rom_select"
+            self._open_folder_browser("scraper_rom_select")
+        wizard.folder_items = []
         wizard.folder_highlighted = 0
         wizard.selected_rom_path = ""
         wizard.selected_rom_name = ""
@@ -6814,96 +6922,129 @@ class ConsoleUtilitiesApp:
         wizard.batch_roms = []
         self.screen_manager.scraper_wizard_modal.clear_thumbs()
 
+    def _navigate_scraper_list(
+        self, wizard, direction, max_items, attr, has_button=False
+    ):
+        """Navigate a scraper wizard list with optional action button at bottom.
+
+        Up/down navigate list items. Left/right toggle focus to the action button.
+        """
+        cur = getattr(wizard, attr)
+        if direction == "up":
+            if wizard.button_focused:
+                wizard.button_focused = False
+            elif cur > 0:
+                setattr(wizard, attr, cur - 1)
+        elif direction == "down":
+            if not wizard.button_focused and cur < max_items - 1:
+                setattr(wizard, attr, cur + 1)
+        elif direction == "right":
+            if has_button and not wizard.button_focused:
+                wizard.button_focused = True
+        elif direction == "left":
+            if wizard.button_focused:
+                wizard.button_focused = False
+
     def _navigate_scraper_wizard(self, direction: str):
         """Handle navigation in scraper wizard."""
         wizard = self.state.scraper_wizard
         step = wizard.step
 
-        if step in ("rom_select", "folder_select"):
-            max_items = len(wizard.folder_items) or 1
-            if direction in ("up", "left"):
-                wizard.folder_highlighted = max(0, wizard.folder_highlighted - 1)
-            elif direction in ("down", "right"):
-                wizard.folder_highlighted = min(
-                    max_items - 1, wizard.folder_highlighted + 1
-                )
+        if step == "edit_name":
+            # Navigate the on-screen keyboard grid
+            from ui.organisms.char_keyboard import CharKeyboard
+
+            keyboard = CharKeyboard()
+            total_chars = keyboard.get_total_chars("default")
+            chars_per_row = 13
+            cur = wizard.search_name_cursor
+            if direction == "up" and cur >= chars_per_row:
+                cur -= chars_per_row
+            elif direction == "down" and cur + chars_per_row < total_chars:
+                cur += chars_per_row
+            elif direction == "left" and cur > 0:
+                cur -= 1
+            elif direction == "right" and cur < total_chars - 1:
+                cur += 1
+            wizard.search_name_cursor = cur
+            return
 
         elif step == "game_select":
             max_items = len(wizard.search_results) or 1
-            if direction in ("up", "left"):
-                wizard.selected_game_index = max(0, wizard.selected_game_index - 1)
-            elif direction in ("down", "right"):
-                wizard.selected_game_index = min(
-                    max_items - 1, wizard.selected_game_index + 1
-                )
+            self._navigate_scraper_list(
+                wizard, direction, max_items, "selected_game_index", has_button=True
+            )
 
         elif step == "image_select":
             max_items = len(wizard.available_images) or 1
-            if direction in ("up", "left"):
-                wizard.image_highlighted = max(0, wizard.image_highlighted - 1)
-            elif direction in ("down", "right"):
-                wizard.image_highlighted = min(
-                    max_items - 1, wizard.image_highlighted + 1
-                )
+            self._navigate_scraper_list(
+                wizard, direction, max_items, "image_highlighted", has_button=True
+            )
 
         elif step == "video_select":
-            # Items: "No Video" + available videos
             max_items = 1 + len(wizard.available_videos)
-            if direction in ("up", "left"):
-                wizard.video_highlighted = max(0, wizard.video_highlighted - 1)
-            elif direction in ("down", "right"):
-                wizard.video_highlighted = min(
-                    max_items - 1, wizard.video_highlighted + 1
-                )
+            self._navigate_scraper_list(
+                wizard, direction, max_items, "video_highlighted", has_button=True
+            )
 
         elif step == "rom_list":
             max_items = len(wizard.batch_roms) or 1
-            if direction in ("up", "left"):
-                wizard.batch_current_index = max(0, wizard.batch_current_index - 1)
-            elif direction in ("down", "right"):
-                wizard.batch_current_index = min(
-                    max_items - 1, wizard.batch_current_index + 1
-                )
+            self._navigate_scraper_list(
+                wizard, direction, max_items, "batch_current_index", has_button=True
+            )
 
         elif step == "batch_options":
             mixed = (
                 self.settings.get("scraper_mixed_images", False)
                 and self.settings.get("scraper_provider", "libretro") == "screenscraper"
             )
-            # System + Auto-select + image types + Download Video toggle
             max_items = (9 if mixed else 7) + 1
-            if direction in ("up", "left"):
-                wizard.image_highlighted = max(0, wizard.image_highlighted - 1)
-            elif direction in ("down", "right"):
-                wizard.image_highlighted = min(
-                    max_items - 1, wizard.image_highlighted + 1
-                )
+            self._navigate_scraper_list(
+                wizard, direction, max_items, "image_highlighted", has_button=True
+            )
+
+        elif step in ("complete", "batch_complete", "error"):
+            # These steps only have a button, always focused
+            wizard.button_focused = True
 
     def _handle_scraper_wizard_selection(self):
         """Handle selection in scraper wizard."""
         wizard = self.state.scraper_wizard
         step = wizard.step
 
-        if step == "rom_select":
-            self._handle_scraper_rom_selection()
-
-        elif step == "folder_select":
-            self._handle_scraper_folder_selection()
+        if step == "edit_name":
+            # Handle on-screen keyboard character selection
+            modal = self.screen_manager.scraper_wizard_modal
+            new_text, is_done, toggle_shift = modal.handle_edit_name_selection(
+                wizard.search_name_cursor,
+                wizard.search_name,
+                shift_active=wizard.search_name_shift,
+            )
+            if toggle_shift:
+                wizard.search_name_shift = not wizard.search_name_shift
+            wizard.search_name = new_text
+            if is_done:
+                self._search_scraper_game()
+            return
 
         elif step == "game_select":
-            if wizard.search_results:
+            if wizard.button_focused:
+                self._handle_start_action()
+            elif wizard.search_results:
                 self._fetch_scraper_images()
 
         elif step == "image_select":
-            # Toggle image selection
-            if wizard.image_highlighted in wizard.selected_images:
+            if wizard.button_focused:
+                self._handle_start_action()
+            elif wizard.image_highlighted in wizard.selected_images:
                 wizard.selected_images.discard(wizard.image_highlighted)
             else:
                 wizard.selected_images.add(wizard.image_highlighted)
 
         elif step == "video_select":
-            # Select/deselect video (radio-style: 0=no video, 1+=video index)
-            if wizard.video_highlighted == 0:
+            if wizard.button_focused:
+                self._handle_start_action()
+            elif wizard.video_highlighted == 0:
                 wizard.selected_video_index = -1  # No video
             else:
                 idx = wizard.video_highlighted - 1
@@ -6913,8 +7054,9 @@ class ConsoleUtilitiesApp:
                     wizard.selected_video_index = idx
 
         elif step == "rom_list":
-            # Toggle ROM skip status
-            if wizard.batch_current_index < len(wizard.batch_roms):
+            if wizard.button_focused:
+                self._handle_start_action()
+            elif wizard.batch_current_index < len(wizard.batch_roms):
                 rom = wizard.batch_roms[wizard.batch_current_index]
                 if rom.get("status") == "skipped":
                     rom["status"] = "pending"
@@ -6922,73 +7064,23 @@ class ConsoleUtilitiesApp:
                     rom["status"] = "skipped"
 
         elif step == "batch_options":
-            self._handle_batch_options_selection()
+            if wizard.button_focused:
+                self._handle_start_action()
+            else:
+                self._handle_batch_options_selection()
 
         elif step in ("complete", "batch_complete"):
             self._close_scraper_wizard()
 
         elif step == "error":
-            # Go back to rom_select to retry
-            wizard.step = "folder_select" if wizard.batch_mode else "rom_select"
+            # Reopen folder browser to retry
             wizard.error_message = ""
-
-    def _handle_scraper_rom_selection(self):
-        """Handle ROM file selection in scraper wizard."""
-        wizard = self.state.scraper_wizard
-        items = wizard.folder_items
-        highlighted = wizard.folder_highlighted
-
-        if highlighted >= len(items):
-            return
-
-        item = items[highlighted]
-        item_type = item.get("type", "")
-        item_path = item.get("path", "")
-
-        if item_type == "parent":
-            wizard.folder_current_path = item_path
-            wizard.folder_items = load_folder_contents(item_path)
-            wizard.folder_highlighted = 0
-
-        elif item_type == "folder":
-            wizard.folder_current_path = item_path
-            wizard.folder_items = load_folder_contents(item_path)
-            wizard.folder_highlighted = 0
-
-        elif item_type in ("file", "zip_file"):
-            # ROM file selected, go to edit name step
-            wizard.selected_rom_path = item_path
-            wizard.selected_rom_name = item.get("name", os.path.basename(item_path))
-            # Extract clean game name for editing
-            from services.scraper_service import get_scraper_service
-
-            service = get_scraper_service(self.settings)
-            wizard.search_name = service.extract_game_name(item_path)
-            wizard.search_name_cursor = len(wizard.search_name)
-            wizard.step = "edit_name"
-
-    def _handle_scraper_folder_selection(self):
-        """Handle folder selection in batch mode."""
-        wizard = self.state.scraper_wizard
-        items = wizard.folder_items
-        highlighted = wizard.folder_highlighted
-
-        if highlighted >= len(items):
-            return
-
-        item = items[highlighted]
-        item_type = item.get("type", "")
-        item_path = item.get("path", "")
-
-        if item_type == "parent":
-            wizard.folder_current_path = item_path
-            wizard.folder_items = load_folder_contents(item_path)
-            wizard.folder_highlighted = 0
-
-        elif item_type == "folder":
-            wizard.folder_current_path = item_path
-            wizard.folder_items = load_folder_contents(item_path)
-            wizard.folder_highlighted = 0
+            if wizard.batch_mode:
+                wizard.step = "folder_select"
+                self._open_folder_browser("scraper_batch_folder")
+            else:
+                wizard.step = "rom_select"
+                self._open_folder_browser("scraper_rom_select")
 
     def _select_batch_folder(self):
         """Select current folder for batch scraping."""
@@ -6996,8 +7088,7 @@ class ConsoleUtilitiesApp:
 
         roms = self.scraper_manager.scan_folder(wizard.folder_current_path)
         roms = [
-            {"name": r["name"], "path": r["path"], "status": "pending"}
-            for r in roms
+            {"name": r["name"], "path": r["path"], "status": "pending"} for r in roms
         ]
 
         if not roms:
@@ -8616,7 +8707,10 @@ class ConsoleUtilitiesApp:
 
                 # If input was from ZIP, re-zip all output files
                 if we.zip_path:
-                    from utils.zip_rom import create_output_zip, cleanup_temp_dir as _zclean
+                    from utils.zip_rom import (
+                        create_output_zip,
+                        cleanup_temp_dir as _zclean,
+                    )
 
                     zip_dir = os.path.dirname(we.zip_path)
                     # Collect all output files with new_prefix
@@ -9141,10 +9235,15 @@ class ConsoleUtilitiesApp:
 
                 # If input was from ZIP, re-zip output
                 if result.success and nhl.zip_path:
-                    from utils.zip_rom import create_output_zip, cleanup_temp_dir as _zclean
+                    from utils.zip_rom import (
+                        create_output_zip,
+                        cleanup_temp_dir as _zclean,
+                    )
 
                     zip_dir = os.path.dirname(nhl.zip_path)
-                    zip_name = os.path.splitext(os.path.basename(output_path))[0] + ".zip"
+                    zip_name = (
+                        os.path.splitext(os.path.basename(output_path))[0] + ".zip"
+                    )
                     output_zip = os.path.join(zip_dir, zip_name)
                     create_output_zip([output_path], output_zip)
                     nhl.patch_output_path = output_zip
@@ -9318,10 +9417,15 @@ class ConsoleUtilitiesApp:
                 kgj.patch_output_path = result.output_path if result.success else ""
 
                 if result.success and kgj.zip_path:
-                    from utils.zip_rom import create_output_zip, cleanup_temp_dir as _zclean
+                    from utils.zip_rom import (
+                        create_output_zip,
+                        cleanup_temp_dir as _zclean,
+                    )
 
                     zip_dir = os.path.dirname(kgj.zip_path)
-                    zip_name = os.path.splitext(os.path.basename(output_path))[0] + ".zip"
+                    zip_name = (
+                        os.path.splitext(os.path.basename(output_path))[0] + ".zip"
+                    )
                     output_zip = os.path.join(zip_dir, zip_name)
                     create_output_zip([output_path], output_zip)
                     kgj.patch_output_path = output_zip
@@ -9468,7 +9572,9 @@ class ConsoleUtilitiesApp:
         base_name = os.path.splitext(os.path.basename(input_path))[0]
         ext = os.path.splitext(input_path)[1]
         season = nba.selected_season
-        output_path = os.path.join(game_dir, f"{base_name} - NBA {season}-{str(season + 1)[-2:]}{ext}")
+        output_path = os.path.join(
+            game_dir, f"{base_name} - NBA {season}-{str(season + 1)[-2:]}{ext}"
+        )
 
         cache_dir = self.settings.get("work_dir", "workdir")
         cache_dir = os.path.join(cache_dir, "nba_cache")
@@ -9495,10 +9601,15 @@ class ConsoleUtilitiesApp:
                 nba.patch_output_path = result.output_path if result.success else ""
 
                 if result.success and nba.zip_path:
-                    from utils.zip_rom import create_output_zip, cleanup_temp_dir as _zclean
+                    from utils.zip_rom import (
+                        create_output_zip,
+                        cleanup_temp_dir as _zclean,
+                    )
 
                     zip_dir = os.path.dirname(nba.zip_path)
-                    zip_name = os.path.splitext(os.path.basename(output_path))[0] + ".zip"
+                    zip_name = (
+                        os.path.splitext(os.path.basename(output_path))[0] + ".zip"
+                    )
                     output_zip = os.path.join(zip_dir, zip_name)
                     create_output_zip([output_path], output_zip)
                     nba.patch_output_path = output_zip
@@ -9672,10 +9783,15 @@ class ConsoleUtilitiesApp:
                 mvp.patch_output_path = result.output_path if result.success else ""
 
                 if result.success and mvp.zip_path:
-                    from utils.zip_rom import create_output_zip, cleanup_temp_dir as _zclean
+                    from utils.zip_rom import (
+                        create_output_zip,
+                        cleanup_temp_dir as _zclean,
+                    )
 
                     zip_dir = os.path.dirname(mvp.zip_path)
-                    zip_name = os.path.splitext(os.path.basename(output_path))[0] + ".zip"
+                    zip_name = (
+                        os.path.splitext(os.path.basename(output_path))[0] + ".zip"
+                    )
                     output_zip = os.path.join(zip_dir, zip_name)
                     create_output_zip([output_path], output_zip)
                     mvp.patch_output_path = output_zip
@@ -9863,10 +9979,15 @@ class ConsoleUtilitiesApp:
                 nhl.patch_output_path = result.output_path if result.success else ""
 
                 if result.success and nhl.zip_path:
-                    from utils.zip_rom import create_output_zip, cleanup_temp_dir as _zclean
+                    from utils.zip_rom import (
+                        create_output_zip,
+                        cleanup_temp_dir as _zclean,
+                    )
 
                     zip_dir = os.path.dirname(nhl.zip_path)
-                    zip_name = os.path.splitext(os.path.basename(output_path))[0] + ".zip"
+                    zip_name = (
+                        os.path.splitext(os.path.basename(output_path))[0] + ".zip"
+                    )
                     output_zip = os.path.join(zip_dir, zip_name)
                     create_output_zip([output_path], output_zip)
                     nhl.patch_output_path = output_zip
@@ -10054,10 +10175,15 @@ class ConsoleUtilitiesApp:
                 nhl.patch_output_path = result.output_path if result.success else ""
 
                 if result.success and nhl.zip_path:
-                    from utils.zip_rom import create_output_zip, cleanup_temp_dir as _zclean
+                    from utils.zip_rom import (
+                        create_output_zip,
+                        cleanup_temp_dir as _zclean,
+                    )
 
                     zip_dir = os.path.dirname(nhl.zip_path)
-                    zip_name = os.path.splitext(os.path.basename(output_path))[0] + ".zip"
+                    zip_name = (
+                        os.path.splitext(os.path.basename(output_path))[0] + ".zip"
+                    )
                     output_zip = os.path.join(zip_dir, zip_name)
                     create_output_zip([output_path], output_zip)
                     nhl.patch_output_path = output_zip
@@ -10142,10 +10268,15 @@ class ConsoleUtilitiesApp:
 
                 # If input was from ZIP, re-zip output
                 if iss.zip_path:
-                    from utils.zip_rom import create_output_zip, cleanup_temp_dir as _zclean
+                    from utils.zip_rom import (
+                        create_output_zip,
+                        cleanup_temp_dir as _zclean,
+                    )
 
                     zip_dir = os.path.dirname(iss.zip_path)
-                    zip_name = os.path.splitext(os.path.basename(output_path))[0] + ".zip"
+                    zip_name = (
+                        os.path.splitext(os.path.basename(output_path))[0] + ".zip"
+                    )
                     output_zip = os.path.join(zip_dir, zip_name)
                     create_output_zip([output_path], output_zip)
                     iss.patch_output_path = output_zip

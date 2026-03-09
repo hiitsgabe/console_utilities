@@ -51,9 +51,7 @@ def check_for_update() -> Tuple[bool, Optional[Dict[str, Any]], str]:
             "User-Agent": "ConsoleUtilities/1.0",
         }
         try:
-            response = requests.get(
-                RELEASES_API, headers=api_headers, timeout=10
-            )
+            response = requests.get(RELEASES_API, headers=api_headers, timeout=10)
         except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
             response = requests.get(
                 RELEASES_API, headers=api_headers, timeout=10, verify=False

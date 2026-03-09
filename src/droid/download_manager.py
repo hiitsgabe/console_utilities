@@ -87,9 +87,7 @@ class AndroidDownloadManager:
         # Register broadcast receiver for download completions
         from droid.receiver import create_download_complete_receiver
 
-        self._receiver = create_download_complete_receiver(
-            self._on_download_complete
-        )
+        self._receiver = create_download_complete_receiver(self._on_download_complete)
 
     @property
     def work_dir(self) -> str:
@@ -222,6 +220,7 @@ class AndroidDownloadManager:
         # Re-acquire activity reference (may have been recreated)
         try:
             from jnius import autoclass
+
             PythonActivity = autoclass("org.kivy.android.PythonActivity")
             self._activity = PythonActivity.mActivity
         except Exception as e:
@@ -356,9 +355,7 @@ class AndroidDownloadManager:
         )
         request.setTitle(f"Downloading: {filename}")
         request.setDescription(f"Console Utilities - {item.system_name}")
-        request.setNotificationVisibility(
-            Request.VISIBILITY_VISIBLE
-        )
+        request.setNotificationVisibility(Request.VISIBILITY_VISIBLE)
 
         # Enqueue the download
         download_id = self._dm.enqueue(request)
@@ -422,10 +419,12 @@ class AndroidDownloadManager:
                     else:
                         item.status = "failed"
                         # Check if this is an IA URL without auth — likely needs login
-                        url = self._get_download_url(
-                            item.system_data, item.game, ""
-                        )
-                        if url and "archive.org" in url and "auth" not in item.system_data:
+                        url = self._get_download_url(item.system_data, item.game, "")
+                        if (
+                            url
+                            and "archive.org" in url
+                            and "auth" not in item.system_data
+                        ):
                             item.error = "ia_auth_required"
                         else:
                             item.error = f"Download failed (status: {status})"
@@ -460,9 +459,7 @@ class AndroidDownloadManager:
         cursor = self._dm.query(query)
 
         if cursor and cursor.moveToFirst():
-            uri_col = cursor.getColumnIndex(
-                DownloadManagerClass.COLUMN_LOCAL_URI
-            )
+            uri_col = cursor.getColumnIndex(DownloadManagerClass.COLUMN_LOCAL_URI)
             local_uri = cursor.getString(uri_col)
             cursor.close()
 

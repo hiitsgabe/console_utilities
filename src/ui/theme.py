@@ -68,8 +68,12 @@ class Theme:
     font_size_xl: int = 48
     font_path: Optional[str] = (
         os.path.join(SCRIPT_DIR, "assets", "fonts", "VT323-Regular.ttf")
-        if os.path.exists(os.path.join(SCRIPT_DIR, "assets", "fonts", "VT323-Regular.ttf"))
-        else os.path.normpath(os.path.join(SCRIPT_DIR, "..", "assets", "fonts", "VT323-Regular.ttf"))
+        if os.path.exists(
+            os.path.join(SCRIPT_DIR, "assets", "fonts", "VT323-Regular.ttf")
+        )
+        else os.path.normpath(
+            os.path.join(SCRIPT_DIR, "..", "assets", "fonts", "VT323-Regular.ttf")
+        )
     )
 
     # ---- Border Radius ---- #
@@ -115,5 +119,3 @@ class Theme:
 
 # Default theme instance
 default_theme = Theme()
-
-

@@ -50,14 +50,32 @@ class Thumbnail:
         if border_radius is None:
             border_radius = self.theme.thumbnail_border_radius
 
-        # Draw background/placeholder
+        # Draw background/placeholder (highlighted gets a glow effect)
+        if highlighted:
+            # Outer glow behind the thumbnail
+            glow_rect = rect.inflate(6, 6)
+            glow_color = (
+                self.theme.primary_light[0] // 3,
+                self.theme.primary_light[1] // 3,
+                self.theme.primary_light[2] // 3,
+            )
+            pygame.draw.rect(
+                screen,
+                glow_color,
+                glow_rect,
+                border_radius=border_radius + 3,
+            )
         bg_color = self.theme.surface_hover if highlighted else self.theme.surface
         pygame.draw.rect(screen, bg_color, rect, border_radius=border_radius)
 
         if image and isinstance(image, pygame.Surface):
             # Scale image preserving aspect ratio
             iw, ih = image.get_size()
-            scale = max(rect.width / iw, rect.height / ih) if fill else min(rect.width / iw, rect.height / ih)
+            scale = (
+                max(rect.width / iw, rect.height / ih)
+                if fill
+                else min(rect.width / iw, rect.height / ih)
+            )
             new_w = max(1, int(iw * scale))
             new_h = max(1, int(ih * scale))
             scaled_img = pygame.transform.smoothscale(image, (new_w, new_h))
@@ -95,7 +113,7 @@ class Thumbnail:
                 screen,
                 self.theme.primary_light,
                 rect,
-                width=2,
+                width=3,
                 border_radius=border_radius,
             )
         else:

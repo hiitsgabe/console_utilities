@@ -32,7 +32,9 @@ def _find_psx_data_track(bin_files):
             return f
 
     # Look for a .bin with no track number at all (standalone data image)
-    no_track = [f for f in bin_files if not any_track_pattern.search(os.path.basename(f))]
+    no_track = [
+        f for f in bin_files if not any_track_pattern.search(os.path.basename(f))
+    ]
     if len(no_track) == 1:
         return no_track[0]
 

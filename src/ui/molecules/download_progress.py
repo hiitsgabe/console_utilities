@@ -94,9 +94,12 @@ class DownloadProgress:
             size=self.theme.font_size_sm,
         )
 
-        # Speed (right)
+        # Speed + ETA (right)
         if speed > 0:
             speed_text = self._format_speed(speed)
+            eta_text = self._format_eta(total_size, downloaded, speed)
+            if eta_text:
+                speed_text = f"{speed_text} - {eta_text}"
             self.text.render(
                 screen,
                 speed_text,
@@ -169,6 +172,19 @@ class DownloadProgress:
             return f"{bytes_per_second / 1024:.1f} KB/s"
         else:
             return f"{bytes_per_second:.0f} B/s"
+
+    def _format_eta(self, total_size: int, downloaded: int, speed: float) -> str:
+        """Format estimated time remaining."""
+        if speed <= 0 or total_size <= 0 or downloaded >= total_size:
+            return ""
+        remaining = total_size - downloaded
+        eta_secs = int(remaining / speed)
+        if eta_secs < 60:
+            return f"{eta_secs}s"
+        elif eta_secs < 3600:
+            return f"{eta_secs // 60}m {eta_secs % 60}s"
+        else:
+            return f"{eta_secs // 3600}h {(eta_secs % 3600) // 60}m"
 
 
 # Default instance

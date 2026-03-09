@@ -11,42 +11,52 @@ from services.sports_api.models import League, Team, Player, PlayerStats
 # Maps our internal league IDs to ESPN league codes.
 # IDs start at 2000 to avoid clashing with API-Football IDs.
 ESPN_LEAGUES = [
-    {"id": 2001, "code": "eng.1",               "name": "Premier League",        "country": "England"},
-    {"id": 2002, "code": "esp.1",               "name": "La Liga",               "country": "Spain"},
-    {"id": 2003, "code": "ger.1",               "name": "Bundesliga",            "country": "Germany"},
-    {"id": 2004, "code": "ita.1",               "name": "Serie A",               "country": "Italy"},
-    {"id": 2005, "code": "fra.1",               "name": "Ligue 1",               "country": "France"},
-    {"id": 2006, "code": "bra.1",               "name": "Brasileirao Serie A",   "country": "Brazil"},
-    {"id": 2007, "code": "usa.1",               "name": "MLS",                   "country": "USA"},
-    {"id": 2008, "code": "UEFA.CHAMPIONS",      "name": "UEFA Champions League", "country": "World"},
-    {"id": 2009, "code": "conmebol.libertadores","name": "Copa Libertadores",     "country": "South America"},
-    {"id": 2010, "code": "arg.1",               "name": "Liga Profesional",      "country": "Argentina"},
-    {"id": 2011, "code": "mex.1",               "name": "Liga BBVA MX",          "country": "Mexico"},
-    {"id": 2012, "code": "por.1",               "name": "Primeira Liga",         "country": "Portugal"},
-    {"id": 2013, "code": "ned.1",               "name": "Eredivisie",            "country": "Netherlands"},
-    {"id": 2014, "code": "jpn.1",               "name": "J.League",              "country": "Japan"},
-    {"id": 2015, "code": "col.1",               "name": "Primera A",             "country": "Colombia"},
-    {"id": 2016, "code": "chi.1",               "name": "Primera División",      "country": "Chile"},
+    {"id": 2001, "code": "eng.1", "name": "Premier League", "country": "England"},
+    {"id": 2002, "code": "esp.1", "name": "La Liga", "country": "Spain"},
+    {"id": 2003, "code": "ger.1", "name": "Bundesliga", "country": "Germany"},
+    {"id": 2004, "code": "ita.1", "name": "Serie A", "country": "Italy"},
+    {"id": 2005, "code": "fra.1", "name": "Ligue 1", "country": "France"},
+    {"id": 2006, "code": "bra.1", "name": "Brasileirao Serie A", "country": "Brazil"},
+    {"id": 2007, "code": "usa.1", "name": "MLS", "country": "USA"},
+    {
+        "id": 2008,
+        "code": "UEFA.CHAMPIONS",
+        "name": "UEFA Champions League",
+        "country": "World",
+    },
+    {
+        "id": 2009,
+        "code": "conmebol.libertadores",
+        "name": "Copa Libertadores",
+        "country": "South America",
+    },
+    {"id": 2010, "code": "arg.1", "name": "Liga Profesional", "country": "Argentina"},
+    {"id": 2011, "code": "mex.1", "name": "Liga BBVA MX", "country": "Mexico"},
+    {"id": 2012, "code": "por.1", "name": "Primeira Liga", "country": "Portugal"},
+    {"id": 2013, "code": "ned.1", "name": "Eredivisie", "country": "Netherlands"},
+    {"id": 2014, "code": "jpn.1", "name": "J.League", "country": "Japan"},
+    {"id": 2015, "code": "col.1", "name": "Primera A", "country": "Colombia"},
+    {"id": 2016, "code": "chi.1", "name": "Primera División", "country": "Chile"},
 ]
 
 # NHL team abbreviations mapping to ROM slots (28 teams: 26 NHL + 2 All-Star)
 # Based on NHL 94 SNES team order (1993-94 season)
 NHL_TEAM_MAP = {
-    "ANA": 0,   # Mighty Ducks (expansion - will use San Jose)
-    "BOS": 1,   # Boston Bruins
-    "BUF": 2,   # Buffalo Sabres
-    "CGY": 3,   # Calgary Flames
-    "CHI": 4,   # Chicago Blackhawks
-    "DAL": 5,   # Dallas Stars
-    "DET": 6,   # Detroit Red Wings
-    "EDM": 7,   # Edmonton Oilers
-    "FLA": 8,   # Florida Panthers
-    "CAR": 9,   # Carolina Hurricanes (was Hartford Whalers)
+    "ANA": 0,  # Mighty Ducks (expansion - will use San Jose)
+    "BOS": 1,  # Boston Bruins
+    "BUF": 2,  # Buffalo Sabres
+    "CGY": 3,  # Calgary Flames
+    "CHI": 4,  # Chicago Blackhawks
+    "DAL": 5,  # Dallas Stars
+    "DET": 6,  # Detroit Red Wings
+    "EDM": 7,  # Edmonton Oilers
+    "FLA": 8,  # Florida Panthers
+    "CAR": 9,  # Carolina Hurricanes (was Hartford Whalers)
     "LAK": 10,  # Los Angeles Kings
-    "LA": 10,   # ESPN abbreviation
+    "LA": 10,  # ESPN abbreviation
     "MTL": 11,  # Montreal Canadiens
     "NJD": 12,  # New Jersey Devils
-    "NJ": 12,   # ESPN abbreviation
+    "NJ": 12,  # ESPN abbreviation
     "NYI": 13,  # New York Islanders
     "NYR": 14,  # New York Rangers
     "OTT": 15,  # Ottawa Senators
@@ -54,10 +64,10 @@ NHL_TEAM_MAP = {
     "PIT": 17,  # Pittsburgh Penguins
     "COL": 18,  # Colorado Avalanche (was Quebec Nordiques)
     "SJS": 19,  # San Jose Sharks
-    "SJ": 19,   # ESPN abbreviation
+    "SJ": 19,  # ESPN abbreviation
     "STL": 20,  # St. Louis Blues
     "TBL": 21,  # Tampa Bay Lightning
-    "TB": 21,   # ESPN abbreviation
+    "TB": 21,  # ESPN abbreviation
     "TOR": 22,  # Toronto Maple Leafs
     "VAN": 23,  # Vancouver Canucks
     "WSH": 24,  # Washington Capitals
@@ -71,13 +81,9 @@ _CODE_TO_LEAGUE = {item["code"]: item for item in ESPN_LEAGUES}
 
 SOCCER_BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/soccer"
 HOCKEY_BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/hockey"
-HOCKEY_CORE_URL = (
-    "https://sports.core.api.espn.com/v2/sports/hockey/leagues/nhl"
-)
+HOCKEY_CORE_URL = "https://sports.core.api.espn.com/v2/sports/hockey/leagues/nhl"
 BASEBALL_BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/baseball"
-BASEBALL_CORE_URL = (
-    "https://sports.core.api.espn.com/v2/sports/baseball/leagues/mlb"
-)
+BASEBALL_CORE_URL = "https://sports.core.api.espn.com/v2/sports/baseball/leagues/mlb"
 BASKETBALL_BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/basketball"
 BASKETBALL_CORE_URL = (
     "https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba"
@@ -106,7 +112,9 @@ class EspnClient:
                 result.append(self._league_from_item(item))
         return result
 
-    def get_leagues(self, country: str = None, season: int = None, id: int = None) -> List[League]:
+    def get_leagues(
+        self, country: str = None, season: int = None, id: int = None
+    ) -> List[League]:
         """Return ESPN leagues, optionally filtered by id."""
         if id is not None:
             item = _ID_TO_LEAGUE.get(id)
@@ -171,16 +179,12 @@ class EspnClient:
         cached = self._load_cache(cache_key)
         if cached:
             return self._parse_hockey_squad(cached)
-        data = self._request(
-            f"/nhl/teams/{team_id}/roster", sport="hockey"
-        )
+        data = self._request(f"/nhl/teams/{team_id}/roster", sport="hockey")
         if data:
             self._save_cache(cache_key, data)
         return self._parse_hockey_squad(data)
 
-    def get_hockey_team_leaders(
-        self, team_id: int, season: int = 2026
-    ) -> dict:
+    def get_hockey_team_leaders(self, team_id: int, season: int = 2026) -> dict:
         """Fetch per-player stats via team leaders endpoint.
 
         Returns dict mapping ESPN player ID (str) to stat dict,
@@ -192,10 +196,7 @@ class EspnClient:
         if cached:
             return cached
 
-        url = (
-            f"{HOCKEY_CORE_URL}/seasons/{season}/types/2"
-            f"/teams/{team_id}/leaders"
-        )
+        url = f"{HOCKEY_CORE_URL}/seasons/{season}/types/2" f"/teams/{team_id}/leaders"
         try:
             resp = requests.get(url, timeout=30)
             resp.raise_for_status()
@@ -242,16 +243,12 @@ class EspnClient:
         cached = self._load_cache(cache_key)
         if cached:
             return self._parse_baseball_squad(cached)
-        data = self._request(
-            f"/mlb/teams/{team_id}/roster", sport="baseball"
-        )
+        data = self._request(f"/mlb/teams/{team_id}/roster", sport="baseball")
         if data:
             self._save_cache(cache_key, data)
         return self._parse_baseball_squad(data)
 
-    def get_baseball_team_leaders(
-        self, team_id: int, season: int = 2025
-    ) -> dict:
+    def get_baseball_team_leaders(self, team_id: int, season: int = 2025) -> dict:
         """Fetch per-player stats via team leaders endpoint.
 
         Returns dict mapping ESPN player ID (str) to stat dict.
@@ -262,8 +259,7 @@ class EspnClient:
             return cached
 
         url = (
-            f"{BASEBALL_CORE_URL}/seasons/{season}/types/2"
-            f"/teams/{team_id}/leaders"
+            f"{BASEBALL_CORE_URL}/seasons/{season}/types/2" f"/teams/{team_id}/leaders"
         )
         try:
             resp = requests.get(url, timeout=30)
@@ -305,19 +301,14 @@ class EspnClient:
                 pos_info = athlete.get("position", {})
                 pos_abbrev = (
                     pos_info.get("abbreviation", "OF")
-                    if isinstance(pos_info, dict) else "OF"
+                    if isinstance(pos_info, dict)
+                    else "OF"
                 ).upper()
 
                 jersey = athlete.get("jersey")
-                number = (
-                    int(jersey)
-                    if jersey and str(jersey).isdigit()
-                    else None
-                )
+                number = int(jersey) if jersey and str(jersey).isdigit() else None
 
-                display_name = athlete.get(
-                    "displayName", athlete.get("fullName", "")
-                )
+                display_name = athlete.get("displayName", athlete.get("fullName", ""))
                 first_name = athlete.get("firstName", "")
                 last_name = athlete.get("lastName", "")
 
@@ -334,34 +325,39 @@ class EspnClient:
                 bats_info = athlete.get("bats", {})
                 bat_hand = (
                     bats_info.get("abbreviation", "")
-                    if isinstance(bats_info, dict) else ""
+                    if isinstance(bats_info, dict)
+                    else ""
                 )
                 throws_info = athlete.get("throws", {})
                 throw_hand = (
                     throws_info.get("abbreviation", "")
-                    if isinstance(throws_info, dict) else ""
+                    if isinstance(throws_info, dict)
+                    else ""
                 )
                 # Fallback to generic hand field
                 if not throw_hand:
                     hand_info = athlete.get("hand", {})
                     throw_hand = (
                         hand_info.get("abbreviation", "")
-                        if isinstance(hand_info, dict) else ""
+                        if isinstance(hand_info, dict)
+                        else ""
                     )
 
-                players.append(Player(
-                    id=int(athlete.get("id", 0)),
-                    name=display_name,
-                    first_name=first_name,
-                    last_name=last_name,
-                    age=athlete.get("age", 25) or 25,
-                    nationality=athlete.get("citizenship", ""),
-                    position=pos_abbrev,
-                    number=number,
-                    photo_url="",
-                    handedness=throw_hand,
-                    bats=bat_hand,
-                ))
+                players.append(
+                    Player(
+                        id=int(athlete.get("id", 0)),
+                        name=display_name,
+                        first_name=first_name,
+                        last_name=last_name,
+                        age=athlete.get("age", 25) or 25,
+                        nationality=athlete.get("citizenship", ""),
+                        position=pos_abbrev,
+                        number=number,
+                        photo_url="",
+                        handedness=throw_hand,
+                        bats=bat_hand,
+                    )
+                )
         return players
 
     # ------------------------------------------------------------------
@@ -385,16 +381,12 @@ class EspnClient:
         cached = self._load_cache(cache_key)
         if cached:
             return self._parse_basketball_squad(cached)
-        data = self._request(
-            f"/nba/teams/{team_id}/roster", sport="basketball"
-        )
+        data = self._request(f"/nba/teams/{team_id}/roster", sport="basketball")
         if data:
             self._save_cache(cache_key, data)
         return self._parse_basketball_squad(data)
 
-    def get_basketball_team_leaders(
-        self, team_id: int, season: int = 2026
-    ) -> dict:
+    def get_basketball_team_leaders(self, team_id: int, season: int = 2026) -> dict:
         """Fetch per-player stats via team leaders endpoint.
 
         Returns dict mapping ESPN player ID (str) to stat dict,
@@ -447,19 +439,14 @@ class EspnClient:
             pos_info = athlete.get("position", {})
             pos_abbrev = (
                 pos_info.get("abbreviation", "SF")
-                if isinstance(pos_info, dict) else "SF"
+                if isinstance(pos_info, dict)
+                else "SF"
             ).upper()
 
             jersey = athlete.get("jersey")
-            number = (
-                int(jersey)
-                if jersey and str(jersey).isdigit()
-                else None
-            )
+            number = int(jersey) if jersey and str(jersey).isdigit() else None
 
-            display_name = athlete.get(
-                "displayName", athlete.get("fullName", "")
-            )
+            display_name = athlete.get("displayName", athlete.get("fullName", ""))
             first_name = athlete.get("firstName", "")
             last_name = athlete.get("lastName", "")
 
@@ -475,18 +462,20 @@ class EspnClient:
             ht = athlete.get("height", 0) or 0
             wt = athlete.get("weight", 0) or 0
 
-            players.append(Player(
-                id=int(athlete.get("id", 0)),
-                name=display_name,
-                first_name=first_name,
-                last_name=last_name,
-                age=athlete.get("age", 25) or 25,
-                nationality=athlete.get("citizenship", ""),
-                position=pos_abbrev,
-                number=number,
-                photo_url="",
-                weight=float(wt),
-            ))
+            players.append(
+                Player(
+                    id=int(athlete.get("id", 0)),
+                    name=display_name,
+                    first_name=first_name,
+                    last_name=last_name,
+                    age=athlete.get("age", 25) or 25,
+                    nationality=athlete.get("citizenship", ""),
+                    position=pos_abbrev,
+                    number=number,
+                    photo_url="",
+                    weight=float(wt),
+                )
+            )
         return players
 
     def _extract_pid(self, athlete) -> Optional[str]:
@@ -505,6 +494,7 @@ class EspnClient:
 
     def _league_from_item(self, item: dict) -> League:
         from datetime import datetime
+
         return League(
             id=item["id"],
             name=item["name"],
@@ -564,24 +554,26 @@ class EspnClient:
     def _parse_teams(self, data: dict) -> List[Team]:
         if not isinstance(data, dict):
             return []
-        teams_raw = (
-            data.get("sports", [{}])[0]
-            .get("leagues", [{}])[0]
-            .get("teams", [])
-        )
+        teams_raw = data.get("sports", [{}])[0].get("leagues", [{}])[0].get("teams", [])
         teams = []
         for entry in teams_raw:
             t = entry.get("team", {})
-            teams.append(Team(
-                id=int(t.get("id", 0)),
-                name=t.get("displayName", t.get("name", "")),
-                short_name=t.get("shortDisplayName", t.get("name", ""))[:12],
-                code=(t.get("abbreviation", "") or "")[:3],
-                logo_url=t.get("logos", [{}])[0].get("href", "") if t.get("logos") else "",
-                country="",
-                color=t.get("color", ""),
-                alternate_color=t.get("alternateColor", ""),
-            ))
+            teams.append(
+                Team(
+                    id=int(t.get("id", 0)),
+                    name=t.get("displayName", t.get("name", "")),
+                    short_name=t.get("shortDisplayName", t.get("name", ""))[:12],
+                    code=(t.get("abbreviation", "") or "")[:3],
+                    logo_url=(
+                        t.get("logos", [{}])[0].get("href", "")
+                        if t.get("logos")
+                        else ""
+                    ),
+                    country="",
+                    color=t.get("color", ""),
+                    alternate_color=t.get("alternateColor", ""),
+                )
+            )
         return teams
 
     def _parse_squad(self, data: dict) -> List[Player]:
@@ -590,7 +582,11 @@ class EspnClient:
         players = []
         for athlete in data.get("athletes", []):
             pos_info = athlete.get("position", {})
-            pos_name = pos_info.get("name", "Midfielder") if isinstance(pos_info, dict) else "Midfielder"
+            pos_name = (
+                pos_info.get("name", "Midfielder")
+                if isinstance(pos_info, dict)
+                else "Midfielder"
+            )
             if "Goalkeeper" in pos_name:
                 position = "Goalkeeper"
             elif "Defender" in pos_name or "Back" in pos_name:
@@ -620,17 +616,19 @@ class EspnClient:
                     last_name = parts[-1]
                     first_name = " ".join(parts[:-1])
 
-            players.append(Player(
-                id=int(athlete.get("id", 0)),
-                name=display_name,
-                first_name=first_name,
-                last_name=last_name,
-                age=athlete.get("age", 25) or 25,
-                nationality=athlete.get("citizenship", ""),
-                position=position,
-                number=number,
-                photo_url="",
-            ))
+            players.append(
+                Player(
+                    id=int(athlete.get("id", 0)),
+                    name=display_name,
+                    first_name=first_name,
+                    last_name=last_name,
+                    age=athlete.get("age", 25) or 25,
+                    nationality=athlete.get("citizenship", ""),
+                    position=position,
+                    number=number,
+                    photo_url="",
+                )
+            )
         return players
 
     def _parse_hockey_squad(self, data: dict) -> List[Player]:
@@ -667,7 +665,8 @@ class EspnClient:
                 pos_info = athlete.get("position", {})
                 pos_abbrev = (
                     pos_info.get("abbreviation", "C")
-                    if isinstance(pos_info, dict) else "C"
+                    if isinstance(pos_info, dict)
+                    else "C"
                 ).upper()
                 # Normalize rare variants
                 if pos_abbrev in ("LD", "RD"):
@@ -676,15 +675,9 @@ class EspnClient:
                     pos_abbrev = "C"
 
                 jersey = athlete.get("jersey")
-                number = (
-                    int(jersey)
-                    if jersey and str(jersey).isdigit()
-                    else None
-                )
+                number = int(jersey) if jersey and str(jersey).isdigit() else None
 
-                display_name = athlete.get(
-                    "displayName", athlete.get("fullName", "")
-                )
+                display_name = athlete.get("displayName", athlete.get("fullName", ""))
                 first_name = athlete.get("firstName", "")
                 last_name = athlete.get("lastName", "")
 
@@ -702,20 +695,23 @@ class EspnClient:
                 hand_info = athlete.get("hand", {})
                 hand = (
                     hand_info.get("abbreviation", "")
-                    if isinstance(hand_info, dict) else ""
+                    if isinstance(hand_info, dict)
+                    else ""
                 )
 
-                players.append(Player(
-                    id=int(athlete.get("id", 0)),
-                    name=display_name,
-                    first_name=first_name,
-                    last_name=last_name,
-                    age=athlete.get("age", 25) or 25,
-                    nationality=athlete.get("citizenship", ""),
-                    position=pos_abbrev,
-                    number=number,
-                    photo_url="",
-                    weight=float(wt),
-                    handedness=hand,
-                ))
+                players.append(
+                    Player(
+                        id=int(athlete.get("id", 0)),
+                        name=display_name,
+                        first_name=first_name,
+                        last_name=last_name,
+                        age=athlete.get("age", 25) or 25,
+                        nationality=athlete.get("citizenship", ""),
+                        position=pos_abbrev,
+                        number=number,
+                        photo_url="",
+                        weight=float(wt),
+                        handedness=hand,
+                    )
+                )
         return players

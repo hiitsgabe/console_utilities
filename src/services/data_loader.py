@@ -59,7 +59,9 @@ def update_json_file_path(settings: Dict[str, Any]) -> None:
     """
     global _json_file
     archive_path = settings.get("archive_json_path", "")
-    print(f"[data_loader] archive_json_path={archive_path!r}, exists={os.path.exists(archive_path) if archive_path else False}")
+    print(
+        f"[data_loader] archive_json_path={archive_path!r}, exists={os.path.exists(archive_path) if archive_path else False}"
+    )
     if archive_path and os.path.exists(archive_path):
         _json_file = archive_path
         print(f"[data_loader] Using user JSON: {_json_file}")

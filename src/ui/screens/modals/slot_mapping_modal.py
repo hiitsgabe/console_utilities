@@ -59,23 +59,48 @@ class SlotMappingModal:
 
         # Header row
         header_y = content_rect.top + self.theme.padding_sm
-        self.text.render(screen, "Real Team", (col_left, header_y),
-                         color=self.theme.text_disabled, size=self.theme.font_size_sm)
-        self.text.render(screen, "->", (col_mid - 10, header_y),
-                         color=self.theme.text_disabled, size=self.theme.font_size_sm)
-        self.text.render(screen, "ROM Slot", (col_mid + 20, header_y),
-                         color=self.theme.text_disabled, size=self.theme.font_size_sm)
+        self.text.render(
+            screen,
+            "Real Team",
+            (col_left, header_y),
+            color=self.theme.text_disabled,
+            size=self.theme.font_size_sm,
+        )
+        self.text.render(
+            screen,
+            "->",
+            (col_mid - 10, header_y),
+            color=self.theme.text_disabled,
+            size=self.theme.font_size_sm,
+        )
+        self.text.render(
+            screen,
+            "ROM Slot",
+            (col_mid + 20, header_y),
+            color=self.theme.text_disabled,
+            size=self.theme.font_size_sm,
+        )
 
         divider_y = header_y + self.theme.font_size_sm + self.theme.padding_sm
-        pygame.draw.line(screen, self.theme.primary,
-                         (content_rect.left, divider_y), (content_rect.right, divider_y), 1)
+        pygame.draw.line(
+            screen,
+            self.theme.primary,
+            (content_rect.left, divider_y),
+            (content_rect.right, divider_y),
+            1,
+        )
 
         # Footer hint
         hint = "Up/Down: navigate   Left/Right: change slot   OK: confirm"
         footer_y = content_rect.bottom - self.theme.font_size_sm - self.theme.padding_sm
-        self.text.render(screen, hint, (content_rect.centerx, footer_y),
-                         color=self.theme.text_secondary, size=self.theme.font_size_sm,
-                         align="center")
+        self.text.render(
+            screen,
+            hint,
+            (content_rect.centerx, footer_y),
+            color=self.theme.text_secondary,
+            size=self.theme.font_size_sm,
+            align="center",
+        )
 
         # List area bounds
         list_top = divider_y + 4
@@ -103,12 +128,15 @@ class SlotMappingModal:
                 break
 
             mapping = we.slot_mapping[i]
-            rect = pygame.Rect(content_rect.left + 4, y, content_rect.width - 8, item_height)
+            rect = pygame.Rect(
+                content_rect.left + 4, y, content_rect.width - 8, item_height
+            )
             is_hl = i == hl
 
             if is_hl:
-                pygame.draw.rect(screen, self.theme.primary, rect,
-                                 border_radius=self.theme.radius_sm)
+                pygame.draw.rect(
+                    screen, self.theme.primary, rect, border_radius=self.theme.radius_sm
+                )
 
             # Highlighted: dark text on bright bg. Normal: dim text on dark bg.
             text_color = self.theme.background if is_hl else self.theme.text_secondary
@@ -122,14 +150,29 @@ class SlotMappingModal:
             slot_name = mapping.slot_name if hasattr(mapping, "slot_name") else ""
 
             text_y = rect.centery - self.theme.font_size_sm // 2
-            self.text.render(screen, real_name, (col_left, text_y),
-                             color=text_color, size=self.theme.font_size_sm,
-                             max_width=col_mid - col_left - 20)
-            self.text.render(screen, "->", (col_mid - 10, text_y),
-                             color=arrow_color, size=self.theme.font_size_sm)
-            self.text.render(screen, slot_name, (col_mid + 20, text_y),
-                             color=text_color, size=self.theme.font_size_sm,
-                             max_width=col_right - col_mid - 30)
+            self.text.render(
+                screen,
+                real_name,
+                (col_left, text_y),
+                color=text_color,
+                size=self.theme.font_size_sm,
+                max_width=col_mid - col_left - 20,
+            )
+            self.text.render(
+                screen,
+                "->",
+                (col_mid - 10, text_y),
+                color=arrow_color,
+                size=self.theme.font_size_sm,
+            )
+            self.text.render(
+                screen,
+                slot_name,
+                (col_mid + 20, text_y),
+                color=text_color,
+                size=self.theme.font_size_sm,
+                max_width=col_right - col_mid - 30,
+            )
 
             item_rects.append(rect)
             y += total_item_h
@@ -137,13 +180,25 @@ class SlotMappingModal:
         # Scroll indicators
         ind_x = content_rect.right - 8
         if scroll > 0:
-            pygame.draw.polygon(screen, self.theme.text_secondary, [
-                (ind_x - 4, list_top + 8), (ind_x, list_top + 2), (ind_x + 4, list_top + 8),
-            ])
+            pygame.draw.polygon(
+                screen,
+                self.theme.text_secondary,
+                [
+                    (ind_x - 4, list_top + 8),
+                    (ind_x, list_top + 2),
+                    (ind_x + 4, list_top + 8),
+                ],
+            )
         if scroll + visible_count < total:
-            pygame.draw.polygon(screen, self.theme.text_secondary, [
-                (ind_x - 4, list_bottom - 8), (ind_x, list_bottom - 2), (ind_x + 4, list_bottom - 8),
-            ])
+            pygame.draw.polygon(
+                screen,
+                self.theme.text_secondary,
+                [
+                    (ind_x - 4, list_bottom - 8),
+                    (ind_x, list_bottom - 2),
+                    (ind_x + 4, list_bottom - 8),
+                ],
+            )
 
         return modal_rect, content_rect, close_rect, item_rects
 

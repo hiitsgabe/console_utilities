@@ -379,9 +379,7 @@ class NHL07PSPPatcher:
             # Generate line flags for the whole team at once
             # (position-aware: fills lines properly, sets PP/PK)
             team_players = [p for p, _ in pairs]
-            all_line_flags = self.mapper.generate_team_line_flags(
-                team_players
-            )
+            all_line_flags = self.mapper.generate_team_line_flags(team_players)
 
             for pi, (player, slot_info) in enumerate(pairs):
                 rost_idx, play_rec, player_id, bio_idx = slot_info
@@ -397,21 +395,29 @@ class NHL07PSPPatcher:
                     sgai_idx = sgai_idx_map.get(player_id, -1)
                     if sgai_idx >= 0:
                         writer.write_goalie_attrs(
-                            master_tdb, sgai_idx, player.goalie_attrs,
+                            master_tdb,
+                            sgai_idx,
+                            player.goalie_attrs,
                         )
                         if split_sgai and sgai_idx < split_sgai.capacity:
                             writer.write_goalie_attrs(
-                                bioatt_tdb, sgai_idx, player.goalie_attrs,
+                                bioatt_tdb,
+                                sgai_idx,
+                                player.goalie_attrs,
                             )
                 elif player.skater_attrs and spai:
                     spai_idx = spai_idx_map.get(player_id, -1)
                     if spai_idx >= 0:
                         writer.write_skater_attrs(
-                            master_tdb, spai_idx, player.skater_attrs,
+                            master_tdb,
+                            spai_idx,
+                            player.skater_attrs,
                         )
                         if split_spai and spai_idx < split_spai.capacity:
                             writer.write_skater_attrs(
-                                bioatt_tdb, spai_idx, player.skater_attrs,
+                                bioatt_tdb,
+                                spai_idx,
+                                player.skater_attrs,
                             )
 
                 # Update ROST: jersey, line flags, captain — but NOT INDX
@@ -486,4 +492,3 @@ class NHL07PSPPatcher:
             teams_patched=teams_patched,
             players_patched=players_patched,
         )
-

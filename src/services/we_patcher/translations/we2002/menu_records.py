@@ -586,7 +586,6 @@ _TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "ALL STARS": "ESTRELLAS",
         "AN N.C.": "AN N.C.",
     },
-
     # ===================================================================
     # FRENCH
     # ===================================================================
@@ -1077,7 +1076,6 @@ _TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "ALL STARS": "ETOILES",
         "AN N.C.": "AN N.C.",
     },
-
     # ===================================================================
     # PORTUGUESE
     # ===================================================================
@@ -1576,9 +1574,7 @@ _TRANSLATIONS: Dict[str, Dict[str, str]] = {
 # ---------------------------------------------------------------------------
 
 
-def get_menu_records(
-    assets_dir: str, lang: str
-) -> Optional[List[Tuple[int, bytes]]]:
+def get_menu_records(assets_dir: str, lang: str) -> Optional[List[Tuple[int, bytes]]]:
     """Get translated menu records from the community English PPF.
 
     Parses the community PPF2 file (w202-english.ppf) and translates

@@ -44,54 +44,84 @@ _OFS_PLAYER_DATA = 0x387EC
 #   Ireland, Belgium, Romania, Bulgaria, Argentina, Brazil, Colombia, Mexico,
 #   U.S.A., Nigeria, Cameroon, Super Star
 # Range 2 (8 teams): Russia, Scotland, S.Korea, Wales, Norway, Switz, Denmark, Austria
-_OFS_KIT1_RANGE1 = 0x2EA3B    # 1st kit, range 1 (19 teams, 32 bytes each)
-_OFS_KIT1_RANGE2 = 0x2F0EB    # 1st kit, range 2 (8 teams, 32 bytes each)
-_OFS_KIT2_RANGE1 = 0x2ECBB    # 2nd kit, range 1 (19 teams, 32 bytes each)
-_OFS_KIT2_RANGE2 = 0x2F1EB    # 2nd kit, range 2 (8 teams, 32 bytes each)
-_OFS_GK_RANGE1 = 0x2EF37      # GK kit, range 1 (18 teams, 24 bytes each)
-_OFS_GK_RANGE2 = 0x2F2E7      # GK kit, range 2 (8 teams, 24 bytes each)
+_OFS_KIT1_RANGE1 = 0x2EA3B  # 1st kit, range 1 (19 teams, 32 bytes each)
+_OFS_KIT1_RANGE2 = 0x2F0EB  # 1st kit, range 2 (8 teams, 32 bytes each)
+_OFS_KIT2_RANGE1 = 0x2ECBB  # 2nd kit, range 1 (19 teams, 32 bytes each)
+_OFS_KIT2_RANGE2 = 0x2F1EB  # 2nd kit, range 2 (8 teams, 32 bytes each)
+_OFS_GK_RANGE1 = 0x2EF37  # GK kit, range 1 (18 teams, 24 bytes each)
+_OFS_GK_RANGE2 = 0x2F2E7  # GK kit, range 2 (8 teams, 24 bytes each)
 
 # Hair/skin colors sit 12 bytes before the kit data in the same blocks
-_OFS_HAIR_SKIN1_RANGE1 = 0x2EA2F   # = 0x2EA3B - 12
-_OFS_HAIR_SKIN1_RANGE2 = 0x2F0DF   # = 0x2F0EB - 12
-_OFS_HAIR_SKIN2_RANGE1 = 0x2ECAF   # = 0x2ECBB - 12
-_OFS_HAIR_SKIN2_RANGE2 = 0x2F1DF   # = 0x2F1EB - 12
+_OFS_HAIR_SKIN1_RANGE1 = 0x2EA2F  # = 0x2EA3B - 12
+_OFS_HAIR_SKIN1_RANGE2 = 0x2F0DF  # = 0x2F0EB - 12
+_OFS_HAIR_SKIN2_RANGE1 = 0x2ECAF  # = 0x2ECBB - 12
+_OFS_HAIR_SKIN2_RANGE2 = 0x2F1DF  # = 0x2F1EB - 12
 
 # Flag tile pointer table: 4 bytes per team (2 pointers × 2 bytes), P48000 format
-_OFS_FLAG_TILE_PTRS = 0x941A       # 27 entries, 4 bytes each
+_OFS_FLAG_TILE_PTRS = 0x941A  # 27 entries, 4 bytes each
 # Write new flag tiles AFTER existing data (0x48000-0x483FE) to avoid overwriting
 # unpatched teams' original flag graphics. Free space up to 0x48A7F.
-_OFS_FLAG_TILE_NEW = 0x48400       # Safe write area for new flag tile data
+_OFS_FLAG_TILE_NEW = 0x48400  # Safe write area for new flag tile data
 
 # Flag colors: 4 colors × 2 bytes BGR555 per team, 10-byte step
 # Colors: entry0 (COLOR_1/shirt numbers), entry1 (COLOR_2), entry2 (COLOR_3), entry3 (COLOR_4)
-_OFS_FLAG_COLORS_RANGE1 = 0x2DD91   # 18 teams, step 10
-_OFS_FLAG_COLORS_RANGE2 = 0x2DE4F   # 9 teams, step 10
+_OFS_FLAG_COLORS_RANGE1 = 0x2DD91  # 18 teams, step 10
+_OFS_FLAG_COLORS_RANGE2 = 0x2DE4F  # 9 teams, step 10
 _FLAG_COLORS_STEP = 10
 
 _FLAG_COLORS_RANGE1_TEAMS = [
-    "Germany", "England", "Italy", "Holland", "France", "Spain", "Belgium",
-    "Ireland", "Colombia", "Brazil", "Argentina", "Mexico", "Nigeria",
-    "Cameroon", "U.S.A.", "Bulgaria", "Romania", "Sweden",
+    "Germany",
+    "England",
+    "Italy",
+    "Holland",
+    "France",
+    "Spain",
+    "Belgium",
+    "Ireland",
+    "Colombia",
+    "Brazil",
+    "Argentina",
+    "Mexico",
+    "Nigeria",
+    "Cameroon",
+    "U.S.A.",
+    "Bulgaria",
+    "Romania",
+    "Sweden",
 ]
 _FLAG_COLORS_RANGE2_TEAMS = [
-    "Scotland", "S.Korea", "Super Star", "Russia", "Switz", "Denmark",
-    "Austria", "Wales", "Norway",
+    "Scotland",
+    "S.Korea",
+    "Super Star",
+    "Russia",
+    "Switz",
+    "Denmark",
+    "Austria",
+    "Wales",
+    "Norway",
 ]
 
 # Predominant color byte
-_OFS_PREDOMINANT_COLOR = 0x8DB2    # 1 byte per team, enum order
+_OFS_PREDOMINANT_COLOR = 0x8DB2  # 1 byte per team, enum order
 
 # In-game team name tiles: pointer table at 0x93CD, P48000/P17000 format
 # Each entry points to Konami-compressed 2bpp tile data (64 bytes decompressed)
 # Displacement: move tile data to 0x17680+ free region, patch code to read from there
-_OFS_NAME_TILES_PTRS = 0x93CD       # 2 bytes per team, 27 entries
+_OFS_NAME_TILES_PTRS = 0x93CD  # 2 bytes per team, 27 entries
 _NAME_TILES_DISPLACED_BASE = 0x17680  # Free 0xFF region in ROM
 _NAME_TILES_DISPLACED_END = 0x18000
-_DISPLACEMENT_PATCH_BYTE = 0x82       # Value to write at patch points
+_DISPLACEMENT_PATCH_BYTE = 0x82  # Value to write at patch points
 _DISPLACEMENT_PATCH_POINTS = [
-    0x93C6, 0x93CB, 0x3A7EB, 0x3A7F0, 0x3A7F5,
-    0x3A7FA, 0x3A7FF, 0x3A804, 0x3A809, 0x3A80E,
+    0x93C6,
+    0x93CB,
+    0x3A7EB,
+    0x3A7F0,
+    0x3A7F5,
+    0x3A7FA,
+    0x3A7FF,
+    0x3A804,
+    0x3A809,
+    0x3A80E,
 ]
 
 # Team description text: pointer table at 0x38000, SNES LoROM pointers
@@ -99,7 +129,7 @@ _DISPLACEMENT_PATCH_POINTS = [
 # Points to FE + formation_line(16B) + FE + ' ' + FD + description_text
 # Description is plain ASCII, 15-char line wrapping, variable length (46-90 bytes)
 _OFS_DESC_PTRS = 0x38000  # 2 bytes per team, 27 entries, TEAM_ENUM_ORDER
-_DESC_LINE_WIDTH = 15      # Characters per line in the description text box
+_DESC_LINE_WIDTH = 15  # Characters per line in the description text box
 
 # Team name text: pointer table in TEAM_ENUM_ORDER, P40000 format
 _OFS_TEAM_NAME_TEXT_PTRS = 0x39DAE  # 2 bytes per team, 27 teams
@@ -107,14 +137,36 @@ _MAX_NAME_TEXT_ADDR = 0x44478  # must not overwrite extra entries at 0x44478+
 
 # ── Kit color team orderings ────────────────────────────────────────────────
 _KIT_RANGE1_TEAMS = [
-    "Germany", "Italy", "Holland", "Spain", "England", "France", "Sweden",
-    "Ireland", "Belgium", "Romania", "Bulgaria", "Argentina", "Brazil",
-    "Colombia", "Mexico", "U.S.A.", "Nigeria", "Cameroon", "Super Star",
+    "Germany",
+    "Italy",
+    "Holland",
+    "Spain",
+    "England",
+    "France",
+    "Sweden",
+    "Ireland",
+    "Belgium",
+    "Romania",
+    "Bulgaria",
+    "Argentina",
+    "Brazil",
+    "Colombia",
+    "Mexico",
+    "U.S.A.",
+    "Nigeria",
+    "Cameroon",
+    "Super Star",
 ]
 
 _KIT_RANGE2_TEAMS = [
-    "Russia", "Scotland", "S.Korea", "Wales", "Norway", "Switz",
-    "Denmark", "Austria",
+    "Russia",
+    "Scotland",
+    "S.Korea",
+    "Wales",
+    "Norway",
+    "Switz",
+    "Denmark",
+    "Austria",
 ]
 
 # GK range 1 is same as kit range 1 but without Super Star (18 teams)
@@ -306,7 +358,6 @@ def _encode_p40000(address: int) -> bytes:
     return bytes([b1, b2])
 
 
-
 def _make_shades(r: int, g: int, b: int, count: int) -> list:
     """Generate BGR555 shades (dark→light) from a single RGB color.
 
@@ -360,9 +411,11 @@ def _rgb_to_predominant(r: int, g: int, b: int) -> int:
 # Row 0 and 7 are top/bottom borders (mostly transparent)
 _TILE_FONT = {c: [] for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789. "}
 
+
 def _f(s):
     """Parse a compact font string into rows of pixel values."""
     return [[int(c) for c in row] for row in s.strip().split("/")]
+
 
 # 5-wide standard letters
 _TILE_FONT["A"] = _f("01110/10001/10001/11111/10001/10001")
@@ -408,8 +461,8 @@ _TILE_COLS = 32
 _TILE_ROWS = 8
 # 2bpp color codes
 _TC_TRANSPARENT = 0
-_TC_WHITE = 1      # COLOR_1 (letter stroke)
-_TC_SHADOW = 3     # COLOR_3 (dark background behind text)
+_TC_WHITE = 1  # COLOR_1 (letter stroke)
+_TC_SHADOW = 3  # COLOR_3 (dark background behind text)
 
 
 def _render_name_tiles(name: str) -> list:
@@ -499,7 +552,7 @@ def _konami_compress_literal(raw: bytes) -> bytes:
     while pos < len(raw):
         chunk = min(31, len(raw) - pos)
         out.append(0x80 | chunk)
-        out.extend(raw[pos:pos + chunk])
+        out.extend(raw[pos : pos + chunk])
         pos += chunk
     # Write size header (total length including header)
     total = len(out)
@@ -537,9 +590,9 @@ def _make_solid_4bpp_tile(color_code: int) -> bytes:
 
     data = bytearray(32)
     for row in range(8):
-        data[row * 2] = bp0        # bitplane 0
-        data[row * 2 + 1] = bp1    # bitplane 1
-        data[16 + row * 2] = bp2   # bitplane 2
+        data[row * 2] = bp0  # bitplane 0
+        data[row * 2 + 1] = bp1  # bitplane 1
+        data[16 + row * 2] = bp2  # bitplane 2
         data[16 + row * 2 + 1] = bp3  # bitplane 3
     return bytes(data)
 
@@ -673,7 +726,9 @@ class ISSRomWriter:
                 return
             self._write_gk_kit(gk_base + gk_pos * 24, team.kit_gk)
 
-    def _write_outfield_kit(self, offset: int, colors: Tuple[Tuple[int, int, int], ...]):
+    def _write_outfield_kit(
+        self, offset: int, colors: Tuple[Tuple[int, int, int], ...]
+    ):
         """Write shirt/shorts/socks with proper shade gradients (dark→light).
 
         32-byte block: words 0-2 shirt, words 3-5 shorts, words 6-7 socks,
@@ -783,10 +838,16 @@ class ISSRomWriter:
             # entry2=COLOR_3, entry3=COLOR_4
             # Our flag top half uses COLOR_1 (palette 12), bottom uses COLOR_2 (palette 13)
             data = bytearray(8)
-            struct.pack_into("<H", data, 0, _rgb_to_bgr555(*primary))   # COLOR_1 (top half)
-            struct.pack_into("<H", data, 2, _rgb_to_bgr555(*alt))       # COLOR_2 (bottom half)
-            struct.pack_into("<H", data, 4, _rgb_to_bgr555(*primary))   # COLOR_3 (unused)
-            struct.pack_into("<H", data, 6, _rgb_to_bgr555(*alt))       # COLOR_4 (unused)
+            struct.pack_into(
+                "<H", data, 0, _rgb_to_bgr555(*primary)
+            )  # COLOR_1 (top half)
+            struct.pack_into(
+                "<H", data, 2, _rgb_to_bgr555(*alt)
+            )  # COLOR_2 (bottom half)
+            struct.pack_into(
+                "<H", data, 4, _rgb_to_bgr555(*primary)
+            )  # COLOR_3 (unused)
+            struct.pack_into("<H", data, 6, _rgb_to_bgr555(*alt))  # COLOR_4 (unused)
             self._seek(addr)
             self._f.write(bytes(data))
 
@@ -987,7 +1048,10 @@ class ISSRomWriter:
             words = clean.split()
             current_line = ""
             for word in words:
-                if current_line and len(current_line) + 1 + len(word) > _DESC_LINE_WIDTH:
+                if (
+                    current_line
+                    and len(current_line) + 1 + len(word) > _DESC_LINE_WIDTH
+                ):
                     lines.append(current_line)
                     current_line = word
                 else:

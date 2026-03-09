@@ -14,7 +14,9 @@ _STATUS_FILENAME = "extraction_status.json"
 _CANCEL_FILENAME = "extraction_cancel.json"
 
 # Exported for service.py to skip during work_dir cleanup
-IPC_FILENAMES = frozenset({_STATUS_FILENAME, _CANCEL_FILENAME, _STATUS_FILENAME + ".tmp"})
+IPC_FILENAMES = frozenset(
+    {_STATUS_FILENAME, _CANCEL_FILENAME, _STATUS_FILENAME + ".tmp"}
+)
 
 
 def write_status(work_dir, item_id, status_dict):

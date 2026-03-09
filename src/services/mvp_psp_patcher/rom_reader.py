@@ -61,8 +61,12 @@ class MVPPSPRomReader:
         self.database_big: Optional[bytes] = None
         self.database_big_offset: int = 0
         self.sections: Dict[str, bytes] = {}  # table_name -> decompressed CSV
-        self.records: Dict[str, Dict[str, Dict[int, str]]] = {}  # table -> {hash -> {field -> value}}
-        self.record_order: Dict[str, List[str]] = {}  # table -> [hash_ids in original order]
+        self.records: Dict[str, Dict[str, Dict[int, str]]] = (
+            {}
+        )  # table -> {hash -> {field -> value}}
+        self.record_order: Dict[str, List[str]] = (
+            {}
+        )  # table -> [hash_ids in original order]
 
     def load(self) -> bool:
         """Load database.big from the ISO."""
@@ -160,9 +164,7 @@ class MVPPSPRomReader:
             if not hash_id or len(hash_id) < 5:
                 continue
             # Skip header lines — real hash IDs are hex-only with no spaces
-            if " " in hash_id or not all(
-                c in "0123456789abcdef" for c in hash_id
-            ):
+            if " " in hash_id or not all(c in "0123456789abcdef" for c in hash_id):
                 continue
 
             fields: Dict[int, str] = {}
@@ -176,7 +178,7 @@ class MVPPSPRomReader:
                     continue
                 try:
                     field_num = int(part[:space_idx])
-                    value = part[space_idx + 1:]
+                    value = part[space_idx + 1 :]
                     fields[field_num] = value
                 except ValueError:
                     continue
@@ -258,13 +260,15 @@ class MVPPSPRomReader:
                 if fname or lname:
                     first_player = f"{fname} {lname}".strip()
 
-            slots.append(MVPTeamSlot(
-                index=i,
-                name=name,
-                abbrev=abbrev,
-                player_count=len(players),
-                first_player=first_player,
-            ))
+            slots.append(
+                MVPTeamSlot(
+                    index=i,
+                    name=name,
+                    abbrev=abbrev,
+                    player_count=len(players),
+                    first_player=first_player,
+                )
+            )
 
         return slots
 

@@ -16,6 +16,7 @@ class ISSPatcher:
             self.api = client
         else:
             from services.sports_api.api_football import ApiFootballClient
+
             self.api = ApiFootballClient(api_key, cache_dir, on_status=on_status)
         self.mapper = ISSStatMapper()
 
@@ -44,8 +45,7 @@ class ISSPatcher:
         teams = self.api.get_teams(league_id, season)
 
         team_rosters = [
-            TR(team=t, players=[], player_stats={}, loading=True)
-            for t in teams
+            TR(team=t, players=[], player_stats={}, loading=True) for t in teams
         ]
         league_data = LeagueData(league=league, teams=team_rosters)
         if on_partial_data:
@@ -66,7 +66,11 @@ class ISSPatcher:
                 team_rosters[i].players = players
                 team_rosters[i].player_stats = player_stats
             except Exception as e:
-                from services.sports_api.api_football import RateLimitError, DailyLimitError
+                from services.sports_api.api_football import (
+                    RateLimitError,
+                    DailyLimitError,
+                )
+
                 if isinstance(e, DailyLimitError):
                     team_rosters[i].error = "Daily API limit reached"
                 elif isinstance(e, RateLimitError):

@@ -23,16 +23,16 @@ from .models import (
 )
 
 # ── ROM size constants ──────────────────────────────────────────────────────
-_ROM_SIZE_8MBIT = 1_048_576           # 1 MB (8 Mbit) — USA/EUR ISS
-_ROM_SIZE_8MBIT_HEADER = 1_049_088    # 1 MB + 512
-_ROM_SIZE_16MBIT = 2_097_152          # 2 MB (16 Mbit) — some variants
-_ROM_SIZE_16MBIT_HEADER = 2_097_664   # 2 MB + 512
+_ROM_SIZE_8MBIT = 1_048_576  # 1 MB (8 Mbit) — USA/EUR ISS
+_ROM_SIZE_8MBIT_HEADER = 1_049_088  # 1 MB + 512
+_ROM_SIZE_16MBIT = 2_097_152  # 2 MB (16 Mbit) — some variants
+_ROM_SIZE_16MBIT_HEADER = 2_097_664  # 2 MB + 512
 _HEADER_SIZE = 512
-_MIN_ROM_SIZE = _ROM_SIZE_8MBIT       # Minimum valid ROM size
+_MIN_ROM_SIZE = _ROM_SIZE_8MBIT  # Minimum valid ROM size
 
 # ── Absolute byte offsets (headerless) ──────────────────────────────────────
 # Player names: 8 bytes per player, teams in TEAM_NAME_ORDER
-_OFS_PLAYER_NAMES = 0x3B62C     # 27 teams × 15 players × 8 bytes = 3240 bytes
+_OFS_PLAYER_NAMES = 0x3B62C  # 27 teams × 15 players × 8 bytes = 3240 bytes
 
 # Player data block: 6 bytes per player, teams in TEAM_ENUM_ORDER
 _OFS_PLAYER_DATA = 0x387EC

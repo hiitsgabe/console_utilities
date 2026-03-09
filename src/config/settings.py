@@ -17,8 +17,8 @@ class Settings:
     """Application settings with default values."""
 
     enable_boxart: bool = True
-    view_type: str = "list"
-    usa_only: bool = False
+    view_type: str = "grid"
+    filter_region: str = "none"  # none, usa, japan, europe, world, other
     show_download_all: bool = False  # Show "Download All" button in game lists
     exclude_installed_on_download_all: bool = True  # Skip already-installed games
     work_dir: str = ""
@@ -56,7 +56,9 @@ class Settings:
     igdb_client_id: str = ""
     igdb_client_secret: str = ""  # base64 encoded
     # Android-specific settings
-    use_python_downloader: bool = False  # Use Python downloads/zip instead of Android-native
+    use_python_downloader: bool = (
+        False  # Use Python downloads/zip instead of Android-native
+    )
     # Web Companion
     web_companion_enabled: bool = False
     # Frontend-specific paths

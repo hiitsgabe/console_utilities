@@ -19,46 +19,209 @@ import struct
 # ROM offsets for the Kanji team name section
 # ---------------------------------------------------------------------------
 
-_OFS_NOMI_SQK  = 2_002_316   # Kanji names start (ML reverse, then nationals reverse)
-_OFS_NOMI_SQK1 = 2_003_928   # Sector boundary continuation (national i=58 split)
+_OFS_NOMI_SQK = 2_002_316  # Kanji names start (ML reverse, then nationals reverse)
+_OFS_NOMI_SQK1 = 2_003_928  # Sector boundary continuation (national i=58 split)
 
 # Kanji byte budget per team (number of 2-byte chars, *2 = raw byte count)
 _LUN_NOMIK = [
-    8,8,6,8,6,6,6,6,6,6,6,6,6,6,6,8,8,6,6,8,6,6,6,8,6,6,6,6,6,6,
-    6,6,6,8,6,6,6,6,6,6,6,6,6,6,6,6,8,6,6,6,6,6,8,8,
-    12,12,14,12,12,12,10,12,14,
-    6,6,6,8,8,6,10,8,6,8,8,8,8,8,6,8,
-    10,6,6,6,8,6,6,6,8,10,6,6,8,10,6,6,
+    8,
+    8,
+    6,
+    8,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    8,
+    8,
+    6,
+    6,
+    8,
+    6,
+    6,
+    6,
+    8,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    8,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    8,
+    6,
+    6,
+    6,
+    6,
+    6,
+    8,
+    8,
+    12,
+    12,
+    14,
+    12,
+    12,
+    12,
+    10,
+    12,
+    14,
+    6,
+    6,
+    6,
+    8,
+    8,
+    6,
+    10,
+    8,
+    6,
+    8,
+    8,
+    8,
+    8,
+    8,
+    6,
+    8,
+    10,
+    6,
+    6,
+    6,
+    8,
+    6,
+    6,
+    6,
+    8,
+    10,
+    6,
+    6,
+    8,
+    10,
+    6,
+    6,
 ]
 
 # English team names — indices 0-62 = national/allstar, 63-94 = ML teams
 # (from nomi_squadre[120] in edDlg.cpp)
 _TEAM_NAMES = [
     # National teams (0-53)
-    "Ireland", "Scotland", "Wales", "England", "Portugal",
-    "Spain", "France", "Belgium", "Netherlands", "Switzerland",
-    "Italy", "Czech Rep.", "Germany", "Denmark", "Norway",
-    "Sweden", "Iceland", "Poland", "Slovakia", "Austria",
-    "Hungary", "Albania", "Croatia", "Serbia", "Romania",
-    "Bosnia", "Greece", "Turkey", "Ukraine", "Russia",
-    "Morocco", "Ivory Coast", "Egypt", "Nigeria", "Cameroon",
-    "Algeria", "Ghana", "U.S.A.", "Mexico", "Venezuela",
-    "Colombia", "Brazil", "Peru", "Chile", "Paraguay",
-    "Uruguay", "Argentina", "Ecuador", "Japan", "South Korea",
-    "China", "India", "New Zealand", "Australia",
+    "Ireland",
+    "Scotland",
+    "Wales",
+    "England",
+    "Portugal",
+    "Spain",
+    "France",
+    "Belgium",
+    "Netherlands",
+    "Switzerland",
+    "Italy",
+    "Czech Rep.",
+    "Germany",
+    "Denmark",
+    "Norway",
+    "Sweden",
+    "Iceland",
+    "Poland",
+    "Slovakia",
+    "Austria",
+    "Hungary",
+    "Albania",
+    "Croatia",
+    "Serbia",
+    "Romania",
+    "Bosnia",
+    "Greece",
+    "Turkey",
+    "Ukraine",
+    "Russia",
+    "Morocco",
+    "Ivory Coast",
+    "Egypt",
+    "Nigeria",
+    "Cameroon",
+    "Algeria",
+    "Ghana",
+    "U.S.A.",
+    "Mexico",
+    "Venezuela",
+    "Colombia",
+    "Brazil",
+    "Peru",
+    "Chile",
+    "Paraguay",
+    "Uruguay",
+    "Argentina",
+    "Ecuador",
+    "Japan",
+    "South Korea",
+    "China",
+    "India",
+    "New Zealand",
+    "Australia",
     # Allstar/Classic teams (54-62)
-    "Euro All Stars", "World All Stars",
-    "Clas. England", "Clas. France", "Clas. Netherlands",
-    "Clas. Italy", "Clas. Germany", "Clas. Brazil", "Clas. Argentina",
+    "Euro All Stars",
+    "World All Stars",
+    "Clas. England",
+    "Clas. France",
+    "Clas. Netherlands",
+    "Clas. Italy",
+    "Clas. Germany",
+    "Clas. Brazil",
+    "Clas. Argentina",
     # Master League teams (63-94)
-    "Manchester U.", "Arsenal", "Chelsea", "Liverpool",
-    "Manchester City", "Tottenham", "Atletico Madrid", "Barcelona",
-    "Real Madrid", "Valencia", "Sevilla", "Monaco",
-    "Porto", "P.S.G.", "Benfica", "Ajax",
-    "CSKA Moskva", "Zenit", "Inter", "Juventus",
-    "Milan", "Lazio", "Napoli", "Fiorentina",
-    "Roma", "B. Dortmund", "B. Munchen", "B. Leverkusen",
-    "Wolfsburg", "Galatasaray", "Shakhtar Donetsk", "Basilea",
+    "Manchester U.",
+    "Arsenal",
+    "Chelsea",
+    "Liverpool",
+    "Manchester City",
+    "Tottenham",
+    "Atletico Madrid",
+    "Barcelona",
+    "Real Madrid",
+    "Valencia",
+    "Sevilla",
+    "Monaco",
+    "Porto",
+    "P.S.G.",
+    "Benfica",
+    "Ajax",
+    "CSKA Moskva",
+    "Zenit",
+    "Inter",
+    "Juventus",
+    "Milan",
+    "Lazio",
+    "Napoli",
+    "Fiorentina",
+    "Roma",
+    "B. Dortmund",
+    "B. Munchen",
+    "B. Leverkusen",
+    "Wolfsburg",
+    "Galatasaray",
+    "Shakhtar Donetsk",
+    "Basilea",
 ]
 
 
@@ -73,22 +236,22 @@ def _ascii_to_kanji(text: str, char_budget: int) -> bytes:
 
     for i in range(min(len(text), max_chars)):
         ch = ord(text[i])
-        if 65 <= ch <= 90:       # A-Z
+        if 65 <= ch <= 90:  # A-Z
             buf[i * 2] = 0x82
             buf[i * 2 + 1] = ch + 31
-        elif 97 <= ch <= 122:    # a-z
+        elif 97 <= ch <= 122:  # a-z
             buf[i * 2] = 0x82
             buf[i * 2 + 1] = ch + 32
-        elif 48 <= ch <= 57:     # 0-9
+        elif 48 <= ch <= 57:  # 0-9
             buf[i * 2] = 0x82
             buf[i * 2 + 1] = ch + 31
-        elif ch == 46:           # period '.'
+        elif ch == 46:  # period '.'
             buf[i * 2] = 0x81
             buf[i * 2 + 1] = 0x42
-        elif ch == 0:            # null
+        elif ch == 0:  # null
             buf[i * 2] = 0x00
             buf[i * 2 + 1] = 0x00
-        else:                    # space / default
+        else:  # space / default
             buf[i * 2] = 0x82
             buf[i * 2 + 1] = 0x80
 
@@ -124,7 +287,7 @@ def _build_kanji_records() -> list:
     # --- ML teams: squad_ml[31] first, squad_ml[0] last ---
     for i in range(32):
         # C++ loop: for(i=0;i<32;i++) write squad_ml[31-i] with lun_nomik[94-i]
-        team_idx = 94 - i           # index into _TEAM_NAMES and _LUN_NOMIK
+        team_idx = 94 - i  # index into _TEAM_NAMES and _LUN_NOMIK
         budget = _LUN_NOMIK[team_idx]
         name = _TEAM_NAMES[team_idx] if team_idx < len(_TEAM_NAMES) else ""
         kanji_name = _titlecase_name(name, budget - 1)
@@ -134,7 +297,7 @@ def _build_kanji_records() -> list:
 
     # --- National/allstar teams: squad_nazall[62] first, squad_nazall[0] last ---
     for i in range(63):
-        team_idx = 62 - i           # index into _TEAM_NAMES and _LUN_NOMIK
+        team_idx = 62 - i  # index into _TEAM_NAMES and _LUN_NOMIK
         budget = _LUN_NOMIK[team_idx]
         name = _TEAM_NAMES[team_idx] if team_idx < len(_TEAM_NAMES) else ""
         kanji_name = _titlecase_name(name, budget - 1)
@@ -191,6 +354,7 @@ def generate_english_ppf(assets_dir: str = "") -> bytes:
     records = _build_kanji_records()
     if assets_dir:
         from .menu_records import get_menu_records
+
         menu = get_menu_records(assets_dir, "en")
         if menu:
             records = menu + records

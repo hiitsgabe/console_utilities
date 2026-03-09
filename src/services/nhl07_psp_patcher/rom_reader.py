@@ -310,7 +310,11 @@ class NHL07PSPRomReader:
                     idx = rec.get("INDX", i)
                     abbr = NHL07_TEAM_INDEX.get(idx, f"T{idx}")
                     if not name:
-                        name = NHL07_TEAM_NAMES[i] if i < len(NHL07_TEAM_NAMES) else f"Team {i}"
+                        name = (
+                            NHL07_TEAM_NAMES[i]
+                            if i < len(NHL07_TEAM_NAMES)
+                            else f"Team {i}"
+                        )
                     slots.append(
                         NHL07TeamSlot(
                             index=idx,
@@ -322,7 +326,11 @@ class NHL07PSPRomReader:
                     slots.append(
                         NHL07TeamSlot(
                             index=i,
-                            name=NHL07_TEAM_NAMES[i] if i < len(NHL07_TEAM_NAMES) else f"Team {i}",
+                            name=(
+                                NHL07_TEAM_NAMES[i]
+                                if i < len(NHL07_TEAM_NAMES)
+                                else f"Team {i}"
+                            ),
                             abbreviation=NHL07_TEAM_INDEX.get(i, f"T{i}"),
                         )
                     )
@@ -396,7 +404,7 @@ class NHL07PSPRomReader:
             with open(self.iso_path, "rb") as f:
                 f.seek(ISO_PVD_OFFSET)
                 pvd = f.read(ISO_SECTOR_SIZE)
-                root_rec = pvd[156:156 + 34]
+                root_rec = pvd[156 : 156 + 34]
                 root_lba = struct.unpack_from("<I", root_rec, 2)[0]
                 root_size = struct.unpack_from("<I", root_rec, 10)[0]
 
@@ -404,9 +412,7 @@ class NHL07PSPRomReader:
                 current_size = root_size
 
                 for part in ["PSP_GAME", "USRDIR", "DB"]:
-                    result = self._find_dir_entry(
-                        f, current_lba, current_size, part
-                    )
+                    result = self._find_dir_entry(f, current_lba, current_size, part)
                     if result is None:
                         return 0
                     current_lba, current_size, _ = result
@@ -443,7 +449,7 @@ class NHL07PSPRomReader:
 
             name_len = dir_data[pos + 32]
             if name_len > 0 and pos + 33 + name_len <= len(dir_data):
-                entry_name = dir_data[pos + 33:pos + 33 + name_len].decode(
+                entry_name = dir_data[pos + 33 : pos + 33 + name_len].decode(
                     "ascii", errors="replace"
                 )
                 entry_name_clean = entry_name.split(";")[0].upper()

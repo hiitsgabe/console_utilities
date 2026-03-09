@@ -13,6 +13,7 @@ import os
 
 class PPFError(Exception):
     """Raised when a PPF patch cannot be applied."""
+
     pass
 
 
@@ -168,10 +169,18 @@ def get_ppf_info(ppf_path: str) -> dict:
     elif magic == b"PPF10":
         version = 1
     else:
-        return {"version": 0, "description": f"Unknown format: {magic!r}", "expected_size": 0}
+        return {
+            "version": 0,
+            "description": f"Unknown format: {magic!r}",
+            "expected_size": 0,
+        }
 
     description = header[6:56].decode("ascii", errors="replace").rstrip("\x00")
     expected_size = 0
     if version == 2 and len(header) >= 60:
         expected_size = struct.unpack_from("<I", header, 56)[0]
-    return {"version": version, "description": description, "expected_size": expected_size}
+    return {
+        "version": version,
+        "description": description,
+        "expected_size": expected_size,
+    }

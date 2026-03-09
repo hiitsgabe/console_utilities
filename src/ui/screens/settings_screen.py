@@ -40,7 +40,7 @@ class SettingsScreen:
         "--- VIEW OPTIONS ---",
         "View Mode",
         "Enable Box-art Display",
-        "USA Games Only",
+        "Filter Region",
         "Dedupe Game List",
         "Show Download All Button",
         "Skip Installed Games",
@@ -238,13 +238,16 @@ class SettingsScreen:
             if i in divider_indices:
                 items.append(item)
             elif item == "View Mode":
-                value = "Grid" if settings.get("view_type", "list") == "grid" else "List"
+                value = (
+                    "Grid" if settings.get("view_type", "list") == "grid" else "List"
+                )
                 items.append((item, value))
             elif item == "Enable Box-art Display":
                 value = "ON" if settings.get("enable_boxart", True) else "OFF"
                 items.append((item, value))
-            elif item == "USA Games Only":
-                value = "ON" if settings.get("usa_only", False) else "OFF"
+            elif item == "Filter Region":
+                region = settings.get("filter_region", "none")
+                value = region.upper() if region != "none" else "OFF"
                 items.append((item, value))
             elif item == "Dedupe Game List":
                 value = "ON" if settings.get("dedupe_game_list", False) else "OFF"
@@ -409,7 +412,7 @@ class SettingsScreen:
                 "Internet Archive Login": "ia_login",
                 "View Mode": "toggle_view_mode",
                 "Enable Box-art Display": "toggle_boxart",
-                "USA Games Only": "toggle_usa_only",
+                "Filter Region": "cycle_filter_region",
                 "Dedupe Game List": "toggle_dedupe_game_list",
                 "Show Download All Button": "toggle_download_all",
                 "Skip Installed Games": "toggle_exclude_installed",

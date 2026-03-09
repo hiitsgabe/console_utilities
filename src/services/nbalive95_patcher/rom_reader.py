@@ -38,8 +38,8 @@ from services.nbalive95_patcher.models import (
 
 
 # Expected ROM size (~2MB Genesis ROM)
-ROM_SIZE_MIN = 0x180000   # 1.5 MB minimum
-ROM_SIZE_MAX = 0x300000   # 3 MB maximum
+ROM_SIZE_MIN = 0x180000  # 1.5 MB minimum
+ROM_SIZE_MAX = 0x300000  # 3 MB maximum
 
 
 class NBALive95RomReader:
@@ -91,7 +91,7 @@ class NBALive95RomReader:
         if name_off + NAME_LENGTH > size:
             return False
 
-        name_bytes = self.data[name_off:name_off + NAME_LENGTH]
+        name_bytes = self.data[name_off : name_off + NAME_LENGTH]
         ascii_count = sum(1 for b in name_bytes if 0x20 <= b <= 0x7E)
         if ascii_count < 3:
             return False
@@ -154,13 +154,15 @@ class NBALive95RomReader:
 
         if null_pos < 0:
             # No null found — treat entire field as last name
-            name = bytes(b for b in data_bytes if 0x20 <= b <= 0x7E).decode(
-                "ascii", errors="replace"
-            ).strip()
+            name = (
+                bytes(b for b in data_bytes if 0x20 <= b <= 0x7E)
+                .decode("ascii", errors="replace")
+                .strip()
+            )
             return name, ""
 
         last_bytes = data_bytes[:null_pos]
-        first_bytes = data_bytes[null_pos + 1:]
+        first_bytes = data_bytes[null_pos + 1 :]
 
         # First name also ends at a null byte
         first_null = -1
@@ -171,12 +173,16 @@ class NBALive95RomReader:
         if first_null >= 0:
             first_bytes = first_bytes[:first_null]
 
-        last = bytes(b for b in last_bytes if 0x20 <= b <= 0x7E).decode(
-            "ascii", errors="replace"
-        ).strip()
-        first = bytes(b for b in first_bytes if 0x20 <= b <= 0x7E).decode(
-            "ascii", errors="replace"
-        ).strip()
+        last = (
+            bytes(b for b in last_bytes if 0x20 <= b <= 0x7E)
+            .decode("ascii", errors="replace")
+            .strip()
+        )
+        first = (
+            bytes(b for b in first_bytes if 0x20 <= b <= 0x7E)
+            .decode("ascii", errors="replace")
+            .strip()
+        )
 
         return last, first
 
@@ -194,14 +200,14 @@ class NBALive95RomReader:
         d = self.data
 
         last_name, first_name = self._decode_name(
-            d[off + OFF_NAME:off + OFF_NAME + NAME_LENGTH]
+            d[off + OFF_NAME : off + OFF_NAME + NAME_LENGTH]
         )
 
         position_byte = d[off + OFF_POSITION]
         position = BYTE_TO_POSITION.get(position_byte, f"?{position_byte}")
 
         # Read 16 ratings
-        ratings = list(d[off + OFF_RATINGS:off + OFF_RATINGS + RATING_COUNT])
+        ratings = list(d[off + OFF_RATINGS : off + OFF_RATINGS + RATING_COUNT])
 
         # Read 16 season stats (2-byte BE each)
         stats = []
@@ -256,13 +262,15 @@ class NBALive95RomReader:
                     first_player = f"{first} {last}"
                 elif last:
                     first_player = last
-            slots.append(NBALive95TeamSlot(
-                index=i,
-                name=(
-                    NBALIVE95_TEAM_ORDER[i]
-                    if i < len(NBALIVE95_TEAM_ORDER)
-                    else f"Team {i}"
-                ),
-                first_player=first_player,
-            ))
+            slots.append(
+                NBALive95TeamSlot(
+                    index=i,
+                    name=(
+                        NBALIVE95_TEAM_ORDER[i]
+                        if i < len(NBALIVE95_TEAM_ORDER)
+                        else f"Team {i}"
+                    ),
+                    first_player=first_player,
+                )
+            )
         return slots

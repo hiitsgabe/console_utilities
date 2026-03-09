@@ -68,7 +68,11 @@ class ScraperMenuScreen:
         for i, item in enumerate(raw_items):
             if i in divider_indices:
                 items.append(item)
-            elif item in ("Scrape Game Images", "Batch Scrape Folder", "Link App to Frontend"):
+            elif item in (
+                "Scrape Game Images",
+                "Batch Scrape Folder",
+                "Link App to Frontend",
+            ):
                 items.append((item, ""))
             elif item == "Scraper Provider":
                 provider = settings.get("scraper_provider", "libretro")
@@ -96,9 +100,16 @@ class ScraperMenuScreen:
                     value = "Not logged in"
                 items.append((item, value))
             elif item == "TheGamesDB API Key":
-                items.append((item, "Set" if settings.get("thegamesdb_api_key", "") else "Not Set"))
+                items.append(
+                    (
+                        item,
+                        "Set" if settings.get("thegamesdb_api_key", "") else "Not Set",
+                    )
+                )
             elif item == "RAWG API Key":
-                items.append((item, "Set" if settings.get("rawg_api_key", "") else "Not Set"))
+                items.append(
+                    (item, "Set" if settings.get("rawg_api_key", "") else "Not Set")
+                )
             elif item == "IGDB Login":
                 client_id = settings.get("igdb_client_id", "")
                 if client_id:
@@ -213,7 +224,7 @@ class ScraperMenuScreen:
                 result = "/" + part + result if result else part
             else:
                 break
-        return "..." + result if result else "..." + path[-max_length + 3:]
+        return "..." + result if result else "..." + path[-max_length + 3 :]
 
 
 scraper_menu_screen = ScraperMenuScreen()

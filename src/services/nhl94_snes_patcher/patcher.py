@@ -53,9 +53,11 @@ class NHL94SNESPatcher:
             from services.sports_api.nhl_api_client import (
                 NhlApiClient,
             )
+
             self.api = NhlApiClient(cache_dir, on_status)
         else:
             from services.sports_api.espn_client import EspnClient
+
             self.api = EspnClient(cache_dir, on_status)
 
     def analyze_rom(self, rom_path: str) -> NHL94RomInfo:
@@ -99,10 +101,7 @@ class NHL94SNESPatcher:
             return rosters
 
         # Filter to teams with NHL94 ROM slots
-        mapped = [
-            t for t in nhl_teams
-            if self.mapper.get_team_slot(t.code) is not None
-        ]
+        mapped = [t for t in nhl_teams if self.mapper.get_team_slot(t.code) is not None]
         total = len(mapped)
 
         for i, team in enumerate(mapped):
@@ -111,18 +110,12 @@ class NHL94SNESPatcher:
 
             if self.provider == "nhl":
                 # NHL API: use team abbreviation + season
-                players = self.api.get_hockey_squad(
-                    team.code, season
-                )
-                stats = self.api.get_hockey_team_leaders(
-                    team.code, season
-                )
+                players = self.api.get_hockey_squad(team.code, season)
+                stats = self.api.get_hockey_team_leaders(team.code, season)
             else:
                 # ESPN: use team ESPN ID (no season support)
                 players = self.api.get_hockey_squad(team.id)
-                stats = self.api.get_hockey_team_leaders(
-                    team.id
-                )
+                stats = self.api.get_hockey_team_leaders(team.id)
 
             if players:
                 rosters[team.code] = players
@@ -156,13 +149,15 @@ class NHL94SNESPatcher:
 
         # Initialize empty teams for all 28 slots
         for i in range(TEAM_COUNT):
-            teams.append(NHL94TeamRecord(
-                index=i,
-                name=NHL94_TEAM_ORDER[i],
-                city="",
-                acronym="",
-                players=[],
-            ))
+            teams.append(
+                NHL94TeamRecord(
+                    index=i,
+                    name=NHL94_TEAM_ORDER[i],
+                    city="",
+                    acronym="",
+                    players=[],
+                )
+            )
 
         # Fill in rosters for mapped teams
         for team_code, players in rosters.items():
@@ -176,7 +171,8 @@ class NHL94SNESPatcher:
 
             # Select players in ROM order: G, F, D
             selected = self.mapper.select_roster(
-                players, stats,
+                players,
+                stats,
                 num_goalies=num_g,
                 num_forwards=num_f,
                 num_defensemen=num_d,
@@ -188,7 +184,9 @@ class NHL94SNESPatcher:
                 pid = str(player.id)
                 pstats = stats.get(pid, {})
                 record = self.mapper.map_player(
-                    player, team_code, pstats,
+                    player,
+                    team_code,
+                    pstats,
                 )
                 nhl94_players.append(record)
 
@@ -232,9 +230,7 @@ class NHL94SNESPatcher:
         # Map rosters to NHL94 format (G+F+D order)
         if self.on_status:
             self.on_status("Mapping rosters...")
-        nhl94_teams = self.map_rosters_to_nhl94(
-            rosters, team_counts
-        )
+        nhl94_teams = self.map_rosters_to_nhl94(rosters, team_counts)
 
         # Initialize writer
         if self.on_status:

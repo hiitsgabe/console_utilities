@@ -102,13 +102,9 @@ class KGJRomReader:
 
     def _decode_name(self, data_bytes: bytes) -> str:
         """Decode custom-encoded name bytes to string."""
-        return "".join(
-            BYTE_TO_CHAR.get(b, "?") for b in data_bytes
-        ).strip()
+        return "".join(BYTE_TO_CHAR.get(b, "?") for b in data_bytes).strip()
 
-    def read_player(
-        self, team_index: int, player_slot: int
-    ) -> dict:
+    def read_player(self, team_index: int, player_slot: int) -> dict:
         """Read a single player record from ROM.
 
         Returns dict with all parsed fields.
@@ -127,7 +123,7 @@ class KGJRomReader:
 
         result = {
             "first_initial": BYTE_TO_CHAR.get(d[off], "?"),
-            "last_name": self._decode_name(d[off + 1:off + 9]),
+            "last_name": self._decode_name(d[off + 1 : off + 9]),
             "position": BYTE_TO_POSITION.get(d[off + 9], "?"),
             "jersey": d[off + 0x0A],
             "is_pitcher": is_pitcher,
@@ -163,9 +159,7 @@ class KGJRomReader:
 
         return result
 
-    def read_team_roster(
-        self, team_index: int
-    ) -> Tuple[List[str], List[dict]]:
+    def read_team_roster(self, team_index: int) -> Tuple[List[str], List[dict]]:
         """Read all players for a team.
 
         Returns: (player_names, player_dicts)
@@ -193,9 +187,11 @@ class KGJRomReader:
             p = self.read_player(i, 0)
             if p:
                 first_player = f"{p['first_initial']}. {p['last_name']}"
-            slots.append(KGJTeamSlot(
-                index=i,
-                name=KGJ_TEAM_ORDER[i] if i < len(KGJ_TEAM_ORDER) else f"Team {i}",
-                first_player=first_player,
-            ))
+            slots.append(
+                KGJTeamSlot(
+                    index=i,
+                    name=KGJ_TEAM_ORDER[i] if i < len(KGJ_TEAM_ORDER) else f"Team {i}",
+                    first_player=first_player,
+                )
+            )
         return slots

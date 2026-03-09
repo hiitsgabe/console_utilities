@@ -8,6 +8,7 @@ import shutil
 import threading
 import time
 import traceback
+from concurrent.futures import ThreadPoolExecutor, Future
 from typing import Dict, Any, List, Optional
 from urllib.parse import urljoin
 from zipfile import ZipFile
@@ -18,6 +19,11 @@ from state import DownloadQueueItem, DownloadQueueState
 from utils.logging import log_error
 from utils.nsz import decompress_nsz_file
 from constants import SCRIPT_DIR
+
+# Minimum file size for parallel downloads (5 MB)
+PARALLEL_MIN_SIZE = 5 * 1024 * 1024
+# Number of parallel download workers
+PARALLEL_WORKERS = 4
 
 
 class DownloadManager:
@@ -269,6 +275,8 @@ class DownloadManager:
     ) -> Optional[str]:
         """
         Download a file with progress updates.
+        Uses parallel chunk downloads when the server supports range requests
+        and the file is larger than PARALLEL_MIN_SIZE.
 
         Returns:
             File path if successful, None if cancelled/failed
@@ -282,7 +290,6 @@ class DownloadManager:
         if "auth" in system_data:
             auth_config = system_data["auth"]
             if auth_config.get("type") == "ia_s3":
-                # Internet Archive S3 authentication (only if both keys are set)
                 access_key = auth_config.get("access_key") or None
                 secret_key = auth_config.get("secret_key") or None
                 if access_key and secret_key:
@@ -295,22 +302,19 @@ class DownloadManager:
                 headers["Authorization"] = f"Bearer {auth_config['token']}"
 
         try:
-            # Build headers for the request
             request_headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 "Accept": "*/*",
                 "Accept-Language": "en-US,en;q=0.9",
             }
 
-            # For Internet Archive URLs, handle auth properly
+            # Resolve the final URL and get initial response
+            resolved_url = url
             if "archive.org" in url:
                 if is_ia_auth:
-                    # With auth: manually follow redirects to preserve auth header
-                    # (similar to curl's --location-trusted flag)
                     request_headers["authorization"] = headers.get("authorization", "")
-
                     current_url = url
-                    for _ in range(5):  # Max 5 redirects
+                    for _ in range(5):
                         resp = requests.get(
                             current_url,
                             stream=True,
@@ -325,11 +329,11 @@ class DownloadManager:
                         else:
                             resp.raise_for_status()
                             response = resp
+                            resolved_url = current_url
                             break
                     else:
                         raise requests.exceptions.TooManyRedirects("Too many redirects")
                 else:
-                    # Without auth: standard request for public items
                     response = requests.get(
                         url,
                         stream=True,
@@ -338,8 +342,8 @@ class DownloadManager:
                         cookies=cookies,
                     )
                     response.raise_for_status()
+                    resolved_url = response.url
             else:
-                # For non-IA URLs, include browser User-Agent
                 dl_headers = dict(request_headers)
                 dl_headers.update(headers)
                 response = requests.get(
@@ -351,51 +355,42 @@ class DownloadManager:
                     allow_redirects=True,
                 )
                 response.raise_for_status()
+                resolved_url = response.url
 
-            item.total_size = int(response.headers.get("content-length", 0))
-            item.downloaded = 0
-            start_time = time.time()
-            last_update = start_time
-            last_downloaded = 0
-            speed_samples = []
+            total_size = int(response.headers.get("content-length", 0))
+            accept_ranges = response.headers.get("accept-ranges", "").lower()
+            item.total_size = total_size
 
-            file_path = os.path.join(self.work_dir, filename)
+            # Close the initial response - we'll either re-open or use parallel
+            response.close()
+
             os.makedirs(self.work_dir, exist_ok=True)
 
-            with open(file_path, "wb") as f:
-                for chunk in response.iter_content(chunk_size=262144):
-                    if self._cancel_current:
-                        f.close()
-                        if os.path.exists(file_path):
-                            os.remove(file_path)
-                        return None
+            # Use parallel downloads if server supports ranges and file is large
+            if accept_ranges == "bytes" and total_size > PARALLEL_MIN_SIZE:
+                return self._download_file_parallel(
+                    item,
+                    resolved_url,
+                    filename,
+                    total_size,
+                    request_headers,
+                    cookies,
+                )
 
-                    if chunk:
-                        f.write(chunk)
-                        item.downloaded += len(chunk)
-
-                        # Update progress and speed every 500ms
-                        current_time = time.time()
-                        elapsed = current_time - last_update
-                        if elapsed >= 0.5:
-                            instant_speed = (item.downloaded - last_downloaded) / elapsed
-                            speed_samples.append(instant_speed)
-                            if len(speed_samples) > 4:
-                                speed_samples.pop(0)
-                            item.speed = sum(speed_samples) / len(speed_samples)
-                            last_downloaded = item.downloaded
-                            last_update = current_time
-
-                            if item.total_size > 0:
-                                item.progress = item.downloaded / item.total_size
-
-            return file_path
+            # Fall back to single-stream download
+            return self._download_file_single(
+                item,
+                resolved_url,
+                filename,
+                total_size,
+                request_headers,
+                cookies,
+            )
 
         except requests.exceptions.RequestException as e:
             log_error(f"Download request failed: {e}")
             log_error(f"Failed URL: {url}")
             item.status = "failed"
-            # Check for IA auth failure
             if (
                 hasattr(e, "response")
                 and e.response is not None
@@ -408,6 +403,229 @@ class DownloadManager:
             else:
                 item.error = f"Network error: {str(e)[:50]}"
             return None
+
+    def _download_file_single(
+        self,
+        item: DownloadQueueItem,
+        url: str,
+        filename: str,
+        total_size: int,
+        headers: Dict[str, str],
+        cookies: Dict[str, str],
+    ) -> Optional[str]:
+        """Single-stream download (fallback path)."""
+        item.downloaded = 0
+        last_update = time.time()
+        last_downloaded = 0
+        speed_samples = []
+
+        file_path = os.path.join(self.work_dir, filename)
+
+        response = requests.get(
+            url,
+            stream=True,
+            timeout=(15, 30),
+            headers=headers,
+            cookies=cookies,
+            allow_redirects=True,
+        )
+        response.raise_for_status()
+
+        with open(file_path, "wb") as f:
+            for chunk in response.iter_content(chunk_size=262144):
+                if self._cancel_current:
+                    f.close()
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
+                    return None
+
+                if chunk:
+                    f.write(chunk)
+                    item.downloaded += len(chunk)
+
+                    current_time = time.time()
+                    elapsed = current_time - last_update
+                    if elapsed >= 0.5:
+                        instant_speed = (item.downloaded - last_downloaded) / elapsed
+                        speed_samples.append(instant_speed)
+                        if len(speed_samples) > 4:
+                            speed_samples.pop(0)
+                        item.speed = sum(speed_samples) / len(speed_samples)
+                        last_downloaded = item.downloaded
+                        last_update = current_time
+
+                        if item.total_size > 0:
+                            item.progress = item.downloaded / item.total_size
+
+        return file_path
+
+    def _download_file_parallel(
+        self,
+        item: DownloadQueueItem,
+        url: str,
+        filename: str,
+        total_size: int,
+        headers: Dict[str, str],
+        cookies: Dict[str, str],
+        num_workers: int = PARALLEL_WORKERS,
+    ) -> Optional[str]:
+        """Download a file using parallel range-request workers."""
+        file_path = os.path.join(self.work_dir, filename)
+        item.downloaded = 0
+
+        # Compute chunk boundaries
+        chunk_size = total_size // num_workers
+        chunks = []
+        for i in range(num_workers):
+            start = i * chunk_size
+            end = (
+                (total_size - 1) if i == num_workers - 1 else ((i + 1) * chunk_size - 1)
+            )
+            chunks.append((start, end))
+
+        # Shared progress array (one entry per worker)
+        progress_array = [0] * num_workers
+        chunk_paths = [
+            os.path.join(self.work_dir, f".{filename}.part{i}")
+            for i in range(num_workers)
+        ]
+
+        chunk_failed = threading.Event()
+
+        def worker(chunk_index: int) -> bool:
+            return self._download_chunk(
+                url,
+                headers,
+                cookies,
+                chunks[chunk_index][0],
+                chunks[chunk_index][1],
+                chunk_paths[chunk_index],
+                chunk_index,
+                progress_array,
+                chunk_failed,
+            )
+
+        executor = ThreadPoolExecutor(max_workers=num_workers)
+        futures: List[Future] = []
+        try:
+            for i in range(num_workers):
+                futures.append(executor.submit(worker, i))
+
+            # Poll progress until all workers complete
+            last_update = time.time()
+            last_downloaded = 0
+            speed_samples = []
+
+            while not all(f.done() for f in futures):
+                if self._cancel_current:
+                    chunk_failed.set()
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    self._cleanup_chunk_files(chunk_paths)
+                    return None
+
+                time.sleep(0.1)
+
+                # Aggregate progress
+                item.downloaded = sum(progress_array)
+                current_time = time.time()
+                elapsed = current_time - last_update
+                if elapsed >= 0.5:
+                    instant_speed = (item.downloaded - last_downloaded) / elapsed
+                    speed_samples.append(instant_speed)
+                    if len(speed_samples) > 4:
+                        speed_samples.pop(0)
+                    item.speed = sum(speed_samples) / len(speed_samples)
+                    last_downloaded = item.downloaded
+                    last_update = current_time
+                    if total_size > 0:
+                        item.progress = item.downloaded / total_size
+
+            # Final progress update
+            item.downloaded = sum(progress_array)
+            if total_size > 0:
+                item.progress = item.downloaded / total_size
+
+            # Check for failures
+            for f in futures:
+                if not f.result():
+                    item.status = "failed"
+                    if not item.error:
+                        item.error = "Chunk download failed"
+                    self._cleanup_chunk_files(chunk_paths)
+                    return None
+
+        except Exception as e:
+            chunk_failed.set()
+            executor.shutdown(wait=False, cancel_futures=True)
+            self._cleanup_chunk_files(chunk_paths)
+            raise
+        finally:
+            executor.shutdown(wait=False)
+
+        # Stitch chunks into final file
+        try:
+            with open(file_path, "wb") as out_f:
+                for chunk_path in chunk_paths:
+                    with open(chunk_path, "rb") as in_f:
+                        shutil.copyfileobj(in_f, out_f)
+            self._cleanup_chunk_files(chunk_paths)
+        except Exception as e:
+            self._cleanup_chunk_files(chunk_paths)
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            raise
+
+        return file_path
+
+    def _download_chunk(
+        self,
+        url: str,
+        headers: Dict[str, str],
+        cookies: Dict[str, str],
+        start: int,
+        end: int,
+        chunk_path: str,
+        chunk_index: int,
+        progress_array: List[int],
+        failed_event: threading.Event,
+    ) -> bool:
+        """Download a single byte range to a temp file."""
+        try:
+            range_headers = dict(headers)
+            range_headers["Range"] = f"bytes={start}-{end}"
+
+            resp = requests.get(
+                url,
+                stream=True,
+                timeout=(15, 60),
+                headers=range_headers,
+                cookies=cookies,
+                allow_redirects=True,
+            )
+            resp.raise_for_status()
+
+            with open(chunk_path, "wb") as f:
+                for chunk in resp.iter_content(chunk_size=262144):
+                    if self._cancel_current or failed_event.is_set():
+                        return False
+                    if chunk:
+                        f.write(chunk)
+                        progress_array[chunk_index] += len(chunk)
+
+            return True
+        except Exception as e:
+            log_error(f"Chunk {chunk_index} failed: {e}")
+            failed_event.set()
+            return False
+
+    def _cleanup_chunk_files(self, chunk_paths: List[str]):
+        """Remove temp .partN files, ignoring errors."""
+        for path in chunk_paths:
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+            except OSError:
+                pass
 
     def _process_downloaded_file(
         self, item: DownloadQueueItem, file_path: str, filename: str, roms_folder: str

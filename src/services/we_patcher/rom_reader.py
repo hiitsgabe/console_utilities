@@ -15,15 +15,15 @@ from typing import List, Tuple
 
 from .models import WETeamRecord, WEPlayerRecord, WETeamSlot, RomInfo, SlotPalette
 
-_MIN_VALID_SIZE = 100 * 1024 * 1024   # 100 MB minimum sanity check
+_MIN_VALID_SIZE = 100 * 1024 * 1024  # 100 MB minimum sanity check
 
 _SQUADRE_ML = 32
 _SQUADRE_NAZ = 63
 
 # Jersey preview offsets (64 bytes per team: maglia1 + maglia2)
-_OFS_ANT_MAGLIE  = 2_667_256   # National teams 0-29
-_OFS_ANT_MAGLIE1 = 2_669_544   # National teams 30-62 (after sector boundary)
-_OFS_ANT_MAGLIE2 = 2_671_896   # ML teams 0-31
+_OFS_ANT_MAGLIE = 2_667_256  # National teams 0-29
+_OFS_ANT_MAGLIE1 = 2_669_544  # National teams 30-62 (after sector boundary)
+_OFS_ANT_MAGLIE2 = 2_671_896  # ML teams 0-31
 
 
 def _bgr555_to_rgb(val: int) -> Tuple[int, int, int]:
@@ -114,13 +114,15 @@ class RomReader:
                 if len(raw) < 64:
                     continue
                 primary, secondary = _extract_dominant_colors(raw[:32])
-                palettes.append(SlotPalette(
-                    slot_type="national",
-                    slot_index=i,
-                    primary=primary,
-                    secondary=secondary,
-                    raw_data=raw,
-                ))
+                palettes.append(
+                    SlotPalette(
+                        slot_type="national",
+                        slot_index=i,
+                        primary=primary,
+                        secondary=secondary,
+                        raw_data=raw,
+                    )
+                )
 
             # ML slots 0-31
             for i in range(_SQUADRE_ML):
@@ -130,13 +132,15 @@ class RomReader:
                 if len(raw) < 64:
                     continue
                 primary, secondary = _extract_dominant_colors(raw[:32])
-                palettes.append(SlotPalette(
-                    slot_type="ml",
-                    slot_index=i,
-                    primary=primary,
-                    secondary=secondary,
-                    raw_data=raw,
-                ))
+                palettes.append(
+                    SlotPalette(
+                        slot_type="ml",
+                        slot_index=i,
+                        primary=primary,
+                        secondary=secondary,
+                        raw_data=raw,
+                    )
+                )
 
         return palettes
 

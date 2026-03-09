@@ -39,6 +39,7 @@ elif BUILD_TARGET == "android":
     # Use external files dir on Android so config survives app updates.
     # Internal app storage gets wiped on reinstall.
     from droid.storage import get_external_data_dir
+
     _ANDROID_DATA_DIR = get_external_data_dir(SCRIPT_DIR)
     os.makedirs(_ANDROID_DATA_DIR, exist_ok=True)
     TEMP_LOG_DIR = _ANDROID_DATA_DIR

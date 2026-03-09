@@ -89,6 +89,7 @@ class MVPPSPPatcher:
         self.mapper = MVPPSPStatMapper()
 
         from services.sports_api.espn_client import EspnClient
+
         self.api = EspnClient(cache_dir, on_status)
 
     def analyze_rom(self, iso_path: str) -> MVPRomInfo:
@@ -117,10 +118,7 @@ class MVPPSPPatcher:
             return rosters
 
         # Filter to teams with MVP ROM slots
-        mapped = [
-            t for t in mlb_teams
-            if self.mapper.get_team_slot(t.code) is not None
-        ]
+        mapped = [t for t in mlb_teams if self.mapper.get_team_slot(t.code) is not None]
         total = len(mapped)
 
         for i, team in enumerate(mapped):
@@ -154,13 +152,15 @@ class MVPPSPPatcher:
 
         for i in range(TEAM_COUNT):
             abbrev = abbrevs[i] if i < len(abbrevs) else ""
-            teams.append(MVPTeamRecord(
-                index=i,
-                name=MVP_TEAM_ORDER[i],
-                abbrev=abbrev,
-                hash_id=TEAM_HASHES.get(abbrev, ""),
-                players=[],
-            ))
+            teams.append(
+                MVPTeamRecord(
+                    index=i,
+                    name=MVP_TEAM_ORDER[i],
+                    abbrev=abbrev,
+                    hash_id=TEAM_HASHES.get(abbrev, ""),
+                    players=[],
+                )
+            )
 
         for team_code, players in rosters.items():
             slot = self.mapper.get_team_slot(team_code)
@@ -185,7 +185,9 @@ class MVPPSPPatcher:
 
                 if is_pitcher:
                     record = self.mapper.map_pitcher(
-                        player, pstats, is_starter=is_starter,
+                        player,
+                        pstats,
+                        is_starter=is_starter,
                     )
                 else:
                     record = self.mapper.map_batter(player, pstats)
@@ -193,7 +195,9 @@ class MVPPSPPatcher:
                 # Assign roster position based on slot
                 record.roster_position = self._slot_to_position(idx)
                 if idx < 9:
-                    record.batting_order = idx + 1  # 1-based (game uses order-1 as index)
+                    record.batting_order = (
+                        idx + 1
+                    )  # 1-based (game uses order-1 as index)
                 else:
                     record.batting_order = -1
 
@@ -238,9 +242,7 @@ class MVPPSPPatcher:
 
         # Separate existing hashes into pitcher and batter pools
         # to preserve cross-table references (pitchstat, batstat, etc.)
-        pitcher_hashes_set = set(
-            writer.reader.records.get("pitchattrib", {}).keys()
-        )
+        pitcher_hashes_set = set(writer.reader.records.get("pitchattrib", {}).keys())
         all_hashes = list(writer.reader.records.get("attrib", {}).keys())
         pitcher_pool = [h for h in all_hashes if h in pitcher_hashes_set]
         batter_pool = [h for h in all_hashes if h not in pitcher_hashes_set]
@@ -267,10 +269,13 @@ class MVPPSPPatcher:
                 preserved_ids.add(rec_id)
 
         # Use IDs that don't collide with preserved entries
-        roster_counter = max(
-            (int(rid, 16) for rid in old_roster.keys()),
-            default=0,
-        ) + 1
+        roster_counter = (
+            max(
+                (int(rid, 16) for rid in old_roster.keys()),
+                default=0,
+            )
+            + 1
+        )
 
         for i, team in enumerate(mvp_teams):
             if on_progress:
@@ -403,9 +408,7 @@ class MVPPSPPatcher:
             LR_POWER: str(power),
         }
 
-    def _build_pitchattrib_fields(
-        self, player: MVPPlayerRecord
-    ) -> Dict[int, str]:
+    def _build_pitchattrib_fields(self, player: MVPPlayerRecord) -> Dict[int, str]:
         """Build pitch attrib fields for a pitcher.
 
         Pitch 1 is always fastball (no type field, fields 4-7).

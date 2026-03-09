@@ -44,6 +44,7 @@ class NBALive95Patcher:
         self.mapper = NBALive95StatMapper()
 
         from services.sports_api.espn_client import EspnClient
+
         self.api = EspnClient(cache_dir, on_status)
 
     def analyze_rom(self, rom_path: str) -> NBALive95RomInfo:
@@ -76,10 +77,7 @@ class NBALive95Patcher:
             return rosters
 
         # Filter to teams with ROM slots
-        mapped = [
-            t for t in nba_teams
-            if self.mapper.get_team_slot(t.code) is not None
-        ]
+        mapped = [t for t in nba_teams if self.mapper.get_team_slot(t.code) is not None]
         total = len(mapped)
 
         for i, team in enumerate(mapped):
@@ -112,11 +110,13 @@ class NBALive95Patcher:
         team_stats = getattr(self, "team_stats", {})
 
         for i in range(TEAM_COUNT):
-            teams.append(NBALive95TeamRecord(
-                index=i,
-                name=NBALIVE95_TEAM_ORDER[i],
-                players=[],
-            ))
+            teams.append(
+                NBALive95TeamRecord(
+                    index=i,
+                    name=NBALIVE95_TEAM_ORDER[i],
+                    players=[],
+                )
+            )
 
         for team_code, players in rosters.items():
             slot = self.mapper.get_team_slot(team_code)

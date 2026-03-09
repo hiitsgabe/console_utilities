@@ -46,11 +46,13 @@ class ISSPatcherScreen:
         else:
             step1_value = "Not selected"
 
-        items.append((
-            "1. Select League",
-            step1_value,
-            "needs_api_key" if needs_key else "select_league",
-        ))
+        items.append(
+            (
+                "1. Select League",
+                step1_value,
+                "needs_api_key" if needs_key else "select_league",
+            )
+        )
 
         # ── Preview Rosters ───────────────────────────────────────────────
         if iss.league_data:
@@ -62,26 +64,35 @@ class ISSPatcherScreen:
         else:
             step2_value = "Complete step 1 first"
 
-        items.append((
-            "2. Preview Rosters",
-            step2_value,
-            "preview_rosters" if (iss.league_data or iss.selected_league) else "locked",
-        ))
+        items.append(
+            (
+                "2. Preview Rosters",
+                step2_value,
+                (
+                    "preview_rosters"
+                    if (iss.league_data or iss.selected_league)
+                    else "locked"
+                ),
+            )
+        )
 
         # ── Set Team Colors (API-Football only) ──────────────────────────
         if provider == "api_football":
             from services.team_color_cache import all_teams_have_colors
+
             if iss.league_data and all_teams_have_colors(iss.league_data):
                 colors_value = "All colors set"
             elif iss.league_data:
                 colors_value = "Colors required"
             else:
                 colors_value = "Complete step 2 first"
-            items.append((
-                "3. Set Team Colors",
-                colors_value,
-                "set_colors" if iss.league_data else "locked",
-            ))
+            items.append(
+                (
+                    "3. Set Team Colors",
+                    colors_value,
+                    "set_colors" if iss.league_data else "locked",
+                )
+            )
 
         # ── Select ROM ────────────────────────────────────────────────────
         step_rom = "4" if provider == "api_football" else "3"
@@ -97,6 +108,7 @@ class ISSPatcherScreen:
         step_patch = "5" if provider == "api_football" else "4"
         if provider == "api_football":
             from services.team_color_cache import all_teams_have_colors as _athc
+
             colors_ok = iss.league_data and _athc(iss.league_data)
         else:
             colors_ok = True
@@ -108,11 +120,17 @@ class ISSPatcherScreen:
         else:
             patch_value = f"Complete steps 1+{step_rom} first"
 
-        items.append((
-            f"{step_patch}. Patch ROM",
-            patch_value,
-            "patch_rom" if (iss.league_data and iss.rom_valid and colors_ok) else "locked",
-        ))
+        items.append(
+            (
+                f"{step_patch}. Patch ROM",
+                patch_value,
+                (
+                    "patch_rom"
+                    if (iss.league_data and iss.rom_valid and colors_ok)
+                    else "locked"
+                ),
+            )
+        )
 
         return items
 
@@ -146,13 +164,17 @@ class ISSPatcherScreen:
                 visible_idx = season_idx - scroll_offset
                 if 0 <= visible_idx < len(item_rects):
                     row = item_rects[visible_idx]
-                    season = state.iss_patcher.selected_season or datetime.now().year - 1
+                    season = (
+                        state.iss_patcher.selected_season or datetime.now().year - 1
+                    )
                     is_hl = highlighted == season_idx
                     self._draw_arrow_control(screen, row, str(season), is_hl)
 
         return back_rect, item_rects, scroll_offset
 
-    def _draw_arrow_control(self, screen, row: pygame.Rect, label: str, is_highlighted: bool):
+    def _draw_arrow_control(
+        self, screen, row: pygame.Rect, label: str, is_highlighted: bool
+    ):
         """Draw < value > control on the right side of a row."""
         btn_w, btn_h = 32, 30
         value_w = 56
@@ -162,25 +184,41 @@ class ISSPatcherScreen:
         rx = row.right - margin
         right_btn = pygame.Rect(rx - btn_w, row.centery - btn_h // 2, btn_w, btn_h)
         value_cx = right_btn.left - gap - value_w // 2
-        left_btn = pygame.Rect(value_cx - value_w // 2 - gap - btn_w, row.centery - btn_h // 2, btn_w, btn_h)
+        left_btn = pygame.Rect(
+            value_cx - value_w // 2 - gap - btn_w,
+            row.centery - btn_h // 2,
+            btn_w,
+            btn_h,
+        )
 
-        arrow_color = self.theme.primary if is_highlighted else self.theme.text_secondary
+        arrow_color = (
+            self.theme.primary if is_highlighted else self.theme.text_secondary
+        )
         value_color = self.theme.primary if is_highlighted else self.theme.text_primary
 
         self.text.render(
-            screen, "<",
+            screen,
+            "<",
             (left_btn.centerx, left_btn.centery - self.theme.font_size_sm // 2),
-            color=arrow_color, size=self.theme.font_size_sm, align="center",
+            color=arrow_color,
+            size=self.theme.font_size_sm,
+            align="center",
         )
         self.text.render(
-            screen, label,
+            screen,
+            label,
             (value_cx, row.centery - self.theme.font_size_md // 2),
-            color=value_color, size=self.theme.font_size_md, align="center",
+            color=value_color,
+            size=self.theme.font_size_md,
+            align="center",
         )
         self.text.render(
-            screen, ">",
+            screen,
+            ">",
             (right_btn.centerx, right_btn.centery - self.theme.font_size_sm // 2),
-            color=arrow_color, size=self.theme.font_size_sm, align="center",
+            color=arrow_color,
+            size=self.theme.font_size_sm,
+            align="center",
         )
 
         self.season_arrow_left = left_btn

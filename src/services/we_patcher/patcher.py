@@ -50,8 +50,7 @@ class WePatcher:
 
         # Build skeleton immediately so the UI can render the team list right away
         team_rosters = [
-            TeamRoster(team=t, players=[], player_stats={}, loading=True)
-            for t in teams
+            TeamRoster(team=t, players=[], player_stats={}, loading=True) for t in teams
         ]
         league_data = LeagueData(league=league, teams=team_rosters)
         if on_partial_data:
@@ -73,8 +72,11 @@ class WePatcher:
                 team_rosters[i].player_stats = player_stats
             except Exception as e:
                 from .api_football import RateLimitError, DailyLimitError
+
                 if isinstance(e, DailyLimitError):
-                    team_rosters[i].error = "Daily API limit reached — upgrade your plan"
+                    team_rosters[i].error = (
+                        "Daily API limit reached — upgrade your plan"
+                    )
                 elif isinstance(e, RateLimitError):
                     team_rosters[i].error = "Rate limit reached — squad unavailable"
                 else:
@@ -169,7 +171,9 @@ class WePatcher:
         if on_progress:
             on_progress(0.02, f"Applying {lang_name} translation...")
         try:
-            assets_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "assets")
+            assets_dir = os.path.join(
+                os.path.dirname(__file__), "..", "..", "..", "assets"
+            )
             translations_dir = os.path.abspath(os.path.join(assets_dir, "translations"))
             # For English, try the community full-translation PPF first
             if language == "en":
@@ -215,11 +219,19 @@ class WePatcher:
             if team_obj.color:
                 h = team_obj.color.lstrip("#")
                 if len(h) == 6:
-                    we_team.kit_home = (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
+                    we_team.kit_home = (
+                        int(h[0:2], 16),
+                        int(h[2:4], 16),
+                        int(h[4:6], 16),
+                    )
             if team_obj.alternate_color:
                 h = team_obj.alternate_color.lstrip("#")
                 if len(h) == 6:
-                    we_team.kit_away = (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
+                    we_team.kit_away = (
+                        int(h[0:2], 16),
+                        int(h[2:4], 16),
+                        int(h[4:6], 16),
+                    )
             we_team.kit_third = we_team.kit_home  # accent = shirt color
 
             # ML slot writes (0-31)

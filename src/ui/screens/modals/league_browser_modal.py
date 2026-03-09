@@ -63,12 +63,28 @@ class LeagueBrowserModal:
             30,
         )
         search_active = we.league_search_active
-        field_bg = self.theme.surface_selected if search_active else self.theme.surface_hover
-        pygame.draw.rect(screen, field_bg, field_rect, border_radius=self.theme.radius_sm)
+        field_bg = (
+            self.theme.surface_selected if search_active else self.theme.surface_hover
+        )
+        pygame.draw.rect(
+            screen, field_bg, field_rect, border_radius=self.theme.radius_sm
+        )
         if search_active:
-            pygame.draw.rect(screen, self.theme.primary, field_rect, 1, border_radius=self.theme.radius_sm)
-        display_text = we.league_search_query or ("Type to search..." if search_active else "Search leagues... [X to search]")
-        text_color = self.theme.text_primary if we.league_search_query else self.theme.text_disabled
+            pygame.draw.rect(
+                screen,
+                self.theme.primary,
+                field_rect,
+                1,
+                border_radius=self.theme.radius_sm,
+            )
+        display_text = we.league_search_query or (
+            "Type to search..." if search_active else "Search leagues... [X to search]"
+        )
+        text_color = (
+            self.theme.text_primary
+            if we.league_search_query
+            else self.theme.text_disabled
+        )
         self.text.render(
             screen,
             display_text,
@@ -180,7 +196,10 @@ class LeagueBrowserModal:
                 self.text.render(
                     screen,
                     "Loading all leagues...",
-                    (content_rect.left + self.theme.padding_sm + 8, y + item_height // 2 - self.theme.font_size_sm // 2),
+                    (
+                        content_rect.left + self.theme.padding_sm + 8,
+                        y + item_height // 2 - self.theme.font_size_sm // 2,
+                    ),
                     color=self.theme.text_disabled,
                     size=self.theme.font_size_sm,
                 )
@@ -205,7 +224,11 @@ class LeagueBrowserModal:
                     screen,
                     "Browse all leagues...",
                     (rect.left + 8, rect.centery - self.theme.font_size_sm // 2),
-                    color=self.theme.primary if is_highlighted else self.theme.text_disabled,
+                    color=(
+                        self.theme.primary
+                        if is_highlighted
+                        else self.theme.text_disabled
+                    ),
                     size=self.theme.font_size_sm,
                 )
                 item_rects.append(rect)

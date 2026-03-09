@@ -165,7 +165,7 @@ def refpack_compress(data: bytes) -> bytes:
     out = bytearray()
 
     # Header: 0x10 0xFB + 3-byte big-endian decompressed size
-    out.extend(b"\x10\xFB")
+    out.extend(b"\x10\xfb")
     out.append((size >> 16) & 0xFF)
     out.append((size >> 8) & 0xFF)
     out.append(size & 0xFF)
@@ -211,7 +211,12 @@ def refpack_compress(data: bytes) -> bytes:
             off = p - cand
             if off > MAX_OFFSET:
                 break
-            if off >= 1 and data[cand] == d0 and data[cand + 1] == d1 and data[cand + 2] == d2:
+            if (
+                off >= 1
+                and data[cand] == d0
+                and data[cand + 1] == d1
+                and data[cand + 2] == d2
+            ):
                 ml = 3
                 limit = min(MAX_MATCH, size - p, size - cand)
                 while ml < limit and data[cand + ml] == data[p + ml]:
@@ -257,10 +262,7 @@ def refpack_compress(data: bytes) -> bytes:
         if length < MAX_MATCH and pos + 1 < size - 2:
             insert(pos)
             next_offset, next_length = find_match(pos + 1)
-            if (
-                next_length > length + 1
-                and _is_encodable(next_length, next_offset)
-            ):
+            if next_length > length + 1 and _is_encodable(next_length, next_offset):
                 # Better match at pos+1 — skip current as literal
                 pos += 1
                 continue
@@ -363,7 +365,9 @@ def bigf_replace(archive: bytes, filename: str, new_data: bytes) -> bytes:
         if entry.name.lower() == filename_lower:
             file_contents[entry.name] = new_data
         else:
-            file_contents[entry.name] = archive[entry.offset : entry.offset + entry.size]
+            file_contents[entry.name] = archive[
+                entry.offset : entry.offset + entry.size
+            ]
 
     if filename not in file_contents:
         raise ValueError(f"File '{filename}' not found in BIGF archive")
@@ -371,9 +375,7 @@ def bigf_replace(archive: bytes, filename: str, new_data: bytes) -> bytes:
     return bigf_build(entries, file_contents)
 
 
-def bigf_replace_inplace(
-    archive: bytearray, filename: str, new_data: bytes
-) -> bool:
+def bigf_replace_inplace(archive: bytearray, filename: str, new_data: bytes) -> bool:
     """Replace a file's data in-place within the BIGF archive.
 
     Writes new_data at the file's ORIGINAL offset, preserving all other
@@ -408,9 +410,10 @@ def bigf_replace_inplace(
     remaining = target_entry.size - len(new_data)
     if remaining > 0:
         archive[
-            target_entry.offset + len(new_data) :
-            target_entry.offset + target_entry.size
-        ] = b"\x00" * remaining
+            target_entry.offset
+            + len(new_data) : target_entry.offset
+            + target_entry.size
+        ] = (b"\x00" * remaining)
 
     # Update file size in directory entry (keep original offset)
     # Directory entry layout: 4B offset (BE) + 4B size (BE) + name + null
@@ -508,8 +511,8 @@ def tdb_crc(data: bytes) -> int:
     crc = 0xFFFFFFFF
     for byte in data:
         crc = (crc ^ (byte << 24)) & 0xFFFFFFFF
-        crc = (((crc << 4) & 0xFFFFFFFF) ^ _CRC_TABLE[crc >> 28])
-        crc = (((crc << 4) & 0xFFFFFFFF) ^ _CRC_TABLE[crc >> 28])
+        crc = ((crc << 4) & 0xFFFFFFFF) ^ _CRC_TABLE[crc >> 28]
+        crc = ((crc << 4) & 0xFFFFFFFF) ^ _CRC_TABLE[crc >> 28]
     return crc
 
 
@@ -741,9 +744,7 @@ class TDBFile:
         return tdb
 
     @classmethod
-    def _parse_table(
-        cls, data: bytes, offset: int, name: str
-    ) -> Optional[TDBTable]:
+    def _parse_table(cls, data: bytes, offset: int, name: str) -> Optional[TDBTable]:
         """Parse a single table at the given offset."""
         if offset + 20 > len(data):
             return None
@@ -846,17 +847,13 @@ class TDBFile:
             # Update record counts in 40-byte table header
             #   header_offset + 20 = maxRecords (2B LE)
             #   header_offset + 22 = currentRecords (2B LE)
-            header_offset = (
-                table.data_offset - len(table.fields) * 16 - 40
-            )
+            header_offset = table.data_offset - len(table.fields) * 16 - 40
             if header_offset >= 0:
                 struct.pack_into("<H", out, header_offset + 20, table.capacity)
                 struct.pack_into("<H", out, header_offset + 22, table.num_records)
 
         # Recalculate CRC chain
-        ordered = [
-            self.tables[n] for n in self._table_order if n in self.tables
-        ]
+        ordered = [self.tables[n] for n in self._table_order if n in self.tables]
         for i, table in enumerate(ordered):
             hdr_off = table.data_offset - len(table.fields) * 16 - 40
             # CRC over field definitions + record data (after the 40B header)

@@ -67,7 +67,9 @@ class RosterPreviewModal:
                 )
                 self.progress_bar.render(screen, bar_rect, progress)
                 league_name = ""
-                if state.active_patcher.selected_league and hasattr(state.active_patcher.selected_league, "name"):
+                if state.active_patcher.selected_league and hasattr(
+                    state.active_patcher.selected_league, "name"
+                ):
                     league_name = state.active_patcher.selected_league.name
                 if league_name:
                     self.text.render(

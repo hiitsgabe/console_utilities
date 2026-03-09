@@ -10,11 +10,13 @@ from services.sports_api.models import League, Team, Player, PlayerStats
 
 class RateLimitError(Exception):
     """Raised when the API rate limit is hit and all retries are exhausted."""
+
     pass
 
 
 class DailyLimitError(Exception):
     """Raised when the daily API request quota is exceeded."""
+
     pass
 
 
@@ -36,10 +38,15 @@ class ApiFootballClient:
     # season=None  → use current calendar year
     # season=-1    → use current year - 1 (cross-year competitions like CL)
     FEATURED_LEAGUES = [
-        {"id": 2,   "name": "UEFA Champions League", "country": "World",         "season": -1},
-        {"id": 13,  "name": "Copa Libertadores",      "country": "South America", "season": None},
-        {"id": 71,  "name": "Brasileirao Serie A",    "country": "Brazil",        "season": None},
-        {"id": 253, "name": "MLS",                    "country": "USA",           "season": None},
+        {"id": 2, "name": "UEFA Champions League", "country": "World", "season": -1},
+        {
+            "id": 13,
+            "name": "Copa Libertadores",
+            "country": "South America",
+            "season": None,
+        },
+        {"id": 71, "name": "Brasileirao Serie A", "country": "Brazil", "season": None},
+        {"id": 253, "name": "MLS", "country": "USA", "season": None},
     ]
 
     RATE_LIMIT_WAIT = 65  # seconds to wait after a rate limit hit
@@ -53,6 +60,7 @@ class ApiFootballClient:
     def get_featured_leagues(self) -> List[League]:
         """Return hardcoded featured leagues with dynamically computed seasons."""
         from datetime import datetime
+
         current_year = datetime.now().year
         results = []
         for item in self.FEATURED_LEAGUES:
@@ -62,18 +70,22 @@ class ApiFootballClient:
                 season = current_year - 1
             else:
                 season = item["season"]
-            results.append(League(
-                id=item["id"],
-                name=item["name"],
-                country=item["country"],
-                country_code="",
-                logo_url="",
-                season=season,
-                teams_count=0,
-            ))
+            results.append(
+                League(
+                    id=item["id"],
+                    name=item["name"],
+                    country=item["country"],
+                    country_code="",
+                    logo_url="",
+                    season=season,
+                    teams_count=0,
+                )
+            )
         return results
 
-    def get_leagues(self, country: str = None, season: int = None, id: int = None) -> List[League]:
+    def get_leagues(
+        self, country: str = None, season: int = None, id: int = None
+    ) -> List[League]:
         """Fetch available leagues, optionally filtered by id/country/season."""
         params = {}
         if id:

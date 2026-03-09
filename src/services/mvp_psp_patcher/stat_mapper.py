@@ -32,24 +32,87 @@ def _scale(value: float, low: float, high: float) -> int:
 
 # Default attributes by position
 POSITION_DEFAULTS = {
-    "C":  {"speed": 35, "fielding": 60, "arm_range": 55, "throw_strength": 65,
-            "throw_accuracy": 60, "contact": 55, "power": 50},
-    "1B": {"speed": 30, "fielding": 50, "arm_range": 45, "throw_strength": 55,
-            "throw_accuracy": 55, "contact": 60, "power": 65},
-    "2B": {"speed": 55, "fielding": 65, "arm_range": 60, "throw_strength": 50,
-            "throw_accuracy": 65, "contact": 55, "power": 35},
-    "3B": {"speed": 40, "fielding": 55, "arm_range": 55, "throw_strength": 70,
-            "throw_accuracy": 60, "contact": 55, "power": 55},
-    "SS": {"speed": 55, "fielding": 70, "arm_range": 65, "throw_strength": 65,
-            "throw_accuracy": 65, "contact": 55, "power": 35},
-    "LF": {"speed": 55, "fielding": 50, "arm_range": 50, "throw_strength": 55,
-            "throw_accuracy": 55, "contact": 60, "power": 55},
-    "CF": {"speed": 65, "fielding": 60, "arm_range": 65, "throw_strength": 60,
-            "throw_accuracy": 55, "contact": 55, "power": 45},
-    "RF": {"speed": 50, "fielding": 55, "arm_range": 55, "throw_strength": 70,
-            "throw_accuracy": 60, "contact": 60, "power": 60},
-    "DH": {"speed": 30, "fielding": 30, "arm_range": 30, "throw_strength": 40,
-            "throw_accuracy": 40, "contact": 65, "power": 70},
+    "C": {
+        "speed": 35,
+        "fielding": 60,
+        "arm_range": 55,
+        "throw_strength": 65,
+        "throw_accuracy": 60,
+        "contact": 55,
+        "power": 50,
+    },
+    "1B": {
+        "speed": 30,
+        "fielding": 50,
+        "arm_range": 45,
+        "throw_strength": 55,
+        "throw_accuracy": 55,
+        "contact": 60,
+        "power": 65,
+    },
+    "2B": {
+        "speed": 55,
+        "fielding": 65,
+        "arm_range": 60,
+        "throw_strength": 50,
+        "throw_accuracy": 65,
+        "contact": 55,
+        "power": 35,
+    },
+    "3B": {
+        "speed": 40,
+        "fielding": 55,
+        "arm_range": 55,
+        "throw_strength": 70,
+        "throw_accuracy": 60,
+        "contact": 55,
+        "power": 55,
+    },
+    "SS": {
+        "speed": 55,
+        "fielding": 70,
+        "arm_range": 65,
+        "throw_strength": 65,
+        "throw_accuracy": 65,
+        "contact": 55,
+        "power": 35,
+    },
+    "LF": {
+        "speed": 55,
+        "fielding": 50,
+        "arm_range": 50,
+        "throw_strength": 55,
+        "throw_accuracy": 55,
+        "contact": 60,
+        "power": 55,
+    },
+    "CF": {
+        "speed": 65,
+        "fielding": 60,
+        "arm_range": 65,
+        "throw_strength": 60,
+        "throw_accuracy": 55,
+        "contact": 55,
+        "power": 45,
+    },
+    "RF": {
+        "speed": 50,
+        "fielding": 55,
+        "arm_range": 55,
+        "throw_strength": 70,
+        "throw_accuracy": 60,
+        "contact": 60,
+        "power": 60,
+    },
+    "DH": {
+        "speed": 30,
+        "fielding": 30,
+        "arm_range": 30,
+        "throw_strength": 40,
+        "throw_accuracy": 40,
+        "contact": 65,
+        "power": 70,
+    },
 }
 
 
@@ -261,27 +324,40 @@ class MVPPSPStatMapper:
         Types: 1=Fastball, 2=Curve, 3=Slider, 4=Changeup, 5=Sinker, etc.
         """
         pitches = [
-            {"type": 1, "movement": velocity // 2, "control": control,
-             "velocity": _clamp(velocity + 10)},
+            {
+                "type": 1,
+                "movement": velocity // 2,
+                "control": control,
+                "velocity": _clamp(velocity + 10),
+            },
         ]
         if is_starter:
             # Starters get 3-4 pitches
             pitches.append(
-                {"type": 3, "movement": _clamp(velocity // 2 + 5),
-                 "control": _clamp(control - 5),
-                 "velocity": _clamp(velocity - 5)}
+                {
+                    "type": 3,
+                    "movement": _clamp(velocity // 2 + 5),
+                    "control": _clamp(control - 5),
+                    "velocity": _clamp(velocity - 5),
+                }
             )
             pitches.append(
-                {"type": 4, "movement": _clamp(velocity // 3),
-                 "control": control,
-                 "velocity": _clamp(velocity - 15)}
+                {
+                    "type": 4,
+                    "movement": _clamp(velocity // 3),
+                    "control": control,
+                    "velocity": _clamp(velocity - 15),
+                }
             )
         else:
             # Relievers get 2 pitches
             pitches.append(
-                {"type": 3, "movement": _clamp(velocity // 2),
-                 "control": _clamp(control - 5),
-                 "velocity": _clamp(velocity - 5)}
+                {
+                    "type": 3,
+                    "movement": _clamp(velocity // 2),
+                    "control": _clamp(control - 5),
+                    "velocity": _clamp(velocity - 5),
+                }
             )
         return pitches
 
@@ -375,9 +451,17 @@ class MVPPSPStatMapper:
         if is_pitcher:
             return "SP"
         pos_map = {
-            "C": "C", "1B": "1B", "2B": "2B", "3B": "3B", "SS": "SS",
-            "LF": "LF", "CF": "CF", "RF": "RF", "DH": "DH",
-            "OF": "CF", "IF": "SS",
+            "C": "C",
+            "1B": "1B",
+            "2B": "2B",
+            "3B": "3B",
+            "SS": "SS",
+            "LF": "LF",
+            "CF": "CF",
+            "RF": "RF",
+            "DH": "DH",
+            "OF": "CF",
+            "IF": "SS",
         }
         return pos_map.get(pos, "CF")
 
