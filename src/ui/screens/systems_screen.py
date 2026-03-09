@@ -14,6 +14,7 @@ _ALL_ROOT_ENTRIES = [
     ("PortMaster (beta)", "portmaster"),
     ("Artbox Games Scraper", "scraper_menu"),
     ("Sports Game Updater", "sports_patcher"),
+    ("Syncthing Sync", "syncthing"),
     ("Utils", "utils"),
     ("Settings", "settings"),
     ("Credits", "credits"),
@@ -45,6 +46,9 @@ def _build_root_menu(
                 continue
         if action == "scraper_menu":
             if not settings.get("scraper_enabled", False):
+                continue
+        if action == "syncthing":
+            if not settings.get("syncthing_enabled", False):
                 continue
         labels.append(label)
         actions.append(action)

@@ -93,6 +93,12 @@ class SettingsScreen:
         "Web Companion",
     ]
 
+    # Save Sync section
+    SAVE_SYNC_SECTION = [
+        "--- SAVE SYNC ---",
+        "Enable Syncthing Helper",
+    ]
+
     # Android section
     ANDROID_SECTION = [
         "--- ANDROID ---",
@@ -198,6 +204,10 @@ class SettingsScreen:
         if BUILD_TARGET not in ("macos", "windows"):
             divider_indices.add(len(items))
             items.extend(self.WEB_COMPANION_SECTION)
+
+        # Add Save Sync section
+        divider_indices.add(len(items))
+        items.extend(self.SAVE_SYNC_SECTION)
 
         # Add Android section (only on Android)
         if BUILD_TARGET == "android":
@@ -330,6 +340,9 @@ class SettingsScreen:
             elif item == "Web Companion":
                 value = "ON" if settings.get("web_companion_enabled", False) else "OFF"
                 items.append((item, value))
+            elif item == "Enable Syncthing Helper":
+                value = "ON" if settings.get("syncthing_enabled", False) else "OFF"
+                items.append((item, value))
             elif item == "Use Python Downloader":
                 value = "ON" if settings.get("use_python_downloader", False) else "OFF"
                 items.append((item, value))
@@ -424,6 +437,7 @@ class SettingsScreen:
                 "Scraper Frontend": "toggle_scraper_frontend",
                 "Enable NSZ": "toggle_nsz_enabled",
                 "Web Companion": "toggle_web_companion",
+                "Enable Syncthing Helper": "toggle_syncthing_enabled",
                 "Use Python Downloader": "toggle_python_downloader",
                 "Redraw UI": "redraw_ui",
                 "Storage Permission": "request_storage_permission",
