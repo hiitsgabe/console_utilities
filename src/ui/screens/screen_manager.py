@@ -1065,6 +1065,8 @@ class ScreenManager:
                     state.syncthing.device_id,
                     state.syncthing.system_statuses,
                     state.syncthing.status_message,
+                    custom_saves=state.syncthing.custom_saves,
+                    custom_statuses=state.syncthing.custom_statuses,
                 )
             rects["back"] = back_rect
             rects["item_rects"] = item_rects

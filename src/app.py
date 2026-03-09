@@ -1506,11 +1506,14 @@ class ConsoleUtilitiesApp:
                     self.screen_manager.syncthing_screen._build_configured_items(
                         self.settings, "", self.state.syncthing.system_statuses,
                         self.state.syncthing.status_message,
+                        custom_saves=self.state.syncthing.custom_saves,
+                        custom_statuses=self.state.syncthing.custom_statuses,
                     )
                 )
                 max_items = self.screen_manager.syncthing_screen.get_configured_item_count(
                     self.settings,
                     status_message=self.state.syncthing.status_message,
+                    custom_saves=self.state.syncthing.custom_saves,
                 )
             else:
                 max_items = 1
@@ -6024,6 +6027,17 @@ class ConsoleUtilitiesApp:
                     self.state.syncthing.system_statuses = (
                         self.syncthing_service.get_system_sync_status()
                     )
+                    # Load custom saves from settings
+                    self.state.syncthing.custom_saves = self.settings.get(
+                        "syncthing_custom_saves", []
+                    )
+                    # Get custom save statuses
+                    if self.state.syncthing.custom_saves:
+                        self.state.syncthing.custom_statuses = (
+                            self.syncthing_service.get_custom_save_statuses(
+                                self.state.syncthing.custom_saves
+                            )
+                        )
                 else:
                     self.state.syncthing.step = "role_select"
             else:
@@ -6074,6 +6088,8 @@ class ConsoleUtilitiesApp:
                 self.settings,
                 self.state.syncthing.system_statuses,
                 status_message=self.state.syncthing.status_message,
+                custom_saves=self.state.syncthing.custom_saves,
+                custom_statuses=self.state.syncthing.custom_statuses,
             )
             if action == "sync_all":
                 if not self.state.syncthing.configuring:
