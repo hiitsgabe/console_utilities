@@ -49,6 +49,7 @@ from .mvp_psp_patcher_screen import MVPPSPPatcherScreen
 from .nhl94_snes_patcher_screen import NHL94SNESPatcherScreen
 from .nhl94_genesis_patcher_screen import NHL94GenesisPatcherScreen
 from .nhl07_psp_patcher_screen import NHL07PSPPatcherScreen
+from .syncthing_screen import SyncthingScreen
 from .downloads_screen import DownloadsScreen
 from .scraper_downloads_screen import ScraperDownloadsScreen
 from ui.molecules.status_footer import StatusFooter, StatusFooterItem
@@ -87,6 +88,7 @@ class ScreenManager:
         self.nhl94_patcher_screen = NHL94SNESPatcherScreen(theme)
         self.nhl94_gen_patcher_screen = NHL94GenesisPatcherScreen(theme)
         self.nhl07_psp_patcher_screen = NHL07PSPPatcherScreen(theme)
+        self.syncthing_screen = SyncthingScreen(theme)
 
         # Initialize modals
         self.search_modal = SearchModal(theme)
@@ -1041,6 +1043,32 @@ class ScreenManager:
             rects["season_right_arrow"] = (
                 self.nhl07_psp_patcher_screen.season_arrow_right
             )
+
+        elif state.mode == "syncthing":
+            if state.syncthing.step == "checking":
+                back_rect, item_rects, scroll_offset = self.syncthing_screen.render_checking(screen)
+            elif state.syncthing.step == "not_found":
+                back_rect, item_rects, scroll_offset = self.syncthing_screen.render_not_found(
+                    screen, state.syncthing.highlighted
+                )
+            elif state.syncthing.step == "role_select":
+                back_rect, item_rects, scroll_offset = self.syncthing_screen.render_role_select(
+                    screen, state.syncthing.highlighted
+                )
+            elif state.syncthing.step == "device_id_input":
+                back_rect, item_rects, scroll_offset = self.syncthing_screen.render_checking(screen)
+            elif state.syncthing.step == "configured":
+                back_rect, item_rects, scroll_offset = self.syncthing_screen.render_configured(
+                    screen,
+                    state.syncthing.highlighted,
+                    settings,
+                    state.syncthing.device_id,
+                    state.syncthing.system_statuses,
+                    state.syncthing.status_message,
+                )
+            rects["back"] = back_rect
+            rects["item_rects"] = item_rects
+            rects["scroll_offset"] = scroll_offset
 
         # Render stacked status footers on non-download screens
         if state.mode not in ("downloads", "scraper_downloads"):
