@@ -301,3 +301,136 @@ class SyncthingService:
                 state = status.get("state", "unknown")
                 statuses[system] = state  # "idle", "syncing", "error", etc.
         return statuses
+
+    @staticmethod
+    def sanitize_folder_id(name: str) -> str:
+        """Convert a custom save name to a Syncthing folder ID.
+        Example: 'Balatro Save' -> 'custom-balatro-save'
+        """
+        import re
+        sanitized = name.lower().strip()
+        sanitized = re.sub(r'[^a-z0-9\s-]', '', sanitized)
+        sanitized = re.sub(r'\s+', '-', sanitized)
+        sanitized = re.sub(r'-+', '-', sanitized).strip('-')
+        return f"custom-{sanitized}"
+
+    @staticmethod
+    def write_sync_info(
+        folder_path: str,
+        name: str,
+        source_device: str,
+        source_path: str,
+        sync_mode: str = "folder",
+        sync_files: Optional[List[str]] = None,
+    ) -> bool:
+        """Write sync_info.json to a folder."""
+        import json
+        from datetime import datetime
+        info = {
+            "name": name,
+            "source_device": source_device,
+            "source_path": source_path,
+            "sync_mode": sync_mode,
+            "created": datetime.now().isoformat(),
+        }
+        if sync_mode == "files" and sync_files:
+            info["sync_files"] = sync_files
+        try:
+            os.makedirs(folder_path, exist_ok=True)
+            with open(os.path.join(folder_path, "sync_info.json"), "w") as f:
+                json.dump(info, f, indent=2)
+            return True
+        except Exception as e:
+            log_error("Syncthing: write_sync_info failed", type(e).__name__, traceback.format_exc())
+            return False
+
+    @staticmethod
+    def write_stignore(folder_path: str, allowed_files: List[str]) -> bool:
+        """Write .stignore that whitelists only specific files."""
+        try:
+            lines = ["!sync_info.json"]
+            for f in allowed_files:
+                lines.append(f"!{f}")
+            lines.append("*")
+            with open(os.path.join(folder_path, ".stignore"), "w") as fh:
+                fh.write("\n".join(lines) + "\n")
+            return True
+        except Exception as e:
+            log_error("Syncthing: write_stignore failed", type(e).__name__, traceback.format_exc())
+            return False
+
+    @staticmethod
+    def read_sync_info(folder_path: str) -> Optional[Dict[str, Any]]:
+        """Read sync_info.json from a folder. Returns None if not found."""
+        import json
+        info_path = os.path.join(folder_path, "sync_info.json")
+        try:
+            if os.path.exists(info_path):
+                with open(info_path, "r") as f:
+                    return json.load(f)
+        except Exception:
+            pass
+        return None
+
+    def add_custom_save(
+        self,
+        name: str,
+        source_path: str,
+        source_device: str,
+        device_ids: List[str],
+        sync_mode: str = "folder",
+        sync_files: Optional[List[str]] = None,
+    ) -> Optional[str]:
+        """Create a custom save sync folder in Syncthing.
+        Returns folder_id on success, None on failure.
+        """
+        folder_id = self.sanitize_folder_id(name)
+
+        # Check if folder ID already exists, make unique if needed
+        existing = set(self.get_existing_folder_ids())
+        if folder_id in existing:
+            i = 2
+            while f"{folder_id}-{i}" in existing:
+                i += 1
+            folder_id = f"{folder_id}-{i}"
+
+        # Write metadata
+        self.write_sync_info(source_path, name, source_device, source_path, sync_mode, sync_files)
+
+        # Write .stignore for file mode
+        if sync_mode == "files" and sync_files:
+            self.write_stignore(source_path, sync_files)
+
+        # Add to Syncthing
+        if self.add_folder(folder_id, name, source_path, device_ids):
+            return folder_id
+        return None
+
+    def get_custom_save_statuses(self, custom_saves: List[Dict[str, str]]) -> Dict[str, str]:
+        """Get sync status for custom save folders."""
+        existing = set(self.get_existing_folder_ids())
+        statuses = {}
+        for save in custom_saves:
+            fid = save.get("folder_id", "")
+            if fid not in existing:
+                statuses[fid] = "not_configured"
+            else:
+                status = self.get_folder_status(fid)
+                statuses[fid] = status.get("state", "unknown")
+        return statuses
+
+    def discover_custom_saves(self, base_path: str) -> List[Dict[str, Any]]:
+        """Scan custom save staging dirs for sync_info.json metadata."""
+        custom_dir = os.path.join(base_path, "custom")
+        saves = []
+        if not os.path.isdir(custom_dir):
+            return saves
+        for entry in os.listdir(custom_dir):
+            entry_path = os.path.join(custom_dir, entry)
+            if os.path.isdir(entry_path):
+                info = self.read_sync_info(entry_path)
+                if info:
+                    info["folder_id"] = entry
+                    info["staging_path"] = entry_path
+                    saves.append(info)
+        return saves
