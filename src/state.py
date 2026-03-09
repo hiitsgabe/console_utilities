@@ -821,6 +821,23 @@ class AuthTokenInputState:
 
 
 @dataclass
+class SyncthingState:
+    """State for Syncthing save sync screen."""
+
+    step: str = "checking"  # "checking", "not_found", "role_select", "device_id_input", "configured"
+    device_id: str = ""  # This device's ID
+    host_device_id_input: str = ""  # Input for host device ID (console mode)
+    cursor_position: int = 0
+    shift_active: bool = False
+    status_message: str = ""
+    error_message: str = ""
+    system_statuses: Dict[str, str] = field(default_factory=dict)  # system -> sync status
+    highlighted: int = 0
+    configuring: bool = False  # True during async configure
+    configure_result: str = ""  # "success", "partial", "error"
+
+
+@dataclass
 class UIRects:
     """Stores rectangles for clickable UI elements."""
 
@@ -948,6 +965,9 @@ class AppState:
         # ---- Steam Shortcut Creator ---- #
         self.steam_shortcut = SteamShortcutState()
 
+        # ---- Syncthing Save Sync ---- #
+        self.syncthing = SyncthingState()
+
         # ---- Auth Token Input ---- #
         self.auth_token_input = AuthTokenInputState()
 
@@ -1011,6 +1031,8 @@ class AppState:
             self.system_settings_highlighted = 0
         elif new_mode == "credits":
             self.credits_scroll_offset = 0
+        elif new_mode == "syncthing":
+            self.syncthing.highlighted = 0
 
     def close_all_modals(self):
         """Close all modal dialogs."""
