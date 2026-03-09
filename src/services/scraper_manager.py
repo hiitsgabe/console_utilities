@@ -44,6 +44,8 @@ class ScraperManager:
         ".nsz",
         ".nsp",
         ".xci",
+        ".app",
+        ".steam",
     }
 
     def __init__(self, settings: Dict[str, Any], scraper_queue: ScraperQueueState):

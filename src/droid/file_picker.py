@@ -34,6 +34,7 @@ SELECTION_CONFIG = {
     "dedupe_folder": "folder",
     "rename_folder": "folder",
     "ghost_cleaner_folder": "folder",
+    "scraper_batch_folder": "folder",
     # File selections
     "archive_json": "file",
     "nsz_keys": "file",

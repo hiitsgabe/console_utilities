@@ -265,6 +265,8 @@ class ScraperWizardState:
     # Single ROM mode
     selected_rom_path: str = ""
     selected_rom_name: str = ""
+    search_name: str = ""  # Editable game name for search
+    search_name_cursor: int = 0
     folder_items: List[Dict[str, Any]] = field(default_factory=list)
     folder_highlighted: int = 0
     folder_current_path: str = ""
