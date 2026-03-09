@@ -14,7 +14,29 @@ on:
         type: string
 
 jobs:
+  download-bundled-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download bundled data
+        run: |
+          mkdir -p assets
+          curl -L -o assets/bundled_data.json "${{ secrets.EXAMPLE_DATA_URL }}"
+          if [ -f assets/bundled_data.json ]; then
+            echo "✅ Bundled data downloaded successfully"
+          else
+            echo "⚠️ Bundled data not available, creating empty placeholder"
+            echo '{}' > assets/bundled_data.json
+          fi
+
+      - name: Upload bundled data
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundled-data
+          path: assets/bundled_data.json
+          retention-days: 1
+
   build-pygame-bundle:
+    needs: [download-bundled-data]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -43,13 +65,10 @@ jobs:
         run: pip install requests
 
       - name: Download bundled data
-        run: |
-          curl -L -o assets/bundled_data.json "${{ secrets.EXAMPLE_DATA_URL }}"
-          if [ -f assets/bundled_data.json ]; then
-            echo "✅ Bundled data downloaded successfully"
-          else
-            echo "⚠️ Bundled data not available, continuing without it"
-          fi
+        uses: actions/download-artifact@v4
+        with:
+          name: bundled-data
+          path: assets/
 
       - name: Build pygame bundle
         run: make bundle VERSION=${{ steps.version.outputs.VERSION }}
@@ -62,6 +81,7 @@ jobs:
           retention-days: 30
 
   build-macos:
+    needs: [download-bundled-data]
     runs-on: macos-latest
     steps:
       - name: Checkout code
@@ -86,13 +106,10 @@ jobs:
           pip install pyinstaller pygame requests zstandard pycryptodome
 
       - name: Download bundled data
-        run: |
-          curl -L -o assets/bundled_data.json "${{ secrets.EXAMPLE_DATA_URL }}"
-          if [ -f assets/bundled_data.json ]; then
-            echo "✅ Bundled data downloaded successfully"
-          else
-            echo "⚠️ Bundled data not available, continuing without it"
-          fi
+        uses: actions/download-artifact@v4
+        with:
+          name: bundled-data
+          path: assets/
 
       - name: Build macOS app
         run: make bundle-macos VERSION=${{ steps.version.outputs.VERSION }}
@@ -105,6 +122,7 @@ jobs:
           retention-days: 30
 
   build-windows:
+    needs: [download-bundled-data]
     runs-on: windows-latest
     steps:
       - name: Checkout code
@@ -130,13 +148,10 @@ jobs:
           pip install pyinstaller pygame requests zstandard pycryptodome
 
       - name: Download bundled data
-        run: |
-          Invoke-WebRequest -Uri "${{ secrets.EXAMPLE_DATA_URL }}" -OutFile "assets/bundled_data.json"
-          if (Test-Path "assets/bundled_data.json") {
-            Write-Host "✅ Bundled data downloaded successfully"
-          } else {
-            Write-Host "⚠️ Bundled data not available, continuing without it"
-          }
+        uses: actions/download-artifact@v4
+        with:
+          name: bundled-data
+          path: assets/
 
       - name: Verify spec file exists
         run: |
@@ -168,6 +183,7 @@ jobs:
           retention-days: 30
 
   build-android:
+    needs: [download-bundled-data]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -183,13 +199,10 @@ jobs:
           fi
 
       - name: Download bundled data
-        run: |
-          curl -L -o assets/bundled_data.json "${{ secrets.EXAMPLE_DATA_URL }}"
-          if [ -f assets/bundled_data.json ]; then
-            echo "✅ Bundled data downloaded successfully"
-          else
-            echo "⚠️ Bundled data not available, continuing without it"
-          fi
+        uses: actions/download-artifact@v4
+        with:
+          name: bundled-data
+          path: assets/
 
       - name: Inject build info
         run: |
@@ -390,9 +403,10 @@ jobs:
 
       - name: Delete old releases (keep last 2)
         run: |
-          gh release list --limit 100 | tail -n +3 | awk '{print $1}' | while read tag; do
+          gh release list --json tagName --limit 100 -q '.[].tagName' | tail -n +3 | while read tag; do
             echo "Deleting release: $tag"
-            gh release delete "$tag" --yes --cleanup-tag
+            gh release delete "$tag" --yes
+            git push --delete origin "$tag" 2>/dev/null || true
           done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
