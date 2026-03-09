@@ -1504,7 +1504,8 @@ class ConsoleUtilitiesApp:
                 max_items = 3
             elif step == "configured":
                 max_items = self.screen_manager.syncthing_screen.get_configured_item_count(
-                    self.settings
+                    self.settings,
+                    status_message=self.state.syncthing.status_message,
                 )
             else:
                 max_items = 1
@@ -6227,6 +6228,7 @@ class ConsoleUtilitiesApp:
                 self.state.syncthing.highlighted,
                 self.settings,
                 self.state.syncthing.system_statuses,
+                status_message=self.state.syncthing.status_message,
             )
             if action == "sync_all":
                 self._syncthing_sync_all()
@@ -6256,11 +6258,15 @@ class ConsoleUtilitiesApp:
 
         # Determine which device IDs to share with
         if role == "host":
-            # Host shares with all known console devices
-            connections = self.syncthing_service.get_connections()
-            device_ids = list(connections.keys())
+            # Host shares with all configured devices (not just connected)
+            config = self.syncthing_service.get_config()
+            my_id = self.syncthing_service.get_device_id()
+            device_ids = [
+                d["deviceID"] for d in config.get("devices", [])
+                if d["deviceID"] != my_id
+            ]
             if not device_ids:
-                self.state.syncthing.status_message = "No devices connected"
+                self.state.syncthing.status_message = "No devices paired yet"
                 self.state.syncthing.configuring = False
                 return
         else:

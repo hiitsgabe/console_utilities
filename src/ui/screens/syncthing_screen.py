@@ -90,49 +90,59 @@ class SyncthingScreen:
             divider_indices=divider_indices,
         )
 
-    def render_configured(
+    def _build_configured_items(
         self,
-        screen: pygame.Surface,
-        highlighted: int,
         settings: Dict[str, Any],
         device_id: str,
         system_statuses: Dict[str, str],
         status_message: str = "",
-    ) -> Tuple[Optional[pygame.Rect], List[pygame.Rect], int]:
-        """Render configured state with system list."""
+    ) -> Tuple[List[Any], List[str], Set[int]]:
+        """
+        Build items, actions, and divider indices for the configured screen.
+        Single source of truth used by render, action lookup, and item count.
+
+        Returns:
+            Tuple of (display_items, action_list, divider_indices)
+        """
         role = settings.get("syncthing_role", "")
         items = []
+        actions = []
         divider_indices = set()
 
+        def _add_divider(label: str):
+            divider_indices.add(len(items))
+            items.append(label)
+            actions.append("divider")
+
+        def _add_item(display, action: str):
+            items.append(display)
+            actions.append(action)
+
         # Status header
-        divider_indices.add(len(items))
-        items.append("--- STATUS ---")
+        _add_divider("--- STATUS ---")
         role_label = "Host" if role == "host" else "Console"
-        items.append(("Role", role_label))
+        _add_item(("Role", role_label), "none")
 
         if role == "host":
-            # Show device ID for copying
             short_id = device_id[:20] + "..." if len(device_id) > 20 else device_id
-            items.append(("Device ID", short_id))
+            _add_item(("Device ID", short_id), "copy_device_id")
         else:
             host_id = settings.get("syncthing_host_device_id", "")
             short_id = host_id[:20] + "..." if len(host_id) > 20 else host_id
-            items.append(("Host", short_id or "Not set"))
+            _add_item(("Host", short_id or "Not set"), "none")
 
         if status_message:
-            items.append(("Status", status_message))
+            _add_item(("Status", status_message), "none")
 
         # Actions
-        divider_indices.add(len(items))
-        items.append("--- ACTIONS ---")
-        items.append("Sync All Systems")
+        _add_divider("--- ACTIONS ---")
+        _add_item("Sync All Systems", "sync_all")
 
         if role == "host":
-            items.append("Change Base Path")
+            _add_item("Change Base Path", "change_base_path")
 
         # System list
-        divider_indices.add(len(items))
-        items.append("--- SYSTEMS ---")
+        _add_divider("--- SYSTEMS ---")
         for system in SYNC_SYSTEMS:
             status = system_statuses.get(system, "not_configured")
             status_labels = {
@@ -144,12 +154,30 @@ class SyncthingScreen:
                 "unknown": "?",
             }
             label = status_labels.get(status, status)
-            items.append((system.upper(), label))
+            if BUILD_TARGET == "android" and status == "not_configured":
+                _add_item((system.upper(), label), f"configure_{system}")
+            else:
+                _add_item((system.upper(), label), f"system_{system}")
 
         # Reset
-        divider_indices.add(len(items))
-        items.append("--- SETTINGS ---")
-        items.append("Reconfigure")
+        _add_divider("--- SETTINGS ---")
+        _add_item("Reconfigure", "reconfigure")
+
+        return items, actions, divider_indices
+
+    def render_configured(
+        self,
+        screen: pygame.Surface,
+        highlighted: int,
+        settings: Dict[str, Any],
+        device_id: str,
+        system_statuses: Dict[str, str],
+        status_message: str = "",
+    ) -> Tuple[Optional[pygame.Rect], List[pygame.Rect], int]:
+        """Render configured state with system list."""
+        items, _, divider_indices = self._build_configured_items(
+            settings, device_id, system_statuses, status_message
+        )
 
         return self.template.render(
             screen,
@@ -167,13 +195,14 @@ class SyncthingScreen:
 
     def get_not_found_action(self, index: int) -> str:
         """Get action for not found screen."""
-        # "Retry Connection" is at index 3
+        # items: [divider, divider, divider, "Retry Connection"]
         if index == 3:
             return "retry"
         return "none"
 
     def get_role_select_action(self, index: int) -> str:
         """Get action for role select screen."""
+        # items: [divider, "Host (Computer)", "Console (Knulli/Android)"]
         if index == 1:
             return "select_host"
         elif index == 2:
@@ -185,37 +214,12 @@ class SyncthingScreen:
         index: int,
         settings: Dict[str, Any],
         system_statuses: Dict[str, str],
+        status_message: str = "",
     ) -> str:
         """Get action for configured screen."""
-        role = settings.get("syncthing_role", "")
-        status_message = ""  # We don't have access to status_message here
-
-        # Build a flat action list matching the items
-        actions = []
-        actions.append("divider")  # --- STATUS ---
-        actions.append("none")  # Role
-        actions.append("copy_device_id" if role == "host" else "none")  # Device ID / Host
-
-        # Note: status_message item is optional, but we can't know if it's present
-        # from here. The caller should account for this. For now we skip it.
-
-        actions.append("divider")  # --- ACTIONS ---
-        actions.append("sync_all")  # Sync All Systems
-
-        if role == "host":
-            actions.append("change_base_path")  # Change Base Path
-
-        actions.append("divider")  # --- SYSTEMS ---
-        for system in SYNC_SYSTEMS:
-            status = system_statuses.get(system, "not_configured")
-            if BUILD_TARGET == "android" and status == "not_configured":
-                actions.append(f"configure_{system}")
-            else:
-                actions.append(f"system_{system}")
-
-        actions.append("divider")  # --- SETTINGS ---
-        actions.append("reconfigure")  # Reconfigure
-
+        _, actions, _ = self._build_configured_items(
+            settings, "", system_statuses, status_message
+        )
         if index < len(actions):
             return actions[index]
         return "none"
@@ -223,17 +227,13 @@ class SyncthingScreen:
     def get_configured_item_count(
         self,
         settings: Dict[str, Any],
+        status_message: str = "",
     ) -> int:
         """Get total item count for configured screen."""
-        role = settings.get("syncthing_role", "")
-        # STATUS: divider + role + device_id = 3
-        # ACTIONS: divider + sync_all + (change_base_path if host) = 2 or 3
-        # SYSTEMS: divider + len(SYNC_SYSTEMS)
-        # SETTINGS: divider + reconfigure = 2
-        count = 3 + 2 + 1 + len(SYNC_SYSTEMS) + 2
-        if role == "host":
-            count += 1
-        return count
+        items, _, _ = self._build_configured_items(
+            settings, "", {}, status_message
+        )
+        return len(items)
 
 
 # Default instance
