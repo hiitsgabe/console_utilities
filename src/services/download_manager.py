@@ -363,7 +363,7 @@ class DownloadManager:
             os.makedirs(self.work_dir, exist_ok=True)
 
             with open(file_path, "wb") as f:
-                for chunk in response.iter_content(chunk_size=32768):
+                for chunk in response.iter_content(chunk_size=262144):
                     if self._cancel_current:
                         f.close()
                         if os.path.exists(file_path):
