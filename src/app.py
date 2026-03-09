@@ -2889,7 +2889,7 @@ class ConsoleUtilitiesApp:
                 # Go back to name step in IA collection wizard
                 self.state.ia_collection_wizard.step = "name"
                 self.state.ia_collection_wizard.cursor_position = 0
-            elif selection_type == "scraper_batch_folder":
+            elif selection_type in ("scraper_batch_folder", "scraper_rom_select"):
                 # Close the scraper wizard too
                 self._close_scraper_wizard()
             elif selection_type == "steam_shortcut":
@@ -4598,7 +4598,8 @@ class ConsoleUtilitiesApp:
                 "esde_media_path", "esde_gamelists_path", "retroarch_thumbnails",
                 "add_system_folder", "ia_collection_folder",
                 "dedupe_folder", "rename_folder", "ghost_cleaner_folder",
-                "ia_download_folder", "steam_shortcut", "folder",
+                "ia_download_folder", "steam_shortcut", "scraper_batch_folder",
+                "folder",
             )
             if selection_type not in folder_only_types:
                 self._complete_folder_browser_selection(item_path, selection_type)
@@ -4627,6 +4628,17 @@ class ConsoleUtilitiesApp:
         elif selection_type == "nsz_keys":
             self.settings["nsz_keys_path"] = path
             save_settings(self.settings)
+        elif selection_type == "scraper_rom_select":
+            # ROM file selected via folder browser for scraper wizard
+            wizard = self.state.scraper_wizard
+            wizard.selected_rom_path = path
+            wizard.selected_rom_name = os.path.basename(path)
+            from services.scraper_service import get_scraper_service
+
+            service = get_scraper_service(self.settings)
+            wizard.search_name = service.extract_game_name(path)
+            wizard.search_name_cursor = len(wizard.search_name)
+            wizard.step = "edit_name"
         elif selection_type == "extract_zip":
             # Extract ZIP file to same folder
             self._extract_zip_file(path)
@@ -6751,13 +6763,18 @@ class ConsoleUtilitiesApp:
         wizard.batch_mode = batch_mode
         wizard.folder_current_path = self.settings.get("roms_dir", SCRIPT_DIR)
 
-        # On Android, use the default folder browser for batch folder selection
-        if batch_mode and BUILD_TARGET == "android":
-            wizard.step = "folder_select"  # Will be skipped by folder browser
-            self._open_folder_browser("scraper_batch_folder")
+        # On Android, use the default folder browser (scoped storage)
+        if BUILD_TARGET == "android":
+            if batch_mode:
+                wizard.step = "folder_select"
+                self._open_folder_browser("scraper_batch_folder")
+            else:
+                wizard.step = "rom_select"
+                self._open_folder_browser("scraper_rom_select")
+            wizard.folder_items = []
         else:
             wizard.step = "folder_select" if batch_mode else "rom_select"
-        wizard.folder_items = load_folder_contents(wizard.folder_current_path)
+            wizard.folder_items = load_folder_contents(wizard.folder_current_path)
         wizard.folder_highlighted = 0
         wizard.selected_rom_path = ""
         wizard.selected_rom_name = ""

@@ -89,7 +89,8 @@ class FolderBrowserModal:
             "esde_media_path", "esde_gamelists_path", "retroarch_thumbnails",
             "add_system_folder", "ia_collection_folder",
             "dedupe_folder", "rename_folder", "ghost_cleaner_folder",
-            "ia_download_folder", "steam_shortcut", "folder",
+            "ia_download_folder", "steam_shortcut", "scraper_batch_folder",
+            "folder",
         )
 
         # List area (below path, above buttons if shown)
