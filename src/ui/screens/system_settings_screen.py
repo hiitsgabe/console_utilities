@@ -85,7 +85,11 @@ class SystemSettingsScreen:
         items.append("--- SETTINGS ---")
         items.append(("Hide System", "ON" if is_hidden else "OFF"))
         custom_folder = sys_s.get("custom_folder", "")
-        folder_value = self._shorten_path(custom_folder) if custom_folder else "Default"
+        if custom_folder:
+            import os
+            folder_value = os.path.basename(custom_folder) or custom_folder
+        else:
+            folder_value = "Default"
         items.append(("Set Custom Folder", folder_value))
         should_unzip = sys_s.get("should_unzip", system.get("should_unzip", False))
         items.append(("Auto-extract ZIPs", "ON" if should_unzip else "OFF"))
