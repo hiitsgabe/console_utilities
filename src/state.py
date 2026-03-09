@@ -824,28 +824,38 @@ class AuthTokenInputState:
 class SyncthingState:
     """State for Syncthing save sync screen."""
 
-    step: str = "checking"  # "checking", "not_found", "role_select", "device_id_input", "configured"
+    step: str = (
+        "checking"  # "checking", "not_found", "role_select", "device_id_input", "configured"
+    )
     device_id: str = ""  # This device's ID
     host_device_id_input: str = ""  # Input for host device ID (console mode)
     cursor_position: int = 0
     shift_active: bool = False
     status_message: str = ""
     error_message: str = ""
-    system_statuses: Dict[str, str] = field(default_factory=dict)  # system -> sync status
+    system_statuses: Dict[str, str] = field(
+        default_factory=dict
+    )  # system -> sync status
     highlighted: int = 0
     configuring: bool = False  # True during async configure
     configure_result: str = ""  # "success", "partial", "error"
 
     # Custom saves
-    custom_saves: List[Dict[str, Any]] = field(default_factory=list)  # loaded from settings/discovery
-    custom_statuses: Dict[str, str] = field(default_factory=dict)  # folder_id -> sync status
+    custom_saves: List[Dict[str, Any]] = field(
+        default_factory=list
+    )  # loaded from settings/discovery
+    custom_statuses: Dict[str, str] = field(
+        default_factory=dict
+    )  # folder_id -> sync status
     custom_highlighted: int = 0
     custom_step: str = ""  # "", "name_input", "folder_browse", "file_select", "mapping"
     custom_name_input: str = ""
     custom_name_cursor: int = 0
     custom_name_shift: bool = False
     custom_source_path: str = ""
-    custom_selected_files: Set[str] = field(default_factory=set)  # filenames selected in file mode
+    custom_selected_files: Set[str] = field(
+        default_factory=set
+    )  # filenames selected in file mode
     custom_file_list: List[str] = field(default_factory=list)  # files in source folder
     custom_file_highlighted: int = 0
 

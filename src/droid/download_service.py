@@ -74,9 +74,7 @@ def run_service():
     try:
         # Set up notification channel and start foreground
         create_download_notification_channel(service)
-        notification = build_download_notification(
-            service, "Preparing download..."
-        )
+        notification = build_download_notification(service, "Preparing download...")
         service.startForeground(DOWNLOAD_NOTIFICATION_ID, notification)
 
         # Read task info
@@ -178,9 +176,7 @@ def _process_download(service, task):
             },
         )
 
-        update_download_notification(
-            service, f"Downloading: {filename}", 0, 100
-        )
+        update_download_notification(service, f"Downloading: {filename}", 0, 100)
 
         # Choose download strategy
         if accept_ranges == "bytes" and total_size > PARALLEL_MIN_SIZE:
@@ -211,9 +207,7 @@ def _process_download(service, task):
             return
 
         # Download complete — trigger extraction service
-        update_download_notification(
-            service, f"Downloaded: {filename}", 100, 100
-        )
+        update_download_notification(service, f"Downloaded: {filename}", 100, 100)
         _start_extraction_service(service, task, file_path)
 
     except Exception as e:
@@ -293,11 +287,7 @@ def _download_single(
                     last_downloaded = downloaded
                     last_update = now
 
-                    progress = (
-                        downloaded / total_size
-                        if total_size > 0
-                        else 0.0
-                    )
+                    progress = downloaded / total_size if total_size > 0 else 0.0
                     write_status(
                         work_dir,
                         item_id,
@@ -336,17 +326,12 @@ def _download_parallel(
     chunks = []
     for i in range(num_workers):
         start = i * chunk_size
-        end = (
-            (total_size - 1)
-            if i == num_workers - 1
-            else ((i + 1) * chunk_size - 1)
-        )
+        end = (total_size - 1) if i == num_workers - 1 else ((i + 1) * chunk_size - 1)
         chunks.append((start, end))
 
     progress_array = [0] * num_workers
     chunk_paths = [
-        os.path.join(work_dir, f".{filename}.part{i}")
-        for i in range(num_workers)
+        os.path.join(work_dir, f".{filename}.part{i}") for i in range(num_workers)
     ]
     chunk_failed = threading.Event()
 
@@ -662,9 +647,7 @@ def _build_download_headers(url):
         "sec-ch-ua-platform": random.choice(platforms),
         "sec-fetch-dest": "document",
         "sec-fetch-mode": "navigate",
-        "sec-fetch-site": (
-            "same-origin" if random.randint(0, 9) < 8 else "none"
-        ),
+        "sec-fetch-site": ("same-origin" if random.randint(0, 9) < 8 else "none"),
         "sec-fetch-user": "?1",
         "upgrade-insecure-requests": "1",
     }

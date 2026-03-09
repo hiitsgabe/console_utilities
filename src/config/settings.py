@@ -67,7 +67,9 @@ class Settings:
     syncthing_host_device_id: str = ""
     syncthing_base_path: str = ""  # host only, default ~/game-saves/
     syncthing_api_key: str = ""
-    syncthing_folder_overrides: Dict[str, str] = field(default_factory=dict)  # android per-system path overrides
+    syncthing_folder_overrides: Dict[str, str] = field(
+        default_factory=dict
+    )  # android per-system path overrides
     syncthing_custom_saves: List[Dict[str, str]] = field(default_factory=list)
     # Frontend-specific paths
     esde_media_path: str = ""

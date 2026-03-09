@@ -16,10 +16,29 @@ from utils.logging import log_error
 
 # Default systems with their Knulli/Batocera save paths
 SYNC_SYSTEMS = [
-    "psx", "snes", "n64", "scummvm", "gba", "gb", "gbc", "nds",
-    "megadrive", "nes", "psp", "dreamcast", "mame", "fba",
-    "segacd", "pcengine", "atari2600", "atari7800", "atarilynx",
-    "wonderswan", "neogeo", "gamegear", "mastersystem",
+    "psx",
+    "snes",
+    "n64",
+    "scummvm",
+    "gba",
+    "gb",
+    "gbc",
+    "nds",
+    "megadrive",
+    "nes",
+    "psp",
+    "dreamcast",
+    "mame",
+    "fba",
+    "segacd",
+    "pcengine",
+    "atari2600",
+    "atari7800",
+    "atarilynx",
+    "wonderswan",
+    "neogeo",
+    "gamegear",
+    "mastersystem",
 ]
 
 SYNCTHING_API_URL = "http://localhost:8384"
@@ -62,7 +81,11 @@ class SyncthingService:
             r.raise_for_status()
             return r.json().get("myID", "")
         except Exception as e:
-            log_error("Syncthing: get_device_id failed", type(e).__name__, traceback.format_exc())
+            log_error(
+                "Syncthing: get_device_id failed",
+                type(e).__name__,
+                traceback.format_exc(),
+            )
             return ""
 
     def get_config(self) -> Dict[str, Any]:
@@ -76,7 +99,9 @@ class SyncthingService:
             r.raise_for_status()
             return r.json()
         except Exception as e:
-            log_error("Syncthing: get_config failed", type(e).__name__, traceback.format_exc())
+            log_error(
+                "Syncthing: get_config failed", type(e).__name__, traceback.format_exc()
+            )
             return {}
 
     def add_device(self, device_id: str, name: str = "console_utils") -> bool:
@@ -96,7 +121,9 @@ class SyncthingService:
             )
             return r.status_code in (200, 201)
         except Exception as e:
-            log_error("Syncthing: add_device failed", type(e).__name__, traceback.format_exc())
+            log_error(
+                "Syncthing: add_device failed", type(e).__name__, traceback.format_exc()
+            )
             return False
 
     def get_existing_folder_ids(self) -> List[str]:
@@ -133,7 +160,9 @@ class SyncthingService:
             )
             return r.status_code in (200, 201)
         except Exception as e:
-            log_error("Syncthing: add_folder failed", type(e).__name__, traceback.format_exc())
+            log_error(
+                "Syncthing: add_folder failed", type(e).__name__, traceback.format_exc()
+            )
             return False
 
     def remove_folder(self, folder_id: str) -> bool:
@@ -146,7 +175,11 @@ class SyncthingService:
             )
             return r.status_code in (200, 204)
         except Exception as e:
-            log_error("Syncthing: remove_folder failed", type(e).__name__, traceback.format_exc())
+            log_error(
+                "Syncthing: remove_folder failed",
+                type(e).__name__,
+                traceback.format_exc(),
+            )
             return False
 
     def get_folder_status(self, folder_id: str) -> Dict[str, Any]:
@@ -161,7 +194,11 @@ class SyncthingService:
             r.raise_for_status()
             return r.json()
         except Exception as e:
-            log_error("Syncthing: get_folder_status failed", type(e).__name__, traceback.format_exc())
+            log_error(
+                "Syncthing: get_folder_status failed",
+                type(e).__name__,
+                traceback.format_exc(),
+            )
             return {}
 
     def get_connections(self) -> Dict[str, Any]:
@@ -175,7 +212,11 @@ class SyncthingService:
             r.raise_for_status()
             return r.json().get("connections", {})
         except Exception as e:
-            log_error("Syncthing: get_connections failed", type(e).__name__, traceback.format_exc())
+            log_error(
+                "Syncthing: get_connections failed",
+                type(e).__name__,
+                traceback.format_exc(),
+            )
             return {}
 
     @staticmethod
@@ -308,10 +349,11 @@ class SyncthingService:
         Example: 'Balatro Save' -> 'custom-balatro-save'
         """
         import re
+
         sanitized = name.lower().strip()
-        sanitized = re.sub(r'[^a-z0-9\s-]', '', sanitized)
-        sanitized = re.sub(r'\s+', '-', sanitized)
-        sanitized = re.sub(r'-+', '-', sanitized).strip('-')
+        sanitized = re.sub(r"[^a-z0-9\s-]", "", sanitized)
+        sanitized = re.sub(r"\s+", "-", sanitized)
+        sanitized = re.sub(r"-+", "-", sanitized).strip("-")
         return f"custom-{sanitized}"
 
     @staticmethod
@@ -326,6 +368,7 @@ class SyncthingService:
         """Write sync_info.json to a folder."""
         import json
         from datetime import datetime
+
         info = {
             "name": name,
             "source_device": source_device,
@@ -341,7 +384,11 @@ class SyncthingService:
                 json.dump(info, f, indent=2)
             return True
         except Exception as e:
-            log_error("Syncthing: write_sync_info failed", type(e).__name__, traceback.format_exc())
+            log_error(
+                "Syncthing: write_sync_info failed",
+                type(e).__name__,
+                traceback.format_exc(),
+            )
             return False
 
     @staticmethod
@@ -356,13 +403,18 @@ class SyncthingService:
                 fh.write("\n".join(lines) + "\n")
             return True
         except Exception as e:
-            log_error("Syncthing: write_stignore failed", type(e).__name__, traceback.format_exc())
+            log_error(
+                "Syncthing: write_stignore failed",
+                type(e).__name__,
+                traceback.format_exc(),
+            )
             return False
 
     @staticmethod
     def read_sync_info(folder_path: str) -> Optional[Dict[str, Any]]:
         """Read sync_info.json from a folder. Returns None if not found."""
         import json
+
         info_path = os.path.join(folder_path, "sync_info.json")
         try:
             if os.path.exists(info_path):
@@ -395,7 +447,9 @@ class SyncthingService:
             folder_id = f"{folder_id}-{i}"
 
         # Write metadata
-        self.write_sync_info(source_path, name, source_device, source_path, sync_mode, sync_files)
+        self.write_sync_info(
+            source_path, name, source_device, source_path, sync_mode, sync_files
+        )
 
         # Write .stignore for file mode
         if sync_mode == "files" and sync_files:
@@ -406,7 +460,9 @@ class SyncthingService:
             return folder_id
         return None
 
-    def get_custom_save_statuses(self, custom_saves: List[Dict[str, str]]) -> Dict[str, str]:
+    def get_custom_save_statuses(
+        self, custom_saves: List[Dict[str, str]]
+    ) -> Dict[str, str]:
         """Get sync status for custom save folders."""
         existing = set(self.get_existing_folder_ids())
         statuses = {}
