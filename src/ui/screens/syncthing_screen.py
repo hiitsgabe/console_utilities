@@ -46,16 +46,12 @@ class SyncthingScreen:
     ) -> Tuple[Optional[pygame.Rect], List[pygame.Rect], int]:
         """Render not found state."""
         items = [
-            "--- STATUS ---",
-            "Syncthing is not running",
-            "",
-            "--- INSTRUCTIONS ---",
-            "Install Syncthing on this device",
-            "and make sure it is running.",
-            "",
+            "--- Syncthing not found ---",
+            "--- Install Syncthing and ---",
+            "--- make sure it is running ---",
             "Retry Connection",
         ]
-        divider_indices = {0, 3}
+        divider_indices = {0, 1, 2}
         return self.template.render(
             screen,
             title="Syncthing Sync",
@@ -67,6 +63,10 @@ class SyncthingScreen:
             item_spacing=8,
             divider_indices=divider_indices,
         )
+
+    def get_not_found_max_items(self) -> int:
+        """Get max items for not found screen."""
+        return 4
 
     def render_role_select(
         self, screen: pygame.Surface, highlighted: int
@@ -167,8 +167,8 @@ class SyncthingScreen:
 
     def get_not_found_action(self, index: int) -> str:
         """Get action for not found screen."""
-        # "Retry Connection" is at index 7
-        if index == 7:
+        # "Retry Connection" is at index 3
+        if index == 3:
             return "retry"
         return "none"
 

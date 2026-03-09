@@ -44,7 +44,8 @@ class SyncthingService:
                 headers=self._headers(),
                 timeout=3,
             )
-            return r.status_code == 200
+            # 200 = OK, 403 = running but needs API key
+            return r.status_code in (200, 403)
         except Exception:
             return False
 
@@ -174,6 +175,7 @@ class SyncthingService:
         config_paths = [
             os.path.expanduser("~/.config/syncthing/config.xml"),
             os.path.expanduser("~/.local/state/syncthing/config.xml"),
+            os.path.expanduser("~/Library/Application Support/Syncthing/config.xml"),
             "/userdata/system/.config/syncthing/config.xml",
         ]
         # Android

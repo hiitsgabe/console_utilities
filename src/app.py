@@ -1499,7 +1499,7 @@ class ConsoleUtilitiesApp:
         elif self.state.mode == "syncthing":
             step = self.state.syncthing.step
             if step == "not_found":
-                max_items = 8
+                max_items = 4
             elif step == "role_select":
                 max_items = 3
             elif step == "configured":
