@@ -12,10 +12,17 @@ import time
 
 _STATUS_FILENAME = "extraction_status.json"
 _CANCEL_FILENAME = "extraction_cancel.json"
+_DOWNLOAD_TASK_FILENAME = "download_task.json"
 
 # Exported for service.py to skip during work_dir cleanup
 IPC_FILENAMES = frozenset(
-    {_STATUS_FILENAME, _CANCEL_FILENAME, _STATUS_FILENAME + ".tmp"}
+    {
+        _STATUS_FILENAME,
+        _CANCEL_FILENAME,
+        _STATUS_FILENAME + ".tmp",
+        _DOWNLOAD_TASK_FILENAME,
+        _DOWNLOAD_TASK_FILENAME + ".tmp",
+    }
 )
 
 
@@ -96,6 +103,38 @@ def clear_cancel(work_dir):
     Clear cancel signal after the service has processed it.
     """
     path = os.path.join(work_dir, _CANCEL_FILENAME)
+    if os.path.exists(path):
+        os.remove(path)
+
+
+def write_download_task(work_dir, task_dict):
+    """
+    Write a download task for the download service to pick up.
+
+    Args:
+        work_dir: Working directory for IPC files
+        task_dict: Dict with url, filename, auth_headers, cookies, etc.
+    """
+    path = os.path.join(work_dir, _DOWNLOAD_TASK_FILENAME)
+    _write_json(path, task_dict)
+
+
+def read_download_task(work_dir):
+    """
+    Read the current download task. Called by the download service.
+
+    Returns:
+        Task dict or None if no task pending.
+    """
+    path = os.path.join(work_dir, _DOWNLOAD_TASK_FILENAME)
+    return _read_json(path)
+
+
+def clear_download_task(work_dir):
+    """
+    Clear the download task after the service has picked it up.
+    """
+    path = os.path.join(work_dir, _DOWNLOAD_TASK_FILENAME)
     if os.path.exists(path):
         os.remove(path)
 
