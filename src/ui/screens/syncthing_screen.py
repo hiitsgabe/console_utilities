@@ -96,6 +96,8 @@ class SyncthingScreen:
         device_id: str,
         system_statuses: Dict[str, str],
         status_message: str = "",
+        custom_saves: List[Dict[str, Any]] = None,
+        custom_statuses: Dict[str, str] = None,
     ) -> Tuple[List[Any], List[str], Set[int]]:
         """
         Build items, actions, and divider indices for the configured screen.
@@ -158,6 +160,34 @@ class SyncthingScreen:
             else:
                 _add_item((system.upper(), label), f"system_{system}")
 
+        # Custom saves
+        _add_divider("--- CUSTOM SAVES ---")
+        _add_item("Add Custom Save", "add_custom_save")
+
+        if custom_saves:
+            cs = custom_statuses or {}
+            for save in custom_saves:
+                name = save.get("name", "Unknown")
+                fid = save.get("folder_id", "")
+                mapped = save.get("mapped", False)
+                mode = save.get("sync_mode", "folder")
+                files = save.get("sync_files", [])
+
+                # Build status label
+                status = cs.get(fid, "not_configured")
+                if not mapped:
+                    label = "Not mapped"
+                elif status == "idle":
+                    label = "Synced"
+                elif status == "syncing":
+                    label = "Syncing..."
+                else:
+                    label = status.capitalize() if status else "-"
+
+                # Add file count for file mode
+                suffix = f" ({len(files)} files)" if mode == "files" and files else ""
+                _add_item((f"{name}{suffix}", label), f"custom_{fid}")
+
         # Reset
         _add_divider("--- SETTINGS ---")
         _add_item("Reconfigure", "reconfigure")
@@ -172,10 +202,13 @@ class SyncthingScreen:
         device_id: str,
         system_statuses: Dict[str, str],
         status_message: str = "",
+        custom_saves: List[Dict[str, Any]] = None,
+        custom_statuses: Dict[str, str] = None,
     ) -> Tuple[Optional[pygame.Rect], List[pygame.Rect], int]:
         """Render configured state with system list."""
         items, _, divider_indices = self._build_configured_items(
-            settings, device_id, system_statuses, status_message
+            settings, device_id, system_statuses, status_message,
+            custom_saves=custom_saves, custom_statuses=custom_statuses,
         )
 
         return self.template.render(
@@ -214,10 +247,13 @@ class SyncthingScreen:
         settings: Dict[str, Any],
         system_statuses: Dict[str, str],
         status_message: str = "",
+        custom_saves: List[Dict[str, Any]] = None,
+        custom_statuses: Dict[str, str] = None,
     ) -> str:
         """Get action for configured screen."""
         _, actions, _ = self._build_configured_items(
-            settings, "", system_statuses, status_message
+            settings, "", system_statuses, status_message,
+            custom_saves=custom_saves, custom_statuses=custom_statuses,
         )
         if index < len(actions):
             return actions[index]
@@ -227,10 +263,11 @@ class SyncthingScreen:
         self,
         settings: Dict[str, Any],
         status_message: str = "",
+        custom_saves: List[Dict[str, Any]] = None,
     ) -> int:
         """Get total item count for configured screen."""
         items, _, _ = self._build_configured_items(
-            settings, "", {}, status_message
+            settings, "", {}, status_message, custom_saves=custom_saves,
         )
         return len(items)
 
