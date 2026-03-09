@@ -1528,7 +1528,7 @@ class ConsoleUtilitiesApp:
                 max_items = 3
                 divider_indices = {0}
             elif step == "configured":
-                _, _, divider_indices = (
+                items, _, divider_indices = (
                     self.screen_manager.syncthing_screen._build_configured_items(
                         self.settings,
                         "",
@@ -1538,13 +1538,7 @@ class ConsoleUtilitiesApp:
                         custom_statuses=self.state.syncthing.custom_statuses,
                     )
                 )
-                max_items = (
-                    self.screen_manager.syncthing_screen.get_configured_item_count(
-                        self.settings,
-                        status_message=self.state.syncthing.status_message,
-                        custom_saves=self.state.syncthing.custom_saves,
-                    )
-                )
+                max_items = len(items)
             else:
                 max_items = 1
 
@@ -6160,7 +6154,8 @@ class ConsoleUtilitiesApp:
                     self.state.syncthing.custom_selected_files.add(filename)
             else:
                 # Confirm button
-                if self.state.syncthing.custom_selected_files:
+                if self.state.syncthing.custom_selected_files and self.state.syncthing.custom_step == "file_select":
+                    self.state.syncthing.custom_step = "creating"
                     self._create_custom_save("files")
                 else:
                     self.state.syncthing.status_message = "Select at least one file"
@@ -6261,6 +6256,19 @@ class ConsoleUtilitiesApp:
                         # Not mapped — open folder browser to pick local path
                         self._open_folder_browser(f"custom_save_map_{folder_id}")
 
+    def _get_syncthing_remote_device_ids(self):
+        """Get remote device IDs for Syncthing sharing."""
+        if not self.syncthing_service:
+            return []
+        role = self.settings.get("syncthing_role", "")
+        if role == "host":
+            config = self.syncthing_service.get_config()
+            my_id = self.syncthing_service.get_device_id()
+            return [d["deviceID"] for d in config.get("devices", []) if d["deviceID"] != my_id]
+        else:
+            host_id = self.settings.get("syncthing_host_device_id", "")
+            return [host_id] if host_id else []
+
     def _syncthing_sync_all(self):
         """Configure all system save folders in Syncthing."""
         import threading
@@ -6274,27 +6282,11 @@ class ConsoleUtilitiesApp:
         role = self.settings.get("syncthing_role", "")
         host_device_id = self.settings.get("syncthing_host_device_id", "")
 
-        # Determine which device IDs to share with
-        if role == "host":
-            # Host shares with all configured devices (not just connected)
-            config = self.syncthing_service.get_config()
-            my_id = self.syncthing_service.get_device_id()
-            device_ids = [
-                d["deviceID"]
-                for d in config.get("devices", [])
-                if d["deviceID"] != my_id
-            ]
-            if not device_ids:
-                self.state.syncthing.status_message = "No devices paired yet"
-                self.state.syncthing.configuring = False
-                return
-        else:
-            # Console shares with host
-            if not host_device_id:
-                self.state.syncthing.status_message = "No host device ID set"
-                self.state.syncthing.configuring = False
-                return
-            device_ids = [host_device_id]
+        device_ids = self._get_syncthing_remote_device_ids()
+        if not device_ids:
+            self.state.syncthing.status_message = "No devices paired yet"
+            self.state.syncthing.configuring = False
+            return
 
         def do_sync():
             # Add host device if console
@@ -6339,7 +6331,11 @@ class ConsoleUtilitiesApp:
             files = []
         self.state.syncthing.custom_file_list = files
         self.state.syncthing.custom_selected_files = set()
-        self.state.syncthing.custom_file_highlighted = 0
+        if not files:
+            self.state.syncthing.status_message = "No files found in folder"
+            self.state.syncthing.custom_step = ""
+            return
+        self.state.syncthing.custom_file_highlighted = 1
         self.state.syncthing.custom_step = "file_select"
 
     def _create_custom_save(self, sync_mode: str):
@@ -6360,20 +6356,7 @@ class ConsoleUtilitiesApp:
         )
         device_id = self.state.syncthing.device_id
 
-        role = self.settings.get("syncthing_role", "")
-        host_device_id = self.settings.get("syncthing_host_device_id", "")
-
-        if role == "host":
-            config = self.syncthing_service.get_config()
-            my_id = self.syncthing_service.get_device_id()
-            device_ids = [
-                d["deviceID"]
-                for d in config.get("devices", [])
-                if d["deviceID"] != my_id
-            ]
-        else:
-            device_ids = [host_device_id] if host_device_id else []
-
+        device_ids = self._get_syncthing_remote_device_ids()
         if not device_ids:
             self.state.syncthing.status_message = "No devices paired"
             return

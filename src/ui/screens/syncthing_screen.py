@@ -252,7 +252,8 @@ class SyncthingScreen:
                 selected_indices.add(i + 1)  # +1 for header
 
         # Confirm button
-        items.append(f"Confirm ({len(selected)} files)")
+        count_text = f"Confirm ({len(selected)} files)" if selected else "Select files above"
+        items.append(count_text)
 
         return self.template.render(
             screen,
