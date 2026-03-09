@@ -96,6 +96,7 @@ class SettingsScreen:
     # Android section
     ANDROID_SECTION = [
         "--- ANDROID ---",
+        "Use Python Downloader",
         "Storage Permission",
     ]
 
@@ -325,6 +326,9 @@ class SettingsScreen:
             elif item == "Web Companion":
                 value = "ON" if settings.get("web_companion_enabled", False) else "OFF"
                 items.append((item, value))
+            elif item == "Use Python Downloader":
+                value = "ON" if settings.get("use_python_downloader", False) else "OFF"
+                items.append((item, value))
             elif item == "Storage Permission":
                 items.append((item, "Request"))
             elif item == "Check for Updates":
@@ -414,6 +418,7 @@ class SettingsScreen:
                 "Scraper Frontend": "toggle_scraper_frontend",
                 "Enable NSZ": "toggle_nsz_enabled",
                 "Web Companion": "toggle_web_companion",
+                "Use Python Downloader": "toggle_python_downloader",
                 "Storage Permission": "request_storage_permission",
                 "Check for Updates": "check_for_updates",
             }
