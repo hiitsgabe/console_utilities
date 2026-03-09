@@ -55,6 +55,8 @@ class Settings:
     rawg_api_key: str = ""
     igdb_client_id: str = ""
     igdb_client_secret: str = ""  # base64 encoded
+    # Android-specific settings
+    use_python_downloader: bool = False  # Use Python downloads/zip instead of Android-native
     # Web Companion
     web_companion_enabled: bool = False
     # Frontend-specific paths

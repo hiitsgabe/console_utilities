@@ -208,16 +208,7 @@ class ConsoleUtilitiesApp:
         self.image_cache = ImageCache()
 
         # Initialize download manager (Android-native or desktop)
-        if BUILD_TARGET == "android":
-            from droid.download_manager import AndroidDownloadManager
-
-            self.download_manager = AndroidDownloadManager(
-                self.settings, self.state.download_queue
-            )
-        else:
-            self.download_manager = _DesktopDownloadManager(
-                self.settings, self.state.download_queue
-            )
+        self._init_download_manager()
 
         # Initialize scraper manager
         self.scraper_manager = ScraperManager(self.settings, self.state.scraper_queue)
@@ -3544,6 +3535,12 @@ class ConsoleUtilitiesApp:
             self.state.confirm_modal.cancel_label = "Cancel"
             self.state.confirm_modal.button_index = 0
             self.state.confirm_modal.context = "clear_game_list_cache"
+        elif action == "toggle_python_downloader":
+            current = self.settings.get("use_python_downloader", False)
+            self.settings["use_python_downloader"] = not current
+            save_settings(self.settings)
+            # Re-initialize download manager with the new setting
+            self._init_download_manager()
         elif action == "request_storage_permission":
             self._request_storage_permission()
         elif action == "check_for_updates":
@@ -3697,6 +3694,23 @@ class ConsoleUtilitiesApp:
         self.state.confirm_modal.cancel_label = ""
         self.state.confirm_modal.button_index = 0
         self.state.confirm_modal.context = ""
+
+    def _init_download_manager(self):
+        """Initialize the download manager based on platform and settings."""
+        use_android_native = (
+            BUILD_TARGET == "android"
+            and not self.settings.get("use_python_downloader", False)
+        )
+        if use_android_native:
+            from droid.download_manager import AndroidDownloadManager
+
+            self.download_manager = AndroidDownloadManager(
+                self.settings, self.state.download_queue
+            )
+        else:
+            self.download_manager = _DesktopDownloadManager(
+                self.settings, self.state.download_queue
+            )
 
     def _request_storage_permission(self):
         """Request MANAGE_EXTERNAL_STORAGE permission on Android."""
