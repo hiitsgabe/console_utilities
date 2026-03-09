@@ -263,9 +263,7 @@ class SearchModal:
         )
 
         self.action_button.render(screen, ok_rect, "Search", hover=True)
-        self.action_button.render_secondary(
-            screen, cancel_rect, "Cancel", hover=False
-        )
+        self.action_button.render_secondary(screen, cancel_rect, "Cancel", hover=False)
 
         self.ok_rect = ok_rect
         self.cancel_rect = cancel_rect

@@ -68,10 +68,10 @@ class ISSStatMapper:
     }
 
     HAIR_BY_POSITION = {
-        "Goalkeeper": 0,   # Short
-        "Defender": 0,     # Short
-        "Midfielder": 9,   # Mid length
-        "Attacker": 4,     # Long straight
+        "Goalkeeper": 0,  # Short
+        "Defender": 0,  # Short
+        "Midfielder": 9,  # Mid length
+        "Attacker": 4,  # Long straight
     }
 
     def map_team_with_league_context(
@@ -88,9 +88,7 @@ class ISSStatMapper:
         percentiles = self._compute_percentiles(all_stats)
 
         # Select best 15 players
-        best_15 = self._select_best_15(
-            team_roster.players, team_roster.player_stats
-        )
+        best_15 = self._select_best_15(team_roster.players, team_roster.player_stats)
 
         iss_players = []
         for player in best_15:
@@ -131,9 +129,7 @@ class ISSStatMapper:
 
         pid = stats.player_id
         return ISSPlayerAttributes(
-            speed=self._percentile_to_speed(
-                percentiles.get("speed", {}).get(pid, 50)
-            ),
+            speed=self._percentile_to_speed(percentiles.get("speed", {}).get(pid, 50)),
             shooting=self._percentile_to_shooting(
                 percentiles.get("shooting", {}).get(pid, 50)
             ),
@@ -159,7 +155,8 @@ class ISSStatMapper:
             "technique": lambda s: (
                 (s.dribbles_success / max(s.dribbles_attempts, 1)) * 100
                 + s.passes_accuracy
-            ) / 2,
+            )
+            / 2,
         }
 
         percentiles = {}
@@ -257,20 +254,25 @@ class ISSStatMapper:
 
         # Starting 11: 1 GK + 4 DF + 4 MF + 2 FW
         starters = []
-        starters.extend(gks[:1])          # 1 GK
-        starters.extend(dfs[:4])          # 4 DF
-        starters.extend(mfs[:4])          # 4 MF
-        starters.extend(fws[:2])          # 2 FW
+        starters.extend(gks[:1])  # 1 GK
+        starters.extend(dfs[:4])  # 4 DF
+        starters.extend(mfs[:4])  # 4 MF
+        starters.extend(fws[:2])  # 2 FW
 
         # Subs: backup GK first, then best remaining outfield
         subs = []
-        subs.extend(gks[1:2])             # backup GK
+        subs.extend(gks[1:2])  # backup GK
 
         remaining = (
-            dfs[4:] + mfs[4:] + fws[2:]
+            dfs[4:]
+            + mfs[4:]
+            + fws[2:]
             + gks[2:]
-            + [p for p in players if p.position not in by_position or p not in
-               gks + dfs + mfs + fws]
+            + [
+                p
+                for p in players
+                if p.position not in by_position or p not in gks + dfs + mfs + fws
+            ]
         )
         remaining.sort(key=_sort_key)
         subs.extend(remaining)

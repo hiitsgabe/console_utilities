@@ -127,7 +127,9 @@ class NHL07PSPPatcherScreen:
 
         return back_rect, item_rects, scroll_offset
 
-    def _draw_arrow_control(self, screen, row: pygame.Rect, label: str, is_highlighted: bool):
+    def _draw_arrow_control(
+        self, screen, row: pygame.Rect, label: str, is_highlighted: bool
+    ):
         """Draw < value > control on the right side of a row."""
         btn_w, btn_h = 32, 30
         value_w = 56
@@ -144,7 +146,9 @@ class NHL07PSPPatcherScreen:
             btn_h,
         )
 
-        arrow_color = self.theme.primary if is_highlighted else self.theme.text_secondary
+        arrow_color = (
+            self.theme.primary if is_highlighted else self.theme.text_secondary
+        )
         value_color = self.theme.primary if is_highlighted else self.theme.text_primary
 
         self.text.render(

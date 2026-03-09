@@ -171,7 +171,13 @@ class IALoginModal:
 
         if input_mode == "keyboard":
             return self._render_keyboard_input(
-                screen, title, "Password:", masked, "Enter password", input_mode, "Login"
+                screen,
+                title,
+                "Password:",
+                masked,
+                "Enter password",
+                input_mode,
+                "Login",
             )
 
         # On-screen keyboard mode
@@ -328,9 +334,7 @@ class IALoginModal:
         )
 
         self.action_button.render(screen, ok_rect, ok_label, hover=True)
-        self.action_button.render_secondary(
-            screen, cancel_rect, "Cancel", hover=False
-        )
+        self.action_button.render_secondary(screen, cancel_rect, "Cancel", hover=False)
 
         self.ok_rect = ok_rect
         self.cancel_rect = cancel_rect
@@ -462,9 +466,7 @@ class IALoginModal:
         )
 
         self.action_button.render(screen, ok_rect, ok_label, hover=True)
-        self.action_button.render_secondary(
-            screen, cancel_rect, "Cancel", hover=False
-        )
+        self.action_button.render_secondary(screen, cancel_rect, "Cancel", hover=False)
 
         self.ok_rect = ok_rect
         self.cancel_rect = cancel_rect
@@ -602,9 +604,7 @@ class IALoginModal:
         )
 
         self.action_button.render(screen, ok_rect, "Try Again", hover=True)
-        self.action_button.render_secondary(
-            screen, cancel_rect, "Cancel", hover=False
-        )
+        self.action_button.render_secondary(screen, cancel_rect, "Cancel", hover=False)
 
         self.ok_rect = ok_rect
         self.cancel_rect = cancel_rect

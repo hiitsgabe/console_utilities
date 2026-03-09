@@ -34,7 +34,10 @@ class SteamSearchModal:
     ) -> Tuple[pygame.Rect, List[pygame.Rect], Optional[pygame.Rect], int]:
         """Render the search results as a grid with images."""
         modal_rect, content_rect, close_rect = self.modal_frame.render_fullscreen(
-            screen, margin=max(30, BEZEL_INSET), title=f"Steam: \"{query}\"", show_close=True
+            screen,
+            margin=max(30, BEZEL_INSET),
+            title=f'Steam: "{query}"',
+            show_close=True,
         )
 
         if not results:
@@ -103,7 +106,8 @@ class SteamSearchModal:
 
         y = content_rect.top + self.theme.padding_md
         self.text.render(
-            screen, f"{game_name}.steam",
+            screen,
+            f"{game_name}.steam",
             (content_rect.centerx, y),
             color=self.theme.primary,
             size=self.theme.font_size_md,
@@ -113,7 +117,8 @@ class SteamSearchModal:
 
         y += self.theme.font_size_md + self.theme.padding_sm
         self.text.render(
-            screen, f"Saved to: {file_path}",
+            screen,
+            f"Saved to: {file_path}",
             (content_rect.centerx, y),
             color=self.theme.text_secondary,
             size=self.theme.font_size_sm,
@@ -127,7 +132,8 @@ class SteamSearchModal:
         ok_rect = pygame.Rect(
             content_rect.centerx - button_width // 2,
             content_rect.bottom - button_height - self.theme.padding_sm,
-            button_width, button_height,
+            button_width,
+            button_height,
         )
         self.action_button.render(screen, ok_rect, "OK", hover=True)
 

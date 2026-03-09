@@ -88,11 +88,15 @@ def run_service():
             task_json = os.environ.get("PYTHON_SERVICE_ARGUMENT", "")
             if task_json:
                 task = json.loads(task_json)
-                write_status(task["work_dir"], task["item_id"], {
-                    "status": "failed",
-                    "progress": 0.0,
-                    "error": f"{type(e).__name__}: {str(e)[:100]}",
-                })
+                write_status(
+                    task["work_dir"],
+                    task["item_id"],
+                    {
+                        "status": "failed",
+                        "progress": 0.0,
+                        "error": f"{type(e).__name__}: {str(e)[:100]}",
+                    },
+                )
         except Exception:
             pass
     finally:
@@ -102,7 +106,9 @@ def run_service():
         service.stopSelf()
 
 
-def _process_file(service, item_id, file_path, filename, work_dir, roms_folder, system_data):
+def _process_file(
+    service, item_id, file_path, filename, work_dir, roms_folder, system_data
+):
     """
     Process a downloaded file: extract ZIP, decompress NSZ, or move files.
 
@@ -124,15 +130,20 @@ def _process_file(service, item_id, file_path, filename, work_dir, roms_folder, 
     # Handle ZIP extraction
     if filename.endswith(".zip") and system_data.get("should_unzip", False):
         _extract_zip(
-            service, item_id, file_path, filename, work_dir, roms_folder, system_data, formats
+            service,
+            item_id,
+            file_path,
+            filename,
+            work_dir,
+            roms_folder,
+            system_data,
+            formats,
         )
         return
 
     # Handle NSZ decompression
     if filename.endswith(".nsz"):
-        _decompress_nsz(
-            service, item_id, file_path, work_dir, roms_folder, system_data
-        )
+        _decompress_nsz(service, item_id, file_path, work_dir, roms_folder, system_data)
         return
 
     # Simple file move
@@ -147,7 +158,8 @@ def _process_file(service, item_id, file_path, filename, work_dir, roms_folder, 
         move_formats.append(".zip")
 
     files_to_move = [
-        f for f in os.listdir(work_dir)
+        f
+        for f in os.listdir(work_dir)
         if f not in IPC_FILENAMES
         and any(f.lower().endswith(ext.lower()) for ext in move_formats)
         and os.path.isfile(os.path.join(work_dir, f))
@@ -169,7 +181,9 @@ def _process_file(service, item_id, file_path, filename, work_dir, roms_folder, 
     update_notification(service, "Extraction complete", 100, 100)
 
 
-def _extract_zip(service, item_id, file_path, filename, work_dir, roms_folder, system_data, formats):
+def _extract_zip(
+    service, item_id, file_path, filename, work_dir, roms_folder, system_data, formats
+):
     """Extract a ZIP file with progress reporting."""
     update_notification(service, f"Extracting: {filename}", 0, 100)
     write_status(work_dir, item_id, {"status": "extracting", "progress": 0.0})
@@ -183,10 +197,14 @@ def _extract_zip(service, item_id, file_path, filename, work_dir, roms_folder, s
                 return
             zip_ref.extract(file_info, work_dir)
             progress = (i + 1) / total_files
-            write_status(work_dir, item_id, {"status": "extracting", "progress": progress})
+            write_status(
+                work_dir, item_id, {"status": "extracting", "progress": progress}
+            )
             # Update notification every ~10% to avoid excessive updates
             if i % max(total_files // 10, 1) == 0:
-                update_notification(service, f"Extracting: {filename}", int(progress * 100), 100)
+                update_notification(
+                    service, f"Extracting: {filename}", int(progress * 100), 100
+                )
 
     os.remove(file_path)
 
@@ -197,7 +215,8 @@ def _extract_zip(service, item_id, file_path, filename, work_dir, roms_folder, s
     if not extract_contents:
         # Keep folder structure
         extracted_items = [
-            f for f in os.listdir(work_dir)
+            f
+            for f in os.listdir(work_dir)
             if not f.startswith(".") and f not in IPC_FILENAMES
         ]
         items_to_move = []
@@ -224,7 +243,8 @@ def _extract_zip(service, item_id, file_path, filename, work_dir, roms_folder, s
     else:
         # Move matching files
         files_to_move = [
-            f for f in os.listdir(work_dir)
+            f
+            for f in os.listdir(work_dir)
             if f not in IPC_FILENAMES
             and any(f.lower().endswith(ext.lower()) for ext in formats)
             and os.path.isfile(os.path.join(work_dir, f))
@@ -252,7 +272,9 @@ def _decompress_nsz(service, item_id, file_path, work_dir, roms_folder, system_d
     from utils.nsz import decompress_nsz_file
 
     def nsz_progress(text, percent):
-        write_status(work_dir, item_id, {"status": "extracting", "progress": percent / 100.0})
+        write_status(
+            work_dir, item_id, {"status": "extracting", "progress": percent / 100.0}
+        )
         update_notification(service, f"Decompressing: {filename}", percent, 100)
 
     keys_path = system_data.get("nsz_keys_path", "")
@@ -274,11 +296,15 @@ def _decompress_nsz(service, item_id, file_path, work_dir, roms_folder, system_d
         write_status(work_dir, item_id, {"status": "completed", "progress": 1.0})
         update_notification(service, "Decompression complete", 100, 100)
     else:
-        write_status(work_dir, item_id, {
-            "status": "failed",
-            "progress": 0.0,
-            "error": "NSZ decompression failed",
-        })
+        write_status(
+            work_dir,
+            item_id,
+            {
+                "status": "failed",
+                "progress": 0.0,
+                "error": "NSZ decompression failed",
+            },
+        )
 
 
 def _check_cancel(work_dir, item_id):

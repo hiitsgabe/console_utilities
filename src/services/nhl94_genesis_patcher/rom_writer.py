@@ -155,9 +155,7 @@ class NHL94GenesisRomWriter:
 
         return written
 
-    def _write_player_stats(
-        self, player: NHL94GenPlayerRecord, offset: int
-    ) -> int:
+    def _write_player_stats(self, player: NHL94GenPlayerRecord, offset: int) -> int:
         """Write 8 stat bytes for a player. Returns new offset.
 
         Byte layout (14 nibbles packed into 8 bytes):
@@ -181,9 +179,7 @@ class NHL94GenesisRomWriter:
         offset += 1
 
         # Byte 1: Weight class | Agility
-        self.data[offset] = encode_weight_nibble(
-            player.weight_class, attrs.agility
-        )
+        self.data[offset] = encode_weight_nibble(player.weight_class, attrs.agility)
         offset += 1
 
         # Byte 2: Speed | Off. Awareness
@@ -191,9 +187,7 @@ class NHL94GenesisRomWriter:
         offset += 1
 
         # Byte 3: Def. Awareness | Shot Power
-        self.data[offset] = encode_nibble(
-            attrs.def_awareness, attrs.shot_power
-        )
+        self.data[offset] = encode_nibble(attrs.def_awareness, attrs.shot_power)
         offset += 1
 
         # Byte 4: Checking | Handedness
@@ -201,9 +195,7 @@ class NHL94GenesisRomWriter:
         offset += 1
 
         # Byte 5: Stick Handling | Shot Accuracy
-        self.data[offset] = encode_nibble(
-            attrs.stick_handling, attrs.shot_accuracy
-        )
+        self.data[offset] = encode_nibble(attrs.stick_handling, attrs.shot_accuracy)
         offset += 1
 
         # Byte 6: Endurance | Roughness
@@ -211,9 +203,7 @@ class NHL94GenesisRomWriter:
         offset += 1
 
         # Byte 7: Pass Accuracy | Aggression
-        self.data[offset] = encode_nibble(
-            attrs.pass_accuracy, attrs.aggression
-        )
+        self.data[offset] = encode_nibble(attrs.pass_accuracy, attrs.aggression)
         offset += 1
 
         return offset
@@ -252,27 +242,23 @@ class NHL94GenesisRomWriter:
 
         # Count positions
         goalie_count = sum(1 for p in players if p.is_goalie)
-        defense_count = sum(
-            1 for p in players if p.position == "D"
-        )
+        defense_count = sum(1 for p in players if p.position == "D")
         forward_count = len(players) - goalie_count - defense_count
 
         # Write count byte at ratings + 3
         # High nibble = forward count, low nibble = defense count
         f_nibble = min(15, forward_count)
         d_nibble = min(15, defense_count)
-        self.data[offsets["ratings"] + 3] = (
-            (f_nibble << 4) | d_nibble
-        )
+        self.data[offsets["ratings"] + 3] = (f_nibble << 4) | d_nibble
 
         # Write goalie byte 1 only — preserve original byte 0 (per-team value)
-        self.data[offsets["goalies"] + 1] = (
-            0x00 if goalie_count <= 2 else 0x10
-        )
+        self.data[offsets["goalies"] + 1] = 0x00 if goalie_count <= 2 else 0x10
 
         # Generate and write lines (8 lines × 8 bytes = 64 bytes)
         lines = self._generate_lines(
-            goalie_count, forward_count, defense_count,
+            goalie_count,
+            forward_count,
+            defense_count,
         )
         lines_off = offsets["lines"]
         for i, line in enumerate(lines):

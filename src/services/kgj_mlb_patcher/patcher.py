@@ -43,6 +43,7 @@ class KGJMLBPatcher:
         self.mapper = KGJStatMapper()
 
         from services.sports_api.espn_client import EspnClient
+
         self.api = EspnClient(cache_dir, on_status)
 
     def analyze_rom(self, rom_path: str) -> KGJRomInfo:
@@ -75,10 +76,7 @@ class KGJMLBPatcher:
             return rosters
 
         # Filter to teams with KGJ ROM slots
-        mapped = [
-            t for t in mlb_teams
-            if self.mapper.get_team_slot(t.code) is not None
-        ]
+        mapped = [t for t in mlb_teams if self.mapper.get_team_slot(t.code) is not None]
         total = len(mapped)
 
         for i, team in enumerate(mapped):
@@ -110,11 +108,13 @@ class KGJMLBPatcher:
         team_stats = getattr(self, "team_stats", {})
 
         for i in range(TEAM_COUNT):
-            teams.append(KGJTeamRecord(
-                index=i,
-                name=KGJ_TEAM_ORDER[i],
-                players=[],
-            ))
+            teams.append(
+                KGJTeamRecord(
+                    index=i,
+                    name=KGJ_TEAM_ORDER[i],
+                    players=[],
+                )
+            )
 
         for team_code, players in rosters.items():
             slot = self.mapper.get_team_slot(team_code)
@@ -136,7 +136,9 @@ class KGJMLBPatcher:
 
                 if is_pitcher:
                     record = self.mapper.map_pitcher(
-                        player, pstats, is_starter=is_starter,
+                        player,
+                        pstats,
+                        is_starter=is_starter,
                     )
                 else:
                     record = self.mapper.map_batter(player, pstats)

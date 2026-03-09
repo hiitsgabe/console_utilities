@@ -44,7 +44,7 @@ POSITION_DEFAULTS = {
     POSITION_SG: [55, 55, 65, 50, 50, 30, 30, 35, 50, 60, 50, 65, 65, 55, 55, 40],
     POSITION_SF: [55, 50, 55, 55, 45, 40, 45, 50, 45, 55, 50, 55, 55, 55, 50, 55],
     POSITION_PF: [55, 35, 55, 60, 35, 50, 55, 65, 35, 55, 55, 45, 45, 55, 35, 70],
-    POSITION_C:  [55, 30, 55, 55, 30, 65, 55, 70, 35, 55, 60, 40, 40, 50, 30, 80],
+    POSITION_C: [55, 30, 55, 55, 30, 65, 55, 70, 35, 55, 60, 40, 40, 50, 30, 80],
 }
 
 
@@ -69,7 +69,9 @@ class NBALive95StatMapper:
         if stats:
             ratings = self._map_stats_to_ratings(stats, pos_byte)
         else:
-            ratings = list(POSITION_DEFAULTS.get(pos_byte, POSITION_DEFAULTS[POSITION_SF]))
+            ratings = list(
+                POSITION_DEFAULTS.get(pos_byte, POSITION_DEFAULTS[POSITION_SF])
+            )
 
         return NBALive95PlayerRecord(
             name_last=last,
@@ -113,8 +115,13 @@ class NBALive95StatMapper:
         ft = _scale(ft_pct, 0.600, 0.920)
 
         # Dunking: position-based + athleticism
-        dunk_base = {POSITION_C: 55, POSITION_PF: 60, POSITION_SF: 55,
-                     POSITION_SG: 40, POSITION_PG: 35}
+        dunk_base = {
+            POSITION_C: 55,
+            POSITION_PF: 60,
+            POSITION_SF: 55,
+            POSITION_SG: 40,
+            POSITION_PG: 35,
+        }
         dunk = _clamp(dunk_base.get(pos, 45) + (10 if fg_pct > 0.520 else 0))
 
         # Stealing: STL/game 0.3-2.0 -> 25-99
@@ -140,8 +147,13 @@ class NBALive95StatMapper:
         def_awareness = _scale(def_composite, 1.0, 12.0)
 
         # Speed: position-based + steals bonus
-        speed_base = {POSITION_PG: 75, POSITION_SG: 65, POSITION_SF: 55,
-                      POSITION_PF: 40, POSITION_C: 35}
+        speed_base = {
+            POSITION_PG: 75,
+            POSITION_SG: 65,
+            POSITION_SF: 55,
+            POSITION_PF: 40,
+            POSITION_C: 35,
+        }
         speed_bonus = 8 if stl > 1.2 else 0
         speed = _clamp(speed_base.get(pos, 50) + speed_bonus)
 
@@ -163,9 +175,22 @@ class NBALive95StatMapper:
         strength = _scale(strength_val, 1.0, 10.0)
 
         return [
-            goals, three_pt, ft, dunk, stealing, blocks,
-            off_reb, def_reb, passing, off_awareness, def_awareness,
-            speed, quickness, jumping, dribbling, strength,
+            goals,
+            three_pt,
+            ft,
+            dunk,
+            stealing,
+            blocks,
+            off_reb,
+            def_reb,
+            passing,
+            off_awareness,
+            def_awareness,
+            speed,
+            quickness,
+            jumping,
+            dribbling,
+            strength,
         ]
 
     def select_roster(
@@ -188,8 +213,11 @@ class NBALive95StatMapper:
             return min_val * 100 + pts
 
         # Filter out pitchers/non-basketball positions
-        eligible = [p for p in players if self._normalize_position(p.position) in
-                    ("PG", "SG", "SF", "PF", "C")]
+        eligible = [
+            p
+            for p in players
+            if self._normalize_position(p.position) in ("PG", "SG", "SF", "PF", "C")
+        ]
         if not eligible:
             eligible = players
 
@@ -234,10 +262,18 @@ class NBALive95StatMapper:
         """Normalize ESPN position strings to NBA Live 95 positions."""
         pos = (position or "").upper().strip()
         pos_map = {
-            "C": "C", "PF": "PF", "SF": "SF", "PG": "PG", "SG": "SG",
+            "C": "C",
+            "PF": "PF",
+            "SF": "SF",
+            "PG": "PG",
+            "SG": "SG",
             # ESPN combo positions
-            "G": "PG", "F": "SF", "F-C": "PF", "C-F": "C",
-            "G-F": "SG", "F-G": "SF",
+            "G": "PG",
+            "F": "SF",
+            "F-C": "PF",
+            "C-F": "C",
+            "G-F": "SG",
+            "F-G": "SF",
         }
         return pos_map.get(pos, "SF")
 

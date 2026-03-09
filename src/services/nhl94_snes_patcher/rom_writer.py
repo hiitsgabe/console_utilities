@@ -26,8 +26,8 @@ from services.nhl94_snes_patcher.rom_reader import (
 # Byte 17 = player count, Byte 18 = team overall,
 # Bytes 19..74 = 8 lines × 7 slots = 56 bytes.
 LINE_ASSIGN_OFFSET = 19
-LINE_SLOTS = 7   # G, LD, RD, LW, C, RW, EA
-LINE_COUNT = 8   # SC1, SC2, CHK, PP1, PP2, PK1, PK2, EA
+LINE_SLOTS = 7  # G, LD, RD, LW, C, RW, EA
+LINE_COUNT = 8  # SC1, SC2, CHK, PP1, PP2, PK1, PK2, EA
 
 
 def encode_nibble(high: int, low: int) -> int:
@@ -200,7 +200,14 @@ class NHL94SNESRomWriter:
         # Forward lines (groups of 3: LW, C, RW)
         # Defense pairs (groups of 2)
         lines = self._build_lines(
-            g1, g2, f_base, nf, d_base, nd, fi, di,
+            g1,
+            g2,
+            f_base,
+            nf,
+            d_base,
+            nd,
+            fi,
+            di,
         )
 
         # ── Write 56 bytes starting at byte 19 ─────────

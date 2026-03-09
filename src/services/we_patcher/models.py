@@ -59,7 +59,9 @@ class WETeamRecord:
     players: List[WEPlayerRecord] = field(default_factory=list)  # Exactly 22
     jersey_data: Optional[bytes] = None  # Raw 64-byte jersey to copy from ROM
     flag_style: Optional[int] = None  # Geometric pattern byte (0-15); None = solid
-    flag_palette: Optional[List[Tuple[int, int, int]]] = None  # 16 RGB colors; None = auto
+    flag_palette: Optional[List[Tuple[int, int, int]]] = (
+        None  # 16 RGB colors; None = auto
+    )
 
 
 @dataclass
@@ -87,7 +89,7 @@ class SlotPalette:
 
     slot_type: str  # "national" or "ml"
     slot_index: int  # 0-62 for national, 0-31 for ML
-    primary: Tuple[int, int, int] = (0, 0, 0)    # RGB
+    primary: Tuple[int, int, int] = (0, 0, 0)  # RGB
     secondary: Tuple[int, int, int] = (0, 0, 0)  # RGB
     raw_data: bytes = b""  # original 64-byte maglia1+maglia2
 

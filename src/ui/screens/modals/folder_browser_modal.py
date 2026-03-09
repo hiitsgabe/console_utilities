@@ -85,11 +85,20 @@ class FolderBrowserModal:
 
         # Determine if this is a folder selection (show buttons) or file selection (no buttons)
         is_folder_selection = selection_type in (
-            "work_dir", "roms_dir", "custom_folder",
-            "esde_media_path", "esde_gamelists_path", "retroarch_thumbnails",
-            "add_system_folder", "ia_collection_folder",
-            "dedupe_folder", "rename_folder", "ghost_cleaner_folder",
-            "ia_download_folder", "steam_shortcut", "scraper_batch_folder",
+            "work_dir",
+            "roms_dir",
+            "custom_folder",
+            "esde_media_path",
+            "esde_gamelists_path",
+            "retroarch_thumbnails",
+            "add_system_folder",
+            "ia_collection_folder",
+            "dedupe_folder",
+            "rename_folder",
+            "ghost_cleaner_folder",
+            "ia_download_folder",
+            "steam_shortcut",
+            "scraper_batch_folder",
             "folder",
         )
 
@@ -97,7 +106,8 @@ class FolderBrowserModal:
         button_height = 44
         button_area_height = (
             (button_height + self.theme.padding_lg + self.theme.padding_sm)
-            if is_folder_selection else 0
+            if is_folder_selection
+            else 0
         )
         list_rect = pygame.Rect(
             content_rect.left,
@@ -155,7 +165,14 @@ class FolderBrowserModal:
                 screen, cancel_rect, "Cancel", hover=cancel_focused
             )
 
-        return modal_rect, item_rects, select_rect, cancel_rect, close_rect, scroll_offset
+        return (
+            modal_rect,
+            item_rects,
+            select_rect,
+            cancel_rect,
+            close_rect,
+            scroll_offset,
+        )
 
     def _get_item_label(self, item: Dict[str, Any]) -> str:
         """Get display label for item."""

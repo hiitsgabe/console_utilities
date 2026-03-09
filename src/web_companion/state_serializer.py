@@ -140,12 +140,14 @@ def serialize_web_state(state, settings=None, data=None):
         for item in state.folder_browser.items:
             if isinstance(item, dict):
                 item_type = item.get("type", "")
-                entries.append({
-                    "name": item.get("name", ""),
-                    "is_dir": item_type in ("folder", "parent"),
-                    "type": item_type,
-                    "size": item.get("size", 0),
-                })
+                entries.append(
+                    {
+                        "name": item.get("name", ""),
+                        "is_dir": item_type in ("folder", "parent"),
+                        "type": item_type,
+                        "size": item.get("size", 0),
+                    }
+                )
             else:
                 entries.append({"name": str(item), "is_dir": True, "type": "folder"})
         # Determine selection type label
@@ -154,10 +156,20 @@ def serialize_web_state(state, settings=None, data=None):
             sel_type = state.folder_browser.selected_system_to_add.get("type", "folder")
         # File types show individual files to pick; folder types pick current dir
         is_file_select = sel_type in (
-            "archive_json", "nsz_keys", "we_patcher_rom", "iss_patcher_rom",
-            "nhl94_patcher_rom", "nhl94_gen_patcher_rom", "nhl07_patcher_rom",
-            "kgj_mlb_patcher_rom", "nbalive95_patcher_rom", "mvp_psp_patcher_rom",
-            "extract_zip", "extract_rar", "extract_7z", "nsz_converter",
+            "archive_json",
+            "nsz_keys",
+            "we_patcher_rom",
+            "iss_patcher_rom",
+            "nhl94_patcher_rom",
+            "nhl94_gen_patcher_rom",
+            "nhl07_patcher_rom",
+            "kgj_mlb_patcher_rom",
+            "nbalive95_patcher_rom",
+            "mvp_psp_patcher_rom",
+            "extract_zip",
+            "extract_rar",
+            "extract_7z",
+            "nsz_converter",
         )
         return {
             "screen_type": "file_browser",
@@ -184,7 +196,11 @@ def serialize_web_state(state, settings=None, data=None):
 
     # URL input
     if state.url_input.show:
-        label = "Enter URL" if state.url_input.context == "direct_download" else "Archive JSON URL"
+        label = (
+            "Enter URL"
+            if state.url_input.context == "direct_download"
+            else "Archive JSON URL"
+        )
         return {
             "screen_type": "text_input",
             "title": label,
@@ -233,9 +249,17 @@ def serialize_web_state(state, settings=None, data=None):
             }
         elif step == "file_select":
             items = []
-            for f in state.ia_download_wizard.display_items or state.ia_download_wizard.files_list:
+            for f in (
+                state.ia_download_wizard.display_items
+                or state.ia_download_wizard.files_list
+            ):
                 if isinstance(f, dict):
-                    items.append({"name": f.get("name", f.get("filename", "")), "selected": False})
+                    items.append(
+                        {
+                            "name": f.get("name", f.get("filename", "")),
+                            "selected": False,
+                        }
+                    )
                 else:
                     items.append({"name": str(f), "selected": False})
             return {
@@ -247,7 +271,10 @@ def serialize_web_state(state, settings=None, data=None):
         elif step == "options":
             wiz = state.ia_download_wizard
             items = [
-                {"name": f"Extract after download: {'ON' if wiz.should_extract else 'OFF'}", "selected": False},
+                {
+                    "name": f"Extract after download: {'ON' if wiz.should_extract else 'OFF'}",
+                    "selected": False,
+                },
             ]
             return {
                 "screen_type": "list",
@@ -260,7 +287,8 @@ def serialize_web_state(state, settings=None, data=None):
             return {
                 "screen_type": "confirm",
                 "title": "Download Error",
-                "message": state.ia_download_wizard.error_message or "An error occurred",
+                "message": state.ia_download_wizard.error_message
+                or "An error occurred",
                 "buttons": ["Retry", ""],
                 "selected": 0,
                 "wizard_action": "ia_download_error",
@@ -311,10 +339,12 @@ def serialize_web_state(state, settings=None, data=None):
         elif step == "formats":
             items = []
             for i, fmt in enumerate(state.ia_collection_wizard.available_formats):
-                items.append({
-                    "name": fmt,
-                    "selected": i in state.ia_collection_wizard.selected_formats,
-                })
+                items.append(
+                    {
+                        "name": fmt,
+                        "selected": i in state.ia_collection_wizard.selected_formats,
+                    }
+                )
             return {
                 "screen_type": "list",
                 "title": "Select File Formats",
@@ -325,13 +355,18 @@ def serialize_web_state(state, settings=None, data=None):
         elif step == "options":
             wiz = state.ia_collection_wizard
             items = [
-                {"name": f"Unzip files: {'ON' if wiz.should_unzip else 'OFF'}", "selected": False},
+                {
+                    "name": f"Unzip files: {'ON' if wiz.should_unzip else 'OFF'}",
+                    "selected": False,
+                },
             ]
             if wiz.should_unzip:
-                items.append({
-                    "name": f"Extract contents only: {'ON' if wiz.extract_contents else 'OFF'}",
-                    "selected": False,
-                })
+                items.append(
+                    {
+                        "name": f"Extract contents only: {'ON' if wiz.extract_contents else 'OFF'}",
+                        "selected": False,
+                    }
+                )
             return {
                 "screen_type": "list",
                 "title": "Collection Options",
@@ -341,8 +376,11 @@ def serialize_web_state(state, settings=None, data=None):
             }
         elif step == "confirm":
             wiz = state.ia_collection_wizard
-            fmts = [wiz.available_formats[i] for i in wiz.selected_formats
-                     if i < len(wiz.available_formats)]
+            fmts = [
+                wiz.available_formats[i]
+                for i in wiz.selected_formats
+                if i < len(wiz.available_formats)
+            ]
             return {
                 "screen_type": "confirm",
                 "title": "Create Collection",
@@ -360,14 +398,19 @@ def serialize_web_state(state, settings=None, data=None):
             return {
                 "screen_type": "loading",
                 "title": "Collection Wizard",
-                "message": "Validating..." if step == "validating" else "Creating collection...",
+                "message": (
+                    "Validating..."
+                    if step == "validating"
+                    else "Creating collection..."
+                ),
                 "progress": 0,
             }
         elif step == "error":
             return {
                 "screen_type": "confirm",
                 "title": "Collection Error",
-                "message": state.ia_collection_wizard.error_message or "An error occurred",
+                "message": state.ia_collection_wizard.error_message
+                or "An error occurred",
                 "buttons": ["Retry", ""],
                 "selected": 0,
                 "wizard_action": "ia_collection_error",
@@ -453,9 +496,21 @@ def serialize_web_state(state, settings=None, data=None):
             leagues = getattr(patcher, "available_leagues", [])
             query_lower = search_query.lower() if search_query else ""
             for lg in leagues:
-                name = lg.name if hasattr(lg, "name") else (lg.get("name", "") if isinstance(lg, dict) else str(lg))
-                country = lg.country if hasattr(lg, "country") else (lg.get("country", "") if isinstance(lg, dict) else "")
-                if query_lower and query_lower not in name.lower() and query_lower not in country.lower():
+                name = (
+                    lg.name
+                    if hasattr(lg, "name")
+                    else (lg.get("name", "") if isinstance(lg, dict) else str(lg))
+                )
+                country = (
+                    lg.country
+                    if hasattr(lg, "country")
+                    else (lg.get("country", "") if isinstance(lg, dict) else "")
+                )
+                if (
+                    query_lower
+                    and query_lower not in name.lower()
+                    and query_lower not in country.lower()
+                ):
                     continue
                 label = f"{name} ({country})" if country else name
                 items.append({"name": label, "selected": False})
@@ -484,6 +539,7 @@ def serialize_web_state(state, settings=None, data=None):
     if state.mode == "systems":
         # Build dynamic root menu using the same logic as systems_screen
         from ui.screens.systems_screen import _build_root_menu
+
         labels, _ = _build_root_menu(settings or {})
         menu_items = [{"name": label, "selected": False} for label in labels]
         return {
@@ -497,6 +553,7 @@ def serialize_web_state(state, settings=None, data=None):
         items = []
         if data:
             from services.data_loader import get_visible_systems
+
             visible = get_visible_systems(data, settings or {})
             for sys in visible:
                 items.append({"name": sys.get("name", ""), "selected": False})
@@ -533,6 +590,7 @@ def serialize_web_state(state, settings=None, data=None):
 
     if state.mode == "settings":
         from ui.screens.settings_screen import SettingsScreen
+
         ss = SettingsScreen()
         setting_items, divider_indices = ss._get_settings_items(settings or {}, data)
         items = []
@@ -550,6 +608,7 @@ def serialize_web_state(state, settings=None, data=None):
 
     if state.mode == "utils":
         from ui.screens.utils_screen import UtilsScreen
+
         utils = UtilsScreen()
         util_items, divider_indices = utils._get_utils_items(settings or {})
         items = []
@@ -569,7 +628,11 @@ def serialize_web_state(state, settings=None, data=None):
         pm = state.portmaster
         items = []
         for port in pm.filtered_ports:
-            name = port.get("attr", {}).get("title", "") if isinstance(port, dict) else str(port)
+            name = (
+                port.get("attr", {}).get("title", "")
+                if isinstance(port, dict)
+                else str(port)
+            )
             items.append({"name": name, "selected": False})
         return {
             "screen_type": "list",
@@ -584,12 +647,14 @@ def serialize_web_state(state, settings=None, data=None):
         for it in state.download_queue.items:
             game = it.game
             name = _get_game_name(game)
-            items.append({
-                "name": name,
-                "selected": False,
-                "status": it.status,
-                "progress": it.progress,
-            })
+            items.append(
+                {
+                    "name": name,
+                    "selected": False,
+                    "status": it.status,
+                    "progress": it.progress,
+                }
+            )
         return {
             "screen_type": "list",
             "title": "Downloads",
@@ -598,8 +663,13 @@ def serialize_web_state(state, settings=None, data=None):
         }
 
     # Patcher screens — use actual screen items
-    if state.mode in ("we_patcher", "iss_patcher", "nhl94_patcher",
-                       "nhl94_gen_patcher", "nhl07_patcher"):
+    if state.mode in (
+        "we_patcher",
+        "iss_patcher",
+        "nhl94_patcher",
+        "nhl94_gen_patcher",
+        "nhl07_patcher",
+    ):
         fields = _build_patcher_fields(state, settings)
         title_map = {
             "we_patcher": "WE2002 Patcher",
@@ -617,6 +687,7 @@ def serialize_web_state(state, settings=None, data=None):
 
     if state.mode == "sports_patcher":
         from ui.screens.sports_patcher_screen import SportsPatcherScreen
+
         sp = SportsPatcherScreen()
         items = [{"name": label, "selected": False} for label, _ in sp.GAMES]
         return {
@@ -628,18 +699,23 @@ def serialize_web_state(state, settings=None, data=None):
 
     if state.mode == "add_systems":
         items = []
-        for sys in (state.available_systems or []):
+        for sys in state.available_systems or []:
             name = sys.get("name", "") if isinstance(sys, dict) else str(sys)
             items.append({"name": name, "selected": False})
         return {
             "screen_type": "list",
             "title": "Add Systems",
-            "items": items if items else [{"name": "No additional systems available", "selected": False}],
+            "items": (
+                items
+                if items
+                else [{"name": "No additional systems available", "selected": False}]
+            ),
             "highlighted": getattr(state, "add_systems_highlighted", 0),
         }
 
     if state.mode == "scraper_menu":
         from ui.screens.scraper_menu_screen import ScraperMenuScreen
+
         sm = ScraperMenuScreen()
         menu_items, divider_indices = sm._get_items(settings or {})
         items = []
@@ -666,11 +742,13 @@ def serialize_web_state(state, settings=None, data=None):
                 "error": "Error",
                 "skipped": it.skip_reason or "Skipped",
             }
-            items.append({
-                "name": it.name,
-                "selected": False,
-                "status": status_map.get(it.status, it.status),
-            })
+            items.append(
+                {
+                    "name": it.name,
+                    "selected": False,
+                    "status": status_map.get(it.status, it.status),
+                }
+            )
         return {
             "screen_type": "list",
             "title": "Scraper Downloads",
@@ -684,7 +762,9 @@ def serialize_web_state(state, settings=None, data=None):
             for sys in data:
                 name = sys.get("name", "")
                 sys_name = sys.get("name", "")
-                sys_settings = (settings or {}).get("system_settings", {}).get(sys_name, {})
+                sys_settings = (
+                    (settings or {}).get("system_settings", {}).get(sys_name, {})
+                )
                 tags = []
                 if sys_settings.get("hidden", False):
                     tags.append("Hidden")
@@ -718,13 +798,28 @@ def serialize_web_state(state, settings=None, data=None):
         items.append({"name": f"Source: {source_label}", "selected": False})
         # Settings section
         items.append({"name": "--- SETTINGS ---", "is_divider": True})
-        items.append({"name": f"Hide System: {'ON' if hidden else 'OFF'}", "selected": False})
-        items.append({"name": f"Custom Folder: {custom or 'Default'}", "selected": False})
-        should_unzip = sys_settings.get("should_unzip", system.get("should_unzip", False))
-        items.append({"name": f"Auto-extract ZIPs: {'ON' if should_unzip else 'OFF'}", "selected": False})
+        items.append(
+            {"name": f"Hide System: {'ON' if hidden else 'OFF'}", "selected": False}
+        )
+        items.append(
+            {"name": f"Custom Folder: {custom or 'Default'}", "selected": False}
+        )
+        should_unzip = sys_settings.get(
+            "should_unzip", system.get("should_unzip", False)
+        )
+        items.append(
+            {
+                "name": f"Auto-extract ZIPs: {'ON' if should_unzip else 'OFF'}",
+                "selected": False,
+            }
+        )
         # Auth section (only for token-based auth)
         auth = system.get("auth", {})
-        if auth and auth.get("type") != "ia_s3" and ("token" in auth or auth.get("auth_message")):
+        if (
+            auth
+            and auth.get("type") != "ia_s3"
+            and ("token" in auth or auth.get("auth_message"))
+        ):
             items.append({"name": "--- AUTHENTICATION ---", "is_divider": True})
             token = auth.get("token", "")
             if token:
@@ -785,18 +880,25 @@ def _build_patcher_fields(state, settings):
     try:
         if state.mode == "we_patcher":
             from ui.screens.we_patcher_screen import we_patcher_screen
+
             items = we_patcher_screen._get_items(state, settings)
         elif state.mode == "iss_patcher":
             from ui.screens.iss_patcher_screen import iss_patcher_screen
+
             items = iss_patcher_screen._get_items(state, settings)
         elif state.mode == "nhl94_patcher":
             from ui.screens.nhl94_snes_patcher_screen import nhl94_snes_patcher_screen
+
             items = nhl94_snes_patcher_screen._get_items(state, settings)
         elif state.mode == "nhl94_gen_patcher":
-            from ui.screens.nhl94_genesis_patcher_screen import nhl94_genesis_patcher_screen
+            from ui.screens.nhl94_genesis_patcher_screen import (
+                nhl94_genesis_patcher_screen,
+            )
+
             items = nhl94_genesis_patcher_screen._get_items(state, settings)
         elif state.mode == "nhl07_patcher":
             from ui.screens.nhl07_psp_patcher_screen import nhl07_psp_patcher_screen
+
             items = nhl07_psp_patcher_screen._get_items(state, settings)
         else:
             items = []
@@ -805,27 +907,35 @@ def _build_patcher_fields(state, settings):
         for item in items:
             if isinstance(item, tuple) and len(item) >= 2:
                 action_name = item[2] if len(item) >= 3 else ""
-                field_type = "cycle" if action_name in ("change_season", "change_language") else "action"
+                field_type = (
+                    "cycle"
+                    if action_name in ("change_season", "change_language")
+                    else "action"
+                )
                 value = item[1]
                 # The pygame screen draws season/language manually, so the
                 # tuple value is empty.  Resolve actual values here.
                 if not value and action_name == "change_season":
                     from datetime import datetime as _dt
+
                     patcher = state.active_patcher
                     value = str(getattr(patcher, "selected_season", _dt.now().year))
                 elif not value and action_name == "change_language":
                     lang_code = (settings or {}).get("we_patcher_language", "en")
                     try:
                         from services.we_patcher.translations.we2002 import LANGUAGES
+
                         value = LANGUAGES.get(lang_code, "English")
                     except Exception:
                         value = lang_code
-                fields.append({
-                    "label": item[0],
-                    "value": value,
-                    "type": field_type,
-                    "action": action_name,
-                })
+                fields.append(
+                    {
+                        "label": item[0],
+                        "value": value,
+                        "type": field_type,
+                        "action": action_name,
+                    }
+                )
             else:
                 fields.append({"label": str(item), "value": "", "type": "text"})
         return fields
@@ -860,11 +970,13 @@ def _serialize_roster_preview(patcher):
     if 0 <= team_idx < len(league_data.teams):
         tr = league_data.teams[team_idx]
         for p in tr.players:
-            players.append({
-                "name": p.name,
-                "position": p.position,
-                "number": p.number,
-            })
+            players.append(
+                {
+                    "name": p.name,
+                    "position": p.position,
+                    "number": p.number,
+                }
+            )
 
     return {
         "screen_type": "roster_preview",
@@ -902,11 +1014,13 @@ def _serialize_color_picker(patcher):
     teams = []
     for tr in league_data.teams:
         team = tr.team
-        teams.append({
-            "name": team.name,
-            "color": team.color or "",
-            "alternate_color": team.alternate_color or "",
-        })
+        teams.append(
+            {
+                "name": team.name,
+                "color": team.color or "",
+                "alternate_color": team.alternate_color or "",
+            }
+        )
 
     return {
         "screen_type": "color_picker",
@@ -960,10 +1074,16 @@ def _serialize_dedupe_wizard(wizard):
                 marker = " [KEEP]" if i == 0 else ""
             else:
                 marker = " [KEEP]" if i == wizard.selected_to_keep else ""
-            items.append({
-                "name": f"{name}{size_str}{marker}",
-                "selected": (i == 0) if wizard.mode == "safe" else (i == wizard.selected_to_keep),
-            })
+            items.append(
+                {
+                    "name": f"{name}{size_str}{marker}",
+                    "selected": (
+                        (i == 0)
+                        if wizard.mode == "safe"
+                        else (i == wizard.selected_to_keep)
+                    ),
+                }
+            )
         confirmed = len(wizard.confirmed_groups)
         return {
             "screen_type": "list",
@@ -990,7 +1110,11 @@ def _serialize_dedupe_wizard(wizard):
         }
 
     if step in ("complete", "no_duplicates"):
-        msg = f"Removed {wizard.files_removed} duplicate files" if step == "complete" else "No duplicates found"
+        msg = (
+            f"Removed {wizard.files_removed} duplicate files"
+            if step == "complete"
+            else "No duplicates found"
+        )
         if wizard.space_freed > 0:
             if wizard.space_freed > 1_000_000_000:
                 msg += f"\nFreed {wizard.space_freed / 1_000_000_000:.1f} GB"
@@ -1043,10 +1167,12 @@ def _serialize_rename_wizard(wizard):
             old_name = item.get("name", "")
             new_name = item.get("new_name", "")
             selected = item.get("selected", True)
-            items.append({
-                "name": f"{old_name} -> {new_name}",
-                "selected": selected,
-            })
+            items.append(
+                {
+                    "name": f"{old_name} -> {new_name}",
+                    "selected": selected,
+                }
+            )
         action = "rename_auto" if wizard.mode == "automatic" else "rename_manual"
         return {
             "screen_type": "list",
@@ -1073,7 +1199,11 @@ def _serialize_rename_wizard(wizard):
         }
 
     if step in ("complete", "no_changes"):
-        msg = f"Renamed {wizard.files_renamed} files" if step == "complete" else "No files to rename"
+        msg = (
+            f"Renamed {wizard.files_renamed} files"
+            if step == "complete"
+            else "No files to rename"
+        )
         return {
             "screen_type": "confirm",
             "title": "Rename Complete",
@@ -1133,7 +1263,11 @@ def _serialize_ghost_cleaner(wizard):
         }
 
     if step in ("complete", "no_ghosts"):
-        msg = f"Removed {wizard.files_removed} ghost files" if step == "complete" else "No ghost files found"
+        msg = (
+            f"Removed {wizard.files_removed} ghost files"
+            if step == "complete"
+            else "No ghost files found"
+        )
         if wizard.space_freed > 0:
             if wizard.space_freed > 1_000_000_000:
                 msg += f"\nFreed {wizard.space_freed / 1_000_000_000:.1f} GB"
@@ -1173,11 +1307,13 @@ def _serialize_scraper_wizard(wizard):
         for f in wizard.folder_items:
             if isinstance(f, dict):
                 item_type = f.get("type", "")
-                items.append({
-                    "name": f.get("name", ""),
-                    "is_dir": item_type in ("folder", "parent"),
-                    "type": item_type,
-                })
+                items.append(
+                    {
+                        "name": f.get("name", ""),
+                        "is_dir": item_type in ("folder", "parent"),
+                        "type": item_type,
+                    }
+                )
         return {
             "screen_type": "file_browser",
             "title": "Select ROM",
@@ -1191,11 +1327,13 @@ def _serialize_scraper_wizard(wizard):
         for f in wizard.folder_items:
             if isinstance(f, dict):
                 item_type = f.get("type", "")
-                items.append({
-                    "name": f.get("name", ""),
-                    "is_dir": item_type in ("folder", "parent"),
-                    "type": item_type,
-                })
+                items.append(
+                    {
+                        "name": f.get("name", ""),
+                        "is_dir": item_type in ("folder", "parent"),
+                        "type": item_type,
+                    }
+                )
         return {
             "screen_type": "file_browser",
             "title": "Select ROM Folder",
@@ -1220,11 +1358,17 @@ def _serialize_scraper_wizard(wizard):
     if step == "image_select":
         items = []
         for i, img in enumerate(wizard.available_images):
-            name = img.get("type", img.get("name", f"Image {i}")) if isinstance(img, dict) else str(img)
-            items.append({
-                "name": name,
-                "selected": i in wizard.selected_images,
-            })
+            name = (
+                img.get("type", img.get("name", f"Image {i}"))
+                if isinstance(img, dict)
+                else str(img)
+            )
+            items.append(
+                {
+                    "name": name,
+                    "selected": i in wizard.selected_images,
+                }
+            )
         return {
             "screen_type": "list",
             "title": "Select Images",
@@ -1236,11 +1380,17 @@ def _serialize_scraper_wizard(wizard):
     if step == "video_select":
         items = [{"name": "No Video", "selected": wizard.selected_video_index == -1}]
         for i, vid in enumerate(wizard.available_videos):
-            name = vid.get("type", vid.get("name", f"Video {i}")) if isinstance(vid, dict) else str(vid)
-            items.append({
-                "name": name,
-                "selected": wizard.selected_video_index == i,
-            })
+            name = (
+                vid.get("type", vid.get("name", f"Video {i}"))
+                if isinstance(vid, dict)
+                else str(vid)
+            )
+            items.append(
+                {
+                    "name": name,
+                    "selected": wizard.selected_video_index == i,
+                }
+            )
         return {
             "screen_type": "list",
             "title": "Select Video",
@@ -1253,11 +1403,13 @@ def _serialize_scraper_wizard(wizard):
         for rom in wizard.batch_roms:
             name = rom.get("name", "")
             status = rom.get("status", "pending")
-            items.append({
-                "name": name,
-                "selected": status == "pending",
-                "status": status,
-            })
+            items.append(
+                {
+                    "name": name,
+                    "selected": status == "pending",
+                    "status": status,
+                }
+            )
         return {
             "screen_type": "list",
             "title": f"ROMs to Scrape ({sum(1 for r in wizard.batch_roms if r.get('status') == 'pending')} selected)",
@@ -1318,14 +1470,23 @@ def _build_batch_options(wizard):
     system_display = batch_system if batch_system else "Auto"
     items.append({"name": f"System: {system_display}", "selected": False})
     auto_select = getattr(wizard, "auto_select", True)
-    items.append({"name": f"Auto-select: {'ON' if auto_select else 'OFF'}", "selected": False})
+    items.append(
+        {"name": f"Auto-select: {'ON' if auto_select else 'OFF'}", "selected": False}
+    )
     default_images = getattr(wizard, "default_images", [])
     image_types = ["box-2D", "boxart", "screenshot", "titlescreen", "fanart", "marquee"]
     for img_type in image_types:
         enabled = img_type in default_images
-        items.append({"name": f"{img_type}: {'ON' if enabled else 'OFF'}", "selected": False})
+        items.append(
+            {"name": f"{img_type}: {'ON' if enabled else 'OFF'}", "selected": False}
+        )
     download_video = getattr(wizard, "download_video", False)
-    items.append({"name": f"Download Video: {'ON' if download_video else 'OFF'}", "selected": False})
+    items.append(
+        {
+            "name": f"Download Video: {'ON' if download_video else 'OFF'}",
+            "selected": False,
+        }
+    )
     return items
 
 
@@ -1334,7 +1495,7 @@ def _build_settings_items(settings):
     items = []
     toggles = [
         ("Enable Box-art Display", "enable_boxart", True),
-        ("USA Games Only", "usa_only", False),
+        ("Filter Region", "filter_region", "none"),
         ("Show Download All", "show_download_all", False),
         ("Enable PortMaster", "portmaster_enabled", False),
         ("Enable Internet Archive", "ia_enabled", False),
@@ -1344,12 +1505,18 @@ def _build_settings_items(settings):
     ]
     for label, key, default in toggles:
         val = settings.get(key, default)
-        name = f"{label}: {'ON' if val else 'OFF'}"
+        if key == "filter_region":
+            display = val.upper() if val != "none" else "OFF"
+            name = f"{label}: {display}"
+        else:
+            name = f"{label}: {'ON' if val else 'OFF'}"
         # Mark web companion as locked (can't disable from web)
         if key == "web_companion_enabled" and val:
             name += " (locked)"
-        items.append({
-            "name": name,
-            "selected": False,
-        })
+        items.append(
+            {
+                "name": name,
+                "selected": False,
+            }
+        )
     return items

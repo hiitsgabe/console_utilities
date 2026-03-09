@@ -80,7 +80,9 @@ class NHL07PSPRomWriter:
         self.reader: Optional[NHL07PSPRomReader] = None
         self._db_viv: Optional[bytes] = None
 
-    def copy_iso(self, on_progress: Optional[Callable[[float, str], None]] = None) -> bool:
+    def copy_iso(
+        self, on_progress: Optional[Callable[[float, str], None]] = None
+    ) -> bool:
         """Copy source ISO to output path with progress reporting."""
         try:
             src_size = os.path.getsize(self.iso_path)
@@ -114,7 +116,9 @@ class NHL07PSPRomWriter:
         self._db_viv = self.reader.get_db_viv()
         return self._db_viv is not None
 
-    def write_player_bio(self, tdb: TDBFile, record_idx: int, player: NHL07PlayerRecord):
+    def write_player_bio(
+        self, tdb: TDBFile, record_idx: int, player: NHL07PlayerRecord
+    ):
         """Update a SPBT record with player bio data."""
         spbt = tdb.get_table("SPBT")
         if not spbt or record_idx >= spbt.capacity:
@@ -290,9 +294,7 @@ class NHL07PSPRomWriter:
             # Find db.viv location in ISO and write back
             reader_for_loc = NHL07PSPRomReader(self.output_path)
             reader_for_loc.load()
-            db_lba, db_orig_size, db_max_size = (
-                reader_for_loc.find_db_viv_location()
-            )
+            db_lba, db_orig_size, db_max_size = reader_for_loc.find_db_viv_location()
             if db_lba == 0:
                 return False
 

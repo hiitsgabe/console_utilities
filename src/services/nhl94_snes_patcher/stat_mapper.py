@@ -20,34 +20,74 @@ from services.nhl94_snes_patcher.models import (
 # Default attributes by position (0-6 scale)
 POSITION_DEFAULTS = {
     "C": NHL94PlayerAttributes(
-        speed=3, agility=3, shot_power=3, shot_accuracy=3,
-        stick_handling=3, pass_accuracy=3, off_awareness=3,
-        def_awareness=2, checking=2, endurance=3,
-        roughness=2, aggression=2,
+        speed=3,
+        agility=3,
+        shot_power=3,
+        shot_accuracy=3,
+        stick_handling=3,
+        pass_accuracy=3,
+        off_awareness=3,
+        def_awareness=2,
+        checking=2,
+        endurance=3,
+        roughness=2,
+        aggression=2,
     ),
     "LW": NHL94PlayerAttributes(
-        speed=3, agility=3, shot_power=3, shot_accuracy=3,
-        stick_handling=3, pass_accuracy=2, off_awareness=3,
-        def_awareness=2, checking=3, endurance=3,
-        roughness=3, aggression=3,
+        speed=3,
+        agility=3,
+        shot_power=3,
+        shot_accuracy=3,
+        stick_handling=3,
+        pass_accuracy=2,
+        off_awareness=3,
+        def_awareness=2,
+        checking=3,
+        endurance=3,
+        roughness=3,
+        aggression=3,
     ),
     "RW": NHL94PlayerAttributes(
-        speed=3, agility=3, shot_power=3, shot_accuracy=3,
-        stick_handling=3, pass_accuracy=2, off_awareness=3,
-        def_awareness=2, checking=3, endurance=3,
-        roughness=3, aggression=3,
+        speed=3,
+        agility=3,
+        shot_power=3,
+        shot_accuracy=3,
+        stick_handling=3,
+        pass_accuracy=2,
+        off_awareness=3,
+        def_awareness=2,
+        checking=3,
+        endurance=3,
+        roughness=3,
+        aggression=3,
     ),
     "D": NHL94PlayerAttributes(
-        speed=2, agility=2, shot_power=2, shot_accuracy=2,
-        stick_handling=2, pass_accuracy=3, off_awareness=2,
-        def_awareness=4, checking=4, endurance=3,
-        roughness=3, aggression=3,
+        speed=2,
+        agility=2,
+        shot_power=2,
+        shot_accuracy=2,
+        stick_handling=2,
+        pass_accuracy=3,
+        off_awareness=2,
+        def_awareness=4,
+        checking=4,
+        endurance=3,
+        roughness=3,
+        aggression=3,
     ),
     "G": NHL94PlayerAttributes(
-        speed=2, agility=4, shot_power=2, shot_accuracy=2,
-        stick_handling=3, pass_accuracy=2, off_awareness=2,
-        def_awareness=3, checking=1, endurance=4,
-        roughness=1, aggression=1,
+        speed=2,
+        agility=4,
+        shot_power=2,
+        shot_accuracy=2,
+        stick_handling=3,
+        pass_accuracy=2,
+        off_awareness=2,
+        def_awareness=3,
+        checking=1,
+        endurance=4,
+        roughness=1,
+        aggression=1,
     ),
 }
 
@@ -88,9 +128,7 @@ class NHL94StatMapper:
         if stats:
             attrs = self._map_stats(stats, pos, is_goalie)
         else:
-            attrs = POSITION_DEFAULTS.get(
-                pos, POSITION_DEFAULTS["C"]
-            )
+            attrs = POSITION_DEFAULTS.get(pos, POSITION_DEFAULTS["C"])
 
         jersey = player.number or 1
 
@@ -210,23 +248,28 @@ class NHL94StatMapper:
 
         centers = sorted(
             [p for p in players if p.position == "C"],
-            key=sort_key, reverse=True,
+            key=sort_key,
+            reverse=True,
         )
         left_wings = sorted(
             [p for p in players if p.position == "LW"],
-            key=sort_key, reverse=True,
+            key=sort_key,
+            reverse=True,
         )
         right_wings = sorted(
             [p for p in players if p.position == "RW"],
-            key=sort_key, reverse=True,
+            key=sort_key,
+            reverse=True,
         )
         defensemen = sorted(
             [p for p in players if p.position == "D"],
-            key=sort_key, reverse=True,
+            key=sort_key,
+            reverse=True,
         )
         goalies = sorted(
             [p for p in players if p.position == "G"],
-            key=sort_key, reverse=True,
+            key=sort_key,
+            reverse=True,
         )
 
         # ── Goalies (best first) ──────────────────────────────
@@ -235,7 +278,8 @@ class NHL94StatMapper:
         # ── Forwards in line order: LW, C, RW per line ────────
         all_fwd = sorted(
             centers + left_wings + right_wings,
-            key=sort_key, reverse=True,
+            key=sort_key,
+            reverse=True,
         )
 
         num_lines = num_forwards // 3
@@ -298,9 +342,7 @@ class NHL94StatMapper:
                 forwards.append(rw)
 
         # Extra forward slots
-        extras = [
-            f for f in all_fwd if id(f) not in used_fwd
-        ]
+        extras = [f for f in all_fwd if id(f) not in used_fwd]
         forwards.extend(extras[:num_extras])
         forwards = forwards[:num_forwards]
 
@@ -314,7 +356,8 @@ class NHL94StatMapper:
         all_used = set(id(p) for p in selected)
         leftover = sorted(
             [p for p in players if id(p) not in all_used],
-            key=sort_key, reverse=True,
+            key=sort_key,
+            reverse=True,
         )
         remaining = max_players - len(selected)
         if remaining > 0:

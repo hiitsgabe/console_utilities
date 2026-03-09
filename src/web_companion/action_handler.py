@@ -67,7 +67,8 @@ def handle_action(state, action_data):
             state.folder_browser.highlighted = index
             _post_key(pygame.K_RETURN)
         elif state.scraper_wizard.show and state.scraper_wizard.step in (
-            "rom_select", "folder_select",
+            "rom_select",
+            "folder_select",
         ):
             state.scraper_wizard.folder_highlighted = index
             _post_key(pygame.K_RETURN)
@@ -181,7 +182,11 @@ def _handle_set_text(state, text):
 
     # Patcher league search — set query regardless of on-screen keyboard state
     patcher = state.active_patcher
-    if patcher and hasattr(patcher, "active_modal") and patcher.active_modal == "league_browser":
+    if (
+        patcher
+        and hasattr(patcher, "active_modal")
+        and patcher.active_modal == "league_browser"
+    ):
         patcher.league_search_query = text
         patcher.league_search_cursor = len(text)
         patcher.leagues_highlighted = 0
@@ -249,7 +254,11 @@ def _handle_select_index(state, index):
             state.rename_wizard.mode_highlighted = index
         elif step == "review":
             state.rename_wizard.current_item_index = index
-    elif state.active_patcher and hasattr(state.active_patcher, "active_modal") and state.active_patcher.active_modal:
+    elif (
+        state.active_patcher
+        and hasattr(state.active_patcher, "active_modal")
+        and state.active_patcher.active_modal
+    ):
         patcher = state.active_patcher
         modal = patcher.active_modal
         if modal == "league_browser":

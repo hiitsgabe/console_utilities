@@ -226,9 +226,7 @@ class KGJRomWriter:
         # Byte 0x1E: Saves
         d[off + 0x1E] = max(0, min(255, player.saves))
 
-    def write_team_roster(
-        self, team_index: int, players: List[KGJPlayerRecord]
-    ) -> int:
+    def write_team_roster(self, team_index: int, players: List[KGJPlayerRecord]) -> int:
         """Write all players for a team.
 
         Players list should be ordered:

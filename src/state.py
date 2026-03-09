@@ -266,7 +266,8 @@ class ScraperWizardState:
     selected_rom_path: str = ""
     selected_rom_name: str = ""
     search_name: str = ""  # Editable game name for search
-    search_name_cursor: int = 0
+    search_name_cursor: int = 0  # Keyboard grid cursor (for CharKeyboard)
+    search_name_shift: bool = False  # Shift state for on-screen keyboard
     folder_items: List[Dict[str, Any]] = field(default_factory=list)
     folder_highlighted: int = 0
     folder_current_path: str = ""
@@ -291,6 +292,7 @@ class ScraperWizardState:
         default_factory=lambda: ["box-2D", "boxart"]
     )
     batch_system: str = ""  # per-batch platform override (e.g. "psx", "snes")
+    button_focused: bool = False  # Whether action button at bottom is focused
 
 
 @dataclass
@@ -546,7 +548,8 @@ class NHL07PSPPatcherState:
     # Season (start year: 2024 = 2024-25 season)
     selected_season: int = field(
         default_factory=lambda: (
-            datetime.now().year if datetime.now().month >= 10
+            datetime.now().year
+            if datetime.now().month >= 10
             else datetime.now().year - 1
         )
     )
@@ -591,7 +594,8 @@ class NHL94GenesisPatcherState:
     # Season (start year: 2024 = 2024-25 season)
     selected_season: int = field(
         default_factory=lambda: (
-            datetime.now().year if datetime.now().month >= 10
+            datetime.now().year
+            if datetime.now().month >= 10
             else datetime.now().year - 1
         )
     )
@@ -634,9 +638,7 @@ class KGJMLBPatcherState:
     """State for the KGJ MLB Patcher feature."""
 
     # MLB season year (e.g. 2025 = 2025 season)
-    selected_season: int = field(
-        default_factory=lambda: datetime.now().year
-    )
+    selected_season: int = field(default_factory=lambda: datetime.now().year)
     selected_league: Any = None
 
     # Fetched data
@@ -679,7 +681,8 @@ class NBALive95PatcherState:
     # NBA season runs Oct-Jun; start year = current year if Oct+, else year-1
     selected_season: int = field(
         default_factory=lambda: (
-            datetime.now().year if datetime.now().month >= 10
+            datetime.now().year
+            if datetime.now().month >= 10
             else datetime.now().year - 1
         )
     )
@@ -722,9 +725,7 @@ class MVPPSPPatcherState:
     """State for the MVP Baseball PSP Patcher feature."""
 
     # MLB season year (e.g. 2025 = 2025 season)
-    selected_season: int = field(
-        default_factory=lambda: datetime.now().year
-    )
+    selected_season: int = field(default_factory=lambda: datetime.now().year)
     selected_league: Any = None
 
     # Fetched data
@@ -767,7 +768,8 @@ class NHL94SNESPatcherState:
     # NHL season runs Oct-Jun; start year = current year if Oct+, else year-1
     selected_season: int = field(
         default_factory=lambda: (
-            datetime.now().year if datetime.now().month >= 10
+            datetime.now().year
+            if datetime.now().month >= 10
             else datetime.now().year - 1
         )
     )

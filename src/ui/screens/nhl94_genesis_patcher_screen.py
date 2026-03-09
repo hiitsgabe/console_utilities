@@ -81,11 +81,13 @@ class NHL94GenesisPatcherScreen:
             patch_value = "Ready to patch"
         else:
             patch_value = "Complete steps 1+3 first"
-        items.append((
-            "4. Patch ROM",
-            patch_value,
-            "patch_rom" if (nhl.rosters and nhl.rom_valid) else "locked",
-        ))
+        items.append(
+            (
+                "4. Patch ROM",
+                patch_value,
+                "patch_rom" if (nhl.rosters and nhl.rom_valid) else "locked",
+            )
+        )
 
         return items
 
@@ -102,9 +104,7 @@ class NHL94GenesisPatcherScreen:
             show_back=True,
             item_height=48,
             get_label=lambda x: x[0] if isinstance(x, tuple) else x,
-            get_secondary=lambda x: (
-                x[1] if isinstance(x, tuple) else None
-            ),
+            get_secondary=lambda x: (x[1] if isinstance(x, tuple) else None),
             item_spacing=8,
         )
 
@@ -115,8 +115,7 @@ class NHL94GenesisPatcherScreen:
         provider = (settings or {}).get("nhl94_gen_provider", "espn")
         if provider == "nhl":
             season_idx = next(
-                (i for i, (_, _, a) in enumerate(items)
-                 if a == "change_season"), None
+                (i for i, (_, _, a) in enumerate(items) if a == "change_season"), None
             )
             if season_idx is not None:
                 visible_idx = season_idx - scroll_offset
@@ -124,9 +123,7 @@ class NHL94GenesisPatcherScreen:
                     row = item_rects[visible_idx]
                     season = state.nhl94_gen_patcher.selected_season
                     is_hl = highlighted == season_idx
-                    self._draw_arrow_control(
-                        screen, row, str(season), is_hl
-                    )
+                    self._draw_arrow_control(screen, row, str(season), is_hl)
 
         return back_rect, item_rects, scroll_offset
 
@@ -140,40 +137,43 @@ class NHL94GenesisPatcherScreen:
         gap = 6
 
         rx = row.right - margin
-        right_btn = pygame.Rect(
-            rx - btn_w, row.centery - btn_h // 2, btn_w, btn_h
-        )
+        right_btn = pygame.Rect(rx - btn_w, row.centery - btn_h // 2, btn_w, btn_h)
         value_cx = right_btn.left - gap - value_w // 2
         left_btn = pygame.Rect(
             value_cx - value_w // 2 - gap - btn_w,
-            row.centery - btn_h // 2, btn_w, btn_h,
+            row.centery - btn_h // 2,
+            btn_w,
+            btn_h,
         )
 
         arrow_color = (
-            self.theme.primary if is_highlighted
-            else self.theme.text_secondary
+            self.theme.primary if is_highlighted else self.theme.text_secondary
         )
-        value_color = (
-            self.theme.primary if is_highlighted
-            else self.theme.text_primary
-        )
+        value_color = self.theme.primary if is_highlighted else self.theme.text_primary
 
         self.text.render(
-            screen, "<",
-            (left_btn.centerx,
-             left_btn.centery - self.theme.font_size_sm // 2),
-            color=arrow_color, size=self.theme.font_size_sm, align="center",
+            screen,
+            "<",
+            (left_btn.centerx, left_btn.centery - self.theme.font_size_sm // 2),
+            color=arrow_color,
+            size=self.theme.font_size_sm,
+            align="center",
         )
         self.text.render(
-            screen, label,
+            screen,
+            label,
             (value_cx, row.centery - self.theme.font_size_md // 2),
-            color=value_color, size=self.theme.font_size_md, align="center",
+            color=value_color,
+            size=self.theme.font_size_md,
+            align="center",
         )
         self.text.render(
-            screen, ">",
-            (right_btn.centerx,
-             right_btn.centery - self.theme.font_size_sm // 2),
-            color=arrow_color, size=self.theme.font_size_sm, align="center",
+            screen,
+            ">",
+            (right_btn.centerx, right_btn.centery - self.theme.font_size_sm // 2),
+            color=arrow_color,
+            size=self.theme.font_size_sm,
+            align="center",
         )
 
         self.season_arrow_left = left_btn

@@ -218,7 +218,10 @@ class NHL07StatMapper:
             else:
                 base = SKATER_DEFAULTS.get(pos, SKATER_DEFAULTS["C"])
                 record.skater_attrs = NHL07SkaterAttributes(
-                    **{f.name: getattr(base, f.name) for f in base.__dataclass_fields__.values()}
+                    **{
+                        f.name: getattr(base, f.name)
+                        for f in base.__dataclass_fields__.values()
+                    }
                 )
 
         return record

@@ -56,17 +56,17 @@ def _encode_name_variable(last: str, first: str, max_bytes: int) -> bytes:
     min_needed = len(last_bytes) + 1 + 2 + 2  # last + \0 + F. + \0\0
 
     if min_needed > max_bytes and len(last_bytes) > max_bytes - 5:
-        last_bytes = last_bytes[:max(1, max_bytes - 5)]
+        last_bytes = last_bytes[: max(1, max_bytes - 5)]
 
     # Try full first name
     full_len = len(last_bytes) + 1 + len(first_bytes) + 2  # +2 for \0\0
     if full_len <= max_bytes:
         result = bytearray(full_len)
-        result[:len(last_bytes)] = last_bytes
+        result[: len(last_bytes)] = last_bytes
         pos = len(last_bytes)
         result[pos] = 0
         pos += 1
-        result[pos:pos + len(first_bytes)] = first_bytes
+        result[pos : pos + len(first_bytes)] = first_bytes
         pos += len(first_bytes)
         result[pos] = 0
         result[pos + 1] = 0
@@ -76,7 +76,7 @@ def _encode_name_variable(last: str, first: str, max_bytes: int) -> bytes:
     abbrev_len = len(last_bytes) + 1 + 2 + 2  # last + \0 + F. + \0\0
     if abbrev_len <= max_bytes:
         result = bytearray(abbrev_len)
-        result[:len(last_bytes)] = last_bytes
+        result[: len(last_bytes)] = last_bytes
         pos = len(last_bytes)
         result[pos] = 0
         pos += 1
@@ -89,7 +89,7 @@ def _encode_name_variable(last: str, first: str, max_bytes: int) -> bytes:
 
     # Last resort: just last name
     result = bytearray(min(len(last_bytes) + 2, max_bytes))
-    result[:len(last_bytes)] = last_bytes[:len(result) - 2]
+    result[: len(last_bytes)] = last_bytes[: len(result) - 2]
     result[-2] = 0
     result[-1] = 0
     return bytes(result)
@@ -177,8 +177,8 @@ class NBALive95RomWriter:
             return
         if CHECKSUM_BYPASS_OFFSET + len(CHECKSUM_BYPASS_BYTES) <= len(self.data):
             self.data[
-                CHECKSUM_BYPASS_OFFSET:
-                CHECKSUM_BYPASS_OFFSET + len(CHECKSUM_BYPASS_BYTES)
+                CHECKSUM_BYPASS_OFFSET : CHECKSUM_BYPASS_OFFSET
+                + len(CHECKSUM_BYPASS_BYTES)
             ] = CHECKSUM_BYPASS_BYTES
 
     def write_player(
@@ -220,13 +220,11 @@ class NBALive95RomWriter:
         # Preserve unknown bytes 0x3B-0x44 (don't zero them)
 
         # Name: variable length, must fit in available gap
-        max_name = self._record_limits.get(
-            (team_index, player_slot), 24
-        )
+        max_name = self._record_limits.get((team_index, player_slot), 24)
         name_bytes = _encode_name_variable(
             player.name_last, player.name_first, max_name
         )
-        d[off + OFF_NAME:off + OFF_NAME + len(name_bytes)] = name_bytes
+        d[off + OFF_NAME : off + OFF_NAME + len(name_bytes)] = name_bytes
 
         return True
 

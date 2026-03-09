@@ -66,11 +66,13 @@ class NBALive95PatcherScreen:
             patch_value = "Ready to patch"
         else:
             patch_value = "Complete steps 1+3 first"
-        items.append((
-            "4. Patch ROM",
-            patch_value,
-            "patch_rom" if (nba.rosters and nba.rom_valid) else "locked",
-        ))
+        items.append(
+            (
+                "4. Patch ROM",
+                patch_value,
+                "patch_rom" if (nba.rosters and nba.rom_valid) else "locked",
+            )
+        )
 
         return items
 
@@ -87,9 +89,7 @@ class NBALive95PatcherScreen:
             show_back=True,
             item_height=48,
             get_label=lambda x: x[0] if isinstance(x, tuple) else x,
-            get_secondary=lambda x: (
-                x[1] if isinstance(x, tuple) else None
-            ),
+            get_secondary=lambda x: (x[1] if isinstance(x, tuple) else None),
             item_spacing=8,
         )
 

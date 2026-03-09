@@ -121,9 +121,7 @@ class StatMapper:
         percentiles = self._compute_percentiles(all_stats)
 
         # Select best 22 players, starters first
-        best_22 = self._select_best_22(
-            team_roster.players, team_roster.player_stats
-        )
+        best_22 = self._select_best_22(team_roster.players, team_roster.player_stats)
 
         # Map each player
         we_players = []
@@ -142,6 +140,7 @@ class StatMapper:
             )
 
         from .rom_writer import _to_ascii
+
         return WETeamRecord(
             name=self._truncate_name(team_roster.team.name, 24),
             short_name=_to_ascii(
@@ -448,6 +447,7 @@ class StatMapper:
         if not name:
             return ""
         from .rom_writer import _to_ascii
+
         ascii_name = _to_ascii(name)
         if len(ascii_name) <= max_bytes:
             return ascii_name

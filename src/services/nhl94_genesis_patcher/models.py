@@ -26,68 +26,68 @@ from services.sports_api.models import (  # noqa: F401
 # Team order in the original NHL 94 Genesis ROM (26 teams)
 # Pointer table at 0x030E, 4 bytes per entry
 NHL94_GEN_TEAM_ORDER = [
-    "Anaheim",       # 0  - Mighty Ducks of Anaheim
-    "Boston",        # 1
-    "Buffalo",       # 2
-    "Calgary",       # 3
-    "Chicago",       # 4
-    "Dallas",        # 5
-    "Detroit",       # 6
-    "Edmonton",      # 7
-    "Florida",       # 8
-    "Hartford",      # 9  - now Carolina Hurricanes
-    "Los Angeles",   # 10
-    "Montreal",      # 11
-    "New Jersey",    # 12
+    "Anaheim",  # 0  - Mighty Ducks of Anaheim
+    "Boston",  # 1
+    "Buffalo",  # 2
+    "Calgary",  # 3
+    "Chicago",  # 4
+    "Dallas",  # 5
+    "Detroit",  # 6
+    "Edmonton",  # 7
+    "Florida",  # 8
+    "Hartford",  # 9  - now Carolina Hurricanes
+    "Los Angeles",  # 10
+    "Montreal",  # 11
+    "New Jersey",  # 12
     "NY Islanders",  # 13
-    "NY Rangers",    # 14
-    "Ottawa",        # 15
+    "NY Rangers",  # 14
+    "Ottawa",  # 15
     "Philadelphia",  # 16
-    "Pittsburgh",    # 17
-    "Quebec",        # 18 - now Colorado Avalanche
-    "San Jose",      # 19
-    "St. Louis",     # 20
-    "Tampa Bay",     # 21
-    "Toronto",       # 22
-    "Vancouver",     # 23
-    "Washington",    # 24
-    "Winnipeg",      # 25 - now Winnipeg Jets (returned 2011)
+    "Pittsburgh",  # 17
+    "Quebec",  # 18 - now Colorado Avalanche
+    "San Jose",  # 19
+    "St. Louis",  # 20
+    "Tampa Bay",  # 21
+    "Toronto",  # 22
+    "Vancouver",  # 23
+    "Washington",  # 24
+    "Winnipeg",  # 25 - now Winnipeg Jets (returned 2011)
 ]
 
 # Modern NHL team abbreviation → NHL94 Genesis ROM slot index.
 # Includes ESPN abbreviation variants.
 # Excludes expansion teams not in NHL94: CBJ, MIN, NSH, SEA, UTA, VGK.
 MODERN_NHL_TO_NHL94_GEN = {
-    "ANA": 0,    # Anaheim Ducks
-    "BOS": 1,    # Boston Bruins
-    "BUF": 2,    # Buffalo Sabres
-    "CGY": 3,    # Calgary Flames
-    "CHI": 4,    # Chicago Blackhawks
-    "DAL": 5,    # Dallas Stars
-    "DET": 6,    # Detroit Red Wings
-    "EDM": 7,    # Edmonton Oilers
-    "FLA": 8,    # Florida Panthers
-    "CAR": 9,    # Carolina Hurricanes (was Hartford)
-    "LAK": 10,   # Los Angeles Kings
-    "LA": 10,    # ESPN abbreviation
-    "MTL": 11,   # Montreal Canadiens
-    "NJD": 12,   # New Jersey Devils
-    "NJ": 12,    # ESPN abbreviation
-    "NYI": 13,   # New York Islanders
-    "NYR": 14,   # New York Rangers
-    "OTT": 15,   # Ottawa Senators
-    "PHI": 16,   # Philadelphia Flyers
-    "PIT": 17,   # Pittsburgh Penguins
-    "COL": 18,   # Colorado Avalanche (was Quebec)
-    "SJS": 19,   # San Jose Sharks
-    "SJ": 19,    # ESPN abbreviation
-    "STL": 20,   # St. Louis Blues
-    "TBL": 21,   # Tampa Bay Lightning
-    "TB": 21,    # ESPN abbreviation
-    "TOR": 22,   # Toronto Maple Leafs
-    "VAN": 23,   # Vancouver Canucks
-    "WSH": 24,   # Washington Capitals
-    "WPG": 25,   # Winnipeg Jets
+    "ANA": 0,  # Anaheim Ducks
+    "BOS": 1,  # Boston Bruins
+    "BUF": 2,  # Buffalo Sabres
+    "CGY": 3,  # Calgary Flames
+    "CHI": 4,  # Chicago Blackhawks
+    "DAL": 5,  # Dallas Stars
+    "DET": 6,  # Detroit Red Wings
+    "EDM": 7,  # Edmonton Oilers
+    "FLA": 8,  # Florida Panthers
+    "CAR": 9,  # Carolina Hurricanes (was Hartford)
+    "LAK": 10,  # Los Angeles Kings
+    "LA": 10,  # ESPN abbreviation
+    "MTL": 11,  # Montreal Canadiens
+    "NJD": 12,  # New Jersey Devils
+    "NJ": 12,  # ESPN abbreviation
+    "NYI": 13,  # New York Islanders
+    "NYR": 14,  # New York Rangers
+    "OTT": 15,  # Ottawa Senators
+    "PHI": 16,  # Philadelphia Flyers
+    "PIT": 17,  # Pittsburgh Penguins
+    "COL": 18,  # Colorado Avalanche (was Quebec)
+    "SJS": 19,  # San Jose Sharks
+    "SJ": 19,  # ESPN abbreviation
+    "STL": 20,  # St. Louis Blues
+    "TBL": 21,  # Tampa Bay Lightning
+    "TB": 21,  # ESPN abbreviation
+    "TOR": 22,  # Toronto Maple Leafs
+    "VAN": 23,  # Vancouver Canucks
+    "WSH": 24,  # Washington Capitals
+    "WPG": 25,  # Winnipeg Jets
 }
 
 TEAM_COUNT = 26
@@ -128,10 +128,10 @@ class NHL94GenPlayerRecord:
     """
 
     name: str
-    position: str = "C"          # C, LW, RW, D, G
-    jersey_number: int = 1       # 1-99
-    weight_class: int = 7        # 0-14 (140 + class*8 = lbs)
-    handedness: int = 0          # 0=L (even nibble), 1=R (odd nibble)
+    position: str = "C"  # C, LW, RW, D, G
+    jersey_number: int = 1  # 1-99
+    weight_class: int = 7  # 0-14 (140 + class*8 = lbs)
+    handedness: int = 0  # 0=L (even nibble), 1=R (odd nibble)
     is_goalie: bool = False
     attributes: NHL94GenPlayerAttributes = field(
         default_factory=NHL94GenPlayerAttributes
@@ -142,7 +142,7 @@ class NHL94GenPlayerRecord:
 class NHL94GenTeamRecord:
     """Complete team record ready to write to ROM."""
 
-    index: int                   # 0-25
+    index: int  # 0-25
     name: str
     city: str
     acronym: str
@@ -154,8 +154,8 @@ class NHL94GenTeamSlot:
     """An existing team slot read from the ROM."""
 
     index: int
-    current_name: str            # City name read from ROM
-    display_name: str            # Name from NHL94_GEN_TEAM_ORDER
+    current_name: str  # City name read from ROM
+    display_name: str  # Name from NHL94_GEN_TEAM_ORDER
 
 
 @dataclass

@@ -51,9 +51,11 @@ class NHL94GenesisPatcher:
 
         if provider == "nhl":
             from services.sports_api.nhl_api_client import NhlApiClient
+
             self.api = NhlApiClient(cache_dir, on_status)
         else:
             from services.sports_api.espn_client import EspnClient
+
             self.api = EspnClient(cache_dir, on_status)
 
     def analyze_rom(self, rom_path: str) -> NHL94GenRomInfo:
@@ -61,8 +63,10 @@ class NHL94GenesisPatcher:
         reader = NHL94GenesisRomReader(rom_path)
         if not reader.load():
             return NHL94GenRomInfo(
-                path=rom_path, size=0,
-                team_slots=[], is_valid=False,
+                path=rom_path,
+                size=0,
+                team_slots=[],
+                is_valid=False,
             )
         return reader.get_info()
 
@@ -89,10 +93,7 @@ class NHL94GenesisPatcher:
             return rosters
 
         # Filter to teams with NHL94 Genesis ROM slots
-        mapped = [
-            t for t in nhl_teams
-            if self.mapper.get_team_slot(t.code) is not None
-        ]
+        mapped = [t for t in nhl_teams if self.mapper.get_team_slot(t.code) is not None]
         total = len(mapped)
 
         for i, team in enumerate(mapped):
@@ -101,9 +102,7 @@ class NHL94GenesisPatcher:
 
             if self.provider == "nhl":
                 players = self.api.get_hockey_squad(team.code, season)
-                stats = self.api.get_hockey_team_leaders(
-                    team.code, season
-                )
+                stats = self.api.get_hockey_team_leaders(team.code, season)
             else:
                 players = self.api.get_hockey_squad(team.id)
                 stats = self.api.get_hockey_team_leaders(team.id)
@@ -131,13 +130,15 @@ class NHL94GenesisPatcher:
 
         # Initialize empty teams for all 26 slots
         for i in range(TEAM_COUNT):
-            teams.append(NHL94GenTeamRecord(
-                index=i,
-                name=NHL94_GEN_TEAM_ORDER[i],
-                city="",
-                acronym="",
-                players=[],
-            ))
+            teams.append(
+                NHL94GenTeamRecord(
+                    index=i,
+                    name=NHL94_GEN_TEAM_ORDER[i],
+                    city="",
+                    acronym="",
+                    players=[],
+                )
+            )
 
         # Fill in rosters for mapped teams
         for team_code, players in rosters.items():
@@ -149,7 +150,9 @@ class NHL94GenesisPatcher:
 
             # Select ~23 players, ordered for proper lines
             selected = self.mapper.select_roster(
-                players, stats, max_players=23,
+                players,
+                stats,
+                max_players=23,
             )
 
             # Map to NHL94 format with real stats
@@ -158,7 +161,9 @@ class NHL94GenesisPatcher:
                 pid = str(player.id)
                 pstats = stats.get(pid, {})
                 record = self.mapper.map_player(
-                    player, team_code, pstats,
+                    player,
+                    team_code,
+                    pstats,
                 )
                 nhl94_players.append(record)
 
@@ -217,7 +222,9 @@ class NHL94GenesisPatcher:
                 written = writer.write_team_roster(i, team.players)
                 if written > 0:
                     writer.write_team_header(
-                        i, team.players, actual_count=written,
+                        i,
+                        team.players,
+                        actual_count=written,
                     )
                     teams_patched += 1
                     players_patched += written

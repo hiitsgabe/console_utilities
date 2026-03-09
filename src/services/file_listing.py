@@ -239,7 +239,9 @@ def list_files(
         formats = list(system_data.get("file_format", []))
         # Archives serve .zip files; include in listing when should_unzip is set
         per_sys = settings.get("system_settings", {}).get(system_name, {})
-        should_unzip = per_sys.get("should_unzip", system_data.get("should_unzip", False))
+        should_unzip = per_sys.get(
+            "should_unzip", system_data.get("should_unzip", False)
+        )
         if should_unzip:
             if ".zip" not in [f.lower() for f in formats]:
                 formats.append(".zip")
@@ -275,19 +277,29 @@ def list_files(
                 _save_listing_cache(url, files)
             all_files.extend(files)
 
-        # Apply USA filter if enabled (top-level for all sources)
-        if settings.get("usa_only", False) and system_data.get(
-            "should_filter_usa", True
-        ):
-            usa_regex = system_data.get("usa_regex", r"\(USA")
-            all_files = [
-                f
-                for f in all_files
-                if re.search(
-                    usa_regex,
-                    f.get("filename", "") if isinstance(f, dict) else f,
-                )
-            ]
+        # Apply region filter if enabled (top-level for all sources)
+        filter_region = settings.get("filter_region", "none")
+        # Backwards compat: usa_only=True maps to filter_region="usa"
+        if filter_region == "none" and settings.get("usa_only", False):
+            filter_region = "usa"
+        if filter_region != "none" and system_data.get("should_filter_usa", True):
+            region_patterns = {
+                "usa": r"\(USA",
+                "europe": r"\(Europe",
+                "japan": r"\(Japan",
+                "world": r"\(World",
+                "other": r"\((?!USA|Europe|Japan|World)",
+            }
+            pattern = region_patterns.get(filter_region)
+            if pattern:
+                all_files = [
+                    f
+                    for f in all_files
+                    if re.search(
+                        pattern,
+                        f.get("filename", "") if isinstance(f, dict) else f,
+                    )
+                ]
 
         # Deduplicate game list (prefer USA, then largest file)
         if settings.get("dedupe_game_list", False) and all_files:
@@ -494,7 +506,6 @@ def _list_files_html_single(
 
             if any(filename.lower().endswith(ext.lower()) for ext in formats):
                 files.append({"filename": filename, "href": href})
-
 
     return sorted(files, key=lambda x: x["filename"])
 
@@ -753,7 +764,11 @@ def get_android_storage_volumes() -> List[Dict[str, Any]]:
                 app_path = ext_dir.getAbsolutePath()
                 if os.path.isdir(app_path):
                     volumes.append(
-                        {"name": "App Storage", "type": "storage_volume", "path": app_path}
+                        {
+                            "name": "App Storage",
+                            "type": "storage_volume",
+                            "path": app_path,
+                        }
                     )
 
             # External SD card volumes via getExternalFilesDirs (plural)
@@ -775,12 +790,20 @@ def get_android_storage_volumes() -> List[Dict[str, Any]]:
                         sd_root = sd_app_path[:android_idx]
                     label = os.path.basename(sd_root) if sd_root != "/" else "SD Card"
                     volumes.append(
-                        {"name": f"SD Card ({label})", "type": "storage_volume", "path": sd_root}
+                        {
+                            "name": f"SD Card ({label})",
+                            "type": "storage_volume",
+                            "path": sd_root,
+                        }
                     )
                     # Also add the writable app dir on SD card
                     if os.path.isdir(sd_app_path):
                         volumes.append(
-                            {"name": f"SD App Storage ({label})", "type": "storage_volume", "path": sd_app_path}
+                            {
+                                "name": f"SD App Storage ({label})",
+                                "type": "storage_volume",
+                                "path": sd_app_path,
+                            }
                         )
         except Exception:
             pass
@@ -797,7 +820,11 @@ def get_android_storage_volumes() -> List[Dict[str, Any]]:
                         existing_paths = {v["path"] for v in volumes}
                         if full not in existing_paths:
                             volumes.append(
-                                {"name": f"SD Card ({entry})", "type": "storage_volume", "path": full}
+                                {
+                                    "name": f"SD Card ({entry})",
+                                    "type": "storage_volume",
+                                    "path": full,
+                                }
                             )
             except Exception:
                 pass
@@ -830,6 +857,7 @@ def load_folder_contents(path: str) -> List[Dict[str, Any]]:
 
         # On Android, add storage volume shortcuts for quick navigation
         from constants import BUILD_TARGET
+
         if BUILD_TARGET == "android":
             volumes = get_android_storage_volumes()
             for vol in volumes:

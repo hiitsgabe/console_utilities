@@ -87,6 +87,7 @@ class SystemSettingsScreen:
         custom_folder = sys_s.get("custom_folder", "")
         if custom_folder:
             import os
+
             folder_value = os.path.basename(custom_folder) or custom_folder
         else:
             folder_value = "Default"

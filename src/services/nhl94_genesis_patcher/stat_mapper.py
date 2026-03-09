@@ -18,34 +18,74 @@ from services.nhl94_genesis_patcher.models import (
 # Default attributes by position (0-6 scale)
 POSITION_DEFAULTS = {
     "C": NHL94GenPlayerAttributes(
-        speed=3, agility=3, shot_power=3, shot_accuracy=3,
-        stick_handling=3, pass_accuracy=3, off_awareness=3,
-        def_awareness=2, checking=2, endurance=3,
-        roughness=2, aggression=2,
+        speed=3,
+        agility=3,
+        shot_power=3,
+        shot_accuracy=3,
+        stick_handling=3,
+        pass_accuracy=3,
+        off_awareness=3,
+        def_awareness=2,
+        checking=2,
+        endurance=3,
+        roughness=2,
+        aggression=2,
     ),
     "LW": NHL94GenPlayerAttributes(
-        speed=3, agility=3, shot_power=3, shot_accuracy=3,
-        stick_handling=3, pass_accuracy=2, off_awareness=3,
-        def_awareness=2, checking=3, endurance=3,
-        roughness=3, aggression=3,
+        speed=3,
+        agility=3,
+        shot_power=3,
+        shot_accuracy=3,
+        stick_handling=3,
+        pass_accuracy=2,
+        off_awareness=3,
+        def_awareness=2,
+        checking=3,
+        endurance=3,
+        roughness=3,
+        aggression=3,
     ),
     "RW": NHL94GenPlayerAttributes(
-        speed=3, agility=3, shot_power=3, shot_accuracy=3,
-        stick_handling=3, pass_accuracy=2, off_awareness=3,
-        def_awareness=2, checking=3, endurance=3,
-        roughness=3, aggression=3,
+        speed=3,
+        agility=3,
+        shot_power=3,
+        shot_accuracy=3,
+        stick_handling=3,
+        pass_accuracy=2,
+        off_awareness=3,
+        def_awareness=2,
+        checking=3,
+        endurance=3,
+        roughness=3,
+        aggression=3,
     ),
     "D": NHL94GenPlayerAttributes(
-        speed=2, agility=2, shot_power=2, shot_accuracy=2,
-        stick_handling=2, pass_accuracy=3, off_awareness=2,
-        def_awareness=4, checking=4, endurance=3,
-        roughness=3, aggression=3,
+        speed=2,
+        agility=2,
+        shot_power=2,
+        shot_accuracy=2,
+        stick_handling=2,
+        pass_accuracy=3,
+        off_awareness=2,
+        def_awareness=4,
+        checking=4,
+        endurance=3,
+        roughness=3,
+        aggression=3,
     ),
     "G": NHL94GenPlayerAttributes(
-        speed=2, agility=4, shot_power=2, shot_accuracy=2,
-        stick_handling=3, pass_accuracy=2, off_awareness=2,
-        def_awareness=3, checking=1, endurance=4,
-        roughness=1, aggression=1,
+        speed=2,
+        agility=4,
+        shot_power=2,
+        shot_accuracy=2,
+        stick_handling=3,
+        pass_accuracy=2,
+        off_awareness=2,
+        def_awareness=3,
+        checking=1,
+        endurance=4,
+        roughness=1,
+        aggression=1,
     ),
 }
 
@@ -183,23 +223,28 @@ class NHL94GenStatMapper:
 
         centers = sorted(
             [p for p in players if p.position == "C"],
-            key=sort_key, reverse=True,
+            key=sort_key,
+            reverse=True,
         )
         left_wings = sorted(
             [p for p in players if p.position == "LW"],
-            key=sort_key, reverse=True,
+            key=sort_key,
+            reverse=True,
         )
         right_wings = sorted(
             [p for p in players if p.position == "RW"],
-            key=sort_key, reverse=True,
+            key=sort_key,
+            reverse=True,
         )
         defensemen = sorted(
             [p for p in players if p.position == "D"],
-            key=sort_key, reverse=True,
+            key=sort_key,
+            reverse=True,
         )
         goalies = sorted(
             [p for p in players if p.position == "G"],
-            key=sort_key, reverse=True,
+            key=sort_key,
+            reverse=True,
         )
 
         # Build 4 forward lines: C, LW, RW per line
@@ -215,11 +260,9 @@ class NHL94GenStatMapper:
         # Fill remaining forward slots
         used = set(id(p) for p in forwards)
         extras = sorted(
-            [
-                p for p in centers + left_wings + right_wings
-                if id(p) not in used
-            ],
-            key=sort_key, reverse=True,
+            [p for p in centers + left_wings + right_wings if id(p) not in used],
+            key=sort_key,
+            reverse=True,
         )
         forwards.extend(extras)
         forwards = forwards[:14]
@@ -237,7 +280,8 @@ class NHL94GenStatMapper:
         all_used = set(id(p) for p in selected)
         leftover = sorted(
             [p for p in players if id(p) not in all_used],
-            key=sort_key, reverse=True,
+            key=sort_key,
+            reverse=True,
         )
         remaining = max_players - len(selected)
         if remaining > 0:

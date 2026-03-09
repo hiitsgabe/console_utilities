@@ -96,8 +96,10 @@ class NHL94GenesisRomReader:
         """Get ROM information and team slots."""
         if not self.data:
             return NHL94GenRomInfo(
-                path=self.rom_path, size=0,
-                team_slots=[], is_valid=False,
+                path=self.rom_path,
+                size=0,
+                team_slots=[],
+                is_valid=False,
             )
         is_valid = self.validate()
         team_slots = self._read_team_slots() if is_valid else []
@@ -152,16 +154,16 @@ class NHL94GenesisRomReader:
                 if i < len(NHL94_GEN_TEAM_ORDER)
                 else f"Team {i}"
             )
-            slots.append(NHL94GenTeamSlot(
-                index=i,
-                current_name=name or display,
-                display_name=display,
-            ))
+            slots.append(
+                NHL94GenTeamSlot(
+                    index=i,
+                    current_name=name or display,
+                    display_name=display,
+                )
+            )
         return slots
 
-    def get_team_section_offsets(
-        self, team_index: int
-    ) -> Optional[Dict[str, int]]:
+    def get_team_section_offsets(self, team_index: int) -> Optional[Dict[str, int]]:
         """Get absolute offsets of all team data sections.
 
         Returns dict with keys: players, palettes, strings, lines,
@@ -214,9 +216,11 @@ class NHL94GenesisRomReader:
         if str_start + str_len > len(self.data):
             return "", 0
         try:
-            name = bytes(
-                self.data[str_start:str_start + str_len]
-            ).decode("ascii", errors="replace").strip("\x00")
+            name = (
+                bytes(self.data[str_start : str_start + str_len])
+                .decode("ascii", errors="replace")
+                .strip("\x00")
+            )
             return name, length
         except Exception:
             return "", 0
@@ -227,9 +231,7 @@ class NHL94GenesisRomReader:
         city, _ = self._read_length_prefixed_string(strings_off)
         return city
 
-    def read_team_roster(
-        self, team_index: int
-    ) -> Tuple[List[str], List[bytes]]:
+    def read_team_roster(self, team_index: int) -> Tuple[List[str], List[bytes]]:
         """Read player names and stat bytes for a team.
 
         Returns: (names, stat_bytes_list)
@@ -255,9 +257,11 @@ class NHL94GenesisRomReader:
             if str_start + str_len > len(self.data):
                 break
             try:
-                name = bytes(
-                    self.data[str_start:str_start + str_len]
-                ).decode("ascii", errors="replace").strip("\x00")
+                name = (
+                    bytes(self.data[str_start : str_start + str_len])
+                    .decode("ascii", errors="replace")
+                    .strip("\x00")
+                )
                 names.append(name)
             except Exception:
                 names.append("")
@@ -265,14 +269,12 @@ class NHL94GenesisRomReader:
             # Read 8 stat bytes (jersey BCD + 7 attribute bytes)
             if offset + STATS_SIZE > len(self.data):
                 break
-            stat_bytes.append(bytes(self.data[offset:offset + STATS_SIZE]))
+            stat_bytes.append(bytes(self.data[offset : offset + STATS_SIZE]))
             offset += STATS_SIZE
 
         return names, stat_bytes
 
-    def get_team_player_region(
-        self, team_index: int
-    ) -> Tuple[int, int]:
+    def get_team_player_region(self, team_index: int) -> Tuple[int, int]:
         """Get file offset and total byte size of a team's player region.
 
         Returns (start_offset, total_bytes) where start includes all

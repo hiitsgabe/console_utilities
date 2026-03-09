@@ -52,10 +52,12 @@ class ColorPickerModal:
 
         if not league_data or not hasattr(league_data, "teams"):
             self.text.render(
-                screen, "No league data loaded",
+                screen,
+                "No league data loaded",
                 (content_rect.centerx, content_rect.centery),
                 color=self.theme.text_disabled,
-                size=self.theme.font_size_lg, align="center",
+                size=self.theme.font_size_lg,
+                align="center",
             )
             return result
 
@@ -65,25 +67,34 @@ class ColorPickerModal:
         # Layout: left panel = team list, right panel = color palette
         divider_x = content_rect.left + content_rect.width // 2
         team_panel = pygame.Rect(
-            content_rect.left, content_rect.top,
-            divider_x - content_rect.left - 4, content_rect.height,
+            content_rect.left,
+            content_rect.top,
+            divider_x - content_rect.left - 4,
+            content_rect.height,
         )
         color_panel = pygame.Rect(
-            divider_x + 4, content_rect.top,
-            content_rect.right - divider_x - 4, content_rect.height,
+            divider_x + 4,
+            content_rect.top,
+            content_rect.right - divider_x - 4,
+            content_rect.height,
         )
 
         # Divider line
         pygame.draw.line(
-            screen, self.theme.primary,
-            (divider_x, content_rect.top), (divider_x, content_rect.bottom), 1,
+            screen,
+            self.theme.primary,
+            (divider_x, content_rect.top),
+            (divider_x, content_rect.bottom),
+            1,
         )
 
         # ── Left panel: team list ──────────────────────────────────
         self.text.render(
-            screen, "Teams",
+            screen,
+            "Teams",
             (team_panel.left, team_panel.top),
-            color=self.theme.text_primary, size=self.theme.font_size_md,
+            color=self.theme.text_primary,
+            size=self.theme.font_size_md,
         )
 
         item_height = 28
@@ -103,7 +114,9 @@ class ColorPickerModal:
 
             if is_sel:
                 pygame.draw.rect(
-                    screen, self.theme.primary, rect,
+                    screen,
+                    self.theme.primary,
+                    rect,
                     border_radius=self.theme.radius_sm,
                 )
 
@@ -132,9 +145,11 @@ class ColorPickerModal:
                     pygame.draw.circle(screen, rgb, (dot_x + 14, rect.centery), 5)
 
             self.text.render(
-                screen, name,
+                screen,
+                name,
                 (rect.left + 6, rect.centery - self.theme.font_size_sm // 2),
-                color=name_color, size=self.theme.font_size_sm,
+                color=name_color,
+                size=self.theme.font_size_sm,
                 max_width=rect.width - 50,
             )
 
@@ -147,9 +162,11 @@ class ColorPickerModal:
             team_name = team.name if hasattr(team, "name") else "Team"
 
             self.text.render(
-                screen, team_name,
+                screen,
+                team_name,
                 (color_panel.left, color_panel.top),
-                color=self.theme.text_primary, size=self.theme.font_size_md,
+                color=self.theme.text_primary,
+                size=self.theme.font_size_md,
                 max_width=color_panel.width,
             )
 
@@ -157,9 +174,11 @@ class ColorPickerModal:
 
             # "Primary" label
             self.text.render(
-                screen, "Primary color:",
+                screen,
+                "Primary color:",
                 (color_panel.left, py),
-                color=self.theme.text_secondary, size=self.theme.font_size_sm,
+                color=self.theme.text_secondary,
+                size=self.theme.font_size_sm,
             )
             py += self.theme.font_size_sm + 6
 
@@ -182,32 +201,42 @@ class ColorPickerModal:
                 pygame.draw.rect(screen, rgb, swatch_rect, border_radius=3)
 
                 # Highlight if this is the picking target
-                is_current = team.color and team.color.lstrip("#").upper() == chex.upper()
-                is_picker_sel = (
-                    cp.picking == "primary" and cp.color_index == ci
+                is_current = (
+                    team.color and team.color.lstrip("#").upper() == chex.upper()
                 )
+                is_picker_sel = cp.picking == "primary" and cp.color_index == ci
                 if is_current:
                     pygame.draw.rect(
-                        screen, self.theme.text_primary, swatch_rect,
-                        width=2, border_radius=3,
+                        screen,
+                        self.theme.text_primary,
+                        swatch_rect,
+                        width=2,
+                        border_radius=3,
                     )
                 if is_picker_sel:
                     pygame.draw.rect(
-                        screen, self.theme.primary, swatch_rect.inflate(4, 4),
-                        width=2, border_radius=4,
+                        screen,
+                        self.theme.primary,
+                        swatch_rect.inflate(4, 4),
+                        width=2,
+                        border_radius=4,
                     )
 
                 result["primary_rects"].append((swatch_rect, ci))
 
             # Calculate rows used by primary swatches
-            primary_rows = (len(COLOR_PALETTE) + swatches_per_row - 1) // swatches_per_row
+            primary_rows = (
+                len(COLOR_PALETTE) + swatches_per_row - 1
+            ) // swatches_per_row
             py += primary_rows * (swatch_size + gap) + self.theme.padding_md
 
             # "Secondary" label
             self.text.render(
-                screen, "Secondary color:",
+                screen,
+                "Secondary color:",
                 (color_panel.left, py),
-                color=self.theme.text_secondary, size=self.theme.font_size_sm,
+                color=self.theme.text_secondary,
+                size=self.theme.font_size_sm,
             )
             py += self.theme.font_size_sm + 6
 
@@ -226,18 +255,22 @@ class ColorPickerModal:
                     team.alternate_color
                     and team.alternate_color.lstrip("#").upper() == chex.upper()
                 )
-                is_picker_sel = (
-                    cp.picking == "secondary" and cp.color_index == ci
-                )
+                is_picker_sel = cp.picking == "secondary" and cp.color_index == ci
                 if is_current:
                     pygame.draw.rect(
-                        screen, self.theme.text_primary, swatch_rect,
-                        width=2, border_radius=3,
+                        screen,
+                        self.theme.text_primary,
+                        swatch_rect,
+                        width=2,
+                        border_radius=3,
                     )
                 if is_picker_sel:
                     pygame.draw.rect(
-                        screen, self.theme.primary, swatch_rect.inflate(4, 4),
-                        width=2, border_radius=4,
+                        screen,
+                        self.theme.primary,
+                        swatch_rect.inflate(4, 4),
+                        width=2,
+                        border_radius=4,
                     )
 
                 result["secondary_rects"].append((swatch_rect, ci))
@@ -251,7 +284,8 @@ class ColorPickerModal:
                     screen,
                     f"Picking {picking_label} - press select to confirm",
                     (color_panel.left, hint_y),
-                    color=self.theme.text_disabled, size=self.theme.font_size_sm,
+                    color=self.theme.text_disabled,
+                    size=self.theme.font_size_sm,
                     max_width=color_panel.width,
                 )
 

@@ -105,9 +105,7 @@ class AndroidFilePicker:
         intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
 
         if initial_uri:
-            DocumentsContract = autoclass(
-                "android.provider.DocumentsContract"
-            )
+            DocumentsContract = autoclass("android.provider.DocumentsContract")
             intent.putExtra(
                 DocumentsContract.EXTRA_INITIAL_URI,
                 Uri.parse(initial_uri),
@@ -140,9 +138,7 @@ class AndroidFilePicker:
             intent.setType("*/*")
 
         if initial_uri:
-            DocumentsContract = autoclass(
-                "android.provider.DocumentsContract"
-            )
+            DocumentsContract = autoclass("android.provider.DocumentsContract")
             intent.putExtra(
                 DocumentsContract.EXTRA_INITIAL_URI,
                 Uri.parse(initial_uri),
@@ -214,13 +210,12 @@ class AndroidFilePicker:
             # Handle external storage document URIs
             from jnius import autoclass
 
-            DocumentsContract = autoclass(
-                "android.provider.DocumentsContract"
-            )
+            DocumentsContract = autoclass("android.provider.DocumentsContract")
 
-            if DocumentsContract.isDocumentUri(
-                self._get_context(), uri
-            ) or "document" in uri_str:
+            if (
+                DocumentsContract.isDocumentUri(self._get_context(), uri)
+                or "document" in uri_str
+            ):
                 # Extract document ID — e.g. "primary:Download/roms"
                 try:
                     doc_id = DocumentsContract.getDocumentId(uri)
@@ -232,12 +227,9 @@ class AndroidFilePicker:
                 if ":" in doc_id:
                     storage_type, rel_path = doc_id.split(":", 1)
                     if storage_type == "primary":
-                        Environment = autoclass(
-                            "android.os.Environment"
-                        )
+                        Environment = autoclass("android.os.Environment")
                         root = (
-                            Environment.getExternalStorageDirectory()
-                            .getAbsolutePath()
+                            Environment.getExternalStorageDirectory().getAbsolutePath()
                         )
                         full_path = os.path.join(root, rel_path)
                         if os.path.exists(full_path):
@@ -245,9 +237,7 @@ class AndroidFilePicker:
                     else:
                         # SD card or other volume
                         # Try /storage/<volume_id>/
-                        sd_path = os.path.join(
-                            "/storage", storage_type, rel_path
-                        )
+                        sd_path = os.path.join("/storage", storage_type, rel_path)
                         if os.path.exists(sd_path):
                             return sd_path
 
@@ -310,9 +300,7 @@ class AndroidFilePicker:
             resolver = context.getContentResolver()
             cursor = resolver.query(uri, None, None, None, None)
             if cursor is not None and cursor.moveToFirst():
-                OpenableColumns = autoclass(
-                    "android.provider.OpenableColumns"
-                )
+                OpenableColumns = autoclass("android.provider.OpenableColumns")
                 idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                 if idx >= 0:
                     name = cursor.getString(idx)

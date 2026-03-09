@@ -25,8 +25,7 @@ COLOR_PALETTE = [
 
 # RGB tuples for rendering
 COLOR_PALETTE_RGB = [
-    (int(h[:2], 16), int(h[2:4], 16), int(h[4:6], 16))
-    for _, h in COLOR_PALETTE
+    (int(h[:2], 16), int(h[2:4], 16), int(h[4:6], 16)) for _, h in COLOR_PALETTE
 ]
 
 

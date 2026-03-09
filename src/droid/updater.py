@@ -87,9 +87,7 @@ def apply_android_update(
                 on_complete()
 
         except Exception as e:
-            log_error(
-                "Android update failed", type(e).__name__, traceback.format_exc()
-            )
+            log_error("Android update failed", type(e).__name__, traceback.format_exc())
             if on_error:
                 msg = str(e)
                 if "SSLError" in type(e).__name__ or "SSL" in msg:

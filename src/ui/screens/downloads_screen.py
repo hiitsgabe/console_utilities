@@ -262,25 +262,31 @@ class DownloadsScreen:
     ):
         """Render the status area for an item."""
         if item.status == "downloading":
-            # Progress bar with percentage and speed
-            bar_rect = pygame.Rect(rect.left, rect.centery - 8, rect.width - 60, 16)
+            # Progress bar above center, speed+ETA below
+            bar_rect = pygame.Rect(rect.left, rect.centery - 14, rect.width, 14)
             self.progress_bar.render_with_text(
-                screen, bar_rect, item.progress, fill_color=self.theme.secondary
+                screen,
+                bar_rect,
+                item.progress,
+                fill_color=self.theme.secondary,
             )
 
-            # Speed
+            # Speed + ETA below the progress bar
             speed_text = self._format_speed(item.speed)
+            eta_text = self._format_eta(item.total_size, item.downloaded, item.speed)
+            if eta_text:
+                speed_text = f"{speed_text} - {eta_text}"
             self.text.render(
                 screen,
                 speed_text,
-                (rect.right, rect.centery),
+                (rect.centerx, rect.centery + 8),
                 color=(
                     self.theme.background
                     if is_highlighted
                     else self.theme.text_secondary
                 ),
                 size=self.theme.font_size_xs,
-                align="right",
+                align="center",
             )
 
         elif item.status == "extracting":
@@ -451,6 +457,19 @@ class DownloadsScreen:
             return f"{bytes_per_second / 1024:.1f} KB/s"
         else:
             return f"{bytes_per_second:.0f} B/s"
+
+    def _format_eta(self, total_size: int, downloaded: int, speed: float) -> str:
+        """Format estimated time remaining."""
+        if speed <= 0 or total_size <= 0 or downloaded >= total_size:
+            return ""
+        remaining = total_size - downloaded
+        eta_secs = int(remaining / speed)
+        if eta_secs < 60:
+            return f"{eta_secs}s"
+        elif eta_secs < 3600:
+            return f"{eta_secs // 60}m {eta_secs % 60}s"
+        else:
+            return f"{eta_secs // 3600}h {(eta_secs % 3600) // 60}m"
 
 
 # Default instance

@@ -31,7 +31,9 @@ class SportsPatcherScreen:
     ) -> Tuple[Optional[pygame.Rect], List[pygame.Rect], int]:
         items = [label for label, _ in self.GAMES]
         api_key = (settings or {}).get("api_football_key", "")
-        hint = None if api_key else "Set your API-Football key in Settings → Sports Roster"
+        hint = (
+            None if api_key else "Set your API-Football key in Settings → Sports Roster"
+        )
         return self.template.render(
             screen,
             title="Sports Game Updater",

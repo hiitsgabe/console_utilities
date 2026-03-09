@@ -37,9 +37,7 @@ class NhlApiClient:
             self._save_cache(cache_key, data)
         return self._parse_standings_teams(data)
 
-    def get_hockey_squad(
-        self, team_abbrev: str, season: int = 2025
-    ) -> List[Player]:
+    def get_hockey_squad(self, team_abbrev: str, season: int = 2025) -> List[Player]:
         """Fetch roster for an NHL team for a given season.
 
         Args:
@@ -72,9 +70,7 @@ class NhlApiClient:
         if cached:
             return cached
 
-        data = self._request(
-            f"/club-stats/{team_abbrev}/{season_str}/2"
-        )
+        data = self._request(f"/club-stats/{team_abbrev}/{season_str}/2")
         if not data:
             return {}
 
@@ -130,24 +126,22 @@ class NhlApiClient:
         teams = []
         seen = set()
         for entry in data.get("standings", []):
-            abbrev = (
-                entry.get("teamAbbrev", {}).get("default", "")
-            )
+            abbrev = entry.get("teamAbbrev", {}).get("default", "")
             if not abbrev or abbrev in seen:
                 continue
             seen.add(abbrev)
             name = entry.get("teamName", {}).get("default", "")
-            common = entry.get(
-                "teamCommonName", {}
-            ).get("default", "")
-            teams.append(Team(
-                id=0,
-                name=f"{name}",
-                short_name=common[:12] if common else name[:12],
-                code=abbrev,
-                logo_url="",
-                country="",
-            ))
+            common = entry.get("teamCommonName", {}).get("default", "")
+            teams.append(
+                Team(
+                    id=0,
+                    name=f"{name}",
+                    short_name=common[:12] if common else name[:12],
+                    code=abbrev,
+                    logo_url="",
+                    country="",
+                )
+            )
         return teams
 
     def _parse_roster(self, data: dict) -> List[Player]:
@@ -164,12 +158,8 @@ class NhlApiClient:
         players = []
         for group_key in ("forwards", "defensemen", "goalies"):
             for athlete in data.get(group_key, []):
-                first = (
-                    athlete.get("firstName", {}).get("default", "")
-                )
-                last = (
-                    athlete.get("lastName", {}).get("default", "")
-                )
+                first = athlete.get("firstName", {}).get("default", "")
+                last = athlete.get("lastName", {}).get("default", "")
                 display = f"{first} {last}".strip()
 
                 pos = athlete.get("positionCode", "C")
@@ -183,19 +173,21 @@ class NhlApiClient:
                 weight = athlete.get("weightInPounds", 0) or 0
                 hand = athlete.get("shootsCatches", "")
 
-                players.append(Player(
-                    id=int(athlete.get("id", 0)),
-                    name=display,
-                    first_name=first,
-                    last_name=last,
-                    age=0,
-                    nationality="",
-                    position=pos,
-                    number=number,
-                    photo_url="",
-                    weight=float(weight),
-                    handedness=hand,
-                ))
+                players.append(
+                    Player(
+                        id=int(athlete.get("id", 0)),
+                        name=display,
+                        first_name=first,
+                        last_name=last,
+                        age=0,
+                        nationality="",
+                        position=pos,
+                        number=number,
+                        photo_url="",
+                        weight=float(weight),
+                        handedness=hand,
+                    )
+                )
 
         return players
 

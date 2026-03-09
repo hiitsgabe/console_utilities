@@ -246,7 +246,9 @@ class WebCompanion:
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Content-Length", str(len(body)))
-                self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+                self.send_header(
+                    "Cache-Control", "no-store, no-cache, must-revalidate, max-age=0"
+                )
                 self.send_header("Pragma", "no-cache")
                 self.end_headers()
                 self.wfile.write(body)
@@ -372,9 +374,7 @@ class WebCompanion:
                 path = self._parse_query_param("path") or "/"
                 resolved = self._safe_path(path)
                 if not resolved or not os.path.isdir(resolved):
-                    self._send_error_json(
-                        "Directory not found: " + (path or ""), 404
-                    )
+                    self._send_error_json("Directory not found: " + (path or ""), 404)
                     return
 
                 entries = []
@@ -390,9 +390,9 @@ class WebCompanion:
                                     {
                                         "name": entry.name,
                                         "is_dir": entry.is_dir(),
-                                        "size": stat.st_size
-                                        if not entry.is_dir()
-                                        else None,
+                                        "size": (
+                                            stat.st_size if not entry.is_dir() else None
+                                        ),
                                         "modified": stat.st_mtime,
                                     }
                                 )
@@ -431,9 +431,7 @@ class WebCompanion:
                     file_size = os.path.getsize(resolved)
                     filename = os.path.basename(resolved)
                     self.send_response(200)
-                    self.send_header(
-                        "Content-Type", "application/octet-stream"
-                    )
+                    self.send_header("Content-Type", "application/octet-stream")
                     self.send_header("Content-Length", str(file_size))
                     self.send_header(
                         "Content-Disposition",
@@ -476,9 +474,7 @@ class WebCompanion:
                         self._send_error_json("No boundary in Content-Type")
                         return
 
-                    content_length = int(
-                        self.headers.get("Content-Length", 0)
-                    )
+                    content_length = int(self.headers.get("Content-Length", 0))
                     body = self.rfile.read(content_length)
                     boundary_bytes = boundary.encode("utf-8")
 
@@ -496,7 +492,7 @@ class WebCompanion:
                         header_end = part.find(b"\r\n\r\n")
                         if header_end < 0:
                             continue
-                        header_data = part[: header_end].decode(
+                        header_data = part[:header_end].decode(
                             "utf-8", errors="replace"
                         )
                         file_data = part[header_end + 4 :]
@@ -507,9 +503,7 @@ class WebCompanion:
                         # Parse Content-Disposition for filename
                         filename = None
                         for line in header_data.split("\r\n"):
-                            if line.lower().startswith(
-                                "content-disposition:"
-                            ):
+                            if line.lower().startswith("content-disposition:"):
                                 for token in line.split(";"):
                                     token = token.strip()
                                     if token.startswith("filename="):
@@ -518,9 +512,7 @@ class WebCompanion:
 
                         if filename:
                             filename = os.path.basename(filename)
-                            dest_path = os.path.join(
-                                resolved_dir, filename
-                            )
+                            dest_path = os.path.join(resolved_dir, filename)
                             with open(dest_path, "wb") as f:
                                 f.write(file_data)
                             uploaded.append(filename)
@@ -622,6 +614,7 @@ class WebCompanion:
                 try:
                     from utils.logging import get_log_file
                     from constants import TEMP_LOG_DIR
+
                     # Check configured log path and temp fallback
                     paths = [get_log_file()]
                     temp_log = os.path.join(TEMP_LOG_DIR, "error.log")
@@ -652,9 +645,7 @@ class WebCompanion:
                     self.address_family = socket.AF_INET6
                     self.socket = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
                     self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                    self.socket.setsockopt(
-                        socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0
-                    )
+                    self.socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
                     self.socket.bind(self.server_address)
                     self.server_address = self.socket.getsockname()[:2]
                 except Exception:

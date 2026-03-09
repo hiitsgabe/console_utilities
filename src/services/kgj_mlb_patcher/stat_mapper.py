@@ -140,9 +140,7 @@ class KGJStatMapper:
             saves=saves,
         )
 
-    def _map_batter_stats(
-        self, stats: Dict, pos: str
-    ) -> KGJBatterAttributes:
+    def _map_batter_stats(self, stats: Dict, pos: str) -> KGJBatterAttributes:
         """Map real batting stats to 1-10 ratings.
 
         Stat ranges for scaling (per-season):
@@ -177,12 +175,13 @@ class KGJStatMapper:
         def_r = _clamp(base_def + def_bonus)
 
         return KGJBatterAttributes(
-            batting=bat, power=pow_r, speed=spd, defense=def_r,
+            batting=bat,
+            power=pow_r,
+            speed=spd,
+            defense=def_r,
         )
 
-    def _map_pitcher_stats(
-        self, stats: Dict, is_starter: bool
-    ) -> KGJPitcherAttributes:
+    def _map_pitcher_stats(self, stats: Dict, is_starter: bool) -> KGJPitcherAttributes:
         """Map real pitching stats to 1-10 ratings.
 
         ESPN leaders provides: ERA, W, K, SV, WHIP, QS, OBA, HLD.
@@ -288,9 +287,7 @@ class KGJStatMapper:
 
         return selected_batters + selected_starters + selected_relievers
 
-    def _select_position_players(
-        self, batters: List[Player]
-    ) -> List[Player]:
+    def _select_position_players(self, batters: List[Player]) -> List[Player]:
         """Select 15 batters filling required positions.
 
         Order: C, 1B, 2B, 3B, SS, LF, CF, RF, DH, then bench.
@@ -338,11 +335,23 @@ class KGJStatMapper:
             return "P"
 
         pos_map = {
-            "C": "C", "1B": "1B", "2B": "2B", "3B": "3B", "SS": "SS",
-            "LF": "LF", "CF": "CF", "RF": "RF", "DH": "DH",
-            "OF": "OF", "IF": "IF",
+            "C": "C",
+            "1B": "1B",
+            "2B": "2B",
+            "3B": "3B",
+            "SS": "SS",
+            "LF": "LF",
+            "CF": "CF",
+            "RF": "RF",
+            "DH": "DH",
+            "OF": "OF",
+            "IF": "IF",
             # ESPN sometimes uses these
-            "SP": "P", "RP": "P", "CL": "P", "CP": "P", "P": "P",
+            "SP": "P",
+            "RP": "P",
+            "CL": "P",
+            "CP": "P",
+            "P": "P",
         }
         return pos_map.get(pos, "OF")
 

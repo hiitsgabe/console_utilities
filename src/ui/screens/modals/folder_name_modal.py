@@ -208,9 +208,7 @@ class FolderNameModal:
 
         # Draw text
         display_text = input_text if input_text else "Type folder name..."
-        text_color = (
-            self.theme.text_primary if input_text else self.theme.text_disabled
-        )
+        text_color = self.theme.text_primary if input_text else self.theme.text_disabled
         self.text.render(
             screen,
             display_text,
@@ -262,9 +260,7 @@ class FolderNameModal:
         )
 
         self.action_button.render(screen, ok_rect, "OK", hover=True)
-        self.action_button.render_secondary(
-            screen, cancel_rect, "Cancel", hover=False
-        )
+        self.action_button.render_secondary(screen, cancel_rect, "Cancel", hover=False)
 
         self.ok_rect = ok_rect
         self.cancel_rect = cancel_rect

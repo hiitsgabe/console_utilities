@@ -29,9 +29,7 @@ def create_download_complete_receiver(on_download_complete):
     DownloadManager = autoclass("android.app.DownloadManager")
 
     def _on_receive(context, intent):
-        download_id = intent.getLongExtra(
-            DownloadManager.EXTRA_DOWNLOAD_ID, -1
-        )
+        download_id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
         if download_id >= 0:
             on_download_complete(download_id)
 

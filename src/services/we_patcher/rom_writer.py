@@ -35,51 +35,53 @@ from .models import WETeamRecord, WEPlayerRecord
 # ---------------------------------------------------------------------------
 
 # Master League player NAME sections (10 bytes per player)
-_OFS_NOMI_GML  = 2_006_288   # ML player names, section 1: players 0–203
-_OFS_NOMI_GML2 = 2_008_632   # ML player names, section 2: players 204–407 + first 8 of 408
-_OFS_NOMI_GML3 = 2_010_984   # ML player names, section 3: last 2 of 408, then 409–461
+_OFS_NOMI_GML = 2_006_288  # ML player names, section 1: players 0–203
+_OFS_NOMI_GML2 = (
+    2_008_632  # ML player names, section 2: players 204–407 + first 8 of 408
+)
+_OFS_NOMI_GML3 = 2_010_984  # ML player names, section 3: last 2 of 408, then 409–461
 
 # Master League player CHARACTERISTICS sections (12 bytes per player)
-_OFS_CARAT_GML  = 2_204_112  # Characteristics section 1: players 0–147
+_OFS_CARAT_GML = 2_204_112  # Characteristics section 1: players 0–147
 _OFS_CARAT_GML1 = 2_206_200  # Characteristics section 2: last 4 of 148, then 149–318, + first 4 of 319
 _OFS_CARAT_GML2 = 2_208_552  # Characteristics section 3: last 8 of 319, then 320–461
 
 # Team NAME offsets — 6 name variants + lowercase + abbreviations + additional ML
-_OFS_NOMI_SQ1   = 1_012_640   # Name variant 1
-_OFS_NOMI_SQ1A  = 1_013_736   # SQ1 continuation after sector boundary (national team 40)
-_OFS_NOMI_SQ2   = 1_881_968   # Name variant 2
-_OFS_NOMI_SQ3   = 2_003_996   # Name variant 3
-_OFS_NOMI_SQ4   = 2_830_160   # Name variant 4
-_OFS_NOMI_SQ5   = 4_822_908   # Name variant 5
-_OFS_NOMI_SQ5A  = 4_823_976   # SQ5 continuation after sector boundary
-_OFS_NOMI_SQ6   = 5_651_448   # Name variant 6
-_OFS_NOMI_SQ6A  = 5_651_880   # SQ6 sector boundary (ML team i==15)
-_OFS_NOMI_SQ6B  = 5_652_364   # SQ6 national/allstar start
-_OFS_NOMI_SQ_M  = 4_598_596   # Lowercase name
+_OFS_NOMI_SQ1 = 1_012_640  # Name variant 1
+_OFS_NOMI_SQ1A = 1_013_736  # SQ1 continuation after sector boundary (national team 40)
+_OFS_NOMI_SQ2 = 1_881_968  # Name variant 2
+_OFS_NOMI_SQ3 = 2_003_996  # Name variant 3
+_OFS_NOMI_SQ4 = 2_830_160  # Name variant 4
+_OFS_NOMI_SQ5 = 4_822_908  # Name variant 5
+_OFS_NOMI_SQ5A = 4_823_976  # SQ5 continuation after sector boundary
+_OFS_NOMI_SQ6 = 5_651_448  # Name variant 6
+_OFS_NOMI_SQ6A = 5_651_880  # SQ6 sector boundary (ML team i==15)
+_OFS_NOMI_SQ6B = 5_652_364  # SQ6 national/allstar start
+_OFS_NOMI_SQ_M = 4_598_596  # Lowercase name
 _OFS_NOMI_SQ_AB1 = 2_004_996  # Abbreviation variant 1 (fixed 4 bytes)
 _OFS_NOMI_SQ_AB2 = 5_651_068  # Abbreviation variant 2 (fixed 4 bytes)
 _OFS_NOMI_SQ_AB3 = 4_234_484  # Abbreviation variant 3 (fixed 4 bytes)
 
 # Flag (bandiera) offsets
-_OFS_BANDIERE_FORMA1  = 1_929_004  # Flag style byte × 5 copies
-_OFS_BANDIERE_FORMA2  = 2_005_412
-_OFS_BANDIERE_FORMA3  = 2_328_060
-_OFS_BANDIERE_FORMA4  = 4_904_664
-_OFS_BANDIERE_FORMA5  = 5_711_640
-_OFS_BANDIERE_COLORE  = 12_549_518  # Flag colors (complex layout)
+_OFS_BANDIERE_FORMA1 = 1_929_004  # Flag style byte × 5 copies
+_OFS_BANDIERE_FORMA2 = 2_005_412
+_OFS_BANDIERE_FORMA3 = 2_328_060
+_OFS_BANDIERE_FORMA4 = 4_904_664
+_OFS_BANDIERE_FORMA5 = 5_711_640
+_OFS_BANDIERE_COLORE = 12_549_518  # Flag colors (complex layout)
 _OFS_BANDIERE_COLORE1 = 12_550_296
 _OFS_BANDIERE_COLORE2 = 12_552_648
 _OFS_BANDIERE_COLORE_SEN = 12_545_758
 
 # Force bars
-_OFS_BAR  = 2_328_184
+_OFS_BAR = 2_328_184
 _OFS_BAR1 = 2_328_504  # Continuation after sector boundary (national team 3)
 
 # Jersey preview colors
 _OFS_ANT_MAGLIE2 = 2_671_896  # ML jersey previews (32 teams × 64 bytes)
 
 # National player NAME sections (10 bytes per player, 8 sections)
-_OFS_NOMI_G  = 387_792
+_OFS_NOMI_G = 387_792
 _OFS_NOMI_G2 = 390_456
 _OFS_NOMI_G3 = 392_808
 _OFS_NOMI_G4 = 395_160
@@ -89,7 +91,7 @@ _OFS_NOMI_G7 = 402_216
 _OFS_NOMI_G8 = 404_568
 
 # National player CHARACTERISTICS sections (12 bytes per player, 10 sections)
-_OFS_CARAT_G  = 2_179_492
+_OFS_CARAT_G = 2_179_492
 _OFS_CARAT_G1 = 2_180_328
 _OFS_CARAT_G2 = 2_182_680
 _OFS_CARAT_G3 = 2_185_032
@@ -101,31 +103,31 @@ _OFS_CARAT_G8 = 2_196_792
 _OFS_CARAT_G9 = 2_199_144
 
 # National jersey preview colors (64 bytes per team: maglia1 + maglia2)
-_OFS_ANT_MAGLIE  = 2_667_256   # National + allstar jersey start
-_OFS_ANT_MAGLIE1 = 2_669_544   # Continuation after sector boundary (team 30)
+_OFS_ANT_MAGLIE = 2_667_256  # National + allstar jersey start
+_OFS_ANT_MAGLIE1 = 2_669_544  # Continuation after sector boundary (team 30)
 
 # Kanji (2-byte encoded) team name section
-_OFS_NOMI_SQK  = 2_002_316   # Kanji names start (ML reverse, then nationals reverse)
-_OFS_NOMI_SQK1 = 2_003_928   # Sector boundary continuation (national i=58 split)
+_OFS_NOMI_SQK = 2_002_316  # Kanji names start (ML reverse, then nationals reverse)
+_OFS_NOMI_SQK1 = 2_003_928  # Sector boundary continuation (national i=58 split)
 
 # ---------------------------------------------------------------------------
 # Sector boundary crossing points (from C++ switch-case indices)
 # ---------------------------------------------------------------------------
 
-_NOME_LAST_GML   = 203
-_NOME_LAST_GML2  = 407
-_NOME_STRADDLE   = 408
+_NOME_LAST_GML = 203
+_NOME_LAST_GML2 = 407
+_NOME_STRADDLE = 408
 _CARAT_STRADDLE1 = 148
 _CARAT_STRADDLE2 = 319
 
 # National player name straddle points (national index, bytes_before, bytes_after)
 # Index 820 is a clean break (0 before, 10 after = full seek to next section)
 _NAT_NOME_STRADDLES = {
-    0:    (8, 2, _OFS_NOMI_G + 312),  # special: seek +312 within same section
-    205:  (6, 4, _OFS_NOMI_G2),
-    410:  (4, 6, _OFS_NOMI_G3),
-    615:  (2, 8, _OFS_NOMI_G4),
-    820:  (0, 10, _OFS_NOMI_G5),       # clean break
+    0: (8, 2, _OFS_NOMI_G + 312),  # special: seek +312 within same section
+    205: (6, 4, _OFS_NOMI_G2),
+    410: (4, 6, _OFS_NOMI_G3),
+    615: (2, 8, _OFS_NOMI_G4),
+    820: (0, 10, _OFS_NOMI_G5),  # clean break
     1024: (8, 2, _OFS_NOMI_G6),
     1229: (6, 4, _OFS_NOMI_G7),
     1434: (4, 6, _OFS_NOMI_G8),
@@ -134,14 +136,14 @@ _NAT_NOME_STRADDLES = {
 # National characteristics straddle points (national index, bytes_before, bytes_after)
 # Indices 215, 727, 1239 are clean breaks (0 before, 12 after)
 _NAT_CARAT_STRADDLES = {
-    44:   (4, 8, _OFS_CARAT_G1),
-    215:  (0, 12, _OFS_CARAT_G2),      # clean break
-    385:  (8, 4, _OFS_CARAT_G3),
-    556:  (4, 8, _OFS_CARAT_G4),
-    727:  (0, 12, _OFS_CARAT_G5),      # clean break
-    897:  (8, 4, _OFS_CARAT_G6),
+    44: (4, 8, _OFS_CARAT_G1),
+    215: (0, 12, _OFS_CARAT_G2),  # clean break
+    385: (8, 4, _OFS_CARAT_G3),
+    556: (4, 8, _OFS_CARAT_G4),
+    727: (0, 12, _OFS_CARAT_G5),  # clean break
+    897: (8, 4, _OFS_CARAT_G6),
     1068: (4, 8, _OFS_CARAT_G7),
-    1239: (0, 12, _OFS_CARAT_G8),      # clean break
+    1239: (0, 12, _OFS_CARAT_G8),  # clean break
     1409: (8, 4, _OFS_CARAT_G9),
 }
 
@@ -149,12 +151,12 @@ _NAT_CARAT_STRADDLES = {
 # ROM constants
 # ---------------------------------------------------------------------------
 
-_SQUADRE_ML   = 32
-_SQUADRE_NAZ  = 63   # National + allstar teams
+_SQUADRE_ML = 32
+_SQUADRE_NAZ = 63  # National + allstar teams
 _GIOCATORI_NC = 462
 _PLAYERS_PER_NAT = 23
-_NOME_SIZE    = 10
-_CARAT_SIZE   = 12
+_NOME_SIZE = 10
+_CARAT_SIZE = 12
 
 _POS_MAP = {0: 0, 1: 1, 2: 3, 3: 6}
 
@@ -162,9 +164,9 @@ _POS_MAP = {0: 0, 1: 1, 2: 3, 3: 6}
 # 3D jersey TEX file constants (CD filesystem)
 # ---------------------------------------------------------------------------
 
-_TEX_BASE_LBA = 8400       # LBA of TEX_00.BIN on CD
-_TEX_LBA_STRIDE = 20       # Each TEX allocated 20 sectors
-_TEX_COUNT = 95             # 63 national + 32 ML teams
+_TEX_BASE_LBA = 8400  # LBA of TEX_00.BIN on CD
+_TEX_LBA_STRIDE = 20  # Each TEX allocated 20 sectors
+_TEX_COUNT = 95  # 63 national + 32 ML teams
 _TEX_MAX_BYTES = 20 * 2048  # 40960 bytes max per TEX slot
 
 # ISO9660 BIN directory location (for updating TEX file sizes)
@@ -178,105 +180,105 @@ _BIN_DIR_SIZE = 12288
 # National teams use real kit colors; ML teams use the real club counterpart.
 _TEX_JERSEY_COLORS = {
     # --- National teams (0-53) ---
-    0: (0, 128, 48),        # Ireland — green
-    1: (0, 0, 102),         # Scotland — dark navy
-    2: (200, 0, 0),         # Wales — red
-    3: (255, 255, 255),     # England — white
-    4: (128, 0, 24),        # Portugal — dark red/maroon
-    5: (200, 0, 0),         # Spain — red
-    6: (0, 32, 160),        # France — blue
-    7: (200, 0, 0),         # Belgium — red
-    8: (255, 128, 0),       # Netherlands — orange
-    9: (200, 0, 0),         # Switzerland — red
-    10: (0, 82, 165),       # Italy — azzurri blue
-    11: (180, 0, 48),       # Czech Republic — dark red
-    12: (255, 255, 255),    # Germany — white
-    13: (200, 0, 0),        # Denmark — red
-    14: (200, 0, 0),        # Norway — red
-    15: (255, 204, 0),      # Sweden — yellow
-    16: (0, 0, 160),        # Iceland — blue
-    17: (255, 255, 255),    # Poland — white
-    18: (0, 0, 160),        # Slovakia — blue
-    19: (255, 255, 255),    # Austria — white
-    20: (200, 0, 0),        # Hungary — red
-    21: (200, 0, 0),        # Albania — red
-    22: (200, 50, 50),      # Croatia — red/white checkered
-    23: (0, 0, 160),        # Serbia — blue
-    24: (255, 204, 0),      # Romania — yellow
-    25: (0, 0, 160),        # Bosnia — blue
-    26: (255, 255, 255),    # Greece — white
-    27: (200, 0, 0),        # Turkey — red
-    28: (255, 204, 0),      # Ukraine — yellow
-    29: (255, 255, 255),    # Russia — white
-    30: (200, 0, 0),        # Morocco — red
-    31: (255, 128, 0),      # Ivory Coast — orange
-    32: (200, 0, 0),        # Egypt — red
-    33: (0, 128, 0),        # Nigeria — green
-    34: (0, 128, 0),        # Cameroon — green
-    35: (0, 128, 0),        # Algeria — green
-    36: (255, 255, 255),    # Ghana — white
-    37: (255, 255, 255),    # U.S.A. — white
-    38: (0, 128, 0),        # Mexico — green
-    39: (128, 0, 0),        # Venezuela — vinotinto (dark maroon)
-    40: (255, 204, 0),      # Colombia — yellow
-    41: (255, 204, 0),      # Brazil — yellow (canarinha)
-    42: (255, 255, 255),    # Peru — white (with red sash)
-    43: (200, 0, 0),        # Chile — red
-    44: (200, 0, 50),       # Paraguay — red/white stripes
-    45: (128, 180, 230),    # Uruguay — celeste (light blue)
-    46: (128, 180, 230),    # Argentina — albiceleste
-    47: (255, 204, 0),      # Ecuador — yellow
-    48: (0, 0, 180),        # Japan — blue
-    49: (200, 0, 0),        # South Korea — red
-    50: (200, 0, 0),        # China — red
-    51: (0, 0, 160),        # India — blue
-    52: (255, 255, 255),    # New Zealand — white (All Whites)
-    53: (255, 204, 0),      # Australia — gold/yellow
+    0: (0, 128, 48),  # Ireland — green
+    1: (0, 0, 102),  # Scotland — dark navy
+    2: (200, 0, 0),  # Wales — red
+    3: (255, 255, 255),  # England — white
+    4: (128, 0, 24),  # Portugal — dark red/maroon
+    5: (200, 0, 0),  # Spain — red
+    6: (0, 32, 160),  # France — blue
+    7: (200, 0, 0),  # Belgium — red
+    8: (255, 128, 0),  # Netherlands — orange
+    9: (200, 0, 0),  # Switzerland — red
+    10: (0, 82, 165),  # Italy — azzurri blue
+    11: (180, 0, 48),  # Czech Republic — dark red
+    12: (255, 255, 255),  # Germany — white
+    13: (200, 0, 0),  # Denmark — red
+    14: (200, 0, 0),  # Norway — red
+    15: (255, 204, 0),  # Sweden — yellow
+    16: (0, 0, 160),  # Iceland — blue
+    17: (255, 255, 255),  # Poland — white
+    18: (0, 0, 160),  # Slovakia — blue
+    19: (255, 255, 255),  # Austria — white
+    20: (200, 0, 0),  # Hungary — red
+    21: (200, 0, 0),  # Albania — red
+    22: (200, 50, 50),  # Croatia — red/white checkered
+    23: (0, 0, 160),  # Serbia — blue
+    24: (255, 204, 0),  # Romania — yellow
+    25: (0, 0, 160),  # Bosnia — blue
+    26: (255, 255, 255),  # Greece — white
+    27: (200, 0, 0),  # Turkey — red
+    28: (255, 204, 0),  # Ukraine — yellow
+    29: (255, 255, 255),  # Russia — white
+    30: (200, 0, 0),  # Morocco — red
+    31: (255, 128, 0),  # Ivory Coast — orange
+    32: (200, 0, 0),  # Egypt — red
+    33: (0, 128, 0),  # Nigeria — green
+    34: (0, 128, 0),  # Cameroon — green
+    35: (0, 128, 0),  # Algeria — green
+    36: (255, 255, 255),  # Ghana — white
+    37: (255, 255, 255),  # U.S.A. — white
+    38: (0, 128, 0),  # Mexico — green
+    39: (128, 0, 0),  # Venezuela — vinotinto (dark maroon)
+    40: (255, 204, 0),  # Colombia — yellow
+    41: (255, 204, 0),  # Brazil — yellow (canarinha)
+    42: (255, 255, 255),  # Peru — white (with red sash)
+    43: (200, 0, 0),  # Chile — red
+    44: (200, 0, 50),  # Paraguay — red/white stripes
+    45: (128, 180, 230),  # Uruguay — celeste (light blue)
+    46: (128, 180, 230),  # Argentina — albiceleste
+    47: (255, 204, 0),  # Ecuador — yellow
+    48: (0, 0, 180),  # Japan — blue
+    49: (200, 0, 0),  # South Korea — red
+    50: (200, 0, 0),  # China — red
+    51: (0, 0, 160),  # India — blue
+    52: (255, 255, 255),  # New Zealand — white (All Whites)
+    53: (255, 204, 0),  # Australia — gold/yellow
     # --- All-Star / Classic teams (54-62) ---
-    54: (255, 255, 255),    # Euro All Stars — white
-    55: (255, 255, 255),    # World All Stars — white
-    56: (255, 255, 255),    # Clas. England — white
-    57: (0, 32, 160),       # Clas. France — blue
-    58: (255, 128, 0),      # Clas. Netherlands — orange
-    59: (0, 82, 165),       # Clas. Italy — azzurri blue
-    60: (255, 255, 255),    # Clas. Germany — white
-    61: (255, 204, 0),      # Clas. Brazil — yellow
-    62: (128, 180, 230),    # Clas. Argentina — light blue
+    54: (255, 255, 255),  # Euro All Stars — white
+    55: (255, 255, 255),  # World All Stars — white
+    56: (255, 255, 255),  # Clas. England — white
+    57: (0, 32, 160),  # Clas. France — blue
+    58: (255, 128, 0),  # Clas. Netherlands — orange
+    59: (0, 82, 165),  # Clas. Italy — azzurri blue
+    60: (255, 255, 255),  # Clas. Germany — white
+    61: (255, 204, 0),  # Clas. Brazil — yellow
+    62: (128, 180, 230),  # Clas. Argentina — light blue
     # --- Master League teams (63-94) ---
     # These are FICTIONAL teams with custom kits — colors from maglia palette,
     # not real-world clubs.  Only override when maglia clearly wrong.
-    63: (156, 33, 33),      # Aragon (≈Man Utd) — red
-    64: (165, 33, 57),      # London (≈Arsenal) — red
-    65: (0, 57, 173),       # Europort (≈Chelsea) — blue
-    66: (173, 16, 49),      # Liguria (≈Liverpool) — red
-    67: (255, 255, 255),    # Yorkshire (≈Man City) — white kit in-game
-    68: (33, 41, 49),       # Highlands (≈Tottenham) — dark kit in-game
-    69: (165, 33, 57),      # Vascongadas (≈Atl. Madrid) — red
-    70: (148, 8, 57),       # Cataluna (≈Barcelona) — dark red/blue
-    71: (255, 255, 255),    # Navarra (≈Real Madrid) — white
-    72: (255, 255, 255),    # Andalucia (≈Valencia) — white
-    73: (57, 74, 148),      # Cantabria (≈Sevilla) — blue kit in-game
-    74: (132, 41, 33),      # Provence (≈Monaco) — red
-    75: (255, 255, 255),    # Languedoc (≈Porto) — white kit in-game
-    76: (57, 74, 148),      # Normandie (≈PSG) — blue
-    77: (255, 255, 255),    # Medoc (≈Benfica) — white kit in-game
-    78: (255, 255, 255),    # Rijnkanaal (≈Ajax) — white
-    79: (99, 0, 8),         # Noordzeekanaal (≈CSKA) — dark red
-    80: (255, 255, 255),    # Flandre (≈Zenit) — white/red kit in-game
-    81: (16, 57, 140),      # Marche (≈Inter) — dark blue
-    82: (40, 40, 40),       # Piemonte (≈Juventus) — black/white
-    83: (156, 8, 33),       # Lombardia (≈Milan) — red
-    84: (90, 132, 189),     # Umbria (≈Lazio) — sky blue
-    85: (41, 41, 123),      # Emilia (≈Napoli) — dark blue-purple
-    86: (66, 57, 123),      # Toscana (≈Fiorentina) — purple
-    87: (115, 41, 41),      # Abruzzi (≈Roma) — dark red
-    88: (41, 41, 41),       # Westfalen (≈Dortmund) — dark kit in-game
-    89: (41, 41, 41),       # Anhalt (≈Bayern) — dark kit in-game
-    90: (140, 33, 33),      # Ruhr (≈Leverkusen) — red
-    91: (255, 255, 255),    # Peloponnisos (≈Wolfsburg) — white kit in-game
-    92: (165, 165, 74),     # Byzantinobul (≈Galatasaray) — olive/yellow
-    93: (255, 255, 255),    # Marmara (≈Shakhtar) — white kit in-game
-    94: (16, 57, 140),      # Patagonia (≈Basel) — dark blue
+    63: (156, 33, 33),  # Aragon (≈Man Utd) — red
+    64: (165, 33, 57),  # London (≈Arsenal) — red
+    65: (0, 57, 173),  # Europort (≈Chelsea) — blue
+    66: (173, 16, 49),  # Liguria (≈Liverpool) — red
+    67: (255, 255, 255),  # Yorkshire (≈Man City) — white kit in-game
+    68: (33, 41, 49),  # Highlands (≈Tottenham) — dark kit in-game
+    69: (165, 33, 57),  # Vascongadas (≈Atl. Madrid) — red
+    70: (148, 8, 57),  # Cataluna (≈Barcelona) — dark red/blue
+    71: (255, 255, 255),  # Navarra (≈Real Madrid) — white
+    72: (255, 255, 255),  # Andalucia (≈Valencia) — white
+    73: (57, 74, 148),  # Cantabria (≈Sevilla) — blue kit in-game
+    74: (132, 41, 33),  # Provence (≈Monaco) — red
+    75: (255, 255, 255),  # Languedoc (≈Porto) — white kit in-game
+    76: (57, 74, 148),  # Normandie (≈PSG) — blue
+    77: (255, 255, 255),  # Medoc (≈Benfica) — white kit in-game
+    78: (255, 255, 255),  # Rijnkanaal (≈Ajax) — white
+    79: (99, 0, 8),  # Noordzeekanaal (≈CSKA) — dark red
+    80: (255, 255, 255),  # Flandre (≈Zenit) — white/red kit in-game
+    81: (16, 57, 140),  # Marche (≈Inter) — dark blue
+    82: (40, 40, 40),  # Piemonte (≈Juventus) — black/white
+    83: (156, 8, 33),  # Lombardia (≈Milan) — red
+    84: (90, 132, 189),  # Umbria (≈Lazio) — sky blue
+    85: (41, 41, 123),  # Emilia (≈Napoli) — dark blue-purple
+    86: (66, 57, 123),  # Toscana (≈Fiorentina) — purple
+    87: (115, 41, 41),  # Abruzzi (≈Roma) — dark red
+    88: (41, 41, 41),  # Westfalen (≈Dortmund) — dark kit in-game
+    89: (41, 41, 41),  # Anhalt (≈Bayern) — dark kit in-game
+    90: (140, 33, 33),  # Ruhr (≈Leverkusen) — red
+    91: (255, 255, 255),  # Peloponnisos (≈Wolfsburg) — white kit in-game
+    92: (165, 165, 74),  # Byzantinobul (≈Galatasaray) — olive/yellow
+    93: (255, 255, 255),  # Marmara (≈Shakhtar) — white kit in-game
+    94: (16, 57, 140),  # Patagonia (≈Basel) — dark blue
 }
 
 # ---------------------------------------------------------------------------
@@ -290,65 +292,788 @@ _TEX_JERSEY_COLORS = {
 # ---------------------------------------------------------------------------
 
 _LUN_NOMI1 = [
-    8,12,8,8,12,8,8,8,12,12,8,8,8,8,8,8,8,8,12,8,8,12,8,12,8,12,8,8,8,8,
-    8,8,8,8,12,16,8,12,8,12,12,8,8,8,12,8,12,8,8,8,8,8,16,12,
-    16,16,16,16,20,16,16,16,20,
-    8,8,8,12,12,12,12,12,8,12,12,12,12,12,8,12,
-    16,8,8,12,12,8,8,8,8,12,8,8,16,16,8,12,
+    8,
+    12,
+    8,
+    8,
+    12,
+    8,
+    8,
+    8,
+    12,
+    12,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    12,
+    8,
+    8,
+    12,
+    8,
+    12,
+    8,
+    12,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    12,
+    16,
+    8,
+    12,
+    8,
+    12,
+    12,
+    8,
+    8,
+    8,
+    12,
+    8,
+    12,
+    8,
+    8,
+    8,
+    8,
+    8,
+    16,
+    12,
+    16,
+    16,
+    16,
+    16,
+    20,
+    16,
+    16,
+    16,
+    20,
+    8,
+    8,
+    8,
+    12,
+    12,
+    12,
+    12,
+    12,
+    8,
+    12,
+    12,
+    12,
+    12,
+    12,
+    8,
+    12,
+    16,
+    8,
+    8,
+    12,
+    12,
+    8,
+    8,
+    8,
+    8,
+    12,
+    8,
+    8,
+    16,
+    16,
+    8,
+    12,
 ]
 
 _LUN_NOMI2 = [
-    8,12,8,12,12,8,8,8,8,8,8,8,8,8,8,12,12,12,8,8,8,8,8,12,8,12,8,
-    8,8,8,8,8,8,12,8,8,8,8,8,8,8,8,8,4,12,8,12,8,8,8,8,8,12,12,
-    16,16,16,12,16,12,12,16,16,
-    8,8,8,12,8,8,16,8,8,12,12,12,12,12,8,12,
-    12,8,8,8,12,8,8,8,12,12,8,8,12,16,8,12,
+    8,
+    12,
+    8,
+    12,
+    12,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    12,
+    12,
+    12,
+    8,
+    8,
+    8,
+    8,
+    8,
+    12,
+    8,
+    12,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    12,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    4,
+    12,
+    8,
+    12,
+    8,
+    8,
+    8,
+    8,
+    8,
+    12,
+    12,
+    16,
+    16,
+    16,
+    12,
+    16,
+    12,
+    12,
+    16,
+    16,
+    8,
+    8,
+    8,
+    12,
+    8,
+    8,
+    16,
+    8,
+    8,
+    12,
+    12,
+    12,
+    12,
+    12,
+    8,
+    12,
+    12,
+    8,
+    8,
+    8,
+    12,
+    8,
+    8,
+    8,
+    12,
+    12,
+    8,
+    8,
+    12,
+    16,
+    8,
+    12,
 ]
 
 _LUN_NOMI3 = [
-    8,12,8,8,12,8,8,8,12,12,8,8,8,8,8,8,8,8,12,8,8,12,8,12,8,12,
-    8,8,8,8,8,8,8,8,12,16,8,12,8,12,12,8,8,8,12,8,12,8,8,8,8,8,16,12,
-    16,16,16,16,20,16,16,16,20,
-    8,8,8,12,12,12,12,12,8,12,12,12,12,12,8,12,
-    16,8,8,12,12,8,8,8,8,12,8,8,16,16,8,12,
+    8,
+    12,
+    8,
+    8,
+    12,
+    8,
+    8,
+    8,
+    12,
+    12,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    12,
+    8,
+    8,
+    12,
+    8,
+    12,
+    8,
+    12,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    12,
+    16,
+    8,
+    12,
+    8,
+    12,
+    12,
+    8,
+    8,
+    8,
+    12,
+    8,
+    12,
+    8,
+    8,
+    8,
+    8,
+    8,
+    16,
+    12,
+    16,
+    16,
+    16,
+    16,
+    20,
+    16,
+    16,
+    16,
+    20,
+    8,
+    8,
+    8,
+    12,
+    12,
+    12,
+    12,
+    12,
+    8,
+    12,
+    12,
+    12,
+    12,
+    12,
+    8,
+    12,
+    16,
+    8,
+    8,
+    12,
+    12,
+    8,
+    8,
+    8,
+    8,
+    12,
+    8,
+    8,
+    16,
+    16,
+    8,
+    12,
 ]
 
 _LUN_NOMI4 = [
-    8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,
-    8,8,8,8,8,8,8,8,8,8,8,8,8,4,8,8,8,8,4,4,4,8,8,8,8,8,16,12,12,
-    12,12,12,16,8,8,8,8,8,8,12,8,8,8,8,8,8,8,8,8,12,8,4,8,8,8,8,
-    8,8,12,8,4,8,12,8,8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    4,
+    8,
+    8,
+    8,
+    8,
+    4,
+    4,
+    4,
+    8,
+    8,
+    8,
+    8,
+    8,
+    16,
+    12,
+    12,
+    12,
+    12,
+    12,
+    16,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    12,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    12,
+    8,
+    4,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    12,
+    8,
+    4,
+    8,
+    12,
+    8,
+    8,
 ]
 
 _LUN_NOMI5 = [
-    8,12,8,12,8,8,8,8,8,4,8,4,8,8,8,8,8,8,8,8,8,8,8,12,8,8,8,4,
-    8,4,8,8,8,8,8,8,8,8,8,8,8,8,8,4,8,8,8,8,8,8,8,4,12,8,
-    12,16,12,12,12,12,12,12,12,
-    8,8,8,8,8,8,12,8,8,8,8,12,12,8,8,8,
-    12,8,4,8,12,8,8,8,8,12,8,4,12,12,8,8,
+    8,
+    12,
+    8,
+    12,
+    8,
+    8,
+    8,
+    8,
+    8,
+    4,
+    8,
+    4,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    12,
+    8,
+    8,
+    8,
+    4,
+    8,
+    4,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    4,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    4,
+    12,
+    8,
+    12,
+    16,
+    12,
+    12,
+    12,
+    12,
+    12,
+    12,
+    12,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    12,
+    8,
+    8,
+    8,
+    8,
+    12,
+    12,
+    8,
+    8,
+    8,
+    12,
+    8,
+    4,
+    8,
+    12,
+    8,
+    8,
+    8,
+    8,
+    12,
+    8,
+    4,
+    12,
+    12,
+    8,
+    8,
 ]
 
 _LUN_NOMI6 = [
-    8,12,8,12,8,8,8,8,8,4,8,4,8,8,8,8,8,8,8,8,8,8,8,12,8,8,8,
-    4,8,4,8,8,8,8,8,8,8,8,8,8,8,8,8,4,8,8,8,8,8,8,8,4,
-    12,8,12,16,16,12,12,12,12,16,16,8,8,8,8,8,8,12,8,8,8,8,12,12,8,8,
-    8,12,8,4,8,12,8,8,8,8,12,8,4,12,12,8,8,
+    8,
+    12,
+    8,
+    12,
+    8,
+    8,
+    8,
+    8,
+    8,
+    4,
+    8,
+    4,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    12,
+    8,
+    8,
+    8,
+    4,
+    8,
+    4,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    4,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    4,
+    12,
+    8,
+    12,
+    16,
+    16,
+    12,
+    12,
+    12,
+    12,
+    16,
+    16,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    12,
+    8,
+    8,
+    8,
+    8,
+    12,
+    12,
+    8,
+    8,
+    8,
+    12,
+    8,
+    4,
+    8,
+    12,
+    8,
+    8,
+    8,
+    8,
+    12,
+    8,
+    4,
+    12,
+    12,
+    8,
+    8,
 ]
 
 _LUN_NOMI_MIN = [
-    8,12,8,12,8,8,8,8,8,4,8,4,8,8,8,8,8,8,8,8,8,8,8,12,8,8,8,4,8,4,8,
-    8,8,8,8,8,8,8,8,8,8,8,8,4,8,8,8,8,8,8,8,4,12,8,12,16,
-    16,12,12,12,12,16,16,8,8,8,8,8,8,12,8,8,8,8,12,12,8,
-    8,8,12,8,4,8,12,8,8,8,8,12,8,4,12,12,8,8,
+    8,
+    12,
+    8,
+    12,
+    8,
+    8,
+    8,
+    8,
+    8,
+    4,
+    8,
+    4,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    12,
+    8,
+    8,
+    8,
+    4,
+    8,
+    4,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    4,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    4,
+    12,
+    8,
+    12,
+    16,
+    16,
+    12,
+    12,
+    12,
+    12,
+    16,
+    16,
+    8,
+    8,
+    8,
+    8,
+    8,
+    8,
+    12,
+    8,
+    8,
+    8,
+    8,
+    12,
+    12,
+    8,
+    8,
+    8,
+    12,
+    8,
+    4,
+    8,
+    12,
+    8,
+    8,
+    8,
+    8,
+    12,
+    8,
+    4,
+    12,
+    12,
+    8,
+    8,
 ]
 
 
 _LUN_NOMIK = [
-    8,8,6,8,6,6,6,6,6,6,6,6,6,6,6,8,8,6,6,8,6,6,6,8,6,6,6,6,6,6,
-    6,6,6,8,6,6,6,6,6,6,6,6,6,6,6,6,8,6,6,6,6,6,8,8,
-    12,12,14,12,12,12,10,12,14,
-    6,6,6,8,8,6,10,8,6,8,8,8,8,8,6,8,
-    10,6,6,6,8,6,6,6,8,10,6,6,8,10,6,6,
+    8,
+    8,
+    6,
+    8,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    8,
+    8,
+    6,
+    6,
+    8,
+    6,
+    6,
+    6,
+    8,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    8,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6,
+    8,
+    6,
+    6,
+    6,
+    6,
+    6,
+    8,
+    8,
+    12,
+    12,
+    14,
+    12,
+    12,
+    12,
+    10,
+    12,
+    14,
+    6,
+    6,
+    6,
+    8,
+    8,
+    6,
+    10,
+    8,
+    6,
+    8,
+    8,
+    8,
+    8,
+    8,
+    6,
+    8,
+    10,
+    6,
+    6,
+    6,
+    8,
+    6,
+    6,
+    6,
+    8,
+    10,
+    6,
+    6,
+    8,
+    10,
+    6,
+    6,
 ]
 
 
@@ -360,6 +1085,7 @@ def _ml_name_budget(slot_index: int, lun_table: list) -> int:
 # ---------------------------------------------------------------------------
 # Encoding helpers
 # ---------------------------------------------------------------------------
+
 
 def _we_val(attr: int) -> int:
     """Map 1-9 WE attribute to 0-7 ROM storage value (offset-12 scheme)."""
@@ -385,45 +1111,67 @@ def _encode_player_carat(player: WEPlayerRecord) -> bytes:
     """
     a = player.attributes
 
-    posizione      = _POS_MAP.get(player.position, 1)
-    stile_capelli  = 0;  col_capelli = 0;  stile_barba = 0;  col_barba = 0
-    col_pelle      = 0;  corporatura = 2
-    altezza        = 178
-    eta            = 25
-    scarpe         = 0;  piede = 0;  fuori_ruolo = 0
-    numero         = max(1, min(32, player.shirt_number or 1))
+    posizione = _POS_MAP.get(player.position, 1)
+    stile_capelli = 0
+    col_capelli = 0
+    stile_barba = 0
+    col_barba = 0
+    col_pelle = 0
+    corporatura = 2
+    altezza = 178
+    eta = 25
+    scarpe = 0
+    piede = 0
+    fuori_ruolo = 0
+    numero = max(1, min(32, player.shirt_number or 1))
 
-    attacco    = _we_val(a.offensive)
-    difesa     = _we_val(a.defensive)
-    forza      = _we_val(a.body_balance)
+    attacco = _we_val(a.offensive)
+    difesa = _we_val(a.defensive)
+    forza = _we_val(a.body_balance)
     resistenza = _we_val(a.stamina)
-    velocita   = _we_val(a.speed)
-    accel      = _we_val(a.acceleration)
-    passaggio  = _we_val(a.pass_accuracy)
-    pot_tiro   = _we_val(a.shoot_power)
-    prec_tiro  = _we_val(a.shoot_accuracy)
-    salto      = _we_val(a.jump_power)
-    testa      = _we_val(a.heading)
-    tecnica    = _we_val(a.technique)
-    dribbling  = _we_val(a.dribble)
-    effetto    = _we_val(a.curve)
-    aggress    = _we_val(a.aggression)
-    riflessi   = _we_val(a.defensive)
+    velocita = _we_val(a.speed)
+    accel = _we_val(a.acceleration)
+    passaggio = _we_val(a.pass_accuracy)
+    pot_tiro = _we_val(a.shoot_power)
+    prec_tiro = _we_val(a.shoot_accuracy)
+    salto = _we_val(a.jump_power)
+    testa = _we_val(a.heading)
+    tecnica = _we_val(a.technique)
+    dribbling = _we_val(a.dribble)
+    effetto = _we_val(a.curve)
+    aggress = _we_val(a.aggression)
+    riflessi = _we_val(a.defensive)
 
     h = altezza - 148
     e = eta - 15
 
     c = bytearray(12)
-    c[0]  = (posizione & 0x07) | ((stile_capelli & 0x0F) << 4)
-    c[1]  = ((stile_capelli >> 4) & 0x01) | ((col_capelli & 0x07) << 1) | ((stile_barba & 0x07) << 5)
-    c[2]  = ((col_barba & 0x07) << 1) | ((h & 0x0F) << 4)
-    c[3]  = ((h >> 4) & 0x03) | (((numero - 1) & 0x1F) << 2) | ((fuori_ruolo & 0x01) << 7)
-    c[4]  = (col_pelle & 0x03) | ((corporatura & 0x07) << 2) | ((e & 0x07) << 5)
-    c[5]  = ((e >> 3) & 0x03) | ((riflessi & 0x07) << 2) | ((forza & 0x03) << 6)
-    c[6]  = ((forza >> 2) & 0x01) | ((resistenza & 0x07) << 1) | ((dribbling & 0x07) << 4) | ((velocita & 0x01) << 7)
-    c[7]  = ((velocita >> 1) & 0x03) | ((accel & 0x07) << 2) | ((attacco & 0x07) << 5)
-    c[8]  = (difesa & 0x07) | ((pot_tiro & 0x07) << 3) | ((prec_tiro & 0x03) << 6)
-    c[9]  = ((prec_tiro >> 2) & 0x01) | ((passaggio & 0x07) << 1) | ((tecnica & 0x07) << 4) | ((testa & 0x01) << 7)
+    c[0] = (posizione & 0x07) | ((stile_capelli & 0x0F) << 4)
+    c[1] = (
+        ((stile_capelli >> 4) & 0x01)
+        | ((col_capelli & 0x07) << 1)
+        | ((stile_barba & 0x07) << 5)
+    )
+    c[2] = ((col_barba & 0x07) << 1) | ((h & 0x0F) << 4)
+    c[3] = (
+        ((h >> 4) & 0x03) | (((numero - 1) & 0x1F) << 2) | ((fuori_ruolo & 0x01) << 7)
+    )
+    c[4] = (col_pelle & 0x03) | ((corporatura & 0x07) << 2) | ((e & 0x07) << 5)
+    c[5] = ((e >> 3) & 0x03) | ((riflessi & 0x07) << 2) | ((forza & 0x03) << 6)
+    c[6] = (
+        ((forza >> 2) & 0x01)
+        | ((resistenza & 0x07) << 1)
+        | ((dribbling & 0x07) << 4)
+        | ((velocita & 0x01) << 7)
+    )
+    c[7] = ((velocita >> 1) & 0x03) | ((accel & 0x07) << 2) | ((attacco & 0x07) << 5)
+    c[8] = (difesa & 0x07) | ((pot_tiro & 0x07) << 3) | ((prec_tiro & 0x03) << 6)
+    c[9] = (
+        ((prec_tiro >> 2) & 0x01)
+        | ((passaggio & 0x07) << 1)
+        | ((tecnica & 0x07) << 4)
+        | ((testa & 0x01) << 7)
+    )
     c[10] = ((testa >> 1) & 0x03) | ((salto & 0x07) << 2) | ((effetto & 0x07) << 5)
     c[11] = (aggress & 0x07) | ((scarpe & 0x07) << 3) | ((piede & 0x03) << 6)
     return bytes(c)
@@ -436,9 +1184,19 @@ def _to_ascii(text: str) -> str:
     and special ligatures/letters that don't decompose via NFKD.
     """
     _SPECIAL = {
-        "ø": "o", "Ø": "O", "ß": "ss", "đ": "d", "Đ": "D",
-        "ł": "l", "Ł": "L", "æ": "ae", "Æ": "AE",
-        "œ": "oe", "Œ": "OE", "þ": "th", "Þ": "TH",
+        "ø": "o",
+        "Ø": "O",
+        "ß": "ss",
+        "đ": "d",
+        "Đ": "D",
+        "ł": "l",
+        "Ł": "L",
+        "æ": "ae",
+        "Æ": "AE",
+        "œ": "oe",
+        "Œ": "OE",
+        "þ": "th",
+        "Þ": "TH",
     }
     for src, dst in _SPECIAL.items():
         text = text.replace(src, dst)
@@ -490,19 +1248,19 @@ def _encode_kanji_name(name: str, budget: int) -> bytes:
     buf = bytearray(budget * 2)
     for i, ch in enumerate(text):
         c = ord(ch)
-        if 65 <= c <= 90:       # A-Z
+        if 65 <= c <= 90:  # A-Z
             buf[i * 2] = 0x82
             buf[i * 2 + 1] = c + 31
-        elif 97 <= c <= 122:    # a-z
+        elif 97 <= c <= 122:  # a-z
             buf[i * 2] = 0x82
             buf[i * 2 + 1] = c + 32
-        elif 48 <= c <= 57:     # 0-9
+        elif 48 <= c <= 57:  # 0-9
             buf[i * 2] = 0x82
             buf[i * 2 + 1] = c + 31
-        elif c == 46:           # period '.'
+        elif c == 46:  # period '.'
             buf[i * 2] = 0x81
             buf[i * 2 + 1] = 0x42
-        else:                   # space / default
+        else:  # space / default
             buf[i * 2] = 0x82
             buf[i * 2 + 1] = 0x80
 
@@ -540,7 +1298,7 @@ _NAT_KANJI_BASE = _nat_kanji_base()
 # nat_index=4 straddles the sector 851/852 boundary.
 # Sector 851 data area ends at byte 2_003_623; sector 852 data starts at SQK1.
 _NAT_KANJI_STRADDLE_IDX = 4
-_NAT_KANJI_SECTOR_END   = 2_003_623  # last byte of sector 851 data area
+_NAT_KANJI_SECTOR_END = 2_003_623  # last byte of sector 851 data area
 
 
 def _nat_kanji_chunks(nat_index: int) -> List[Tuple[int, int]]:
@@ -610,7 +1368,11 @@ def _build_flag_data(team: "WETeamRecord") -> Tuple[int, bytes]:
     Otherwise falls back to style 1 (3 vertical stripes) with 8×primary +
     8×secondary from ESPN colors.
     """
-    if team.flag_style is not None and team.flag_palette and len(team.flag_palette) == 16:
+    if (
+        team.flag_style is not None
+        and team.flag_palette
+        and len(team.flag_palette) == 16
+    ):
         style = team.flag_style
         palette = [_rgb_to_ps1_color(*c) for c in team.flag_palette]
     else:
@@ -625,6 +1387,7 @@ def _build_flag_data(team: "WETeamRecord") -> Tuple[int, bytes]:
 # ---------------------------------------------------------------------------
 # Sector-boundary-aware offset calculation
 # ---------------------------------------------------------------------------
+
 
 def _nome_chunks(player_idx: int) -> List[Tuple[int, int]]:
     """Return [(file_offset, byte_count)] to write the 10-byte player name."""
@@ -673,14 +1436,14 @@ def _carat_chunks(player_idx: int) -> List[Tuple[int, int]]:
 # Straddle indices are the LAST element of their section; their linear
 # offset is computed normally, then _nat_nome_chunks splits the write.
 _NAT_NOME_SECTIONS = [
-    (0,    206,  _OFS_NOMI_G),              # index 0 straddles (8+2 at G+312)
-    (206,  411,  _OFS_NOMI_G2 + 4),         # after straddle 205 tail
-    (411,  616,  _OFS_NOMI_G3 + 6),         # after straddle 410 tail
-    (616,  821,  _OFS_NOMI_G4 + 8),         # after straddle 615 tail
-    (821,  1025, _OFS_NOMI_G5 + 10),        # after straddle 820 (full 10)
-    (1025, 1230, _OFS_NOMI_G6 + 2),         # after straddle 1024 tail
-    (1230, 1435, _OFS_NOMI_G7 + 4),         # after straddle 1229 tail
-    (1435, 1449, _OFS_NOMI_G8 + 6),         # after straddle 1434 tail
+    (0, 206, _OFS_NOMI_G),  # index 0 straddles (8+2 at G+312)
+    (206, 411, _OFS_NOMI_G2 + 4),  # after straddle 205 tail
+    (411, 616, _OFS_NOMI_G3 + 6),  # after straddle 410 tail
+    (616, 821, _OFS_NOMI_G4 + 8),  # after straddle 615 tail
+    (821, 1025, _OFS_NOMI_G5 + 10),  # after straddle 820 (full 10)
+    (1025, 1230, _OFS_NOMI_G6 + 2),  # after straddle 1024 tail
+    (1230, 1435, _OFS_NOMI_G7 + 4),  # after straddle 1229 tail
+    (1435, 1449, _OFS_NOMI_G8 + 6),  # after straddle 1434 tail
 ]
 
 # Special: index 0 has an internal 312-byte gap (8 bytes at G, then skip to G+312
@@ -712,21 +1475,23 @@ def _nat_nome_linear_offset(nat_idx: int) -> int:
     for start, end, base in _NAT_NOME_SECTIONS[1:]:
         if start <= nat_idx < end:
             return base + (nat_idx - start) * _NOME_SIZE
-    return _NAT_NOME_SECTIONS[-1][2] + (nat_idx - _NAT_NOME_SECTIONS[-1][0]) * _NOME_SIZE
+    return (
+        _NAT_NOME_SECTIONS[-1][2] + (nat_idx - _NAT_NOME_SECTIONS[-1][0]) * _NOME_SIZE
+    )
 
 
 # Contiguous sections for national player characteristics.
 _NAT_CARAT_SECTIONS = [
-    (0,    45,   _OFS_CARAT_G),             # indices 0..44 (straddle 44 at end)
-    (45,   216,  _OFS_CARAT_G1 + 8),        # after straddle 44 tail
-    (216,  386,  _OFS_CARAT_G2 + 12),       # after clean break 215
-    (386,  557,  _OFS_CARAT_G3 + 4),        # after straddle 385 tail
-    (557,  728,  _OFS_CARAT_G4 + 8),        # after straddle 556 tail
-    (728,  898,  _OFS_CARAT_G5 + 12),       # after clean break 727
-    (898,  1069, _OFS_CARAT_G6 + 4),        # after straddle 897 tail
-    (1069, 1240, _OFS_CARAT_G7 + 8),        # after straddle 1068 tail
-    (1240, 1410, _OFS_CARAT_G8 + 12),       # after clean break 1239
-    (1410, 1449, _OFS_CARAT_G9 + 4),        # after straddle 1409 tail
+    (0, 45, _OFS_CARAT_G),  # indices 0..44 (straddle 44 at end)
+    (45, 216, _OFS_CARAT_G1 + 8),  # after straddle 44 tail
+    (216, 386, _OFS_CARAT_G2 + 12),  # after clean break 215
+    (386, 557, _OFS_CARAT_G3 + 4),  # after straddle 385 tail
+    (557, 728, _OFS_CARAT_G4 + 8),  # after straddle 556 tail
+    (728, 898, _OFS_CARAT_G5 + 12),  # after clean break 727
+    (898, 1069, _OFS_CARAT_G6 + 4),  # after straddle 897 tail
+    (1069, 1240, _OFS_CARAT_G7 + 8),  # after straddle 1068 tail
+    (1240, 1410, _OFS_CARAT_G8 + 12),  # after clean break 1239
+    (1410, 1449, _OFS_CARAT_G9 + 4),  # after straddle 1409 tail
 ]
 
 
@@ -746,7 +1511,10 @@ def _nat_carat_linear_offset(nat_idx: int) -> int:
     for start, end, base in _NAT_CARAT_SECTIONS:
         if start <= nat_idx < end:
             return base + (nat_idx - start) * _CARAT_SIZE
-    return _NAT_CARAT_SECTIONS[-1][2] + (nat_idx - _NAT_CARAT_SECTIONS[-1][0]) * _CARAT_SIZE
+    return (
+        _NAT_CARAT_SECTIONS[-1][2]
+        + (nat_idx - _NAT_CARAT_SECTIONS[-1][0]) * _CARAT_SIZE
+    )
 
 
 def _nat_slot_player_range(nat_index: int) -> Tuple[int, int]:
@@ -762,6 +1530,7 @@ def _nat_slot_player_range(nat_index: int) -> Tuple[int, int]:
 # Team-to-player index mapping
 # ---------------------------------------------------------------------------
 
+
 def _slot_player_range(slot_index: int) -> Tuple[int, int]:
     """Return (first_global_player_index, player_count) for a ML slot.
 
@@ -775,7 +1544,7 @@ def _slot_player_range(slot_index: int) -> Tuple[int, int]:
         return rom_pos * 15, 15
     else:
         rom_pos = 31 - slot_index
-        first   = 14 * 15 + (rom_pos - 14) * 14
+        first = 14 * 15 + (rom_pos - 14) * 14
         return first, 14
 
 
@@ -784,7 +1553,7 @@ def _write_chunks(f, data: bytes, chunks: List[Tuple[int, int]]) -> None:
     pos = 0
     for offset, size in chunks:
         f.seek(offset)
-        f.write(data[pos: pos + size])
+        f.write(data[pos : pos + size])
         pos += size
 
 
@@ -797,6 +1566,7 @@ def _write_chunks(f, data: bytes, chunks: List[Tuple[int, int]]) -> None:
 #   base + sum(lun_nomiN[94 - j] for j in range(rom_position))
 # where rom_position = the team's write index (0 = squad_ml[31], 31 = squad_ml[0]).
 # ---------------------------------------------------------------------------
+
 
 def _ml_name_offset(base_offset: int, slot_index: int, lun_table: list) -> int:
     """Calculate the absolute file offset for an ML team name.
@@ -820,6 +1590,7 @@ def _ml_name_offset(base_offset: int, slot_index: int, lun_table: list) -> int:
 # The offset is: base + sum of all 32 ML budgets + sum of nat budgets 0..nat_index-1.
 # Sector boundaries within national ranges must be handled per variant.
 # ---------------------------------------------------------------------------
+
 
 def _nat_name_offset(base_offset: int, nat_index: int, lun_table: list) -> int:
     """Calculate the absolute file offset for a national team name.
@@ -887,6 +1658,7 @@ def _nat_ab_offset(base_offset: int, nat_index: int) -> int:
 # National force bar offset calculation
 # ---------------------------------------------------------------------------
 
+
 def _nat_bar_offset(nat_index: int) -> Tuple[List[Tuple[int, int]], None]:
     """Return [(offset, nbytes)] chunks for a national team's 5 force bar bytes.
 
@@ -924,6 +1696,7 @@ def _nat_jersey_offset(nat_index: int) -> int:
 # The C++ OnWriteCD() writes national colors (i=0..55) then ML colors.
 # We trace the file pointer to compute each national team's color offset.
 # ---------------------------------------------------------------------------
+
 
 def _compute_nat_color_offsets() -> dict:
     """Compute {nat_index: [(offset, nbytes)]} for national team flag colors.
@@ -968,6 +1741,7 @@ _NAT_COLOR_OFFSETS = _compute_nat_color_offsets()
 # with relative seeks interspersed.  We replicate the absolute offsets by
 # tracking file position as the C++ code does.
 # ---------------------------------------------------------------------------
+
 
 def _build_ml_color_write_plan() -> List[Tuple[int, int]]:
     """Build (ml_squad_index, relative_position) pairs for color writes.
@@ -1038,6 +1812,7 @@ def _build_ml_color_write_plan() -> List[Tuple[int, int]]:
 
 # Instead of the complex tracing, compute the ML color offsets directly.
 # The ML color region starts at a known position that we can derive.
+
 
 def _compute_ml_color_offsets() -> dict:
     """Compute {ml_index: (offset, size)} for each ML team's color data.
@@ -1179,6 +1954,7 @@ _ML_COLOR_OFFSETS = _compute_ml_color_offsets()
 # ML bars follow directly after the last national team bar.
 # ---------------------------------------------------------------------------
 
+
 def _compute_ml_bar_offset() -> int:
     """Compute the file offset where ML force bars begin.
 
@@ -1232,7 +2008,7 @@ def _build_tex_dir_map(rom_data: bytes) -> Tuple[dict, dict]:
     sectors = (_BIN_DIR_SIZE + 2047) // 2048
     for s in range(sectors):
         off = (_BIN_DIR_LBA + s) * 2352 + 24
-        dir_data.extend(rom_data[off:off + 2048])
+        dir_data.extend(rom_data[off : off + 2048])
 
     sizes = {}
     dir_offsets = {}
@@ -1243,17 +2019,21 @@ def _build_tex_dir_map(rom_data: bytes) -> Tuple[dict, dict]:
             pos = ((pos // 2048) + 1) * 2048
             continue
         name_len = dir_data[pos + 32]
-        name = dir_data[pos + 33:pos + 33 + name_len].decode('ascii', errors='replace')
-        if name.startswith('TEX_') and name.endswith('.BIN;1'):
+        name = dir_data[pos + 33 : pos + 33 + name_len].decode(
+            "ascii", errors="replace"
+        )
+        if name.startswith("TEX_") and name.endswith(".BIN;1"):
             idx_str = name[4:-6]
             try:
                 idx = int(idx_str)
                 if idx < _TEX_COUNT:
-                    ext_size = struct.unpack_from('<I', dir_data, pos + 10)[0]
+                    ext_size = struct.unpack_from("<I", dir_data, pos + 10)[0]
                     sizes[idx] = ext_size
                     sector_in_dir = pos // 2048
                     offset_in_sector = pos % 2048
-                    abs_pos = (_BIN_DIR_LBA + sector_in_dir) * 2352 + 24 + offset_in_sector
+                    abs_pos = (
+                        (_BIN_DIR_LBA + sector_in_dir) * 2352 + 24 + offset_in_sector
+                    )
                     dir_offsets[idx] = abs_pos
             except ValueError:
                 pass
@@ -1263,11 +2043,11 @@ def _build_tex_dir_map(rom_data: bytes) -> Tuple[dict, dict]:
 
 def _update_iso_dir_size(rom: bytearray, dir_record_offset: int, new_size: int):
     """Update file size in an ISO9660 directory record (both LE and BE) + EDC."""
-    struct.pack_into('<I', rom, dir_record_offset + 10, new_size)
-    struct.pack_into('>I', rom, dir_record_offset + 14, new_size)
+    struct.pack_into("<I", rom, dir_record_offset + 10, new_size)
+    struct.pack_into(">I", rom, dir_record_offset + 14, new_size)
     # Recalculate EDC for the sector containing this directory record
     sector_off = (dir_record_offset // 2352) * 2352
-    new_edc = _edc_compute(rom[sector_off + 16:sector_off + 2072])
+    new_edc = _edc_compute(rom[sector_off + 16 : sector_off + 2072])
     struct.pack_into("<I", rom, sector_off + 2072, new_edc)
 
 
@@ -1279,7 +2059,7 @@ def _read_cd_file(rom_data: bytes, lba: int, size: int) -> bytes:
     while remaining > 0:
         sector_offset = current_lba * 2352 + 24
         chunk = min(remaining, 2048)
-        result.extend(rom_data[sector_offset:sector_offset + chunk])
+        result.extend(rom_data[sector_offset : sector_offset + chunk])
         remaining -= chunk
         current_lba += 1
     return bytes(result)
@@ -1293,8 +2073,8 @@ def _write_cd_file_with_edc(rom: bytearray, lba: int, file_data: bytes):
         sector_off = current_lba * 2352
         user_off = sector_off + 24
         chunk = min(len(file_data) - offset, 2048)
-        rom[user_off:user_off + chunk] = file_data[offset:offset + chunk]
-        new_edc = _edc_compute(rom[sector_off + 16:sector_off + 2072])
+        rom[user_off : user_off + chunk] = file_data[offset : offset + chunk]
+        new_edc = _edc_compute(rom[sector_off + 16 : sector_off + 2072])
         struct.pack_into("<I", rom, sector_off + 2072, new_edc)
         offset += chunk
         current_lba += 1
@@ -1303,7 +2083,7 @@ def _write_cd_file_with_edc(rom: bytearray, lba: int, file_data: bytes):
 def _find_best_tex_match(target_rgb: Tuple[int, int, int]) -> Optional[int]:
     """Find the TEX index whose known jersey color is closest to target_rgb."""
     best_idx = None
-    best_dist = float('inf')
+    best_dist = float("inf")
     for idx, color in _TEX_JERSEY_COLORS.items():
         dist = sum((a - b) ** 2 for a, b in zip(target_rgb, color))
         if dist < best_dist:
@@ -1316,7 +2096,7 @@ def _find_best_tex_match(target_rgb: Tuple[int, int, int]) -> Optional[int]:
 # Public writer class
 # ---------------------------------------------------------------------------
 
-_DUMMY_NAME  = b"PLAYER\x00\x00\x00\x00"
+_DUMMY_NAME = b"PLAYER\x00\x00\x00\x00"
 _DUMMY_CARAT = bytes(12)
 
 
@@ -1326,9 +2106,11 @@ class RomWriter:
         if os.path.exists(rom_path):
             shutil.copy2(rom_path, output_path)
         self.output_path = output_path
-        self._tex_cache = None       # Original TEX file data (avoids re-read corruption)
-        self._tex_sizes = None       # TEX file sizes from ISO9660 directory
-        self._tex_dir_offsets = None  # ISO9660 directory record offsets for size patching
+        self._tex_cache = None  # Original TEX file data (avoids re-read corruption)
+        self._tex_sizes = None  # TEX file sizes from ISO9660 directory
+        self._tex_dir_offsets = (
+            None  # ISO9660 directory record offsets for size patching
+        )
 
     def write_team(self, slot_index: int, team: WETeamRecord):
         """Write team names, abbreviations, and force bars for a ROM slot.
@@ -1486,12 +2268,15 @@ class RomWriter:
         n = len(team.players)
         tot_att = sum(p.attributes.offensive for p in team.players)
         tot_def = sum(p.attributes.defensive for p in team.players)
-        tot_pow = sum(p.attributes.body_balance + p.attributes.shoot_power
-                      for p in team.players)
-        tot_spd = sum(p.attributes.speed + p.attributes.acceleration
-                      for p in team.players)
-        tot_tec = sum(p.attributes.technique + p.attributes.pass_accuracy
-                      for p in team.players)
+        tot_pow = sum(
+            p.attributes.body_balance + p.attributes.shoot_power for p in team.players
+        )
+        tot_spd = sum(
+            p.attributes.speed + p.attributes.acceleration for p in team.players
+        )
+        tot_tec = sum(
+            p.attributes.technique + p.attributes.pass_accuracy for p in team.players
+        )
 
         def bar(total, divisor):
             avg = total / divisor
@@ -1546,13 +2331,13 @@ class RomWriter:
 
                 if i < len(players):
                     p = players[i]
-                    name_bytes  = _encode_player_name(p.last_name)
+                    name_bytes = _encode_player_name(p.last_name)
                     carat_bytes = _encode_player_carat(p)
                 else:
-                    name_bytes  = _DUMMY_NAME
+                    name_bytes = _DUMMY_NAME
                     carat_bytes = _DUMMY_CARAT
 
-                _write_chunks(f, name_bytes,  _nome_chunks(global_idx))
+                _write_chunks(f, name_bytes, _nome_chunks(global_idx))
                 _write_chunks(f, carat_bytes, _carat_chunks(global_idx))
 
     def write_flag(self, slot_index: int, team: WETeamRecord):
@@ -1579,8 +2364,10 @@ class RomWriter:
         with open(self.output_path, "r+b") as f:
             # Write style byte at all 5 FORMA offsets
             for forma_base in [
-                _OFS_BANDIERE_FORMA1, _OFS_BANDIERE_FORMA2,
-                _OFS_BANDIERE_FORMA3, _OFS_BANDIERE_FORMA4,
+                _OFS_BANDIERE_FORMA1,
+                _OFS_BANDIERE_FORMA2,
+                _OFS_BANDIERE_FORMA3,
+                _OFS_BANDIERE_FORMA4,
                 _OFS_BANDIERE_FORMA5,
             ]:
                 # 63 national teams first, then 32 ML teams sequential
@@ -1757,8 +2544,10 @@ class RomWriter:
         with open(self.output_path, "r+b") as f:
             # Write style byte at all 5 FORMA offsets
             for forma_base in [
-                _OFS_BANDIERE_FORMA1, _OFS_BANDIERE_FORMA2,
-                _OFS_BANDIERE_FORMA3, _OFS_BANDIERE_FORMA4,
+                _OFS_BANDIERE_FORMA1,
+                _OFS_BANDIERE_FORMA2,
+                _OFS_BANDIERE_FORMA3,
+                _OFS_BANDIERE_FORMA4,
                 _OFS_BANDIERE_FORMA5,
             ]:
                 off = forma_base + nat_index
@@ -1825,12 +2614,16 @@ class RomWriter:
             if best_idx is not None and best_idx != tex_index:
                 src_color = _TEX_JERSEY_COLORS[best_idx]
                 dist = sum((a - b) ** 2 for a, b in zip(target_rgb, src_color))
-                _dbg.write(f"[TEX] Patch TEX_{tex_index:02d}: want RGB{target_rgb} -> "
-                           f"best TEX_{best_idx:02d} RGB{src_color} dist={dist}\n")
+                _dbg.write(
+                    f"[TEX] Patch TEX_{tex_index:02d}: want RGB{target_rgb} -> "
+                    f"best TEX_{best_idx:02d} RGB{src_color} dist={dist}\n"
+                )
             else:
                 reason = "no match" if best_idx is None else "same slot"
-                _dbg.write(f"[TEX] Patch TEX_{tex_index:02d}: want RGB{target_rgb} -> "
-                           f"SKIP ({reason})\n")
+                _dbg.write(
+                    f"[TEX] Patch TEX_{tex_index:02d}: want RGB{target_rgb} -> "
+                    f"SKIP ({reason})\n"
+                )
         if best_idx is None or best_idx == tex_index:
             return
 
@@ -1896,9 +2689,11 @@ class RomWriter:
         lines.append("--- PHASE 1: ROM FORMAT CHECK ---")
         with open(original_path, "rb") as f:
             sync = f.read(12)
-            is_mode2 = (sync == b"\x00\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x00")
+            is_mode2 = sync == b"\x00\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x00"
             lines.append(f"Sector 0 sync: {sync.hex()}")
-            lines.append(f"Mode2/2352: {'YES' if is_mode2 else 'NO  *** WRONG FORMAT ***'}")
+            lines.append(
+                f"Mode2/2352: {'YES' if is_mode2 else 'NO  *** WRONG FORMAT ***'}"
+            )
             if not is_mode2:
                 lines.append("!!! ROM is NOT a raw Mode2/2352 BIN dump.")
                 lines.append("!!! All offsets are calibrated for Mode2/2352.")
@@ -1906,21 +2701,27 @@ class RomWriter:
 
             f.seek(2352)
             sync2 = f.read(12)
-            sector1_ok = (sync2 == b"\x00\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x00")
-            lines.append(f"Sector 1 sync: {sync2.hex()} ({'OK' if sector1_ok else 'MISMATCH'})")
+            sector1_ok = sync2 == b"\x00\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x00"
+            lines.append(
+                f"Sector 1 sync: {sync2.hex()} ({'OK' if sector1_ok else 'MISMATCH'})"
+            )
 
             # Probe known data offsets for sanity
             f.seek(_OFS_NOMI_SQ_AB1)
             sample = f.read(32)
             has_ascii = any(0x20 <= b <= 0x7E for b in sample)
             lines.append(f"Probe @AB1 ({_OFS_NOMI_SQ_AB1}): {sample[:16].hex()}")
-            lines.append(f"  Printable ASCII present: {'YES' if has_ascii else 'NO (wrong offset?)'}")
+            lines.append(
+                f"  Printable ASCII present: {'YES' if has_ascii else 'NO (wrong offset?)'}"
+            )
 
             f.seek(_OFS_NOMI_GML)
             sample2 = f.read(40)
             has_names = any(0x41 <= b <= 0x5A for b in sample2)  # uppercase A-Z
             lines.append(f"Probe @GML ({_OFS_NOMI_GML}): {sample2[:20].hex()}")
-            lines.append(f"  Uppercase letters present: {'YES' if has_names else 'NO (wrong offset?)'}")
+            lines.append(
+                f"  Uppercase letters present: {'YES' if has_names else 'NO (wrong offset?)'}"
+            )
         lines.append("")
 
         # --- Phase 2: Binary diff original vs patched ---
@@ -1931,7 +2732,11 @@ class RomWriter:
         with open(original_path, "rb") as orig, open(self.output_path, "rb") as patched:
             for mapping in slot_mapping:
                 si = mapping.slot_index
-                team_name = mapping.real_team.name if hasattr(mapping, "real_team") else f"slot {si}"
+                team_name = (
+                    mapping.real_team.name
+                    if hasattr(mapping, "real_team")
+                    else f"slot {si}"
+                )
                 we_team = we_teams.get(si)
                 lines.append(f"\n  Slot {si}: {team_name}")
 
@@ -1948,7 +2753,9 @@ class RomWriter:
                     # Show readable representation
                     orig_repr = self._format_bytes(orig_data)
                     patch_repr = self._format_bytes(patch_data)
-                    lines.append(f"    {label} @{offset}: {orig_repr} -> {patch_repr} {'CHANGED' if changed else 'SAME'}")
+                    lines.append(
+                        f"    {label} @{offset}: {orig_repr} -> {patch_repr} {'CHANGED' if changed else 'SAME'}"
+                    )
 
         lines.append("")
         lines.append(f"  Diff totals: {total_changed}/{total_checked} regions changed")
@@ -1966,7 +2773,11 @@ class RomWriter:
                 if not we_team:
                     continue
 
-                team_name = mapping.real_team.name if hasattr(mapping, "real_team") else f"slot {si}"
+                team_name = (
+                    mapping.real_team.name
+                    if hasattr(mapping, "real_team")
+                    else f"slot {si}"
+                )
 
                 # Verify abbreviation matches what we intended to write
                 code = we_team.short_name or we_team.name[:3]
@@ -1979,7 +2790,9 @@ class RomWriter:
                     readback_ok += 1
                 else:
                     readback_fail += 1
-                    lines.append(f"  FAIL slot {si} AB1: expected {expected_ab} got {actual_ab}")
+                    lines.append(
+                        f"  FAIL slot {si} AB1: expected {expected_ab} got {actual_ab}"
+                    )
 
                 # Verify name variant 1
                 budget = _ml_name_budget(si, _LUN_NOMI1)
@@ -1991,7 +2804,9 @@ class RomWriter:
                     readback_ok += 1
                 else:
                     readback_fail += 1
-                    lines.append(f"  FAIL slot {si} Name1: expected {expected_name} got {actual_name}")
+                    lines.append(
+                        f"  FAIL slot {si} Name1: expected {expected_name} got {actual_name}"
+                    )
 
                 # Verify first player name
                 if we_team.players:
@@ -2001,11 +2816,13 @@ class RomWriter:
                     f.seek(pn_chunks[0][0])
                     actual_pn = f.read(pn_chunks[0][1])
                     # For straddle cases, only check the first chunk
-                    if actual_pn == expected_pn[:len(actual_pn)]:
+                    if actual_pn == expected_pn[: len(actual_pn)]:
                         readback_ok += 1
                     else:
                         readback_fail += 1
-                        lines.append(f"  FAIL slot {si} Player0: expected {expected_pn[:len(actual_pn)]} got {actual_pn}")
+                        lines.append(
+                            f"  FAIL slot {si} Player0: expected {expected_pn[:len(actual_pn)]} got {actual_pn}"
+                        )
 
         if readback_fail == 0:
             lines.append(f"  All {readback_ok} read-back checks PASSED")
@@ -2066,7 +2883,9 @@ class RomWriter:
         checks.append(("ForceBar", _ML_BAR_OFFSET + slot_index * 5, 5))
 
         # Flag style
-        checks.append(("FlagStyle", _OFS_BANDIERE_FORMA1 + _SQUADRE_NAZ + slot_index, 1))
+        checks.append(
+            ("FlagStyle", _OFS_BANDIERE_FORMA1 + _SQUADRE_NAZ + slot_index, 1)
+        )
 
         return checks
 

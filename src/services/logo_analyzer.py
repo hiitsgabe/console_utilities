@@ -13,6 +13,7 @@ from typing import Dict, List, Optional, Tuple
 
 try:
     from PIL import Image
+
     _PIL_AVAILABLE = True
 except ImportError:
     _PIL_AVAILABLE = False
@@ -228,7 +229,7 @@ def _score_pattern(
         cb = sum(c[2] for c in colors) / len(colors)
         centroids.append((cr, cg, cb))
     between = _between_zone_distance(centroids)
-    return between / (1.0 + within ** 0.5)
+    return between / (1.0 + within**0.5)
 
 
 def _match_best_pattern(
@@ -494,13 +495,15 @@ def analyze_flag(
 
 def analyze_logo(
     logo_url: str,
-) -> Optional[Tuple[
-    Tuple[int, int, int],
-    Tuple[int, int, int],
-    Tuple[int, int, int],
-    int,
-    List[Tuple[int, int, int]],
-]]:
+) -> Optional[
+    Tuple[
+        Tuple[int, int, int],
+        Tuple[int, int, int],
+        Tuple[int, int, int],
+        int,
+        List[Tuple[int, int, int]],
+    ]
+]:
     """Download a logo ONCE and return both jersey colors and flag data.
 
     Returns (primary, secondary, tertiary, flag_style, flag_palette_16)
