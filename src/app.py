@@ -66,6 +66,7 @@ from services.image_cache import ImageCache
 from services.download_manager import DownloadManager as _DesktopDownloadManager
 from services.scraper_manager import ScraperManager
 from services.portmaster_loader import PortMasterLoader, PortMasterInstaller
+from services.syncthing_service import SyncthingService
 from input.navigation import NavigationHandler
 from input.controller import ControllerHandler
 from input.touch import TouchHandler
@@ -220,6 +221,9 @@ class ConsoleUtilitiesApp:
         self.portmaster_installer = PortMasterInstaller(
             self.settings, self.portmaster_loader
         )
+
+        # Initialize Syncthing service (lazily when needed)
+        self.syncthing_service = None
 
         # Initialize web companion (lazy — started via settings toggle)
         # Not available on standalone desktop builds (macos/windows)
@@ -1491,6 +1495,28 @@ class ConsoleUtilitiesApp:
 
         elif self.state.mode == "nhl07_patcher":
             self._handle_nhl07_patcher_navigation(direction)
+
+        elif self.state.mode == "syncthing":
+            step = self.state.syncthing.step
+            if step == "not_found":
+                max_items = 8
+            elif step == "role_select":
+                max_items = 3
+            elif step == "configured":
+                max_items = self.screen_manager.syncthing_screen.get_configured_item_count(
+                    self.settings
+                )
+            else:
+                max_items = 1
+
+            if direction == "up":
+                self.state.syncthing.highlighted = (
+                    self.state.syncthing.highlighted - 1
+                ) % max_items
+            elif direction == "down":
+                self.state.syncthing.highlighted = (
+                    self.state.syncthing.highlighted + 1
+                ) % max_items
 
     def _handle_we_patcher_navigation(self, direction):
         """Handle D-pad navigation for we_patcher mode and its modals."""
@@ -2953,6 +2979,9 @@ class ConsoleUtilitiesApp:
             self.state.portmaster.search_query = ""
             self.state.mode = "systems"
             self.state.highlighted = 0
+        elif self.state.mode == "syncthing":
+            self.state.mode = "systems"
+            self.state.highlighted = 0
         elif self.state.mode == "sports_patcher":
             self.state.mode = "systems"
             self.state.highlighted = 0
@@ -3199,6 +3228,8 @@ class ConsoleUtilitiesApp:
             elif action == "sports_patcher":
                 self.state.mode = "sports_patcher"
                 self.state.highlighted = 0
+            elif action == "syncthing":
+                self._enter_syncthing()
             elif action == "utils":
                 self.state.mode = "utils"
                 self.state.highlighted = 1  # Skip first divider
@@ -3288,6 +3319,9 @@ class ConsoleUtilitiesApp:
 
         elif self.state.mode == "portmaster":
             self._handle_portmaster_selection()
+
+        elif self.state.mode == "syncthing":
+            self._handle_syncthing_select()
 
         elif self.state.mode == "sports_patcher":
             from ui.screens.sports_patcher_screen import sports_patcher_screen
@@ -3563,6 +3597,11 @@ class ConsoleUtilitiesApp:
                 self.state.confirm_modal.cancel_label = "Cancel"
                 self.state.confirm_modal.button_index = 0
                 self.state.confirm_modal.context = "install_portmaster"
+        elif action == "toggle_syncthing_enabled":
+            self.settings["syncthing_enabled"] = not self.settings.get(
+                "syncthing_enabled", False
+            )
+            save_settings(self.settings)
         elif action == "toggle_sports_roster_enabled":
             self.settings["sports_roster_enabled"] = not self.settings.get(
                 "sports_roster_enabled", False
@@ -4325,6 +4364,10 @@ class ConsoleUtilitiesApp:
             path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "mvp_psp_patcher_rom":
             path = self.settings.get("roms_dir", SCRIPT_DIR)
+        elif selection_type == "syncthing_base_path":
+            path = self.settings.get("syncthing_base_path", SCRIPT_DIR)
+        elif selection_type.startswith("syncthing_override_"):
+            path = self.settings.get("roms_dir", SCRIPT_DIR)
         else:
             path = SCRIPT_DIR
 
@@ -4680,6 +4723,15 @@ class ConsoleUtilitiesApp:
             self.state.current_screen = "systems"
             self.state.highlighted = 0
             self._hide_loading()
+        elif selection_type.startswith("syncthing_override_"):
+            system = selection_type.replace("syncthing_override_", "")
+            overrides = self.settings.get("syncthing_folder_overrides", {})
+            overrides[system] = path
+            self.settings["syncthing_folder_overrides"] = overrides
+            save_settings(self.settings)
+        elif selection_type == "syncthing_base_path":
+            self.settings["syncthing_base_path"] = path
+            save_settings(self.settings)
         elif selection_type == "nsz_keys":
             self.settings["nsz_keys_path"] = path
             save_settings(self.settings)
@@ -5049,7 +5101,8 @@ class ConsoleUtilitiesApp:
             "esde_media_path",
             "esde_gamelists_path",
             "retroarch_thumbnails",
-        ):
+            "syncthing_base_path",
+        ) or selection_type.startswith("syncthing_override_"):
             self._complete_folder_browser_selection(current_path, selection_type)
         elif selection_type == "add_system_folder":
             self.state.folder_browser.show = False
@@ -5457,9 +5510,23 @@ class ConsoleUtilitiesApp:
         self.state.url_input.input_text = new_text
 
         if is_done:
-            # URL entry complete - handle the URL
-            self.state.url_input.show = False
-            # TODO: Process the URL based on context
+            # URL entry complete - handle the URL based on context
+            if self.state.url_input.context == "syncthing_device_id":
+                device_id = self.state.url_input.input_text.strip()
+                self.settings["syncthing_host_device_id"] = device_id
+                save_settings(self.settings)
+                self.state.url_input.show = False
+                # Add host device
+                if self.syncthing_service and device_id:
+                    self.syncthing_service.add_device(device_id, "game-saves-host")
+                self.state.syncthing.step = "configured"
+                self.state.syncthing.highlighted = 1
+                if self.syncthing_service:
+                    self.state.syncthing.system_statuses = (
+                        self.syncthing_service.get_system_sync_status()
+                    )
+            else:
+                self.state.url_input.show = False
 
     def _handle_folder_name_input_selection(self):
         """Handle folder name input keyboard selection."""
@@ -6076,6 +6143,162 @@ class ConsoleUtilitiesApp:
         )
 
     # ---- PortMaster Handlers ---- #
+
+    # ---- Syncthing Handlers ---- #
+
+    def _enter_syncthing(self):
+        """Enter the Syncthing sync screen."""
+        import threading
+
+        self.state.mode = "syncthing"
+        self.state.syncthing.step = "checking"
+        self.state.syncthing.highlighted = 1  # Skip first divider
+        self.state.syncthing.error_message = ""
+        self.state.syncthing.status_message = ""
+
+        def check_syncthing():
+            # Try to detect API key
+            api_key = self.settings.get("syncthing_api_key", "")
+            if not api_key:
+                api_key = SyncthingService.detect_api_key()
+                if api_key:
+                    self.settings["syncthing_api_key"] = api_key
+                    save_settings(self.settings)
+
+            self.syncthing_service = SyncthingService(api_key=api_key)
+
+            if self.syncthing_service.is_running():
+                device_id = self.syncthing_service.get_device_id()
+                self.state.syncthing.device_id = device_id
+
+                role = self.settings.get("syncthing_role", "")
+                if role:
+                    # Already configured — go to status view
+                    self.state.syncthing.step = "configured"
+                    self.state.syncthing.system_statuses = (
+                        self.syncthing_service.get_system_sync_status()
+                    )
+                else:
+                    self.state.syncthing.step = "role_select"
+            else:
+                self.state.syncthing.step = "not_found"
+
+        threading.Thread(target=check_syncthing, daemon=True).start()
+
+    def _handle_syncthing_select(self):
+        """Handle selection on the syncthing screen."""
+        step = self.state.syncthing.step
+
+        if step == "not_found":
+            action = self.screen_manager.syncthing_screen.get_not_found_action(
+                self.state.syncthing.highlighted
+            )
+            if action == "retry":
+                self._enter_syncthing()
+
+        elif step == "role_select":
+            action = self.screen_manager.syncthing_screen.get_role_select_action(
+                self.state.syncthing.highlighted
+            )
+            if action == "select_host":
+                self.settings["syncthing_role"] = "host"
+                save_settings(self.settings)
+                self.state.syncthing.step = "configured"
+                self.state.syncthing.highlighted = 1
+                if self.syncthing_service:
+                    self.state.syncthing.system_statuses = (
+                        self.syncthing_service.get_system_sync_status()
+                    )
+            elif action == "select_console":
+                self.settings["syncthing_role"] = "console"
+                save_settings(self.settings)
+                # Need host device ID — open URL input modal for text entry
+                self.state.url_input.show = True
+                self.state.url_input.input_text = self.settings.get(
+                    "syncthing_host_device_id", ""
+                )
+                self.state.url_input.cursor_position = len(
+                    self.state.url_input.input_text
+                )
+                self.state.url_input.context = "syncthing_device_id"
+
+        elif step == "configured":
+            action = self.screen_manager.syncthing_screen.get_configured_action(
+                self.state.syncthing.highlighted,
+                self.settings,
+                self.state.syncthing.system_statuses,
+            )
+            if action == "sync_all":
+                self._syncthing_sync_all()
+            elif action == "reconfigure":
+                self.settings["syncthing_role"] = ""
+                self.settings["syncthing_host_device_id"] = ""
+                save_settings(self.settings)
+                self._enter_syncthing()
+            elif action == "change_base_path":
+                self._open_folder_browser("syncthing_base_path")
+            elif action and action.startswith("configure_"):
+                system = action.replace("configure_", "")
+                self._open_folder_browser(f"syncthing_override_{system}")
+
+    def _syncthing_sync_all(self):
+        """Configure all system save folders in Syncthing."""
+        import threading
+
+        if not self.syncthing_service:
+            return
+
+        self.state.syncthing.status_message = "Configuring..."
+        self.state.syncthing.configuring = True
+
+        role = self.settings.get("syncthing_role", "")
+        host_device_id = self.settings.get("syncthing_host_device_id", "")
+
+        # Determine which device IDs to share with
+        if role == "host":
+            # Host shares with all known console devices
+            connections = self.syncthing_service.get_connections()
+            device_ids = list(connections.keys())
+            if not device_ids:
+                self.state.syncthing.status_message = "No devices connected"
+                self.state.syncthing.configuring = False
+                return
+        else:
+            # Console shares with host
+            if not host_device_id:
+                self.state.syncthing.status_message = "No host device ID set"
+                self.state.syncthing.configuring = False
+                return
+            device_ids = [host_device_id]
+
+        def do_sync():
+            # Add host device if console
+            if role == "console" and host_device_id:
+                self.syncthing_service.add_device(host_device_id, "game-saves-host")
+
+            success, skipped, errors = self.syncthing_service.configure_all_systems(
+                role=role,
+                device_ids=device_ids,
+                base_path=self.settings.get("syncthing_base_path", ""),
+                folder_overrides=self.settings.get("syncthing_folder_overrides", {}),
+            )
+
+            # Update status
+            self.state.syncthing.system_statuses = (
+                self.syncthing_service.get_system_sync_status()
+            )
+            self.state.syncthing.configuring = False
+
+            if errors:
+                self.state.syncthing.status_message = (
+                    f"Done: {success} added, {len(errors)} failed"
+                )
+            elif success == 0 and skipped > 0:
+                self.state.syncthing.status_message = "All systems already configured"
+            else:
+                self.state.syncthing.status_message = f"Configured {success} systems"
+
+        threading.Thread(target=do_sync, daemon=True).start()
 
     def _enter_portmaster(self):
         """Fetch ports from PortMaster and enter portmaster mode."""
