@@ -266,7 +266,6 @@ class AndroidDownloadManager:
         item_id = str(self._next_item_id)
         self._next_item_id += 1
         self._item_ids[item_id] = item
-        item._android_item_id = item_id
 
         roms_folder = self._get_roms_folder(item.system_data)
 
