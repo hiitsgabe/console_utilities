@@ -69,6 +69,8 @@ class ScraperWizardModal:
         self.nav_select_rect: Optional[pygame.Rect] = None
         self.nav_back_rect: Optional[pygame.Rect] = None
         self.backspace_rect: Optional[pygame.Rect] = None
+        # Filtered systems list set by app.py before rendering system picker
+        self.system_picker_systems: List = []
 
     def render(
         self,
@@ -103,6 +105,7 @@ class ScraperWizardModal:
         search_name_cursor: int = 0,
         search_name_shift: bool = False,
         button_focused: bool = False,
+        nav_bar_index: int = -1,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[pygame.Rect]]:
         """
         Render the scraper wizard modal.
@@ -124,6 +127,7 @@ class ScraperWizardModal:
         self.backspace_rect = None
         self._scroll_offset = 0
         self._button_focused = button_focused
+        self._nav_bar_index = nav_bar_index
 
         if step in ("rom_select", "folder_select"):
             # These steps use the default folder browser modal
@@ -542,7 +546,8 @@ class ScraperWizardModal:
         # Results list
         item_rects = []
         item_height = THUMB_SIZE[1] + 8 if has_thumbs else 55
-        visible_items = (content_rect.height - 90) // item_height
+        available_height = content_rect.bottom - y - 40
+        visible_items = max(1, available_height // item_height)
         scroll_offset = max(0, selected_index - visible_items + 2)
 
         for i in range(
@@ -1067,7 +1072,8 @@ class ScraperWizardModal:
 
         item_rects = []
         item_height = 38
-        visible_items = (content_rect.height - 90) // item_height
+        available_height = content_rect.bottom - y - 40
+        visible_items = max(1, available_height // item_height)
         scroll_offset = max(0, highlighted - visible_items + 2)
 
         for i in range(
@@ -1199,7 +1205,8 @@ class ScraperWizardModal:
 
         item_rects = []
         item_height = 40
-        visible_items = (content_rect.height - 90) // item_height
+        available_height = content_rect.bottom - y - 40
+        visible_items = max(1, available_height // item_height)
         scroll_offset = max(0, highlighted - visible_items + 2)
 
         for i in range(scroll_offset, min(len(items), scroll_offset + visible_items)):
@@ -1454,11 +1461,13 @@ class ScraperWizardModal:
         content_rect: pygame.Rect,
         show_select: bool = True,
     ):
-        """Render on-screen navigation buttons at the top of the modal content for Android.
+        """Render on-screen navigation buttons at the top of the modal content.
 
         Draws Back, Up, Down, and optionally Select buttons in a horizontal bar.
+        Visible on Android always; on other platforms only when focused via d-pad.
         """
-        if not IS_ANDROID:
+        nav_focused = self._nav_bar_index >= 0
+        if not IS_ANDROID and not nav_focused:
             return 0
 
         padding = self.theme.padding_sm
@@ -1475,26 +1484,34 @@ class ScraperWizardModal:
         btn_w = (available_w - spacing * (btn_count - 1)) // btn_count
         x = content_rect.left + padding
 
-        for label, nav_type in buttons:
+        for i, (label, nav_type) in enumerate(buttons):
             btn_rect = pygame.Rect(x, btn_y, btn_w, btn_h)
+            is_highlighted = nav_focused and i == self._nav_bar_index
+            bg_color = self.theme.primary if is_highlighted else self.theme.surface_hover
             pygame.draw.rect(
                 screen,
-                self.theme.surface_hover,
+                bg_color,
                 btn_rect,
                 border_radius=self.theme.radius_sm,
             )
+            border_color = (
+                self.theme.primary if is_highlighted else self.theme.text_secondary
+            )
             pygame.draw.rect(
                 screen,
-                self.theme.text_secondary,
+                border_color,
                 btn_rect,
                 width=1,
                 border_radius=self.theme.radius_sm,
+            )
+            text_color = (
+                self.theme.background if is_highlighted else self.theme.text_primary
             )
             self.text.render(
                 screen,
                 label,
                 (btn_rect.centerx, btn_rect.centery - self.theme.font_size_sm // 2),
-                color=self.theme.text_primary,
+                color=text_color,
                 size=self.theme.font_size_sm,
                 align="center",
             )
@@ -1509,6 +1526,150 @@ class ScraperWizardModal:
             x += btn_w + spacing
 
         return btn_h + padding
+
+    # ---- System picker overlay ----
+
+    def render_system_picker(
+        self,
+        screen: pygame.Surface,
+        systems: list,
+        highlighted: int,
+        search_query: str,
+        search_active: bool,
+        search_cursor: int,
+        shift_active: bool,
+    ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[pygame.Rect]]:
+        """Render system picker modal overlay on top of batch options."""
+        width = min(500, screen.get_width() - 40)
+        height = min(480, screen.get_height() - 60)
+
+        modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
+            screen, width, height, title="Select System", show_close=True
+        )
+
+        padding = self.theme.padding_sm
+        y = content_rect.top + padding
+
+        # Search bar
+        field_rect = pygame.Rect(
+            content_rect.left + padding,
+            y,
+            content_rect.width - padding * 2,
+            30,
+        )
+        field_bg = (
+            self.theme.surface_selected if search_active else self.theme.surface_hover
+        )
+        pygame.draw.rect(
+            screen, field_bg, field_rect, border_radius=self.theme.radius_sm
+        )
+        if search_active:
+            pygame.draw.rect(
+                screen,
+                self.theme.primary,
+                field_rect,
+                1,
+                border_radius=self.theme.radius_sm,
+            )
+        display_text = search_query or (
+            "Type to search..." if search_active else "Search systems... [X to search]"
+        )
+        text_color = (
+            self.theme.text_primary if search_query else self.theme.text_disabled
+        )
+        self.text.render(
+            screen,
+            display_text,
+            (field_rect.left + 8, field_rect.centery - self.theme.font_size_sm // 2),
+            color=text_color,
+            size=self.theme.font_size_sm,
+            max_width=field_rect.width - 16,
+        )
+        y = field_rect.bottom + padding
+
+        # On-screen keyboard when search is active
+        char_rects = []
+        if search_active:
+            kb_height = 200
+            kb_rect = pygame.Rect(
+                content_rect.left,
+                y,
+                content_rect.width,
+                kb_height,
+            )
+            char_rects, _ = self.char_keyboard.render(
+                screen,
+                kb_rect,
+                current_text=search_query,
+                selected_index=search_cursor,
+                chars_per_row=13,
+                char_set="default",
+                show_input_field=False,
+                shift_active=shift_active,
+            )
+            y = kb_rect.bottom + padding
+
+        # System list
+        item_rects = []
+        item_height = 36
+        list_bottom = content_rect.bottom - padding
+        visible_count = max(1, (list_bottom - y) // (item_height + 2))
+        scroll_start = max(0, highlighted - visible_count + 2)
+
+        for i, (name, sid) in enumerate(systems):
+            if i < scroll_start:
+                continue
+            if y + item_height > list_bottom:
+                break
+
+            rect = pygame.Rect(
+                content_rect.left + padding,
+                y,
+                content_rect.width - padding * 2,
+                item_height,
+            )
+
+            is_highlighted = i == highlighted
+            if is_highlighted:
+                pygame.draw.rect(
+                    screen,
+                    self.theme.primary,
+                    rect,
+                    border_radius=self.theme.radius_sm,
+                )
+
+            label = name if not sid else f"{name} ({sid})"
+            self.text.render(
+                screen,
+                label,
+                (rect.left + 8, rect.centery - self.theme.font_size_sm // 2),
+                color=(
+                    self.theme.background
+                    if is_highlighted
+                    else self.theme.text_secondary
+                ),
+                size=self.theme.font_size_sm,
+                max_width=rect.width - 16,
+            )
+
+            item_rects.append(rect)
+            y += item_height + 2
+
+        return modal_rect, content_rect, close_rect, char_rects, item_rects
+
+    def handle_system_picker_key(
+        self,
+        cursor: int,
+        current_text: str,
+        shift_active: bool = False,
+    ):
+        """Handle character selection from on-screen keyboard in system picker."""
+        return self.char_keyboard.handle_selection(
+            cursor,
+            current_text,
+            char_set="default",
+            shift_active=shift_active,
+        )
 
     # Thumbnail helpers
 

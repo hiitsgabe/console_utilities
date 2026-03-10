@@ -56,12 +56,15 @@ A PyGame-based utility suite for handheld gaming consoles, with a retro CRT-them
 - **👻 Ghost File Cleaner** — Find and remove orphaned split archives
 - **📂 ZIP/RAR Extraction** — Extract archives from the file browser
 
-### 🚢 PortMaster Integration (Beta)
+### 🔄 Syncthing Save Sync
+- **Cross-Device Save Sync** — Synchronize game saves between your computer and Knulli/Batocera consoles or Android devices using Syncthing
+- **Hub-and-Spoke Architecture** — Computer acts as the hub, with multiple consoles and Android devices as spokes
+- **Per-System Folders** — Auto-configures shared folders for 22+ gaming systems (PSX, SNES, N64, GBA, NDS, PSP, and more)
+- **Custom Save Support** — Add custom save folders with selective file syncing and `.stignore` whitelisting
+- **Versioning** — Built-in 5-file rollback support for save safety
+- **Auto-Detection** — Discovers Syncthing API key from the local config automatically
 
-> ⚠️ **Work in Progress** — PortMaster support is experimental and may not work as expected. For the full PortMaster experience, please use the official [PortMaster](https://portmaster.games/) app directly. This integration is a convenience feature under active development.
-
-- Browse and install PortMaster ports from within Console Utilities
-- Available on Batocera/Knulli builds only
+> **Note:** This is not Syncthing itself — it's a helper that configures an existing Syncthing installation through its REST API. See the [Syncthing Save Sync Guide](docs/syncthing-save-sync.md) for setup instructions.
 
 ### ⚙️ System Management
 - **Add Custom Systems** — Discover systems from directory listings or manually configure new sources
@@ -137,6 +140,7 @@ Runtime settings are auto-generated and stored in `config.json`:
 - **📚 Internet Archive** — Enable/disable, S3 credentials
 - **🖼️ Scraper** — Provider selection (Libretro, ScreenScraper, TheGamesDB, RAWG, IGDB), frontend format (EmulationStation, ES-DE, RetroArch, Pegasus), API credentials
 - **🔐 NSZ** — Enable/disable, keys file path
+- **🔄 Syncthing** — Enable/disable, role (host/console), device IDs, base path, custom saves
 
 ---
 
@@ -246,6 +250,7 @@ console_utilities/
 
 ## 📖 Documentation
 
+- 🔄 [Syncthing Save Sync Guide](docs/syncthing-save-sync.md) — Setting up cross-device save synchronization
 - ⚽ [Sports ROM Patcher Guide](docs/sports-rom-patcher.md) — How the sports roster patcher works
 - 📄 [Server Response Format](docs/server-response-format.md) — How your server needs to respond for the app to detect and list files
 - ➕ [Adding a System](docs/adding-a-system.md) — How to add custom gaming systems
@@ -292,7 +297,7 @@ console_utilities/
 This project incorporates the following open source libraries and projects:
 
 - **NSZ Library** — NSZ compression/decompression functionality provided by [nicoboss/nsz](https://github.com/nicoboss/nsz) — A compression/decompression tool with fast compression and decompression for various file formats.
-- **PortMaster** — Port installation functionality powered by [PortMaster](https://portmaster.games/) — A convenient way to download and manage ports for handheld devices. All credit for the ports catalog and runtime goes to the PortMaster team and contributors.
+- **Syncthing** — Save synchronization powered by [Syncthing](https://syncthing.net/) — An open-source continuous file synchronization program.
 
 ---
 

@@ -11,7 +11,6 @@ from ui.templates.list_screen import ListScreenTemplate
 # All possible root menu entries and their action keys (in order)
 _ALL_ROOT_ENTRIES = [
     ("Backup Games", "systems_list"),
-    ("PortMaster (beta)", "portmaster"),
     ("Artbox Games Scraper", "scraper_menu"),
     ("Sports Game Updater", "sports_patcher"),
     ("Syncthing Sync", "syncthing"),
@@ -36,11 +35,6 @@ def _build_root_menu(
         actions.append("downloads")
 
     for label, action in _ALL_ROOT_ENTRIES:
-        if action == "portmaster":
-            if BUILD_TARGET not in ("pygame", "source") or not settings.get(
-                "portmaster_enabled", False
-            ):
-                continue
         if action == "sports_patcher":
             if not settings.get("sports_roster_enabled", False):
                 continue

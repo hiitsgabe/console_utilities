@@ -475,17 +475,6 @@ def serialize_web_state(state, settings=None, data=None):
     if state.ghost_cleaner_wizard.show:
         return _serialize_ghost_cleaner(state.ghost_cleaner_wizard)
 
-    # Port details
-    if state.port_details.show and state.port_details.port:
-        port = state.port_details.port
-        return {
-            "screen_type": "details",
-            "title": "Port Details",
-            "name": port.get("attr", {}).get("title", ""),
-            "info": port.get("attr", {}).get("desc", ""),
-            "actions": ["Install"],
-        }
-
     # Patcher modals (league browser, roster preview, patch progress, color picker)
     patcher = state.active_patcher
     if patcher and hasattr(patcher, "active_modal") and patcher.active_modal:
@@ -622,24 +611,6 @@ def serialize_web_state(state, settings=None, data=None):
             "title": "Utilities",
             "items": items,
             "highlighted": state.highlighted,
-        }
-
-    if state.mode == "portmaster":
-        pm = state.portmaster
-        items = []
-        for port in pm.filtered_ports:
-            name = (
-                port.get("attr", {}).get("title", "")
-                if isinstance(port, dict)
-                else str(port)
-            )
-            items.append({"name": name, "selected": False})
-        return {
-            "screen_type": "list",
-            "title": "PortMaster",
-            "items": items,
-            "highlighted": pm.highlighted,
-            "search": pm.search_query,
         }
 
     if state.mode == "downloads":
@@ -1497,7 +1468,6 @@ def _build_settings_items(settings):
         ("Enable Box-art Display", "enable_boxart", True),
         ("Filter Region", "filter_region", "none"),
         ("Show Download All", "show_download_all", False),
-        ("Enable PortMaster", "portmaster_enabled", False),
         ("Enable Internet Archive", "ia_enabled", False),
         ("Enable Sports Updater", "sports_roster_enabled", False),
         ("Enable Scraper", "scraper_enabled", False),

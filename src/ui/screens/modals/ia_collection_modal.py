@@ -229,7 +229,7 @@ class IACollectionModal:
                 title,
                 "Collection display name:",
                 name,
-                "e.g., PortMaster Ports",
+                "e.g., My Collection",
                 input_mode,
             )
 
@@ -287,7 +287,7 @@ class IACollectionModal:
                 title,
                 "ROM folder name (within roms directory):",
                 folder,
-                "e.g., portmaster",
+                "e.g., my_collection",
                 input_mode,
             )
 
