@@ -130,13 +130,14 @@ def _process_download(service, task):
     request_headers = _build_download_headers(url)
     request_headers.update(auth_headers)
 
-    # Resolve final URL (follow redirects for IA auth)
-    is_ia = "archive.org" in url
-    is_ia_auth = bool(auth_headers.get("authorization", ""))
+    # Resolve final URL (follow redirects preserving auth).
+    # requests strips Authorization/Cookie on cross-host redirects,
+    # so for ALL authenticated downloads we resolve manually first.
+    has_auth = bool(auth_headers) or bool(cookies)
 
     try:
         resolved_url = url
-        if is_ia and is_ia_auth:
+        if has_auth:
             resolved_url = _resolve_redirects(url, request_headers, cookies)
             if resolved_url is None:
                 write_status(
@@ -145,7 +146,7 @@ def _process_download(service, task):
                     {
                         "status": "failed",
                         "progress": 0.0,
-                        "error": "IA auth redirect resolution failed",
+                        "error": "Auth redirect resolution failed",
                     },
                 )
                 return
