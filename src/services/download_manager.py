@@ -285,7 +285,6 @@ class DownloadManager:
         headers = {}
         cookies = {}
         system_data = item.system_data
-        is_ia_auth = False
 
         if "auth" in system_data:
             auth_config = system_data["auth"]
@@ -294,7 +293,6 @@ class DownloadManager:
                 secret_key = auth_config.get("secret_key") or None
                 if access_key and secret_key:
                     headers["authorization"] = f"LOW {access_key}:{secret_key}"
-                    is_ia_auth = True
             elif auth_config.get("cookies", False) and "token" in auth_config:
                 cookie_name = auth_config.get("cookie_name", "auth_token")
                 cookies[cookie_name] = auth_config["token"]
@@ -307,52 +305,42 @@ class DownloadManager:
                 "Accept": "*/*",
                 "Accept-Language": "en-US,en;q=0.9",
             }
+            # Merge auth headers so they persist to parallel/single downloads
+            request_headers.update(headers)
+            has_auth = bool(headers) or bool(cookies)
 
-            # Resolve the final URL and get initial response
+            # Resolve the final URL and get initial response.
+            # requests strips Authorization/Cookie on cross-host redirects,
+            # so for all authenticated downloads we follow redirects manually.
             resolved_url = url
-            if "archive.org" in url:
-                if is_ia_auth:
-                    request_headers["authorization"] = headers.get("authorization", "")
-                    current_url = url
-                    for _ in range(5):
-                        resp = requests.get(
-                            current_url,
-                            stream=True,
-                            timeout=(15, 30),
-                            headers=request_headers,
-                            cookies=cookies,
-                            allow_redirects=False,
-                        )
-                        if resp.status_code in (301, 302, 303, 307, 308):
-                            current_url = resp.headers.get("Location", current_url)
-                            continue
-                        else:
-                            resp.raise_for_status()
-                            response = resp
-                            resolved_url = current_url
-                            break
-                    else:
-                        raise requests.exceptions.TooManyRedirects("Too many redirects")
-                else:
-                    response = requests.get(
-                        url,
+            if has_auth:
+                current_url = url
+                for _ in range(5):
+                    resp = requests.get(
+                        current_url,
                         stream=True,
                         timeout=(15, 30),
                         headers=request_headers,
                         cookies=cookies,
+                        allow_redirects=False,
                     )
-                    response.raise_for_status()
-                    resolved_url = response.url
+                    if resp.status_code in (301, 302, 303, 307, 308):
+                        current_url = resp.headers.get("Location", current_url)
+                        continue
+                    else:
+                        resp.raise_for_status()
+                        response = resp
+                        resolved_url = current_url
+                        break
+                else:
+                    raise requests.exceptions.TooManyRedirects("Too many redirects")
             else:
-                dl_headers = dict(request_headers)
-                dl_headers.update(headers)
                 response = requests.get(
                     url,
                     stream=True,
                     timeout=(15, 30),
-                    headers=dl_headers,
+                    headers=request_headers,
                     cookies=cookies,
-                    allow_redirects=True,
                 )
                 response.raise_for_status()
                 resolved_url = response.url
