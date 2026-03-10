@@ -65,7 +65,6 @@ from services.installed_checker import installed_checker
 from services.image_cache import ImageCache
 from services.download_manager import DownloadManager as _DesktopDownloadManager
 from services.scraper_manager import ScraperManager
-from services.portmaster_loader import PortMasterLoader, PortMasterInstaller
 from services.syncthing_service import SyncthingService
 from input.navigation import NavigationHandler
 from input.controller import ControllerHandler
@@ -215,12 +214,6 @@ class ConsoleUtilitiesApp:
 
         # Initialize scraper manager
         self.scraper_manager = ScraperManager(self.settings, self.state.scraper_queue)
-
-        # Initialize PortMaster loader and installer
-        self.portmaster_loader = PortMasterLoader(self.settings)
-        self.portmaster_installer = PortMasterInstaller(
-            self.settings, self.portmaster_loader
-        )
 
         # Initialize Syncthing service (lazily when needed)
         self.syncthing_service = None
@@ -661,10 +654,6 @@ class ConsoleUtilitiesApp:
         self, game: Any, system_data: Optional[dict] = None
     ) -> Optional[pygame.Surface]:
         """Get thumbnail for a game."""
-        # PortMaster ports have banner_url directly in the dict
-        if isinstance(game, dict) and game.get("banner_url"):
-            return self.image_cache.get_thumbnail(game, "", self.settings)
-
         if system_data:
             boxart_url = system_data.get("boxarts", "")
         else:
@@ -679,10 +668,6 @@ class ConsoleUtilitiesApp:
 
     def _get_hires_image(self, game: Any) -> Optional[pygame.Surface]:
         """Get hi-res image for a game."""
-        # PortMaster ports have banner_url directly in the dict
-        if isinstance(game, dict) and game.get("banner_url"):
-            return self.image_cache.get_hires_image(game, "", self.settings)
-
         if self.state.selected_system < 0 or self.state.selected_system >= len(
             self.data
         ):
@@ -1024,6 +1009,15 @@ class ConsoleUtilitiesApp:
                 try:
                     self._draw_background()
 
+                    # Pre-compute filtered systems for system picker rendering
+                    if (
+                        self.state.scraper_wizard.show
+                        and self.state.scraper_wizard.system_picker_active
+                    ):
+                        self.screen_manager.scraper_wizard_modal.system_picker_systems = (
+                            self._get_filtered_systems()
+                        )
+
                     # Render current screen
                     rects = self.screen_manager.render(
                         self.screen,
@@ -1088,18 +1082,6 @@ class ConsoleUtilitiesApp:
             self._navigate_keyboard_modal(
                 direction, self.state.search, char_set="default"
             )
-            return
-
-        if self.state.port_details.show:
-            # Left/right scroll the port title text horizontally
-            if direction in ("left", "right"):
-                scroll_step = 20
-                if direction == "right":
-                    self.state.text_scroll_offset += scroll_step
-                else:
-                    self.state.text_scroll_offset = max(
-                        0, self.state.text_scroll_offset - scroll_step
-                    )
             return
 
         if self.state.game_details.show:
@@ -1213,6 +1195,9 @@ class ConsoleUtilitiesApp:
             return
 
         if self.state.scraper_wizard.show:
+            if self.state.scraper_wizard.system_picker_active:
+                self._navigate_system_picker(direction)
+                return
             self._navigate_scraper_wizard(direction)
             return
 
@@ -1439,25 +1424,6 @@ class ConsoleUtilitiesApp:
                 self.state.scraper_queue.highlighted = (
                     self.state.scraper_queue.highlighted + 1
                 ) % max_items
-
-        elif self.state.mode == "portmaster":
-            pm = self.state.portmaster
-            max_items = len(pm.filtered_ports) or 1
-            if direction == "up":
-                pm.highlighted = (pm.highlighted - 1) % max_items
-                self.state.text_scroll_offset = 0
-            elif direction == "down":
-                pm.highlighted = (pm.highlighted + 1) % max_items
-                self.state.text_scroll_offset = 0
-            elif direction in ("left", "right"):
-                # Left/right scroll the highlighted item's text horizontally
-                scroll_step = 20
-                if direction == "right":
-                    self.state.text_scroll_offset += scroll_step
-                else:
-                    self.state.text_scroll_offset = max(
-                        0, self.state.text_scroll_offset - scroll_step
-                    )
 
         elif self.state.mode == "sports_patcher":
             from ui.screens.sports_patcher_screen import sports_patcher_screen
@@ -2423,13 +2389,7 @@ class ConsoleUtilitiesApp:
         elif event.key == pygame.K_RIGHT:
             self._move_highlight("right")
         elif event.key == pygame.K_q:
-            if self.state.mode == "portmaster" and not self._any_modal_open():
-                self._portmaster_cycle_genre(-1)
-            else:
-                self._toggle_keyboard_shift()
-        elif event.key == pygame.K_e:
-            if self.state.mode == "portmaster" and not self._any_modal_open():
-                self._portmaster_cycle_genre(1)
+            self._toggle_keyboard_shift()
         elif event.key == pygame.K_s:
             self._handle_search_action()
         elif event.key == pygame.K_d:
@@ -2490,27 +2450,7 @@ class ConsoleUtilitiesApp:
         elif action == "detail":
             self._handle_detail_action()
         elif action == "left_shoulder":
-            wizard = self.state.scraper_wizard
-            if (
-                wizard.show
-                and wizard.step == "batch_options"
-                and wizard.image_highlighted == 0
-            ):
-                self._cycle_batch_system(reverse=True)
-            elif self.state.mode == "portmaster" and not self._any_modal_open():
-                self._portmaster_cycle_genre(-1)
-            else:
-                self._toggle_keyboard_shift()
-        elif action == "right_shoulder":
-            wizard = self.state.scraper_wizard
-            if (
-                wizard.show
-                and wizard.step == "batch_options"
-                and wizard.image_highlighted == 0
-            ):
-                self._cycle_batch_system()
-            elif self.state.mode == "portmaster" and not self._any_modal_open():
-                self._portmaster_cycle_genre(1)
+            self._toggle_keyboard_shift()
         elif action == "start":
             self._handle_start_action()
 
@@ -2594,6 +2534,50 @@ class ConsoleUtilitiesApp:
 
         # Check scraper wizard clicks
         if self.state.scraper_wizard.show:
+            # System picker overlay intercepts clicks when active
+            if self.state.scraper_wizard.system_picker_active:
+                rects = self.state.ui_rects.rects
+                # Close button
+                close_btn = rects.get("close")
+                if close_btn and close_btn.collidepoint(x, y):
+                    self._close_system_picker()
+                    return
+                # Keyboard character clicks
+                for i, rect in enumerate(rects.get("char_rects", [])):
+                    if rect.collidepoint(x, y):
+                        wizard = self.state.scraper_wizard
+                        modal = self.screen_manager.scraper_wizard_modal
+                        new_text, is_done, toggle_shift = (
+                            modal.handle_system_picker_key(
+                                i,
+                                wizard.system_picker_search,
+                                shift_active=wizard.system_picker_shift,
+                            )
+                        )
+                        if toggle_shift:
+                            wizard.system_picker_shift = not wizard.system_picker_shift
+                        wizard.system_picker_search = new_text
+                        wizard.system_picker_highlighted = 0
+                        if is_done:
+                            wizard.system_picker_search_active = False
+                        return
+                # System list item clicks
+                for i, rect in enumerate(rects.get("item_rects", [])):
+                    if rect.collidepoint(x, y):
+                        filtered = self._get_filtered_systems()
+                        scroll_start = max(
+                            0,
+                            self.state.scraper_wizard.system_picker_highlighted
+                            - max(1, len(rects.get("item_rects", [])))
+                            + 2,
+                        )
+                        idx = i + scroll_start
+                        if 0 <= idx < len(filtered):
+                            self.state.scraper_wizard.system_picker_highlighted = idx
+                            self._select_system_from_picker()
+                        return
+                return
+
             rects = self.state.ui_rects.rects
             # Action buttons
             select_btn = rects.get("select_button")
@@ -2697,9 +2681,7 @@ class ConsoleUtilitiesApp:
         # Check download button (modal or games screen)
         if self.state.ui_rects.download_button:
             if self.state.ui_rects.download_button.collidepoint(x, y):
-                if self.state.port_details.show:
-                    self._handle_port_details_selection()
-                elif self.state.game_details.show:
+                if self.state.game_details.show:
                     self._handle_game_details_selection()
                 elif self.state.mode == "games" and self.state.selected_games:
                     self._start_download()
@@ -2864,9 +2846,7 @@ class ConsoleUtilitiesApp:
             if rect.collidepoint(x, y):
                 # Add scroll offset to get actual item index
                 actual_index = i + self.state.ui_rects.scroll_offset
-                if self.state.mode == "portmaster":
-                    self.state.portmaster.highlighted = actual_index
-                elif self.state.mode == "systems_list":
+                if self.state.mode == "systems_list":
                     self.state.systems_list_highlighted = actual_index
                 elif self.state.mode == "add_systems":
                     self.state.add_systems_highlighted = actual_index
@@ -2994,7 +2974,9 @@ class ConsoleUtilitiesApp:
         elif self.state.scraper_login.show:
             self._close_scraper_login()
         elif self.state.scraper_wizard.show:
-            if self.state.scraper_wizard.step == "video_select":
+            if self.state.scraper_wizard.system_picker_active:
+                self._close_system_picker()
+            elif self.state.scraper_wizard.step == "video_select":
                 self.state.scraper_wizard.step = "image_select"
             elif self.state.scraper_wizard.step == "edit_name":
                 self.state.scraper_wizard.step = "rom_select"
@@ -3007,18 +2989,10 @@ class ConsoleUtilitiesApp:
             self._close_rename_wizard()
         elif self.state.ghost_cleaner_wizard.show:
             self._close_ghost_cleaner()
-        elif self.state.port_details.show:
-            self.state.port_details.show = False
-            self.state.port_details.port = None
-            self.state.text_scroll_offset = 0
         elif self.state.game_details.show:
             self.state.game_details.show = False
             self.state.game_details.current_game = None
             self.state.text_scroll_offset = 0
-        elif self.state.mode == "portmaster":
-            self.state.portmaster.search_query = ""
-            self.state.mode = "systems"
-            self.state.highlighted = 0
         elif self.state.mode == "syncthing":
             if self.state.syncthing.custom_step == "file_select":
                 self.state.syncthing.custom_step = ""
@@ -3224,6 +3198,9 @@ class ConsoleUtilitiesApp:
             return
 
         if self.state.scraper_wizard.show:
+            if self.state.scraper_wizard.system_picker_active:
+                self._handle_system_picker_selection()
+                return
             self._handle_scraper_wizard_selection()
             return
 
@@ -3237,10 +3214,6 @@ class ConsoleUtilitiesApp:
 
         if self.state.ghost_cleaner_wizard.show:
             self._handle_ghost_cleaner_selection()
-            return
-
-        if self.state.port_details.show:
-            self._handle_port_details_selection()
             return
 
         # Mode-based selection
@@ -3263,8 +3236,6 @@ class ConsoleUtilitiesApp:
             elif action == "systems_list":
                 self.state.mode = "systems_list"
                 # Don't reset systems_list_highlighted to preserve position
-            elif action == "portmaster":
-                self._enter_portmaster()
             elif action == "scraper_menu":
                 self.state.mode = "scraper_menu"
                 self.state.highlighted = 0
@@ -3359,9 +3330,6 @@ class ConsoleUtilitiesApp:
 
         elif self.state.mode == "system_settings":
             self._handle_system_settings_selection()
-
-        elif self.state.mode == "portmaster":
-            self._handle_portmaster_selection()
 
         elif self.state.mode == "syncthing":
             self._handle_syncthing_select()
@@ -3508,9 +3476,6 @@ class ConsoleUtilitiesApp:
             # Navigate to downloads screen
             self.state.mode = "downloads"
             self.state.download_queue.highlighted = 0
-        elif context == "install_portmaster":
-            self._install_portmaster_base()
-            return  # Don't close modal - _install_portmaster_base manages UI
         elif context == "syncthing_reconfigure":
             self.settings["syncthing_role"] = ""
             self.settings["syncthing_host_device_id"] = ""
@@ -3648,29 +3613,6 @@ class ConsoleUtilitiesApp:
             self.state.systems_settings_highlighted = 0
         elif action == "remap_controller":
             self._collect_controller_mapping()
-        elif action == "toggle_portmaster_enabled":
-            if self.settings.get("portmaster_enabled", False):
-                # Disabling — just toggle off
-                self.settings["portmaster_enabled"] = False
-                save_settings(self.settings)
-            elif self.portmaster_installer.is_base_installed():
-                # Enabling and base already installed — just toggle on
-                self.settings["portmaster_enabled"] = True
-                save_settings(self.settings)
-            else:
-                # Enabling but base not installed — ask to install
-                self.state.confirm_modal.show = True
-                self.state.confirm_modal.title = "Install PortMaster"
-                self.state.confirm_modal.message_lines = [
-                    "PortMaster base package is required",
-                    "for ports to run.",
-                    "",
-                    "Download and install now? (~24 MB)",
-                ]
-                self.state.confirm_modal.ok_label = "Install"
-                self.state.confirm_modal.cancel_label = "Cancel"
-                self.state.confirm_modal.button_index = 0
-                self.state.confirm_modal.context = "install_portmaster"
         elif action == "toggle_syncthing_enabled":
             self.settings["syncthing_enabled"] = not self.settings.get(
                 "syncthing_enabled", False
@@ -5719,21 +5661,6 @@ class ConsoleUtilitiesApp:
         """Apply search filter and close search modal."""
         self.state.show_search_input = False
 
-        if self.state.mode == "portmaster":
-            pm = self.state.portmaster
-            pm.search_query = self.state.search.query or ""
-            genre = pm.genres[pm.selected_genre] if pm.genres else ""
-            pm.filtered_ports = self.portmaster_loader.filter_ports(
-                pm.ports, genre=genre, query=pm.search_query
-            )
-            pm.highlighted = 0
-            pm.scroll_offset = 0
-            self.state.search.mode = False
-            self.state.search.query = ""
-            self.state.search.input_text = ""
-            self.state.text_scroll_offset = 0
-            return
-
         if self.state.search.query:
             self.state.search.filtered_list = filter_games_by_search(
                 self.state.game_list, self.state.search.query
@@ -5780,12 +5707,8 @@ class ConsoleUtilitiesApp:
 
     def _handle_search_action(self):
         """Handle search key press."""
-        # Only show search in games mode or portmaster mode
+        # Only show search in games mode
         if self.state.mode == "games":
-            self.state.show_search_input = True
-            self.state.search.mode = True
-            self.state.search.query = ""
-        elif self.state.mode == "portmaster":
             self.state.show_search_input = True
             self.state.search.mode = True
             self.state.search.query = ""
@@ -5805,13 +5728,17 @@ class ConsoleUtilitiesApp:
             iss.league_search_active = not iss.league_search_active
             if not iss.league_search_active:
                 iss.league_search_cursor = 0
+        elif (
+            self.state.scraper_wizard.show
+            and self.state.scraper_wizard.system_picker_active
+        ):
+            wizard = self.state.scraper_wizard
+            wizard.system_picker_search_active = not wizard.system_picker_search_active
+            if not wizard.system_picker_search_active:
+                wizard.system_picker_cursor = 0
 
     def _handle_detail_action(self):
         """Handle detail key press."""
-        # Show details in portmaster mode
-        if self.state.mode == "portmaster":
-            self._handle_portmaster_selection()
-            return
         # Only show details in games mode with a valid selection
         if self.state.mode == "games":
             game_list = (
@@ -5883,6 +5810,7 @@ class ConsoleUtilitiesApp:
             elif step == "image_select":
                 wizard = self.state.scraper_wizard
                 wizard.button_focused = False
+                wizard.nav_bar_index = -1
                 if wizard.available_videos:
                     wizard.step = "video_select"
                     wizard.video_highlighted = 0
@@ -5891,12 +5819,14 @@ class ConsoleUtilitiesApp:
                 return
             elif step == "video_select":
                 self.state.scraper_wizard.button_focused = False
+                self.state.scraper_wizard.nav_bar_index = -1
                 self._start_scraper_download()
                 return
             elif step == "rom_list":
                 # Continue to batch options — auto-detect system from folder
                 wizard = self.state.scraper_wizard
                 wizard.button_focused = False
+                wizard.nav_bar_index = -1
                 wizard.step = "batch_options"
                 wizard.image_highlighted = 0
                 if not wizard.batch_system:
@@ -5944,8 +5874,6 @@ class ConsoleUtilitiesApp:
         self.state.folder_browser.show = False
         self.state.game_details.show = False
         self.state.game_details.current_game = None
-        self.state.port_details.show = False
-        self.state.port_details.port = None
         self.state.ia_login.show = False
         self.state.ia_download_wizard.show = False
         self.state.ia_collection_wizard.show = False
@@ -6067,7 +5995,6 @@ class ConsoleUtilitiesApp:
         return (
             self.state.show_search_input
             or self.state.game_details.show
-            or self.state.port_details.show
             or self.state.folder_browser.show
             or self.state.url_input.show
             or self.state.folder_name_input.show
@@ -6083,8 +6010,6 @@ class ConsoleUtilitiesApp:
             or self.state.auth_token_input.show
             or self.state.steam_shortcut.show
         )
-
-    # ---- PortMaster Handlers ---- #
 
     # ---- Syncthing Handlers ---- #
 
@@ -6473,153 +6398,6 @@ class ConsoleUtilitiesApp:
         save_settings(self.settings)
         self.state.syncthing.custom_saves = saves
         self.state.syncthing.status_message = "Custom save removed"
-
-    def _enter_portmaster(self):
-        """Fetch ports from PortMaster and enter portmaster mode."""
-        self._show_loading("Loading PortMaster ports...")
-
-        import threading
-
-        def fetch():
-            success, ports, error = self.portmaster_loader.fetch_ports()
-            if success:
-                pm = self.state.portmaster
-                pm.ports = ports
-                pm.genres = self.portmaster_loader.get_genres(ports)
-                pm.selected_genre = 0
-                pm.highlighted = 0
-                pm.scroll_offset = 0
-                pm.search_query = ""
-                pm.error = ""
-                pm.filtered_ports = self.portmaster_loader.filter_ports(ports)
-                self._hide_loading()
-                self.state.mode = "portmaster"
-            else:
-                pm = self.state.portmaster
-                pm.error = error
-                self._hide_loading()
-                self.state.mode = "portmaster"
-
-        thread = threading.Thread(target=fetch, daemon=True)
-        thread.start()
-
-    def _handle_portmaster_selection(self):
-        """Handle selection in portmaster mode - open port details."""
-        pm = self.state.portmaster
-        if pm.filtered_ports and 0 <= pm.highlighted < len(pm.filtered_ports):
-            port = pm.filtered_ports[pm.highlighted]
-            self.state.port_details.show = True
-            self.state.port_details.port = port
-            self.state.port_details.button_focused = True
-            self.state.text_scroll_offset = 0
-
-    def _handle_port_details_selection(self):
-        """Handle port details modal selection (Download button).
-
-        Uses the PortMasterInstaller to perform a proper installation:
-        download, MD5 verify, extract with file routing, write port.json,
-        inject PM signatures, fix permissions, install runtimes, and
-        update gamelist.xml.
-        """
-        port = self.state.port_details.port
-        if not port or not port.get("download_url"):
-            return
-
-        # Close modal
-        self.state.port_details.show = False
-        self.state.port_details.port = None
-
-        # Show loading modal for install progress
-        self.state.loading.show = True
-        self.state.loading.message = f"Installing {port.get('title', 'port')}..."
-        self.state.loading.progress = 0
-
-        import threading
-
-        def _do_install():
-            def progress_cb(status_text, progress):
-                self.state.loading.message = status_text
-                self.state.loading.progress = int(progress * 100)
-
-            success, error = self.portmaster_installer.install_port(
-                port, progress_cb=progress_cb
-            )
-
-            self.state.loading.show = False
-            self.state.loading.progress = 0
-
-            if success:
-                self.state.loading.message = ""
-            else:
-                # Show error via confirm modal
-                self.state.confirm_modal.show = True
-                self.state.confirm_modal.title = "Install Failed"
-                self.state.confirm_modal.message_lines = [
-                    f"Failed to install {port.get('title', 'port')}:",
-                    error[:80] if error else "Unknown error",
-                ]
-                self.state.confirm_modal.ok_label = "OK"
-                self.state.confirm_modal.cancel_label = ""
-                self.state.confirm_modal.button_index = 0
-                self.state.confirm_modal.context = ""
-
-        thread = threading.Thread(target=_do_install, daemon=True)
-        thread.start()
-
-    def _install_portmaster_base(self):
-        """Download and run the PortMaster base package installer."""
-        import threading
-
-        self._handle_confirm_modal_cancel()
-
-        self.state.loading.show = True
-        self.state.loading.message = "Installing PortMaster..."
-        self.state.loading.progress = 0
-
-        def _do_install():
-            def progress_cb(status_text, progress):
-                self.state.loading.message = status_text
-                self.state.loading.progress = int(progress * 100)
-
-            success, error = self.portmaster_installer.install_base_package(
-                progress_cb=progress_cb
-            )
-
-            self.state.loading.show = False
-            self.state.loading.progress = 0
-
-            if success:
-                self.state.loading.message = ""
-                self.settings["portmaster_enabled"] = True
-                save_settings(self.settings)
-            else:
-                self.state.confirm_modal.show = True
-                self.state.confirm_modal.title = "Install Failed"
-                self.state.confirm_modal.message_lines = [
-                    "Failed to install PortMaster:",
-                    error[:80] if error else "Unknown error",
-                ]
-                self.state.confirm_modal.ok_label = "OK"
-                self.state.confirm_modal.cancel_label = ""
-                self.state.confirm_modal.button_index = 0
-                self.state.confirm_modal.context = ""
-
-        thread = threading.Thread(target=_do_install, daemon=True)
-        thread.start()
-
-    def _portmaster_cycle_genre(self, direction: int):
-        """Cycle through genres in portmaster mode. direction: 1 or -1."""
-        pm = self.state.portmaster
-        if not pm.genres:
-            return
-        pm.selected_genre = (pm.selected_genre + direction) % len(pm.genres)
-        genre = pm.genres[pm.selected_genre]
-        pm.filtered_ports = self.portmaster_loader.filter_ports(
-            pm.ports, genre=genre, query=pm.search_query
-        )
-        pm.highlighted = 0
-        pm.scroll_offset = 0
-        self.state.text_scroll_offset = 0
 
     # ---- Internet Archive Handlers ---- #
 
@@ -7297,6 +7075,7 @@ class ConsoleUtilitiesApp:
         wizard.batch_roms = []
         wizard.batch_current_index = 0
         wizard.batch_auto_select = True
+        wizard.nav_bar_index = -1
         if (
             self.settings.get("scraper_mixed_images", False)
             and self.settings.get("scraper_provider", "libretro") == "screenscraper"
@@ -7320,18 +7099,36 @@ class ConsoleUtilitiesApp:
         self.screen_manager.scraper_wizard_modal.clear_thumbs()
 
     def _navigate_scraper_list(
-        self, wizard, direction, max_items, attr, has_button=False
+        self, wizard, direction, max_items, attr, has_button=False,
+        nav_bar_count=0,
     ):
-        """Navigate a scraper wizard list with optional action button at bottom.
+        """Navigate a scraper wizard list with optional action button and navbar.
 
-        Up/down navigate list items. Left/right toggle focus to the action button.
+        Up/down navigate list items. Left/right navigate the navbar buttons
+        or toggle focus to the action button.
         """
         cur = getattr(wizard, attr)
+
+        # Navbar is focused — left/right cycle buttons, down exits to list
+        if wizard.nav_bar_index >= 0:
+            if direction == "left":
+                if wizard.nav_bar_index > 0:
+                    wizard.nav_bar_index -= 1
+            elif direction == "right":
+                if wizard.nav_bar_index < nav_bar_count - 1:
+                    wizard.nav_bar_index += 1
+            elif direction == "down":
+                wizard.nav_bar_index = -1
+            return
+
         if direction == "up":
             if wizard.button_focused:
                 wizard.button_focused = False
             elif cur > 0:
                 setattr(wizard, attr, cur - 1)
+            elif nav_bar_count > 0:
+                # At top of list — move focus to navbar
+                wizard.nav_bar_index = 0
         elif direction == "down":
             if not wizard.button_focused and cur < max_items - 1:
                 setattr(wizard, attr, cur + 1)
@@ -7341,6 +7138,9 @@ class ConsoleUtilitiesApp:
         elif direction == "left":
             if wizard.button_focused:
                 wizard.button_focused = False
+            elif nav_bar_count > 0:
+                # In list — move focus to navbar
+                wizard.nav_bar_index = 0
 
     def _navigate_scraper_wizard(self, direction: str):
         """Handle navigation in scraper wizard."""
@@ -7369,25 +7169,29 @@ class ConsoleUtilitiesApp:
         elif step == "game_select":
             max_items = len(wizard.search_results) or 1
             self._navigate_scraper_list(
-                wizard, direction, max_items, "selected_game_index", has_button=True
+                wizard, direction, max_items, "selected_game_index",
+                has_button=True, nav_bar_count=4,
             )
 
         elif step == "image_select":
             max_items = len(wizard.available_images) or 1
             self._navigate_scraper_list(
-                wizard, direction, max_items, "image_highlighted", has_button=True
+                wizard, direction, max_items, "image_highlighted",
+                has_button=True, nav_bar_count=4,
             )
 
         elif step == "video_select":
             max_items = 1 + len(wizard.available_videos)
             self._navigate_scraper_list(
-                wizard, direction, max_items, "video_highlighted", has_button=True
+                wizard, direction, max_items, "video_highlighted",
+                has_button=True, nav_bar_count=4,
             )
 
         elif step == "rom_list":
             max_items = len(wizard.batch_roms) or 1
             self._navigate_scraper_list(
-                wizard, direction, max_items, "batch_current_index", has_button=True
+                wizard, direction, max_items, "batch_current_index",
+                has_button=True, nav_bar_count=4,
             )
 
         elif step == "batch_options":
@@ -7397,7 +7201,8 @@ class ConsoleUtilitiesApp:
             )
             max_items = (9 if mixed else 7) + 1
             self._navigate_scraper_list(
-                wizard, direction, max_items, "image_highlighted", has_button=True
+                wizard, direction, max_items, "image_highlighted",
+                has_button=True, nav_bar_count=4,
             )
 
         elif step in ("complete", "batch_complete", "error"):
@@ -7408,6 +7213,21 @@ class ConsoleUtilitiesApp:
         """Handle selection in scraper wizard."""
         wizard = self.state.scraper_wizard
         step = wizard.step
+
+        # Handle navbar button activation
+        if wizard.nav_bar_index >= 0:
+            nav_actions = ["back", "up", "down", "select"]
+            action = nav_actions[wizard.nav_bar_index]
+            wizard.nav_bar_index = -1
+            if action == "back":
+                self._go_back()
+            elif action == "up":
+                self._navigate_scraper_wizard("up")
+            elif action == "down":
+                self._navigate_scraper_wizard("down")
+            elif action == "select":
+                self._handle_scraper_wizard_selection()
+            return
 
         if step == "edit_name":
             # Handle on-screen keyboard character selection
@@ -7503,8 +7323,8 @@ class ConsoleUtilitiesApp:
         highlighted = wizard.image_highlighted
 
         if highlighted == 0:
-            # Cycle through known systems
-            self._cycle_batch_system()
+            # Open system picker modal
+            self._open_system_picker()
         elif highlighted == 1:
             # Toggle auto-select
             wizard.batch_auto_select = not wizard.batch_auto_select
@@ -7783,50 +7603,222 @@ class ConsoleUtilitiesApp:
         self.state.mode = "scraper_downloads"
         self.state.scraper_queue.highlighted = 0
 
-    # Deduplicated system list for batch scraper (short name per system ID)
-    _BATCH_SYSTEMS = [
-        "",
-        "nes",
-        "snes",
-        "n64",
-        "gb",
-        "gbc",
-        "gba",
-        "nds",
-        "psx",
-        "ps2",
-        "psp",
-        "genesis",
-        "sega32x",
-        "gamegear",
-        "mastersystem",
-        "saturn",
-        "dreamcast",
-        "atari2600",
-        "atari7800",
-        "lynx",
-        "neogeo",
-        "arcade",
-        "pcengine",
-        "pcfx",
-        "3do",
-        "jaguar",
-        "gamecube",
-        "wii",
-        "pico8",
+    # Comprehensive Batocera system list: (display_name, batocera_folder_id)
+    # folder_id maps to ScreenScraper systemeid via SYSTEM_ID_MAP
+    _ALL_SYSTEMS = [
+        # Nintendo Home
+        ("NES / Famicom", "nes"),
+        ("Famicom Disk System", "fds"),
+        ("SNES / Super Famicom", "snes"),
+        ("SNES MSU-1", "snesmsu1"),
+        ("Satellaview", "satellaview"),
+        ("SuFami Turbo", "sufami"),
+        ("Nintendo 64", "n64"),
+        ("Nintendo 64DD", "n64dd"),
+        ("GameCube", "gamecube"),
+        ("Wii", "wii"),
+        ("Wii U", "wiiu"),
+        ("Switch", "switch"),
+        # Nintendo Handhelds
+        ("Game Boy", "gb"),
+        ("Game Boy Color", "gbc"),
+        ("Game Boy Advance", "gba"),
+        ("Virtual Boy", "virtualboy"),
+        ("Nintendo DS", "nds"),
+        ("Nintendo 3DS", "3ds"),
+        ("Pokemon Mini", "pokemini"),
+        # PlayStation
+        ("PlayStation", "psx"),
+        ("PlayStation 2", "ps2"),
+        ("PlayStation 3", "ps3"),
+        ("PSP", "psp"),
+        ("PS Vita", "psvita"),
+        # Sega Home
+        ("SG-1000", "sg1000"),
+        ("Master System", "mastersystem"),
+        ("Mega Drive / Genesis", "genesis"),
+        ("Sega CD", "segacd"),
+        ("Sega 32X", "sega32x"),
+        ("Saturn", "saturn"),
+        ("Dreamcast", "dreamcast"),
+        ("Naomi", "naomi"),
+        ("Naomi 2", "naomi2"),
+        # Sega Handhelds
+        ("Game Gear", "gamegear"),
+        # Atari
+        ("Atari 2600", "atari2600"),
+        ("Atari 5200", "atari5200"),
+        ("Atari 7800", "atari7800"),
+        ("Atari ST", "atarist"),
+        ("Atari 800 / XL / XE", "atari800"),
+        ("Atari Jaguar", "jaguar"),
+        ("Atari Jaguar CD", "jaguarcd"),
+        ("Atari Lynx", "lynx"),
+        # NEC
+        ("PC Engine / TG-16", "pcengine"),
+        ("PC Engine CD / TG-CD", "pcenginecd"),
+        ("SuperGrafx", "supergrafx"),
+        ("PC-FX", "pcfx"),
+        # SNK
+        ("Neo Geo MVS/AES", "neogeo"),
+        ("Neo Geo CD", "neogeocd"),
+        ("Neo Geo Pocket", "ngp"),
+        ("Neo Geo Pocket Color", "ngpc"),
+        # Other Consoles
+        ("3DO", "3do"),
+        ("ColecoVision", "colecovision"),
+        ("Intellivision", "intellivision"),
+        ("Odyssey 2 / Videopac", "odyssey2"),
+        ("Vectrex", "vectrex"),
+        ("Channel F", "channelf"),
+        ("Philips CD-i", "cdi"),
+        ("Supervision", "supervision"),
+        # Arcade
+        ("Arcade / MAME", "arcade"),
+        ("FinalBurn Neo", "fbneo"),
+        ("CPS-1", "cps1"),
+        ("CPS-2", "cps2"),
+        ("CPS-3", "cps3"),
+        ("Atomiswave", "atomiswave"),
+        ("Sega Model 2", "model2"),
+        ("Sega Model 3", "model3"),
+        # Computers
+        ("MSX", "msx"),
+        ("MSX2", "msx2"),
+        ("Amiga", "amiga"),
+        ("Amiga CD32", "amigacd32"),
+        ("Amiga CDTV", "amigacdtv"),
+        ("Amstrad CPC", "amstradcpc"),
+        ("ZX Spectrum", "zxspectrum"),
+        ("ZX81", "zx81"),
+        ("Commodore 64", "c64"),
+        ("DOS / DOSBox", "dos"),
+        ("PC-88", "pc88"),
+        ("PC-98", "pc98"),
+        ("Sharp X68000", "x68000"),
+        ("Sharp X1", "x1"),
+        ("SAM Coupe", "samcoupe"),
+        ("Thomson", "thomson"),
+        ("TI-99/4A", "ti99"),
+        ("Apple II", "apple2"),
+        ("Apple IIGS", "apple2gs"),
+        ("BBC Micro", "bbcmicro"),
+        ("Dragon 32/64", "dragondata"),
+        ("Oric", "oric"),
+        ("TRS-80 CoCo", "trs80coco"),
+        # Handhelds & Misc
+        ("WonderSwan", "wswan"),
+        ("WonderSwan Color", "wswanc"),
+        ("Game & Watch", "gw"),
+        ("Gamate", "gamate"),
+        ("Mega Duck", "megaduck"),
+        ("Arduboy", "arduboy"),
+        # Fantasy / Engines
+        ("PICO-8", "pico8"),
+        ("TIC-80", "tic80"),
+        ("Uzebox", "uzebox"),
+        ("ScummVM", "scummvm"),
+        ("EasyRPG", "easyrpg"),
+        ("Solarus", "solarus"),
+        ("OpenBOR", "openbor"),
+        ("LowRes NX", "lowresnx"),
     ]
 
-    def _cycle_batch_system(self, reverse=False):
-        """Cycle batch system to the next/previous known platform."""
+    def _open_system_picker(self):
+        """Open the system picker modal for batch scraper."""
         wizard = self.state.scraper_wizard
-        systems = self._BATCH_SYSTEMS
-        current = wizard.batch_system
-        try:
-            idx = systems.index(current)
-        except ValueError:
-            idx = 0
-        step = -1 if reverse else 1
-        wizard.batch_system = systems[(idx + step) % len(systems)]
+        wizard.system_picker_active = True
+        wizard.system_picker_highlighted = 0
+        wizard.system_picker_search = ""
+        wizard.system_picker_search_active = False
+        wizard.system_picker_cursor = 0
+        wizard.system_picker_shift = False
+        # Pre-select current system if set
+        if wizard.batch_system:
+            for i, (_, sys_id) in enumerate(self._ALL_SYSTEMS):
+                if sys_id == wizard.batch_system:
+                    wizard.system_picker_highlighted = i
+                    break
+
+    def _close_system_picker(self):
+        """Close the system picker without changing selection."""
+        wizard = self.state.scraper_wizard
+        if wizard.system_picker_search_active:
+            wizard.system_picker_search_active = False
+            wizard.system_picker_cursor = 0
+        else:
+            wizard.system_picker_active = False
+
+    def _select_system_from_picker(self):
+        """Confirm system selection from picker modal."""
+        wizard = self.state.scraper_wizard
+        filtered = self._get_filtered_systems()
+        if filtered and 0 <= wizard.system_picker_highlighted < len(filtered):
+            _, sys_id = filtered[wizard.system_picker_highlighted]
+            wizard.batch_system = sys_id
+        wizard.system_picker_active = False
+
+    def _get_filtered_systems(self):
+        """Return systems filtered by current search query."""
+        query = self.state.scraper_wizard.system_picker_search.lower().strip()
+        if not query:
+            return [("Auto (detect from folder)", "")] + list(self._ALL_SYSTEMS)
+        return [
+            (name, sid) for name, sid in self._ALL_SYSTEMS
+            if query in name.lower() or query in sid.lower()
+        ]
+
+    def _navigate_system_picker(self, direction):
+        """Handle d-pad navigation in the system picker modal."""
+        wizard = self.state.scraper_wizard
+        filtered = self._get_filtered_systems()
+        max_items = len(filtered) or 1
+
+        if wizard.system_picker_search_active:
+            # Navigate on-screen keyboard
+            from ui.organisms.char_keyboard import CharKeyboard
+            keyboard = CharKeyboard()
+            total_chars = keyboard.get_total_chars("default")
+            chars_per_row = 13
+            cur = wizard.system_picker_cursor
+            if direction == "up" and cur >= chars_per_row:
+                cur -= chars_per_row
+            elif direction == "down" and cur + chars_per_row < total_chars:
+                cur += chars_per_row
+            elif direction == "left" and cur > 0:
+                cur -= 1
+            elif direction == "right" and cur < total_chars - 1:
+                cur += 1
+            wizard.system_picker_cursor = cur
+        else:
+            if direction == "up":
+                if wizard.system_picker_highlighted > 0:
+                    wizard.system_picker_highlighted -= 1
+            elif direction == "down":
+                if wizard.system_picker_highlighted < max_items - 1:
+                    wizard.system_picker_highlighted += 1
+
+    def _handle_system_picker_selection(self):
+        """Handle A/select in system picker."""
+        wizard = self.state.scraper_wizard
+        if wizard.system_picker_search_active:
+            # Character selected from keyboard
+            modal = self.screen_manager.scraper_wizard_modal
+            new_text, is_done, toggle_shift = (
+                modal.handle_system_picker_key(
+                    wizard.system_picker_cursor,
+                    wizard.system_picker_search,
+                    shift_active=wizard.system_picker_shift,
+                )
+            )
+            if toggle_shift:
+                wizard.system_picker_shift = not wizard.system_picker_shift
+            wizard.system_picker_search = new_text
+            wizard.system_picker_highlighted = 0
+            if is_done:
+                wizard.system_picker_search_active = False
+        else:
+            self._select_system_from_picker()
 
     def _show_screenscraper_login(self):
         """Show ScreenScraper login modal."""

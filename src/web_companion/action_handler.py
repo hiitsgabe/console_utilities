@@ -171,9 +171,9 @@ def _handle_set_text(state, text):
             state.scraper_login.api_key = text
             state.scraper_login.cursor_position = len(text)
     else:
-        # Fallback: if we're on games/portmaster, activate search modal
+        # Fallback: if we're on games, activate search modal
         # so the subsequent submit_text will trigger _apply_search_filter
-        if state.mode in ("games", "portmaster"):
+        if state.mode == "games":
             state.show_search_input = True
             state.search.mode = True
             state.search.input_text = text
@@ -272,8 +272,6 @@ def _handle_select_index(state, index):
             return  # Don't post K_RETURN — just switch team
     elif state.mode == "games":
         state.highlighted = index
-    elif state.mode == "portmaster":
-        state.portmaster.highlighted = index
     elif state.mode == "systems_list":
         state.systems_list_highlighted = index
     elif state.mode == "add_systems":

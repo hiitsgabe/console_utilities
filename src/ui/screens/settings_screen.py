@@ -46,12 +46,6 @@ class SettingsScreen:
         "Skip Installed Games",
     ]
 
-    # PortMaster section (only shown for pygame builds)
-    PORTMASTER_SECTION = [
-        "--- PORTMASTER (BETA) ---",
-        "Enable PortMaster (beta)",
-    ]
-
     # Input section
     INPUT_SECTION = [
         "--- INPUT ---",
@@ -162,11 +156,6 @@ class SettingsScreen:
         # Add View Options section
         divider_indices.add(len(items))
         items.extend(self.VIEW_OPTIONS_SECTION)
-
-        # Add PortMaster section (only for pygame builds)
-        if BUILD_TARGET in ("pygame", "source"):
-            divider_indices.add(len(items))
-            items.extend(self.PORTMASTER_SECTION)
 
         # Add Internet Archive section
         divider_indices.add(len(items))
@@ -283,9 +272,6 @@ class SettingsScreen:
             elif item == "Remote Games Bkp File":
                 path = settings.get("archive_json_path", "")
                 value = os.path.basename(path) if path else "Not Set"
-                items.append((item, value))
-            elif item == "Enable PortMaster (beta)":
-                value = "ON" if settings.get("portmaster_enabled", False) else "OFF"
                 items.append((item, value))
             elif item == "Internet Archive Login":
                 email = settings.get("ia_email", "")
@@ -421,7 +407,6 @@ class SettingsScreen:
                 "Add Game System": "add_systems",
                 "Games Systems Preference": "systems_settings",
                 "Clear Game List Cache": "clear_game_list_cache",
-                "Enable PortMaster (beta)": "toggle_portmaster_enabled",
                 "Internet Archive Login": "ia_login",
                 "View Mode": "toggle_view_mode",
                 "Enable Box-art Display": "toggle_boxart",

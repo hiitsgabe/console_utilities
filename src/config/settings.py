@@ -28,8 +28,6 @@ class Settings:
     archive_json_url: str = ""
     cache_enabled: bool = True
     system_settings: Dict[str, Dict[str, Any]] = field(default_factory=dict)
-    # PortMaster settings
-    portmaster_enabled: bool = False
     # Internet Archive settings
     ia_enabled: bool = False
     ia_email: str = ""

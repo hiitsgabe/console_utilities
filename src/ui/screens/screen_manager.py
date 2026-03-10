@@ -31,14 +31,12 @@ from .modals.scraper_login_modal import ScraperLoginModal
 from .modals.dedupe_wizard_modal import DedupeWizardModal
 from .modals.rename_wizard_modal import RenameWizardModal
 from .modals.ghost_cleaner_modal import GhostCleanerModal
-from .modals.port_details_modal import PortDetailsModal
 from .modals.league_browser_modal import LeagueBrowserModal
 from .modals.roster_preview_modal import RosterPreviewModal
 from .modals.patch_progress_modal import PatchProgressModal
 from .modals.color_picker_modal import ColorPickerModal
 from .modals.auth_token_modal import AuthTokenModal
 from .modals.steam_search_modal import SteamSearchModal
-from .portmaster_screen import PortMasterScreen
 from .scraper_menu_screen import ScraperMenuScreen
 from .sports_patcher_screen import SportsPatcherScreen
 from .we_patcher_screen import WePatcherScreen
@@ -77,7 +75,6 @@ class ScreenManager:
         self.system_settings_screen = SystemSettingsScreen(theme)
         self.downloads_screen = DownloadsScreen(theme)
         self.scraper_downloads_screen = ScraperDownloadsScreen(theme)
-        self.portmaster_screen = PortMasterScreen(theme)
         self.scraper_menu_screen = ScraperMenuScreen(theme)
         self.sports_patcher_screen = SportsPatcherScreen(theme)
         self.we_patcher_screen = WePatcherScreen(theme)
@@ -107,7 +104,6 @@ class ScreenManager:
         self.dedupe_wizard_modal = DedupeWizardModal(theme)
         self.rename_wizard_modal = RenameWizardModal(theme)
         self.ghost_cleaner_modal = GhostCleanerModal(theme)
-        self.port_details_modal = PortDetailsModal(theme)
         self.league_browser_modal = LeagueBrowserModal(theme)
         self.roster_preview_modal = RosterPreviewModal(theme)
         self.patch_progress_modal = PatchProgressModal(theme)
@@ -471,6 +467,7 @@ class ScreenManager:
                     search_name_cursor=state.scraper_wizard.search_name_cursor,
                     search_name_shift=state.scraper_wizard.search_name_shift,
                     button_focused=state.scraper_wizard.button_focused,
+                    nav_bar_index=state.scraper_wizard.nav_bar_index,
                 )
             )
             rects["modal"] = modal_rect
@@ -499,6 +496,27 @@ class ScreenManager:
                 rects["nav_back"] = wm.nav_back_rect
             if wm.backspace_rect:
                 rects["backspace"] = wm.backspace_rect
+
+            # System picker overlay on top of batch options
+            if state.scraper_wizard.system_picker_active:
+                sw = state.scraper_wizard
+                filtered = wm.system_picker_systems or []
+                sp_modal, sp_content, sp_close, sp_chars, sp_items = (
+                    self.scraper_wizard_modal.render_system_picker(
+                        screen,
+                        filtered,
+                        sw.system_picker_highlighted,
+                        sw.system_picker_search,
+                        sw.system_picker_search_active,
+                        sw.system_picker_cursor,
+                        sw.system_picker_shift,
+                    )
+                )
+                rects["modal"] = sp_modal
+                rects["close"] = sp_close
+                rects["item_rects"] = sp_items
+                rects["char_rects"] = sp_chars
+
             return rects
 
         if state.dedupe_wizard.show:
@@ -573,23 +591,6 @@ class ScreenManager:
             rects["modal"] = modal_rect
             rects["close"] = close_rect
             rects["item_rects"] = item_rects
-            return rects
-
-        if state.port_details.show and state.port_details.port:
-            hires_image = (
-                get_hires_image(state.port_details.port) if get_hires_image else None
-            )
-            modal_rect, download_rect, close_rect = self.port_details_modal.render(
-                screen,
-                state.port_details.port,
-                hires_image,
-                button_focused=state.port_details.button_focused,
-                input_mode=state.input_mode,
-                text_scroll_offset=state.text_scroll_offset,
-            )
-            rects["modal"] = modal_rect
-            rects["download_button"] = download_rect
-            rects["close"] = close_rect
             return rects
 
         # WE Patcher modals
@@ -927,22 +928,6 @@ class ScreenManager:
                 screen,
                 state.scraper_queue,
                 input_mode=state.input_mode,
-            )
-            rects["back"] = back_rect
-            rects["item_rects"] = item_rects
-            rects["scroll_offset"] = scroll_offset
-
-        elif state.mode == "portmaster":
-            pm = state.portmaster
-            genre = pm.genres[pm.selected_genre] if pm.genres else "All"
-            back_rect, item_rects, scroll_offset = self.portmaster_screen.render(
-                screen,
-                pm.filtered_ports,
-                pm.highlighted,
-                genre=genre,
-                search_query=pm.search_query,
-                get_thumbnail=get_thumbnail,
-                text_scroll_offset=state.text_scroll_offset,
             )
             rects["back"] = back_rect
             rects["item_rects"] = item_rects

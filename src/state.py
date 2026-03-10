@@ -293,6 +293,14 @@ class ScraperWizardState:
     )
     batch_system: str = ""  # per-batch platform override (e.g. "psx", "snes")
     button_focused: bool = False  # Whether action button at bottom is focused
+    nav_bar_index: int = -1  # Focused navbar button index (-1 = not focused)
+    # System picker modal state
+    system_picker_active: bool = False
+    system_picker_highlighted: int = 0
+    system_picker_search: str = ""
+    system_picker_search_active: bool = False
+    system_picker_cursor: int = 0
+    system_picker_shift: bool = False
 
 
 @dataclass
@@ -375,33 +383,6 @@ class ScraperQueueState:
     highlighted: int = 0  # Currently highlighted item in scraper downloads screen
     download_video: bool = False  # Download video for each ROM during batch
     system: str = ""  # Per-batch platform override (e.g. "psx", "snes")
-
-
-@dataclass
-class PortMasterState:
-    """State for PortMaster port browsing."""
-
-    ports: List[Dict[str, Any]] = field(default_factory=list)
-    filtered_ports: List[Dict[str, Any]] = field(default_factory=list)
-    genres: List[str] = field(default_factory=list)
-    selected_genre: int = 0  # 0 = "All"
-    highlighted: int = 0
-    scroll_offset: int = 0
-    search_query: str = ""
-    loading: bool = False
-    error: str = ""
-    last_fetched: float = 0.0
-    view_type: str = "list"
-
-
-@dataclass
-class PortDetailsState:
-    """State for port details modal."""
-
-    show: bool = False
-    port: Optional[Dict[str, Any]] = None
-    button_focused: bool = True
-    loading_image: bool = False
 
 
 @dataclass
@@ -895,7 +876,7 @@ class AppState:
 
         # ---- Navigation State ---- #
         self.mode: str = (
-            "systems"  # systems, systems_list, games, settings, utils, credits, add_systems, systems_settings, system_settings, portmaster
+            "systems"  # systems, systems_list, games, settings, utils, credits, add_systems, systems_settings, system_settings
         )
         self.systems_list_highlighted: int = 0
         self.highlighted: int = 0
@@ -958,10 +939,6 @@ class AppState:
 
         # ---- Ghost Cleaner ---- #
         self.ghost_cleaner_wizard = GhostCleanerWizardState()
-
-        # ---- PortMaster ---- #
-        self.portmaster = PortMasterState()
-        self.port_details = PortDetailsState()
 
         # ---- WE Patcher ---- #
         self.we_patcher = WePatcherState()
@@ -1073,7 +1050,6 @@ class AppState:
         self.dedupe_wizard.show = False
         self.rename_wizard.show = False
         self.ghost_cleaner_wizard.show = False
-        self.port_details.show = False
         self.auth_token_input.show = False
         self.steam_shortcut.show = False
         self.we_patcher.active_modal = None
