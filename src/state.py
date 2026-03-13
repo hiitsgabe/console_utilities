@@ -569,6 +569,48 @@ class NHL07PSPPatcherState:
 
 
 @dataclass
+class NHL05PS2PatcherState:
+    """State for the NHL 05 PS2 Patcher feature."""
+
+    selected_season: int = field(
+        default_factory=lambda: (
+            datetime.now().year
+            if datetime.now().month >= 10
+            else datetime.now().year - 1
+        )
+    )
+    selected_league: Any = None
+
+    rosters: Any = None
+    team_stats: Any = None
+    league_data: Any = None
+    fetch_progress: float = 0.0
+    fetch_status: str = ""
+    is_fetching: bool = False
+    fetch_error: str = ""
+
+    rom_path: str = ""
+    rom_info: Any = None
+    rom_valid: bool = False
+    zip_path: str = ""
+    zip_temp_dir: str = ""
+
+    patch_progress: float = 0.0
+    patch_status: str = ""
+    is_patching: bool = False
+    patch_output_path: str = ""
+    patch_complete: bool = False
+    patch_error: str = ""
+
+    roster_preview_team_index: int = 0
+    roster_preview_player_index: int = 0
+    active_modal: Optional[str] = None
+    leagues_highlighted: int = 0
+    roster_teams_highlighted: int = 0
+    roster_players_highlighted: int = 0
+
+
+@dataclass
 class NHL94GenesisPatcherState:
     """State for the NHL94 Genesis Patcher feature."""
 
@@ -962,6 +1004,9 @@ class AppState:
         # ---- NHL 07 PSP Patcher ---- #
         self.nhl07_psp_patcher = NHL07PSPPatcherState()
 
+        # ---- NHL 05 PS2 Patcher ---- #
+        self.nhl05_ps2_patcher = NHL05PS2PatcherState()
+
         # ---- Steam Shortcut Creator ---- #
         self.steam_shortcut = SteamShortcutState()
 
@@ -1002,6 +1047,8 @@ class AppState:
             return self.nhl94_gen_patcher
         if self.mode == "nhl07_patcher":
             return self.nhl07_psp_patcher
+        if self.mode == "nhl05_patcher":
+            return self.nhl05_ps2_patcher
         return self.we_patcher
 
     def reset_navigation(self):

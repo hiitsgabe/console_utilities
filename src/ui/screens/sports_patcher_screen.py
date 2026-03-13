@@ -15,6 +15,7 @@ class SportsPatcherScreen:
         ("NBA Live 95 (Genesis)", "nbalive95_patcher"),
         ("NHL 94 - NHL Hockey '94 (SNES)", "nhl94_patcher"),
         ("NHL 94 - NHL Hockey '94 (Genesis)", "nhl94_gen_patcher"),
+        ("NHL 05 - NHL 05 (PS2)", "nhl05_patcher"),
         ("NHL 07 - NHL 07 (PSP)", "nhl07_patcher"),
         ("MVP Baseball (PSP)", "mvp_psp_patcher"),
     ]
