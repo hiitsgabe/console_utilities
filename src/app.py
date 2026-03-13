@@ -1458,6 +1458,9 @@ class ConsoleUtilitiesApp:
         elif self.state.mode == "nhl07_patcher":
             self._handle_nhl07_patcher_navigation(direction)
 
+        elif self.state.mode == "nhl05_patcher":
+            self._handle_nhl05_patcher_navigation(direction)
+
         elif self.state.mode == "syncthing":
             # Check custom save sub-steps first
             if self.state.syncthing.custom_step == "file_select":
@@ -1954,6 +1957,70 @@ class ConsoleUtilitiesApp:
                     return
 
             max_items = nhl07_psp_patcher_screen.get_count(self.state, self.settings)
+            if direction in ("up", "left"):
+                self.state.highlighted = (self.state.highlighted - 1) % max_items
+            elif direction in ("down", "right"):
+                self.state.highlighted = (self.state.highlighted + 1) % max_items
+
+    def _handle_nhl05_patcher_navigation(self, direction):
+        """Handle D-pad navigation for nhl05_patcher mode and its modals."""
+        nhl = self.state.nhl05_ps2_patcher
+
+        if nhl.active_modal == "roster_preview":
+            league_data = nhl.league_data
+            if not league_data or not hasattr(league_data, "teams"):
+                return
+            teams = league_data.teams
+            if direction == "left":
+                nhl.roster_preview_team_index = (
+                    nhl.roster_preview_team_index - 1
+                ) % max(len(teams), 1)
+                nhl.roster_preview_player_index = 0
+            elif direction == "right":
+                nhl.roster_preview_team_index = (
+                    nhl.roster_preview_team_index + 1
+                ) % max(len(teams), 1)
+                nhl.roster_preview_player_index = 0
+            elif direction == "up":
+                nhl.roster_preview_player_index = max(
+                    0, nhl.roster_preview_player_index - 1
+                )
+            elif direction == "down":
+                team_idx = nhl.roster_preview_team_index
+                if 0 <= team_idx < len(teams):
+                    players = (
+                        teams[team_idx].players
+                        if hasattr(teams[team_idx], "players")
+                        else []
+                    )
+                    nhl.roster_preview_player_index = min(
+                        nhl.roster_preview_player_index + 1,
+                        max(len(players) - 1, 0),
+                    )
+
+        elif nhl.active_modal is None:
+            # Main nhl05_patcher menu
+            from ui.screens.nhl05_ps2_patcher_screen import nhl05_ps2_patcher_screen
+
+            # Left/Right on the Season row changes year (NHL API only)
+            if direction in ("left", "right"):
+                action = nhl05_ps2_patcher_screen.get_action(
+                    self.state.highlighted, self.state, self.settings
+                )
+                if action == "change_season":
+                    from datetime import datetime as _dt
+
+                    now = _dt.now()
+                    max_year = now.year if now.month >= 10 else now.year - 1
+                    delta = -1 if direction == "left" else 1
+                    nhl.selected_season = max(
+                        2005, min(max_year, nhl.selected_season + delta)
+                    )
+                    nhl.rosters = None
+                    nhl.league_data = None
+                    return
+
+            max_items = nhl05_ps2_patcher_screen.get_count(self.state, self.settings)
             if direction in ("up", "left"):
                 self.state.highlighted = (self.state.highlighted - 1) % max_items
             elif direction in ("down", "right"):
@@ -2804,6 +2871,21 @@ class ConsoleUtilitiesApp:
                 self.state.highlighted = 0  # Season row
                 self._handle_nhl07_patcher_navigation("right")
                 return
+        # Check Season arrow buttons (nhl05_patcher main menu only)
+        if (
+            self.state.mode == "nhl05_patcher"
+            and self.state.nhl05_ps2_patcher.active_modal is None
+        ):
+            left_arrow = self.state.ui_rects.rects.get("season_left_arrow")
+            right_arrow = self.state.ui_rects.rects.get("season_right_arrow")
+            if left_arrow and left_arrow.collidepoint(x, y):
+                self.state.highlighted = 0  # Season row
+                self._handle_nhl05_patcher_navigation("left")
+                return
+            if right_arrow and right_arrow.collidepoint(x, y):
+                self.state.highlighted = 0  # Season row
+                self._handle_nhl05_patcher_navigation("right")
+                return
         # Check Season arrow buttons (nhl94_gen_patcher main menu only)
         if (
             self.state.mode == "nhl94_gen_patcher"
@@ -3072,6 +3154,15 @@ class ConsoleUtilitiesApp:
                 from state import NHL07PSPPatcherState
 
                 self.state.nhl07_psp_patcher = NHL07PSPPatcherState()
+                self.state.mode = "sports_patcher"
+                self.state.highlighted = 0
+        elif self.state.mode == "nhl05_patcher":
+            if self.state.nhl05_ps2_patcher.active_modal:
+                self.state.nhl05_ps2_patcher.active_modal = None
+            else:
+                from state import NHL05PS2PatcherState
+
+                self.state.nhl05_ps2_patcher = NHL05PS2PatcherState()
                 self.state.mode = "sports_patcher"
                 self.state.highlighted = 0
         elif self.state.mode == "system_settings":
@@ -3359,6 +3450,9 @@ class ConsoleUtilitiesApp:
             elif action == "nhl07_patcher":
                 self.state.mode = "nhl07_patcher"
                 self.state.highlighted = 0
+            elif action == "nhl05_patcher":
+                self.state.mode = "nhl05_patcher"
+                self.state.highlighted = 0
             elif action == "mvp_psp_patcher":
                 self.state.mode = "mvp_psp_patcher"
                 self.state.highlighted = 0
@@ -3386,6 +3480,9 @@ class ConsoleUtilitiesApp:
 
         elif self.state.mode == "nhl07_patcher":
             self._handle_nhl07_patcher_selection()
+
+        elif self.state.mode == "nhl05_patcher":
+            self._handle_nhl05_patcher_selection()
 
         elif self.state.mode == "downloads":
             self._handle_downloads_selection()
@@ -4356,6 +4453,8 @@ class ConsoleUtilitiesApp:
             path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "nhl94_gen_patcher_rom":
             path = self.settings.get("roms_dir", SCRIPT_DIR)
+        elif selection_type == "nhl05_patcher_rom":
+            path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "nhl07_patcher_rom":
             path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "custom_folder":
@@ -4423,6 +4522,10 @@ class ConsoleUtilitiesApp:
             from services.file_listing import load_genesis_rom_folder_contents
 
             loader = load_genesis_rom_folder_contents
+        elif selection_type == "nhl05_patcher_rom":
+            from services.file_listing import load_psp_iso_folder_contents
+
+            loader = load_psp_iso_folder_contents
         elif selection_type == "nhl07_patcher_rom":
             from services.file_listing import load_psp_iso_folder_contents
 
@@ -4482,7 +4585,7 @@ class ConsoleUtilitiesApp:
             "nhl94_gen_patcher_rom",
             "nbalive95_patcher_rom",
         )
-        is_psp_context = selection_type in ("nhl07_patcher_rom", "mvp_psp_patcher_rom")
+        is_psp_context = selection_type in ("nhl05_patcher_rom", "nhl07_patcher_rom", "mvp_psp_patcher_rom")
         if is_psx_context:
             nav_loader = load_psx_rom_folder_contents
         elif is_snes_context:
@@ -4877,6 +4980,44 @@ class ConsoleUtilitiesApp:
             except Exception:
                 nhl_gen_st.rom_valid = False
                 nhl_gen_st.rom_info = None
+        elif selection_type == "nhl05_patcher_rom":
+            from utils.zip_rom import (
+                is_zip,
+                extract_rom_from_zip,
+                cleanup_temp_dir as _zt_cleanup,
+            )
+
+            nhl05_st = self.state.nhl05_ps2_patcher
+            _zt_cleanup(nhl05_st.zip_temp_dir)
+            nhl05_st.zip_path = ""
+            nhl05_st.zip_temp_dir = ""
+
+            if is_zip(path):
+                try:
+                    rom, tmp = extract_rom_from_zip(path, [".iso", ".cso"])
+                    nhl05_st.zip_path = path
+                    nhl05_st.zip_temp_dir = tmp
+                    path = rom
+                except ValueError:
+                    nhl05_st.rom_valid = False
+                    nhl05_st.rom_info = None
+                    nhl05_st.rom_path = path
+                    self.state.folder_browser.show = False
+                    return
+
+            nhl05_st.rom_path = path
+            try:
+                from services.nhl05_ps2_patcher.patcher import NHL05PS2Patcher
+
+                cache_dir = self.settings.get("work_dir", "workdir")
+                cache_dir = os.path.join(cache_dir, "nhl_cache")
+                patcher = NHL05PS2Patcher(cache_dir)
+                rom_info = patcher.analyze_rom(path)
+                nhl05_st.rom_info = rom_info
+                nhl05_st.rom_valid = rom_info.is_valid
+            except Exception:
+                nhl05_st.rom_valid = False
+                nhl05_st.rom_info = None
         elif selection_type == "nhl07_patcher_rom":
             from utils.zip_rom import (
                 is_zip,
@@ -10543,6 +10684,202 @@ class ConsoleUtilitiesApp:
                 from services.nhl07_psp_patcher import NHL07PSPPatcher
 
                 patcher = NHL07PSPPatcher(
+                    cache_dir,
+                    provider=provider,
+                )
+                # Restore team_stats from fetch phase so sorting works
+                patcher.team_stats = nhl.team_stats or {}
+
+                def progress(p, msg):
+                    nhl.patch_progress = p
+                    nhl.patch_status = msg
+
+                result = patcher.patch_rom(
+                    input_path,
+                    output_path,
+                    nhl.rosters,
+                    on_progress=progress,
+                )
+                nhl.patch_complete = result.success
+                nhl.patch_error = result.error if not result.success else ""
+                nhl.patch_output_path = result.output_path if result.success else ""
+
+                if result.success and nhl.zip_path:
+                    from utils.zip_rom import (
+                        create_output_zip,
+                        cleanup_temp_dir as _zclean,
+                    )
+
+                    zip_dir = os.path.dirname(nhl.zip_path)
+                    zip_name = (
+                        os.path.splitext(os.path.basename(output_path))[0] + ".zip"
+                    )
+                    output_zip = os.path.join(zip_dir, zip_name)
+                    create_output_zip([output_path], output_zip)
+                    nhl.patch_output_path = output_zip
+                    _zclean(nhl.zip_temp_dir)
+                    nhl.zip_temp_dir = ""
+            except Exception as e:
+                nhl.patch_error = str(e)
+                nhl.patch_complete = False
+            finally:
+                nhl.is_patching = False
+
+        threading.Thread(target=_patch, daemon=True).start()
+
+    def _handle_nhl05_patcher_selection(self):
+        """Handle item selection on the nhl05_patcher main menu."""
+        nhl = self.state.nhl05_ps2_patcher
+
+        # If a modal is active, route to modal selection
+        if nhl.active_modal == "roster_preview":
+            return
+        if nhl.active_modal == "patch_progress":
+            if nhl.patch_complete or nhl.patch_error:
+                nhl.active_modal = None
+            return
+
+        from ui.screens.nhl05_ps2_patcher_screen import nhl05_ps2_patcher_screen
+
+        action = nhl05_ps2_patcher_screen.get_action(
+            self.state.highlighted, self.state, self.settings
+        )
+
+        if action == "fetch_rosters":
+            self._start_nhl05_roster_fetch()
+        elif action == "preview_rosters":
+            nhl.active_modal = "roster_preview"
+            nhl.roster_preview_team_index = 0
+            nhl.roster_preview_player_index = 0
+            if not nhl.rosters and not nhl.is_fetching:
+                self._start_nhl05_roster_fetch()
+        elif action == "select_rom":
+            self._open_folder_browser("nhl05_patcher_rom")
+        elif action == "patch_rom":
+            nhl.active_modal = "patch_progress"
+            self._start_nhl05_patching()
+
+    def _start_nhl05_roster_fetch(self):
+        """Start background NHL 05 PS2 roster fetch thread."""
+        import threading
+
+        nhl = self.state.nhl05_ps2_patcher
+
+        if nhl.is_fetching:
+            return
+
+        nhl.is_fetching = True
+        nhl.fetch_error = ""
+        nhl.rosters = None
+
+        cache_dir = self.settings.get("work_dir", "workdir")
+        cache_dir = os.path.join(cache_dir, "nhl_cache")
+        provider = self.settings.get("nhl05_provider", "espn")
+        season = nhl.selected_season
+
+        def _fetch():
+            from services.nhl05_ps2_patcher.patcher import NHL05PS2Patcher
+            from services.sports_api.models import League, Team, TeamRoster, LeagueData
+
+            try:
+
+                def on_status(msg):
+                    nhl.fetch_status = msg
+
+                patcher = NHL05PS2Patcher(
+                    cache_dir,
+                    on_status=on_status,
+                    provider=provider,
+                )
+
+                def progress(p, msg):
+                    nhl.fetch_progress = p
+                    nhl.fetch_status = msg
+
+                rosters = patcher.fetch_rosters(
+                    on_progress=progress,
+                    season=season,
+                )
+                nhl.rosters = rosters
+                nhl.team_stats = getattr(patcher, "team_stats", {})
+
+                # Build LeagueData so roster preview modal works
+                team_rosters = []
+                for team_code, players in sorted(rosters.items()):
+                    team_name = team_code
+                    if players and hasattr(players[0], "team") and players[0].team:
+                        team_name = players[0].team
+                    team = Team(
+                        id=0,
+                        name=team_name,
+                        short_name=team_code,
+                        code=team_code,
+                        logo_url="",
+                        country="",
+                    )
+                    team_rosters.append(
+                        TeamRoster(
+                            team=team,
+                            players=players,
+                            player_stats={},
+                        )
+                    )
+                nhl.league_data = LeagueData(
+                    league=League(
+                        id=0,
+                        name="NHL",
+                        country="USA",
+                        country_code="US",
+                        logo_url="",
+                        season=season,
+                        teams_count=len(team_rosters),
+                    ),
+                    teams=team_rosters,
+                )
+            except Exception as e:
+                nhl.fetch_error = str(e)
+            finally:
+                nhl.is_fetching = False
+
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def _start_nhl05_patching(self):
+        """Start background NHL 05 PS2 patching thread."""
+        import threading
+        import os
+
+        nhl = self.state.nhl05_ps2_patcher
+
+        if not nhl.rosters or not nhl.rom_path:
+            nhl.patch_error = "Missing rosters or ISO"
+            return
+
+        if not nhl.rom_valid:
+            nhl.patch_error = "Invalid ISO"
+            return
+
+        nhl.is_patching = True
+        nhl.patch_error = ""
+        nhl.patch_complete = False
+        nhl.patch_output_path = ""
+
+        input_path = nhl.rom_path
+        game_dir = os.path.dirname(input_path)
+        base_name = os.path.splitext(os.path.basename(input_path))[0]
+        ext = os.path.splitext(input_path)[1]
+        season = nhl.selected_season
+        season_label = f"{season}-{season + 1}"
+        output_path = os.path.join(game_dir, f"{base_name} - NHL {season_label}{ext}")
+
+        cache_dir = self.settings.get("work_dir", "workdir")
+        cache_dir = os.path.join(cache_dir, "nhl_cache")
+        provider = self.settings.get("nhl05_provider", "espn")
+
+        def _patch():
+            try:
+                from services.nhl05_ps2_patcher.patcher import NHL05PS2Patcher
+
+                patcher = NHL05PS2Patcher(
                     cache_dir,
                     provider=provider,
                 )

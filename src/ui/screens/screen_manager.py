@@ -47,6 +47,7 @@ from .mvp_psp_patcher_screen import MVPPSPPatcherScreen
 from .nhl94_snes_patcher_screen import NHL94SNESPatcherScreen
 from .nhl94_genesis_patcher_screen import NHL94GenesisPatcherScreen
 from .nhl07_psp_patcher_screen import NHL07PSPPatcherScreen
+from .nhl05_ps2_patcher_screen import NHL05PS2PatcherScreen
 from .syncthing_screen import SyncthingScreen
 from .downloads_screen import DownloadsScreen
 from .scraper_downloads_screen import ScraperDownloadsScreen
@@ -85,6 +86,7 @@ class ScreenManager:
         self.nhl94_patcher_screen = NHL94SNESPatcherScreen(theme)
         self.nhl94_gen_patcher_screen = NHL94GenesisPatcherScreen(theme)
         self.nhl07_psp_patcher_screen = NHL07PSPPatcherScreen(theme)
+        self.nhl05_ps2_patcher_screen = NHL05PS2PatcherScreen(theme)
         self.syncthing_screen = SyncthingScreen(theme)
 
         # Initialize modals
@@ -1027,6 +1029,18 @@ class ScreenManager:
             rects["season_left_arrow"] = self.nhl07_psp_patcher_screen.season_arrow_left
             rects["season_right_arrow"] = (
                 self.nhl07_psp_patcher_screen.season_arrow_right
+            )
+
+        elif state.mode == "nhl05_patcher":
+            back_rect, item_rects, scroll_offset = self.nhl05_ps2_patcher_screen.render(
+                screen, state.highlighted, state, settings
+            )
+            rects["back"] = back_rect
+            rects["item_rects"] = item_rects
+            rects["scroll_offset"] = scroll_offset
+            rects["season_left_arrow"] = self.nhl05_ps2_patcher_screen.season_arrow_left
+            rects["season_right_arrow"] = (
+                self.nhl05_ps2_patcher_screen.season_arrow_right
             )
 
         elif state.mode == "syncthing":
