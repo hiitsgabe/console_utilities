@@ -234,17 +234,24 @@ class WePatcher:
                     )
             we_team.kit_third = we_team.kit_home  # accent = shirt color
 
-            # ML slot writes (0-31)
+            # ML slot writes (0-31) — single file open per team
             if mapping.slot_index < 32:
-                writer.write_team(mapping.slot_index, we_team)
-                writer.write_players(mapping.slot_index, we_team.players)
-                writer.write_flag(mapping.slot_index, we_team)
+                writer.write_team(
+                    mapping.slot_index, we_team,
+                    players=we_team.players, include_flag=True,
+                )
 
-            # National slot writes (0-62)
+            # National slot writes (0-62) — single file open per team
             if mapping.nat_index is not None:
-                writer.write_nat_team(mapping.nat_index, we_team)
-                writer.write_nat_players(mapping.nat_index, we_team.players)
-                writer.write_nat_flag(mapping.nat_index, we_team)
+                writer.write_nat_team(
+                    mapping.nat_index, we_team,
+                    players=we_team.players, include_flag=True,
+                )
+
+        # Apply all 3D jersey TEX patches in one ROM read/write
+        if on_progress:
+            on_progress(0.85, "Patching 3D jerseys...")
+        writer.flush_tex_patches()
 
         if on_progress:
             on_progress(0.90, "Verifying patches...")
