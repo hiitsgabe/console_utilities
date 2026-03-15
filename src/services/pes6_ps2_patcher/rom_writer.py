@@ -328,6 +328,144 @@ class PES6RomWriter:
                 self._fh.seek(afs_table_off)
                 self._fh.write(struct.pack("<I", len(new_entry)))
 
+    # -----------------------------------------------------------------------
+    # Player roster patching in 0_TEXT.AFS file 55
+    # -----------------------------------------------------------------------
+    # File 55 = 32B file header + 80B data header + zlib(decrypted OF data)
+    # Player names are UTF-16LE within the decompressed data.
+    # We decompress, replace names, recompress, and write back.
+    FILE55_INDEX = 55
+    FILE55_HEADER_SIZE = 32
+    FILE55_DATA_HEADER_SIZE = 80
+
+    def write_player_roster(self, league_data, on_progress=None):
+        """Replace player names in file 55 for all teams in league_data.
+
+        Decompresses the option file data from file 55, finds each
+        existing player name (UTF-16LE), replaces with ESPN names,
+        recompresses, and writes back.
+        """
+        if self._fh is None:
+            raise RuntimeError("Writer already finalized")
+
+        import zlib
+        import unicodedata
+
+        def clean(name):
+            nfkd = unicodedata.normalize("NFKD", name)
+            return "".join(c for c in nfkd if not unicodedata.combining(c))
+
+        # Read AFS table
+        self._fh.seek(self.AFS_0TEXT_LBA * ISO_SECTOR_SIZE)
+        afs_header = self._fh.read(8)
+        num_files = struct.unpack_from("<I", afs_header, 4)[0]
+        afs_table = self._fh.read(num_files * 8)
+
+        entry_off = struct.unpack_from(
+            "<I", afs_table, self.FILE55_INDEX * 8
+        )[0]
+        entry_sz = struct.unpack_from(
+            "<I", afs_table, self.FILE55_INDEX * 8 + 4
+        )[0]
+
+        abs_entry = self.AFS_0TEXT_LBA * ISO_SECTOR_SIZE + entry_off
+
+        # Read file 55
+        self._fh.seek(abs_entry)
+        raw55 = self._fh.read(entry_sz)
+
+        # Decompress: skip 32B file header + 80B data header
+        skip = self.FILE55_HEADER_SIZE + self.FILE55_DATA_HEADER_SIZE
+        try:
+            dec_data = bytearray(zlib.decompress(raw55[skip:]))
+        except zlib.error:
+            return  # Can't decompress, skip player patching
+
+        if on_progress:
+            on_progress(0.1, "Preparing players...")
+
+        # Collect all ESPN player names
+        espn_players = []
+        for tr in league_data.teams:
+            players = tr.players if hasattr(tr, "players") else []
+            for p in players:
+                pname = p.name if hasattr(p, "name") else str(p)
+                espn_players.append(clean(pname))
+
+        # The decompressed data contains 124-byte player records
+        # starting at offset 0 with stride 124.
+        # Name = first 32 bytes of each record (UTF-16LE, 15 chars max)
+        # Shirt name = bytes 32-47 (ASCII, 15 chars max)
+        RECORD_SIZE = 124
+        NAME_SIZE = 32  # UTF-16LE
+        SHIRT_SIZE = 16  # ASCII
+        total_records = len(dec_data) // RECORD_SIZE
+
+        # Replace player names at exact record boundaries
+        replaced = 0
+        espn_idx = 0
+        for rec in range(total_records):
+            if espn_idx >= len(espn_players):
+                break
+
+            rec_off = rec * RECORD_SIZE
+            # Only replace if there's an existing name (non-zero)
+            if dec_data[rec_off] == 0 and dec_data[rec_off + 1] == 0:
+                continue  # Empty record, skip
+
+            new_name = espn_players[espn_idx][:15]
+            new_bytes = new_name.encode("utf-16-le")
+
+            # Write name (zero-fill first, then write)
+            dec_data[rec_off:rec_off + NAME_SIZE] = b"\x00" * NAME_SIZE
+            write_len = min(len(new_bytes), NAME_SIZE - 2)
+            dec_data[rec_off:rec_off + write_len] = new_bytes[:write_len]
+
+            # Write shirt name (last name, uppercase, ASCII)
+            parts = new_name.split()
+            shirt = (parts[-1] if parts else new_name).upper()[:15]
+            shirt_bytes = shirt.encode("ascii", errors="replace")
+            dec_data[rec_off + 32:rec_off + 32 + SHIRT_SIZE] = (
+                b"\x00" * SHIRT_SIZE
+            )
+            dec_data[rec_off + 32:rec_off + 32 + len(shirt_bytes)] = (
+                shirt_bytes
+            )
+
+            espn_idx += 1
+            replaced += 1
+
+        if on_progress:
+            on_progress(0.7, f"Replaced {replaced} names, compressing...")
+
+        # Recompress
+        recompressed = zlib.compress(bytes(dec_data), 6)
+
+        # Build new entry: keep original headers intact
+        new_entry = raw55[:skip] + recompressed
+
+        # Check allocated space
+        if self.FILE55_INDEX + 1 < num_files:
+            next_off = struct.unpack_from(
+                "<I", afs_table, (self.FILE55_INDEX + 1) * 8
+            )[0]
+            allocated = next_off - entry_off
+        else:
+            allocated = entry_sz
+
+        if len(new_entry) <= allocated:
+            # Keep original entry size — pad with zeros to match
+            padded = new_entry + b"\x00" * (entry_sz - len(new_entry))
+            self._fh.seek(abs_entry)
+            self._fh.write(padded)
+            # DON'T update AFS entry size — keep original
+
+            if on_progress:
+                on_progress(1.0, f"Done! {replaced} players patched")
+        else:
+            if on_progress:
+                on_progress(1.0, "Warning: recompressed data too large")
+
     def finalize(self):
         """Flush and close the output file."""
         if self._fh is not None:
