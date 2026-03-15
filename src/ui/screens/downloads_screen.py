@@ -30,6 +30,7 @@ class DownloadsScreen:
         self.header = Header(theme)
         self.text = Text(theme)
         self.progress_bar = ProgressBar(theme)
+        self._thumb_cache = {}  # Cache for scaled thumbnails
 
     def render(
         self,
@@ -207,8 +208,15 @@ class DownloadsScreen:
             try:
                 thumbnail = get_thumbnail(item.game, item.system_data)
                 if thumbnail:
-                    scaled = pygame.transform.scale(thumbnail, (thumb_size, thumb_size))
-                    screen.blit(scaled, thumb_rect)
+                    # id() safe while image_cache holds refs
+                    cache_key = (id(thumbnail), thumb_size)
+                    if cache_key not in self._thumb_cache:
+                        if len(self._thumb_cache) > 50:
+                            self._thumb_cache.clear()
+                        self._thumb_cache[cache_key] = pygame.transform.scale(
+                            thumbnail, (thumb_size, thumb_size)
+                        )
+                    screen.blit(self._thumb_cache[cache_key], thumb_rect)
             except Exception:
                 pass
 
@@ -289,24 +297,33 @@ class DownloadsScreen:
                 align="center",
             )
 
-        elif item.status == "extracting":
-            # Indeterminate progress or text
-            self.text.render(
-                screen,
-                "Extracting...",
-                (rect.centerx, rect.centery),
-                color=(self.theme.background if is_highlighted else self.theme.warning),
-                size=self.theme.font_size_sm,
-                align="center",
+        elif item.status in ("extracting", "moving", "processing"):
+            label = (
+                "Processing..."
+                if item.status == "processing"
+                else "Extracting..."
+                if item.status == "extracting"
+                else "Moving..."
             )
-
-        elif item.status == "moving":
+            # Progress bar above center
+            bar_rect = pygame.Rect(rect.left, rect.centery - 14, rect.width, 14)
+            self.progress_bar.render_with_text(
+                screen,
+                bar_rect,
+                item.progress,
+                fill_color=self.theme.warning,
+            )
+            # Label below the progress bar
             self.text.render(
                 screen,
-                "Moving files...",
-                (rect.centerx, rect.centery),
-                color=(self.theme.background if is_highlighted else self.theme.warning),
-                size=self.theme.font_size_sm,
+                label,
+                (rect.centerx, rect.centery + 8),
+                color=(
+                    self.theme.background
+                    if is_highlighted
+                    else self.theme.text_secondary
+                ),
+                size=self.theme.font_size_xs,
                 align="center",
             )
 
