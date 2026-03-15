@@ -211,10 +211,8 @@ def load_controller_mapping() -> bool:
         if os.path.exists(mapping_file):
             with open(mapping_file, "r") as f:
                 _controller_mapping = json.load(f)
-                print("Controller mapping loaded from file")
                 return True
         else:
-            print("No controller mapping found, will need to create new mapping")
             _controller_mapping = {}
             return False
     except Exception as e:
@@ -250,7 +248,6 @@ def save_controller_mapping(mapping: Optional[Dict[str, Any]] = None) -> bool:
         os.makedirs(os.path.dirname(mapping_file), exist_ok=True)
         with open(mapping_file, "w") as f:
             json.dump(_controller_mapping, f, indent=2)
-        print("Controller mapping saved")
         return True
     except Exception as e:
         from utils.logging import log_error
