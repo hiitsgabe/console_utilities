@@ -407,32 +407,38 @@ class PES6RomWriter:
                 pname = p.name if hasattr(p, "name") else str(p)
                 espn_players.append(clean(pname))
 
-        # Replace ALL non-empty player records with ESPN names.
-        # The game pulls players from scattered PIDs across the
-        # entire player pool, so we replace every name.
+        # Write ESPN players to the correct club team record slots.
+        # Club teams start at record 1472 (after 64 national teams × 23).
+        # Each club team has 32 record slots.
+        # ESPN team 0 → club slot 0 (records 1472-1503)
+        # ESPN team 1 → club slot 1 (records 1504-1535), etc.
         RECORD_SIZE = 124
         NAME_SIZE = 32
-        total_records = len(dec_data) // RECORD_SIZE
+        CLUB_START_REC = 1472  # 64 national teams × 23 players
+        CLUB_TEAM_SIZE = 32
 
         replaced = 0
-        espn_idx = 0
-        for rec in range(total_records):
-            rec_off = rec * RECORD_SIZE
-            if dec_data[rec_off] == 0 and dec_data[rec_off + 1] == 0:
-                continue
+        for team_idx, tr in enumerate(league_data.teams):
+            players = tr.players if hasattr(tr, "players") else []
+            base_rec = CLUB_START_REC + team_idx * CLUB_TEAM_SIZE
 
-            full_name = espn_players[espn_idx % len(espn_players)]
-            # Use last name only to keep compressed size small
-            parts = full_name.split()
-            new_name = (parts[-1] if parts else full_name)[:15]
-            new_bytes = new_name.encode("utf-16-le")
+            for j, player in enumerate(players[:CLUB_TEAM_SIZE]):
+                rec = base_rec + j
+                rec_off = rec * RECORD_SIZE
+                if rec_off + NAME_SIZE > len(dec_data):
+                    break
 
-            dec_data[rec_off:rec_off + NAME_SIZE] = b"\x00" * NAME_SIZE
-            wlen = min(len(new_bytes), NAME_SIZE - 2)
-            dec_data[rec_off:rec_off + wlen] = new_bytes[:wlen]
+                pname = player.name if hasattr(player, "name") else str(player)
+                full = clean(pname)
+                # Use last name to keep compressed size small
+                parts = full.split()
+                last = (parts[-1] if parts else full)[:15]
+                new_bytes = last.encode("utf-16-le")
 
-            espn_idx += 1
-            replaced += 1
+                dec_data[rec_off:rec_off + NAME_SIZE] = b"\x00" * NAME_SIZE
+                wlen = min(len(new_bytes), NAME_SIZE - 2)
+                dec_data[rec_off:rec_off + wlen] = new_bytes[:wlen]
+                replaced += 1
 
         if on_progress:
             on_progress(0.7, f"Replaced {replaced} names, compressing...")
