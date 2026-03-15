@@ -66,6 +66,7 @@ from services.image_cache import ImageCache
 from services.download_manager import DownloadManager as _DesktopDownloadManager
 from services.scraper_manager import ScraperManager
 from services.syncthing_service import SyncthingService
+from services import file_explorer_service
 from input.navigation import NavigationHandler
 from input.controller import ControllerHandler
 from input.touch import TouchHandler
@@ -1461,6 +1462,9 @@ class ConsoleUtilitiesApp:
         elif self.state.mode == "nhl05_patcher":
             self._handle_nhl05_patcher_navigation(direction)
 
+        elif self.state.mode == "file_explorer":
+            self._handle_file_explorer_navigation(direction)
+
         elif self.state.mode == "syncthing":
             # Check custom save sub-steps first
             if self.state.syncthing.custom_step == "file_select":
@@ -2517,7 +2521,13 @@ class ConsoleUtilitiesApp:
         elif action == "detail":
             self._handle_detail_action()
         elif action == "left_shoulder":
-            self._toggle_keyboard_shift()
+            if self.state.mode == "file_explorer":
+                self._file_explorer_page("up")
+            else:
+                self._toggle_keyboard_shift()
+        elif action == "right_shoulder":
+            if self.state.mode == "file_explorer":
+                self._file_explorer_page("down")
         elif action == "start":
             self._handle_start_action()
 
@@ -2827,6 +2837,11 @@ class ConsoleUtilitiesApp:
             if self.state.ui_rects.back_button.collidepoint(x, y):
                 self._go_back()
                 return
+
+        # File explorer click handling
+        if self.state.mode == "file_explorer":
+            self._handle_file_explorer_click(x, y)
+            return
 
         # Check Season / Language arrow buttons (iss_patcher main menu only)
         if (
@@ -3195,6 +3210,9 @@ class ConsoleUtilitiesApp:
             # Go back to scraper menu; scraping continues in background
             self.state.mode = "scraper_menu"
             self.state.highlighted = 0
+        elif self.state.mode == "file_explorer":
+            self._handle_file_explorer_back()
+
         elif self.state.mode in ("settings", "utils", "credits", "scraper_menu"):
             self.state.mode = "systems"
             self.state.highlighted = 0
@@ -3335,6 +3353,12 @@ class ConsoleUtilitiesApp:
                 self.state.highlighted = 0
             elif action == "syncthing":
                 self._enter_syncthing()
+            elif action == "file_explorer":
+                self.state.enter_mode("file_explorer")
+                self.state.file_explorer.current_path = self.settings.get(
+                    "roms_dir", os.path.join(SCRIPT_DIR, "roms")
+                )
+                self._refresh_file_explorer()
             elif action == "utils":
                 self.state.mode = "utils"
                 self.state.highlighted = 1  # Skip first divider
@@ -3483,6 +3507,9 @@ class ConsoleUtilitiesApp:
 
         elif self.state.mode == "nhl05_patcher":
             self._handle_nhl05_patcher_selection()
+
+        elif self.state.mode == "file_explorer":
+            self._handle_file_explorer_select()
 
         elif self.state.mode == "downloads":
             self._handle_downloads_selection()
@@ -5877,6 +5904,19 @@ class ConsoleUtilitiesApp:
             wizard.system_picker_search_active = not wizard.system_picker_search_active
             if not wizard.system_picker_search_active:
                 wizard.system_picker_cursor = 0
+        elif self.state.mode == "file_explorer":
+            fe = self.state.file_explorer
+            if fe.context_menu_open or fe.viewer_open or fe.delete_modal_open or fe.extract_modal_open or fe.input_modal_open or fe.error_message:
+                return
+            if fe.clipboard_paths:
+                self._file_explorer_paste()
+            else:
+                # Toggle selection on highlighted item
+                if fe.entries and 0 <= fe.highlighted < len(fe.entries):
+                    if fe.highlighted in fe.selected:
+                        fe.selected.discard(fe.highlighted)
+                    else:
+                        fe.selected.add(fe.highlighted)
 
     def _handle_detail_action(self):
         """Handle detail key press."""
@@ -5917,6 +5957,9 @@ class ConsoleUtilitiesApp:
 
                     thread = Thread(target=fetch_size, daemon=True)
                     thread.start()
+
+        elif self.state.mode == "file_explorer":
+            self._open_file_explorer_context_menu()
 
     def _handle_start_action(self):
         """Handle start key press - download selected games or go home."""
@@ -11154,6 +11197,583 @@ class ConsoleUtilitiesApp:
             cp.color_index = (cp.color_index - 1) % num_colors
         elif direction == "right":
             cp.color_index = (cp.color_index + 1) % num_colors
+
+    # ──────────────────────────────────────────────────────────
+    # File Explorer helpers
+    # ──────────────────────────────────────────────────────────
+
+    def _refresh_file_explorer(self):
+        """Reload directory listing for the current path."""
+        fe = self.state.file_explorer
+        entries, err = file_explorer_service.list_directory(fe.current_path)
+        if err:
+            fe.error_message = err
+        fe.entries = entries
+        fe.selected = set()
+        fe.highlighted = min(fe.highlighted, max(0, len(fe.entries) - 1))
+        fe.scroll_offset = 0
+
+    def _handle_file_explorer_navigation(self, direction):
+        """Handle D-pad navigation in file_explorer mode."""
+        fe = self.state.file_explorer
+
+        # Context menu open
+        if fe.context_menu_open:
+            if fe.context_menu_actions:
+                if direction in ("up", "left"):
+                    fe.context_menu_highlighted = (
+                        fe.context_menu_highlighted - 1
+                    ) % len(fe.context_menu_actions)
+                elif direction in ("down", "right"):
+                    fe.context_menu_highlighted = (
+                        fe.context_menu_highlighted + 1
+                    ) % len(fe.context_menu_actions)
+            return
+
+        # Viewer open — scroll content
+        if fe.viewer_open:
+            if direction == "up":
+                fe.viewer_scroll = max(0, fe.viewer_scroll - 1)
+            elif direction == "down":
+                fe.viewer_scroll += 1
+            return
+
+        # Delete modal — left/right toggles Yes/No
+        if fe.delete_modal_open:
+            if direction in ("left", "right"):
+                fe.delete_highlighted = 1 - fe.delete_highlighted
+            return
+
+        # Extract modal — up/down toggles options
+        if fe.extract_modal_open:
+            if direction in ("up", "down"):
+                fe.extract_highlighted = 1 - fe.extract_highlighted
+            return
+
+        # Input modal — keyboard handles it
+        if fe.input_modal_open:
+            from ui.organisms.char_keyboard import CharKeyboard
+
+            keyboard = CharKeyboard()
+            total_chars = keyboard.get_total_chars("default")
+            chars_per_row = 13
+            if direction == "up":
+                if fe.kb_selected_index >= chars_per_row:
+                    fe.kb_selected_index -= chars_per_row
+            elif direction == "down":
+                if fe.kb_selected_index + chars_per_row < total_chars:
+                    fe.kb_selected_index += chars_per_row
+            elif direction == "left":
+                if fe.kb_selected_index > 0:
+                    fe.kb_selected_index -= 1
+            elif direction == "right":
+                if fe.kb_selected_index < total_chars - 1:
+                    fe.kb_selected_index += 1
+            return
+
+        # Error modal — no navigation needed
+        if fe.error_message:
+            return
+
+        # Default: navigate file list
+        max_items = len(fe.entries)
+        if max_items == 0:
+            return
+        if direction in ("up", "left"):
+            fe.highlighted = (fe.highlighted - 1) % max_items
+        elif direction in ("down", "right"):
+            fe.highlighted = (fe.highlighted + 1) % max_items
+
+    def _handle_file_explorer_select(self):
+        """Handle A button in file_explorer mode."""
+        fe = self.state.file_explorer
+
+        # Error modal dismiss
+        if fe.error_message:
+            fe.error_message = ""
+            return
+
+        # Delete modal
+        if fe.delete_modal_open:
+            if fe.delete_highlighted == 0:  # Yes
+                ok, err = file_explorer_service.delete_paths(fe.delete_targets)
+                if not ok:
+                    fe.error_message = err
+                fe.delete_modal_open = False
+                fe.delete_targets = []
+                self._refresh_file_explorer()
+            else:  # No
+                fe.delete_modal_open = False
+                fe.delete_targets = []
+            return
+
+        # Extract modal
+        if fe.extract_modal_open:
+            to_subfolder = fe.extract_highlighted == 1
+            ok, err = file_explorer_service.extract_archive(
+                fe.extract_target, to_subfolder
+            )
+            if not ok:
+                fe.error_message = err
+            fe.extract_modal_open = False
+            fe.extract_target = ""
+            self._refresh_file_explorer()
+            return
+
+        # Input modal — delegate to keyboard handler
+        if fe.input_modal_open:
+            self._handle_file_explorer_kb_select()
+            return
+
+        # Context menu
+        if fe.context_menu_open:
+            self._handle_file_explorer_context_action()
+            return
+
+        # Viewer — no-op, B closes
+        if fe.viewer_open:
+            return
+
+        # Main list — A opens folders, views text files
+        if not fe.entries or fe.highlighted < 0 or fe.highlighted >= len(fe.entries):
+            return
+        entry = fe.entries[fe.highlighted]
+        full_path = os.path.join(fe.current_path, entry["name"])
+
+        if entry["is_dir"]:
+            fe.current_path = full_path
+            fe.highlighted = 0
+            fe.scroll_offset = 0
+            fe.selected = set()
+            self._refresh_file_explorer()
+        else:
+            # Check if text-viewable
+            _, ext = os.path.splitext(entry["name"])
+            from services.file_explorer_service import _TEXT_EXTENSIONS
+
+            if ext.lower() in _TEXT_EXTENSIONS:
+                lines, truncated, err = file_explorer_service.read_text_file(
+                    full_path
+                )
+                if err:
+                    fe.error_message = err
+                else:
+                    fe.viewer_open = True
+                    fe.viewer_content = lines
+                    fe.viewer_title = entry["name"]
+                    fe.viewer_scroll = 0
+                    fe.viewer_truncated = truncated
+
+    def _handle_file_explorer_back(self):
+        """Handle B button in file_explorer mode."""
+        fe = self.state.file_explorer
+
+        # Close modals in priority order
+        if fe.error_message:
+            fe.error_message = ""
+            return
+        if fe.delete_modal_open:
+            fe.delete_modal_open = False
+            fe.delete_targets = []
+            return
+        if fe.extract_modal_open:
+            fe.extract_modal_open = False
+            fe.extract_target = ""
+            return
+        if fe.input_modal_open:
+            fe.input_modal_open = False
+            fe.input_modal_value = ""
+            fe.input_modal_action = ""
+            return
+        if fe.viewer_open:
+            fe.viewer_open = False
+            fe.viewer_content = []
+            fe.viewer_title = ""
+            fe.viewer_scroll = 0
+            return
+        if fe.context_menu_open:
+            fe.context_menu_open = False
+            fe.context_menu_actions = []
+            return
+
+        # Navigate to parent directory
+        parent = os.path.dirname(fe.current_path)
+        if parent and parent != fe.current_path:
+            fe.current_path = parent
+            fe.highlighted = 0
+            fe.scroll_offset = 0
+            fe.selected = set()
+            self._refresh_file_explorer()
+        else:
+            # At root — exit to systems screen
+            fe.clipboard_paths = []
+            fe.clipboard_mode = ""
+            self.state.mode = "systems"
+            self.state.highlighted = 0
+
+    def _open_file_explorer_context_menu(self):
+        """Build and open the context menu for the file explorer."""
+        fe = self.state.file_explorer
+        if fe.context_menu_open or fe.viewer_open or fe.delete_modal_open or fe.extract_modal_open or fe.input_modal_open or fe.error_message:
+            return
+
+        actions = []
+        actions.append(("mkdir", "New Folder"))
+
+        if fe.clipboard_paths:
+            actions.append(("paste", "Paste Here"))
+
+        if fe.selected:
+            count = len(fe.selected)
+            actions.append(("copy", f"Copy {count} item{'s' if count > 1 else ''}"))
+            actions.append(("cut", f"Cut {count} item{'s' if count > 1 else ''}"))
+            actions.append(("delete", f"Delete {count} item{'s' if count > 1 else ''}"))
+        elif fe.entries and 0 <= fe.highlighted < len(fe.entries):
+            entry = fe.entries[fe.highlighted]
+            full_path = os.path.join(fe.current_path, entry["name"])
+
+            if entry["is_dir"]:
+                actions.append(("open", "Open"))
+            else:
+                _, ext = os.path.splitext(entry["name"])
+                from services.file_explorer_service import (
+                    _TEXT_EXTENSIONS,
+                    _ARCHIVE_EXTENSIONS,
+                )
+
+                if ext.lower() in _TEXT_EXTENSIONS:
+                    actions.append(("view", "View"))
+                if ext.lower() in _ARCHIVE_EXTENSIONS:
+                    actions.append(("extract", "Extract"))
+
+            actions.append(("copy", "Copy"))
+            actions.append(("cut", "Cut"))
+            actions.append(("rename", "Rename"))
+            actions.append(("delete", "Delete"))
+
+        fe.context_menu_actions = actions
+        fe.context_menu_highlighted = 0
+        fe.context_menu_open = True
+
+    def _handle_file_explorer_context_action(self):
+        """Execute the selected context menu action."""
+        fe = self.state.file_explorer
+        if not fe.context_menu_actions or fe.context_menu_highlighted >= len(
+            fe.context_menu_actions
+        ):
+            fe.context_menu_open = False
+            return
+
+        action_id, _ = fe.context_menu_actions[fe.context_menu_highlighted]
+        fe.context_menu_open = False
+        fe.context_menu_actions = []
+
+        if action_id == "mkdir":
+            fe.input_modal_open = True
+            fe.input_modal_title = "New Folder"
+            fe.input_modal_value = ""
+            fe.input_modal_action = "mkdir"
+            fe.kb_selected_index = 0
+
+        elif action_id == "rename":
+            if fe.entries and 0 <= fe.highlighted < len(fe.entries):
+                entry = fe.entries[fe.highlighted]
+                fe.input_modal_open = True
+                fe.input_modal_title = "Rename"
+                fe.input_modal_value = entry["name"]
+                fe.input_modal_action = "rename"
+                fe.kb_selected_index = 0
+
+        elif action_id == "delete":
+            targets = []
+            if fe.selected:
+                for idx in sorted(fe.selected):
+                    if 0 <= idx < len(fe.entries):
+                        targets.append(
+                            os.path.join(fe.current_path, fe.entries[idx]["name"])
+                        )
+            elif fe.entries and 0 <= fe.highlighted < len(fe.entries):
+                targets.append(
+                    os.path.join(
+                        fe.current_path, fe.entries[fe.highlighted]["name"]
+                    )
+                )
+            if targets:
+                fe.delete_modal_open = True
+                fe.delete_targets = targets
+                fe.delete_highlighted = 1  # Default to No
+
+        elif action_id == "copy":
+            paths = []
+            if fe.selected:
+                for idx in sorted(fe.selected):
+                    if 0 <= idx < len(fe.entries):
+                        paths.append(
+                            os.path.join(fe.current_path, fe.entries[idx]["name"])
+                        )
+            elif fe.entries and 0 <= fe.highlighted < len(fe.entries):
+                paths.append(
+                    os.path.join(
+                        fe.current_path, fe.entries[fe.highlighted]["name"]
+                    )
+                )
+            if paths:
+                fe.clipboard_paths = paths
+                fe.clipboard_mode = "copy"
+                fe.selected = set()
+
+        elif action_id == "cut":
+            paths = []
+            if fe.selected:
+                for idx in sorted(fe.selected):
+                    if 0 <= idx < len(fe.entries):
+                        paths.append(
+                            os.path.join(fe.current_path, fe.entries[idx]["name"])
+                        )
+            elif fe.entries and 0 <= fe.highlighted < len(fe.entries):
+                paths.append(
+                    os.path.join(
+                        fe.current_path, fe.entries[fe.highlighted]["name"]
+                    )
+                )
+            if paths:
+                fe.clipboard_paths = paths
+                fe.clipboard_mode = "cut"
+                fe.selected = set()
+
+        elif action_id == "paste":
+            self._file_explorer_paste()
+
+        elif action_id == "open":
+            if fe.entries and 0 <= fe.highlighted < len(fe.entries):
+                entry = fe.entries[fe.highlighted]
+                if entry["is_dir"]:
+                    fe.current_path = os.path.join(fe.current_path, entry["name"])
+                    fe.highlighted = 0
+                    fe.scroll_offset = 0
+                    fe.selected = set()
+                    self._refresh_file_explorer()
+
+        elif action_id == "view":
+            if fe.entries and 0 <= fe.highlighted < len(fe.entries):
+                entry = fe.entries[fe.highlighted]
+                full_path = os.path.join(fe.current_path, entry["name"])
+                lines, truncated, err = file_explorer_service.read_text_file(
+                    full_path
+                )
+                if err:
+                    fe.error_message = err
+                else:
+                    fe.viewer_open = True
+                    fe.viewer_content = lines
+                    fe.viewer_title = entry["name"]
+                    fe.viewer_scroll = 0
+                    fe.viewer_truncated = truncated
+
+        elif action_id == "extract":
+            if fe.entries and 0 <= fe.highlighted < len(fe.entries):
+                entry = fe.entries[fe.highlighted]
+                fe.extract_modal_open = True
+                fe.extract_target = os.path.join(fe.current_path, entry["name"])
+                fe.extract_highlighted = 0
+
+    def _file_explorer_paste(self):
+        """Paste clipboard contents to the current directory."""
+        fe = self.state.file_explorer
+        if not fe.clipboard_paths:
+            return
+        if fe.clipboard_mode == "copy":
+            ok, err = file_explorer_service.copy_files(
+                fe.clipboard_paths, fe.current_path
+            )
+        else:
+            ok, err = file_explorer_service.move_files(
+                fe.clipboard_paths, fe.current_path
+            )
+        if not ok:
+            fe.error_message = err
+        fe.clipboard_paths = []
+        fe.clipboard_mode = ""
+        self._refresh_file_explorer()
+
+    def _handle_file_explorer_kb_select(self):
+        """Handle A press on the file explorer input modal keyboard."""
+        fe = self.state.file_explorer
+        from ui.organisms.char_keyboard import char_keyboard
+
+        new_text, is_done, toggle_shift = char_keyboard.handle_selection(
+            fe.kb_selected_index, fe.input_modal_value, char_set="default"
+        )
+        fe.input_modal_value = new_text
+
+        if toggle_shift:
+            # Shift not supported for file explorer keyboard, ignore
+            return
+
+        if is_done:
+            action = fe.input_modal_action
+            value = fe.input_modal_value.strip()
+            fe.input_modal_open = False
+            fe.input_modal_value = ""
+            fe.input_modal_action = ""
+
+            if not value:
+                return
+
+            if action == "mkdir":
+                ok, err = file_explorer_service.create_folder(
+                    fe.current_path, value
+                )
+                if not ok:
+                    fe.error_message = err
+                self._refresh_file_explorer()
+            elif action == "rename":
+                if fe.entries and 0 <= fe.highlighted < len(fe.entries):
+                    old_path = os.path.join(
+                        fe.current_path, fe.entries[fe.highlighted]["name"]
+                    )
+                    ok, err = file_explorer_service.rename_path(old_path, value)
+                    if not ok:
+                        fe.error_message = err
+                    self._refresh_file_explorer()
+
+    def _file_explorer_page(self, direction):
+        """Handle L/R shoulder page up/down in the file explorer."""
+        fe = self.state.file_explorer
+
+        if fe.viewer_open:
+            page_size = 20
+            if direction == "up":
+                fe.viewer_scroll = max(0, fe.viewer_scroll - page_size)
+            else:
+                fe.viewer_scroll += page_size
+            return
+
+        if fe.context_menu_open or fe.delete_modal_open or fe.extract_modal_open or fe.input_modal_open or fe.error_message:
+            return
+
+        # Page through file list
+        page_size = 10
+        max_items = len(fe.entries)
+        if max_items == 0:
+            return
+        if direction == "up":
+            fe.highlighted = max(0, fe.highlighted - page_size)
+        else:
+            fe.highlighted = min(max_items - 1, fe.highlighted + page_size)
+
+    def _handle_file_explorer_click(self, x, y):
+        """Handle touch/click events in the file explorer."""
+        fe = self.state.file_explorer
+        rects = self.state.ui_rects.rects
+
+        # Error OK button
+        if fe.error_message:
+            error_ok = rects.get("error_ok")
+            if error_ok and error_ok.collidepoint(x, y):
+                fe.error_message = ""
+            return
+
+        # Delete modal buttons
+        if fe.delete_modal_open:
+            delete_yes = rects.get("delete_yes")
+            delete_no = rects.get("delete_no")
+            if delete_yes and delete_yes.collidepoint(x, y):
+                fe.delete_highlighted = 0
+                self._handle_file_explorer_select()
+            elif delete_no and delete_no.collidepoint(x, y):
+                fe.delete_highlighted = 1
+                self._handle_file_explorer_select()
+            return
+
+        # Extract modal options
+        if fe.extract_modal_open:
+            extract_options = rects.get("extract_options", [])
+            for i, opt_rect in enumerate(extract_options):
+                if opt_rect.collidepoint(x, y):
+                    fe.extract_highlighted = i
+                    self._handle_file_explorer_select()
+                    return
+            return
+
+        # Input modal keyboard
+        if fe.input_modal_open:
+            kb_char_rects = rects.get("kb_char_rects", [])
+            for char_rect, char_index, char in kb_char_rects:
+                if char_rect.collidepoint(x, y):
+                    fe.kb_selected_index = char_index
+                    self._handle_file_explorer_kb_select()
+                    return
+            return
+
+        # Context menu items (click outside closes)
+        if fe.context_menu_open:
+            ctx_items = rects.get("context_menu_items", [])
+            for i, rect in enumerate(ctx_items):
+                if rect.collidepoint(x, y):
+                    fe.context_menu_highlighted = i
+                    self._handle_file_explorer_context_action()
+                    return
+            # Click outside — close
+            fe.context_menu_open = False
+            fe.context_menu_actions = []
+            return
+
+        # Viewer close button
+        if fe.viewer_open:
+            viewer_close = rects.get("viewer_close")
+            if viewer_close and viewer_close.collidepoint(x, y):
+                fe.viewer_open = False
+                fe.viewer_content = []
+                fe.viewer_title = ""
+                fe.viewer_scroll = 0
+            return
+
+        # Touch action buttons
+        touch_back = rects.get("touch_back")
+        if touch_back and touch_back.collidepoint(x, y):
+            self._handle_file_explorer_back()
+            return
+
+        touch_open = rects.get("touch_open")
+        if touch_open and touch_open.collidepoint(x, y):
+            self._handle_file_explorer_select()
+            return
+
+        touch_actions = rects.get("touch_actions")
+        if touch_actions and touch_actions.collidepoint(x, y):
+            self._open_file_explorer_context_menu()
+            return
+
+        touch_paste = rects.get("touch_paste")
+        if touch_paste and touch_paste.collidepoint(x, y):
+            self._file_explorer_paste()
+            return
+
+        touch_deselect = rects.get("touch_deselect")
+        if touch_deselect and touch_deselect.collidepoint(x, y):
+            fe.selected = set()
+            return
+
+        # File list items
+        item_rects = rects.get("item_rects", [])
+        scroll_offset = rects.get("scroll_offset", 0)
+        for i, rect in enumerate(item_rects):
+            if rect.collidepoint(x, y):
+                actual_index = i + scroll_offset
+                now = pygame.time.get_ticks()
+                if (
+                    fe.highlighted == actual_index
+                    and now - self.state.touch.last_click_time < 400
+                    and self.state.touch.last_clicked_item == actual_index
+                ):
+                    # Double-tap — open
+                    self._handle_file_explorer_select()
+                else:
+                    fe.highlighted = actual_index
+                self.state.touch.last_click_time = now
+                self.state.touch.last_clicked_item = actual_index
+                return
 
 
 def main():
