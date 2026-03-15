@@ -16,6 +16,7 @@ from ui.atoms.surface import Surface
 from ui.molecules.action_button import ActionButton
 from utils.button_hints import get_button_name
 from services.file_explorer_service import format_size, get_file_icon
+from constants import BEZEL_INSET
 
 
 class FileExplorerScreen:
@@ -47,24 +48,26 @@ class FileExplorerScreen:
         )
         rects["back"] = back_rect
 
+        inset = BEZEL_INSET
+
         # Breadcrumb bar
         breadcrumb_y = header_rect.bottom
         breadcrumb_h = 28
-        breadcrumb_rect = pygame.Rect(0, breadcrumb_y, w, breadcrumb_h)
+        breadcrumb_rect = pygame.Rect(inset, breadcrumb_y, w - inset * 2, breadcrumb_h)
         pygame.draw.rect(screen, self.theme.surface, breadcrumb_rect)
 
         breadcrumb_text = self._format_breadcrumb(fe.current_path, w)
         font_sm = self.theme.font_size_sm
         self.text.render(
             screen, breadcrumb_text,
-            (self.theme.padding_md, breadcrumb_y + (breadcrumb_h - font_sm) // 2),
+            (inset + self.theme.padding_md, breadcrumb_y + (breadcrumb_h - font_sm) // 2),
             color=self.theme.primary, size=font_sm,
         )
 
         # Footer
         footer_h = 36
-        footer_y = h - footer_h
-        footer_rect = pygame.Rect(0, footer_y, w, footer_h)
+        footer_y = h - footer_h - inset
+        footer_rect = pygame.Rect(inset, footer_y, w - inset * 2, footer_h)
         pygame.draw.rect(screen, self.theme.surface, footer_rect)
         touch_rects = self._render_footer(screen, footer_rect, fe, input_mode)
         rects.update(touch_rects)
@@ -72,7 +75,7 @@ class FileExplorerScreen:
         # File list area
         list_y = breadcrumb_rect.bottom
         list_h = footer_y - list_y
-        list_rect = pygame.Rect(0, list_y, w, list_h)
+        list_rect = pygame.Rect(inset, list_y, w - inset * 2, list_h)
 
         if not fe.entries:
             self.text.render(
