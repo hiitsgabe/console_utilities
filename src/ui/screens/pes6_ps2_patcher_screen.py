@@ -1,11 +1,12 @@
 """PES 6 PS2 Patcher screen — Pro Evolution Soccer 6 (PS2) team name update.
 
-Mirrors the NHL 05 PS2 patcher UI pattern: step-by-step list with
-(label, secondary_text) pairs and action-based dispatch.
+Mirrors the WE2002 patcher UI pattern: Season row at top, then step-by-step
+list with (label, secondary_text) pairs and action-based dispatch.
 """
 
 import os
 import pygame
+from datetime import datetime
 
 from ui.theme import Theme, default_theme
 from ui.templates.list_screen import ListScreenTemplate
@@ -23,11 +24,15 @@ class PES6PS2PatcherScreen:
     def _get_items(self, state, settings):
         """Build the menu items as (label, value, action) tuples.
 
-        Order: Select League -> Fetch Rosters -> Preview Rosters -> Select ISO -> Patch ROM
+        Order: Season → Select League → Preview Rosters → Select ISO → Patch ROM
         """
         pes = state.pes6_ps2_patcher
 
         items = []
+
+        # -- Season (read-only for ESPN) --
+        season_value = str(datetime.now().year)
+        items.append(("Season", season_value, "locked"))
 
         # -- 1. Select League --
         if pes.selected_league:
@@ -41,61 +46,46 @@ class PES6PS2PatcherScreen:
             league_value = "Not selected"
         items.append(("1. Select League", league_value, "select_league"))
 
-        # -- 2. Fetch Rosters --
-        if pes.is_fetching:
-            fetch_value = f"Fetching... {int(pes.fetch_progress * 100)}%"
-            fetch_action = "locked"
-        elif pes.league_data:
-            team_count = (
-                len(pes.league_data.teams)
-                if hasattr(pes.league_data, "teams")
-                else 0
-            )
-            fetch_value = f"{team_count} teams loaded"
-            fetch_action = "fetch_rosters"
-        elif pes.fetch_error:
-            fetch_value = f"Error: {pes.fetch_error}"
-            fetch_action = "fetch_rosters" if pes.selected_league else "locked"
-        elif pes.selected_league:
-            fetch_value = "Not fetched"
-            fetch_action = "fetch_rosters"
-        else:
-            fetch_value = "Select a league first"
-            fetch_action = "locked"
-        items.append(("2. Fetch Rosters", fetch_value, fetch_action))
-
-        # -- 3. Preview Rosters --
-        if pes.league_data or pes.is_fetching:
+        # -- 2. Preview Rosters --
+        if pes.league_data:
             preview_value = "Tap to preview"
-            preview_action = "preview_rosters"
+        elif pes.is_fetching and pes.selected_league:
+            preview_value = "Loading roster data..."
+        elif pes.selected_league:
+            preview_value = "Tap to preview"
         else:
-            preview_value = "Complete step 2 first"
-            preview_action = "locked"
-        items.append(("3. Preview Rosters", preview_value, preview_action))
+            preview_value = "Complete step 1 first"
+        items.append((
+            "2. Preview Rosters",
+            preview_value,
+            (
+                "preview_rosters"
+                if (pes.league_data or pes.selected_league)
+                else "locked"
+            ),
+        ))
 
-        # -- 4. Select ISO --
+        # -- 3. Select ISO --
         if pes.rom_path and pes.rom_valid:
             rom_value = os.path.basename(pes.zip_path or pes.rom_path)
         elif pes.rom_path:
             rom_value = "Invalid ISO"
         else:
             rom_value = "Not selected"
-        items.append(("4. Select ISO (.iso/.zip)", rom_value, "select_rom"))
+        items.append(("3. Select ISO (.iso/.zip)", rom_value, "select_rom"))
 
-        # -- 5. Patch ROM --
+        # -- 4. Patch ROM --
         if pes.patch_complete:
             patch_value = "Complete"
         elif pes.league_data and pes.rom_valid:
             patch_value = "Ready to patch"
         else:
-            patch_value = "Complete steps 2+4 first"
-        items.append(
-            (
-                "5. Patch ROM",
-                patch_value,
-                "patch_rom" if (pes.league_data and pes.rom_valid) else "locked",
-            )
-        )
+            patch_value = "Complete steps 1+3 first"
+        items.append((
+            "4. Patch ROM",
+            patch_value,
+            "patch_rom" if (pes.league_data and pes.rom_valid) else "locked",
+        ))
 
         return items
 

@@ -11422,11 +11422,17 @@ class ConsoleUtilitiesApp:
                     pes.patch_progress = p
                     pes.patch_status = msg
 
+                league_name = ""
+                if pes.selected_league and hasattr(pes.selected_league, "name"):
+                    league_name = pes.selected_league.name
+
                 result = patcher.patch_rom(
                     input_path,
                     output_path,
                     slot_mapping,
                     rom_info,
+                    league_id=league_id,
+                    league_name=league_name,
                     on_progress=progress,
                 )
                 pes.patch_complete = result.success
