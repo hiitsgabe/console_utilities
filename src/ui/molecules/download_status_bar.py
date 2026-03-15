@@ -63,11 +63,21 @@ class DownloadStatusBar:
         in_progress = sum(
             1
             for item in queue.items
-            if item.status in ("downloading", "extracting", "moving")
+            if item.status in ("downloading", "extracting", "moving", "processing")
         )
 
         # Left side: status text
-        if in_progress > 0:
+        active_item = self._get_active_item(queue)
+        if active_item and active_item.status == "processing":
+            current = completed + 1
+            status_text = f"Processing {current} of {total} games"
+        elif active_item and active_item.status == "extracting":
+            current = completed + 1
+            status_text = f"Extracting {current} of {total} games"
+        elif active_item and active_item.status == "moving":
+            current = completed + 1
+            status_text = f"Moving {current} of {total} games"
+        elif in_progress > 0:
             current = completed + 1
             status_text = f"Downloading {current} of {total} games"
         else:
@@ -87,7 +97,6 @@ class DownloadStatusBar:
         )
 
         # Right side: small progress indicator for active download
-        active_item = self._get_active_item(queue)
         if active_item and active_item.status == "downloading":
             # Draw compact progress bar
             bar_width = 100
@@ -104,6 +113,22 @@ class DownloadStatusBar:
                 active_item.progress,
                 fill_color=self.theme.secondary,
             )
+        elif active_item and active_item.status in ("extracting", "moving", "processing"):
+            # Draw compact progress bar for extraction/moving
+            bar_width = 100
+            bar_height = 10
+            progress_rect = pygame.Rect(
+                screen_width - self.theme.padding_md - bar_width,
+                bar_rect.centery - bar_height // 2,
+                bar_width,
+                bar_height,
+            )
+            self.progress_bar.render(
+                screen,
+                progress_rect,
+                active_item.progress,
+                fill_color=self.theme.warning,
+            )
 
         return bar_rect
 
@@ -114,7 +139,7 @@ class DownloadStatusBar:
 
         # Show if any items are in progress or waiting
         for item in queue.items:
-            if item.status in ("waiting", "downloading", "extracting", "moving"):
+            if item.status in ("waiting", "downloading", "extracting", "moving", "processing"):
                 return True
 
         return False
@@ -122,7 +147,7 @@ class DownloadStatusBar:
     def _get_active_item(self, queue: DownloadQueueState):
         """Get the currently active download item."""
         for item in queue.items:
-            if item.status in ("downloading", "extracting", "moving"):
+            if item.status in ("downloading", "extracting", "moving", "processing"):
                 return item
         return None
 

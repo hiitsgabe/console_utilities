@@ -53,23 +53,18 @@ class Thumbnail:
         # Draw background/placeholder (highlighted gets a glow effect)
         if highlighted:
             # Outer glow behind the thumbnail
-            glow_rect = rect.inflate(6, 6)
-            glow_color = (
-                self.theme.primary_light[0] // 3,
-                self.theme.primary_light[1] // 3,
-                self.theme.primary_light[2] // 3,
-            )
+            glow_rect = rect.inflate(8, 8)
             pygame.draw.rect(
                 screen,
-                glow_color,
+                self.theme.primary_dark,
                 glow_rect,
-                border_radius=border_radius + 3,
+                border_radius=border_radius + 4,
             )
         bg_color = self.theme.surface_hover if highlighted else self.theme.surface
         pygame.draw.rect(screen, bg_color, rect, border_radius=border_radius)
 
         if image and isinstance(image, pygame.Surface):
-            # Scale image preserving aspect ratio
+            # Scale image preserving aspect ratio (with cache)
             iw, ih = image.get_size()
             scale = (
                 max(rect.width / iw, rect.height / ih)
@@ -78,7 +73,19 @@ class Thumbnail:
             )
             new_w = max(1, int(iw * scale))
             new_h = max(1, int(ih * scale))
-            scaled_img = pygame.transform.smoothscale(image, (new_w, new_h))
+            # Cache scaled surfaces to avoid per-frame smoothscale.
+            # Uses id(image) assuming image_cache keeps strong refs
+            # to all surfaces for their lifetime.
+            cache_key = (id(image), new_w, new_h)
+            if not hasattr(self, "_scale_cache"):
+                self._scale_cache = {}
+            if cache_key not in self._scale_cache:
+                if len(self._scale_cache) > 200:
+                    self._scale_cache.clear()
+                self._scale_cache[cache_key] = pygame.transform.smoothscale(
+                    image, (new_w, new_h)
+                )
+            scaled_img = self._scale_cache[cache_key]
 
             # Center image in rect (fill mode crops overflow)
             img_rect = scaled_img.get_rect(center=rect.center)

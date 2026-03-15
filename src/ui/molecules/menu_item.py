@@ -97,11 +97,18 @@ class MenuItem:
                 content_left, rect.centery - thumb_size // 2, thumb_size, thumb_size
             )
 
-            # Scale thumbnail to fit (smoothscale for better quality)
-            scaled_thumb = pygame.transform.smoothscale(
-                thumbnail, (thumb_size, thumb_size)
-            )
-            screen.blit(scaled_thumb, thumb_rect)
+            # Scale thumbnail to fit (cached smoothscale).
+            # Uses id() assuming image_cache keeps strong refs.
+            cache_key = (id(thumbnail), thumb_size)
+            if not hasattr(self, "_thumb_cache"):
+                self._thumb_cache = {}
+            if cache_key not in self._thumb_cache:
+                if len(self._thumb_cache) > 200:
+                    self._thumb_cache.clear()
+                self._thumb_cache[cache_key] = pygame.transform.smoothscale(
+                    thumbnail, (thumb_size, thumb_size)
+                )
+            screen.blit(self._thumb_cache[cache_key], thumb_rect)
 
             content_left = thumb_rect.right + padding
 

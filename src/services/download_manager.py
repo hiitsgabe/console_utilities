@@ -457,7 +457,11 @@ class DownloadManager:
         cookies: Dict[str, str],
         num_workers: int = PARALLEL_WORKERS,
     ) -> Optional[str]:
-        """Download a file using parallel range-request workers."""
+        """Download a file using parallel range-request workers.
+
+        Workers write directly to the final file at their byte
+        offsets, eliminating the chunk-stitching step entirely.
+        """
         file_path = os.path.join(self.work_dir, filename)
         item.downloaded = 0
 
@@ -467,16 +471,18 @@ class DownloadManager:
         for i in range(num_workers):
             start = i * chunk_size
             end = (
-                (total_size - 1) if i == num_workers - 1 else ((i + 1) * chunk_size - 1)
+                (total_size - 1)
+                if i == num_workers - 1
+                else ((i + 1) * chunk_size - 1)
             )
             chunks.append((start, end))
 
+        # Pre-allocate the output file
+        with open(file_path, "wb") as f:
+            f.truncate(total_size)
+
         # Shared progress array (one entry per worker)
         progress_array = [0] * num_workers
-        chunk_paths = [
-            os.path.join(self.work_dir, f".{filename}.part{i}")
-            for i in range(num_workers)
-        ]
 
         chunk_failed = threading.Event()
 
@@ -487,7 +493,7 @@ class DownloadManager:
                 cookies,
                 chunks[chunk_index][0],
                 chunks[chunk_index][1],
-                chunk_paths[chunk_index],
+                file_path,
                 chunk_index,
                 progress_array,
                 chunk_failed,
@@ -508,7 +514,8 @@ class DownloadManager:
                 if self._cancel_current:
                     chunk_failed.set()
                     executor.shutdown(wait=False, cancel_futures=True)
-                    self._cleanup_chunk_files(chunk_paths)
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
                     return None
 
                 time.sleep(0.1)
@@ -518,15 +525,20 @@ class DownloadManager:
                 current_time = time.time()
                 elapsed = current_time - last_update
                 if elapsed >= 0.5:
-                    instant_speed = (item.downloaded - last_downloaded) / elapsed
+                    dl = item.downloaded - last_downloaded
+                    instant_speed = dl / elapsed
                     speed_samples.append(instant_speed)
                     if len(speed_samples) > 4:
                         speed_samples.pop(0)
-                    item.speed = sum(speed_samples) / len(speed_samples)
+                    item.speed = (
+                        sum(speed_samples) / len(speed_samples)
+                    )
                     last_downloaded = item.downloaded
                     last_update = current_time
                     if total_size > 0:
-                        item.progress = item.downloaded / total_size
+                        item.progress = (
+                            item.downloaded / total_size
+                        )
 
             # Final progress update
             item.downloaded = sum(progress_array)
@@ -539,29 +551,18 @@ class DownloadManager:
                     item.status = "failed"
                     if not item.error:
                         item.error = "Chunk download failed"
-                    self._cleanup_chunk_files(chunk_paths)
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
                     return None
 
         except Exception as e:
             chunk_failed.set()
             executor.shutdown(wait=False, cancel_futures=True)
-            self._cleanup_chunk_files(chunk_paths)
-            raise
-        finally:
-            executor.shutdown(wait=False)
-
-        # Stitch chunks into final file
-        try:
-            with open(file_path, "wb") as out_f:
-                for chunk_path in chunk_paths:
-                    with open(chunk_path, "rb") as in_f:
-                        shutil.copyfileobj(in_f, out_f)
-            self._cleanup_chunk_files(chunk_paths)
-        except Exception as e:
-            self._cleanup_chunk_files(chunk_paths)
             if os.path.exists(file_path):
                 os.remove(file_path)
             raise
+        finally:
+            executor.shutdown(wait=False)
 
         return file_path
 
@@ -572,12 +573,16 @@ class DownloadManager:
         cookies: Dict[str, str],
         start: int,
         end: int,
-        chunk_path: str,
+        file_path: str,
         chunk_index: int,
         progress_array: List[int],
         failed_event: threading.Event,
     ) -> bool:
-        """Download a single byte range to a temp file."""
+        """Download a byte range directly into the output file.
+
+        Each worker opens its own fd and writes to disjoint byte
+        ranges, so no locking is needed.
+        """
         try:
             range_headers = dict(headers)
             range_headers["Range"] = f"bytes={start}-{end}"
@@ -592,12 +597,15 @@ class DownloadManager:
             )
             resp.raise_for_status()
 
-            with open(chunk_path, "wb") as f:
+            offset = start
+            with open(file_path, "r+b") as f:
                 for chunk in resp.iter_content(chunk_size=262144):
                     if self._cancel_current or failed_event.is_set():
                         return False
                     if chunk:
+                        f.seek(offset)
                         f.write(chunk)
+                        offset += len(chunk)
                         progress_array[chunk_index] += len(chunk)
 
             return True
@@ -605,15 +613,6 @@ class DownloadManager:
             log_error(f"Chunk {chunk_index} failed: {e}")
             failed_event.set()
             return False
-
-    def _cleanup_chunk_files(self, chunk_paths: List[str]):
-        """Remove temp .partN files, ignoring errors."""
-        for path in chunk_paths:
-            try:
-                if os.path.exists(path):
-                    os.remove(path)
-            except OSError:
-                pass
 
     def _process_downloaded_file(
         self, item: DownloadQueueItem, file_path: str, filename: str, roms_folder: str
@@ -638,19 +637,26 @@ class DownloadManager:
                 item.status = "extracting"
                 extract_contents = item.system_data.get("extract_contents", True)
 
+                # Extract directly to roms folder to avoid
+                # extra move step (major speedup on slow storage)
+                extract_dir = roms_folder if extract_contents else self.work_dir
+
                 with ZipFile(file_path, "r") as zip_ref:
-                    total_files = len(zip_ref.namelist())
-                    for i, file_info in enumerate(zip_ref.infolist()):
+                    members = zip_ref.infolist()
+                    total = len(members)
+                    # Update progress every ~5% to keep overhead low
+                    update_interval = max(1, total // 20)
+                    for i, member in enumerate(members):
                         if self._cancel_current:
                             return False
-                        zip_ref.extract(file_info, self.work_dir)
-                        item.progress = (i + 1) / total_files
+                        zip_ref.extract(member, extract_dir)
+                        if (i + 1) % update_interval == 0 or i == total - 1:
+                            item.progress = (i + 1) / total
 
                 os.remove(file_path)
 
-                # Handle extract mode
+                # Handle extract mode (keep folder structure)
                 if not extract_contents:
-                    # Keep folder structure - move extracted folders and matching files
                     item.status = "moving"
                     item.progress = 0.0
                     extracted_items = [
@@ -670,13 +676,12 @@ class DownloadManager:
                             return False
                         src_path = os.path.join(self.work_dir, extracted_item)
                         dst_path = os.path.join(roms_folder, extracted_item)
-                        # Use shutil.move for both files and directories
                         if os.path.exists(dst_path):
                             if os.path.isdir(dst_path):
                                 shutil.rmtree(dst_path)
                             else:
                                 os.remove(dst_path)
-                        shutil.move(src_path, dst_path)
+                        self._fast_move(src_path, dst_path)
                         item.progress = (i + 1) / max(len(items_to_move), 1)
 
                     # Clean up remaining files in work directory
@@ -707,7 +712,7 @@ class DownloadManager:
                         if f.endswith(".nsp"):
                             src_path = os.path.join(self.work_dir, f)
                             dst_path = os.path.join(roms_folder, f)
-                            shutil.move(src_path, dst_path)
+                            self._fast_move(src_path, dst_path)
 
                     if os.path.exists(file_path):
                         os.remove(file_path)
@@ -737,7 +742,7 @@ class DownloadManager:
                     return False
                 src_path = os.path.join(self.work_dir, f)
                 dst_path = os.path.join(roms_folder, f)
-                shutil.move(src_path, dst_path)
+                self._fast_move(src_path, dst_path)
                 item.progress = (i + 1) / max(len(files_to_move), 1)
 
             # Clean up work directory
@@ -755,6 +760,14 @@ class DownloadManager:
             log_error(f"Error processing file {filename}: {e}")
             item.error = str(e)[:50]
             return False
+
+    @staticmethod
+    def _fast_move(src: str, dst: str):
+        """Move a file or directory, preferring os.rename (instant on same FS)."""
+        try:
+            os.rename(src, dst)
+        except OSError:
+            shutil.move(src, dst)
 
     def _get_filename(self, game: Any) -> str:
         """Extract filename from game item."""
