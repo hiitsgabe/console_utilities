@@ -20,10 +20,12 @@ from utils.logging import log_error
 from utils.nsz import decompress_nsz_file
 from constants import SCRIPT_DIR
 
-# Minimum file size for parallel downloads (5 MB)
-PARALLEL_MIN_SIZE = 5 * 1024 * 1024
+# Minimum file size for parallel downloads (50 MB)
+PARALLEL_MIN_SIZE = 50 * 1024 * 1024
 # Number of parallel download workers
 PARALLEL_WORKERS = 4
+# iter_content chunk size (2 MB — reduces Python/GIL overhead vs 256 KB)
+STREAM_CHUNK_SIZE = 2 * 1024 * 1024
 
 
 class DownloadManager:
@@ -48,6 +50,18 @@ class DownloadManager:
         self._cancel_current = False
         self._stop_thread = False
         self._lock = threading.Lock()
+        self._session = self._make_session()
+
+    @staticmethod
+    def _make_session() -> requests.Session:
+        """Create a requests session with connection pooling."""
+        s = requests.Session()
+        adapter = requests.adapters.HTTPAdapter(
+            pool_connections=6, pool_maxsize=6
+        )
+        s.mount("https://", adapter)
+        s.mount("http://", adapter)
+        return s
 
     @property
     def work_dir(self) -> str:
@@ -303,6 +317,7 @@ class DownloadManager:
             request_headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 "Accept": "*/*",
+                "Accept-Encoding": "identity",
                 "Accept-Language": "en-US,en;q=0.9",
             }
             # Merge auth headers so they persist to parallel/single downloads
@@ -316,7 +331,7 @@ class DownloadManager:
             if has_auth:
                 current_url = url
                 for _ in range(5):
-                    resp = requests.get(
+                    resp = self._session.get(
                         current_url,
                         stream=True,
                         timeout=(15, 30),
@@ -335,7 +350,7 @@ class DownloadManager:
                 else:
                     raise requests.exceptions.TooManyRedirects("Too many redirects")
             else:
-                response = requests.get(
+                response = self._session.get(
                     url,
                     stream=True,
                     timeout=(15, 30),
@@ -409,7 +424,7 @@ class DownloadManager:
 
         file_path = os.path.join(self.work_dir, filename)
 
-        response = requests.get(
+        response = self._session.get(
             url,
             stream=True,
             timeout=(15, 30),
@@ -420,7 +435,7 @@ class DownloadManager:
         response.raise_for_status()
 
         with open(file_path, "wb") as f:
-            for chunk in response.iter_content(chunk_size=262144):
+            for chunk in response.iter_content(chunk_size=STREAM_CHUNK_SIZE):
                 if self._cancel_current:
                     f.close()
                     if os.path.exists(file_path):
@@ -587,7 +602,7 @@ class DownloadManager:
             range_headers = dict(headers)
             range_headers["Range"] = f"bytes={start}-{end}"
 
-            resp = requests.get(
+            resp = self._session.get(
                 url,
                 stream=True,
                 timeout=(15, 60),
@@ -599,7 +614,7 @@ class DownloadManager:
 
             offset = start
             with open(file_path, "r+b") as f:
-                for chunk in resp.iter_content(chunk_size=262144):
+                for chunk in resp.iter_content(chunk_size=STREAM_CHUNK_SIZE):
                     if self._cancel_current or failed_event.is_set():
                         return False
                     if chunk:

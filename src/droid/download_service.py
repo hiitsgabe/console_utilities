@@ -50,8 +50,10 @@ PowerManager = autoclass("android.os.PowerManager")
 Context = autoclass("android.content.Context")
 
 # Parallel download constants (match desktop download_manager.py)
-PARALLEL_MIN_SIZE = 5 * 1024 * 1024  # 5 MB
+PARALLEL_MIN_SIZE = 50 * 1024 * 1024  # 50 MB
 PARALLEL_WORKERS = 4
+# iter_content chunk size (2 MB — reduces Python/GIL overhead vs 256 KB)
+STREAM_CHUNK_SIZE = 2 * 1024 * 1024
 
 
 def run_service():
@@ -265,7 +267,7 @@ def _download_single(
         total_size = int(resp.headers.get("content-length", 0))
 
     with open(file_path, "wb") as f:
-        for chunk in resp.iter_content(chunk_size=262144):
+        for chunk in resp.iter_content(chunk_size=STREAM_CHUNK_SIZE):
             # Check cancel
             if _check_cancel(work_dir, item_id):
                 f.close()
@@ -479,7 +481,7 @@ def _download_chunk(
         resp.raise_for_status()
 
         with open(chunk_path, "wb") as f:
-            for chunk in resp.iter_content(chunk_size=262144):
+            for chunk in resp.iter_content(chunk_size=STREAM_CHUNK_SIZE):
                 if failed_event.is_set():
                     return False
                 if chunk:
@@ -638,7 +640,7 @@ def _build_download_headers(url):
             "application/signed-exchange;v=b3;q=0.7"
         ),
         "Accept-Language": random.choice(languages),
-        "Accept-Encoding": "gzip, deflate, br, zstd",
+        "Accept-Encoding": "identity",
         "Connection": "keep-alive",
         "Pragma": "no-cache",
         "Cache-Control": "no-cache",
