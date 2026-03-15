@@ -1462,6 +1462,9 @@ class ConsoleUtilitiesApp:
         elif self.state.mode == "nhl05_patcher":
             self._handle_nhl05_patcher_navigation(direction)
 
+        elif self.state.mode == "pes6_patcher":
+            self._handle_pes6_patcher_navigation(direction)
+
         elif self.state.mode == "file_explorer":
             self._handle_file_explorer_navigation(direction)
 
@@ -2274,6 +2277,42 @@ class ConsoleUtilitiesApp:
                 self.state.iss_patcher.leagues_highlighted = 0
             return
 
+        # Handle keyboard text input for PES6 Patcher league browser search
+        if self.state.pes6_ps2_patcher.active_modal == "league_browser" and (
+            self.state.input_mode == "keyboard" or BUILD_TARGET == "android"
+        ):
+            if event.key == pygame.K_ESCAPE:
+                if self.state.pes6_ps2_patcher.league_search_active:
+                    self.state.pes6_ps2_patcher.league_search_active = False
+                    self.state.pes6_ps2_patcher.league_search_cursor = 0
+                else:
+                    self._go_back()
+            elif event.key == pygame.K_RETURN:
+                self._handle_pes6_league_browser_selection()
+            elif event.key in (pygame.K_UP, pygame.K_LEFT):
+                self._handle_pes6_patcher_navigation("up")
+            elif event.key in (pygame.K_DOWN, pygame.K_RIGHT):
+                self._handle_pes6_patcher_navigation("down")
+            elif event.key == pygame.K_BACKSPACE:
+                if self.state.pes6_ps2_patcher.league_search_query:
+                    self.state.pes6_ps2_patcher.league_search_query = (
+                        self.state.pes6_ps2_patcher.league_search_query[:-1]
+                    )
+                    self.state.pes6_ps2_patcher.leagues_highlighted = 0
+            elif self._is_paste_event(event):
+                clip = self._get_clipboard_text()
+                if clip:
+                    self.state.pes6_ps2_patcher.league_search_query += clip
+                    self.state.pes6_ps2_patcher.leagues_highlighted = 0
+            elif (
+                event.unicode
+                and event.unicode.isprintable()
+                and BUILD_TARGET != "android"
+            ):
+                self.state.pes6_ps2_patcher.league_search_query += event.unicode
+                self.state.pes6_ps2_patcher.leagues_highlighted = 0
+            return
+
         # Handle keyboard text input for IA download wizard
         if self.state.ia_download_wizard.show and (
             self.state.input_mode == "keyboard" or BUILD_TARGET == "android"
@@ -2830,6 +2869,13 @@ class ConsoleUtilitiesApp:
                     ):
                         self.state.iss_patcher.league_search_cursor = char_index
                         self._handle_iss_league_browser_selection()
+                    elif (
+                        self.state.mode == "pes6_patcher"
+                        and self.state.pes6_ps2_patcher.active_modal == "league_browser"
+                        and self.state.pes6_ps2_patcher.league_search_active
+                    ):
+                        self.state.pes6_ps2_patcher.league_search_cursor = char_index
+                        self._handle_pes6_league_browser_selection()
                     return
 
         # Check back button
@@ -2961,6 +3007,11 @@ class ConsoleUtilitiesApp:
                     and self.state.iss_patcher.active_modal == "league_browser"
                 ):
                     self.state.iss_patcher.leagues_highlighted = actual_index
+                elif (
+                    self.state.mode == "pes6_patcher"
+                    and self.state.pes6_ps2_patcher.active_modal == "league_browser"
+                ):
+                    self.state.pes6_ps2_patcher.leagues_highlighted = actual_index
                 elif self.state.mode == "syncthing":
                     if self.state.syncthing.custom_step == "file_select":
                         self.state.syncthing.custom_file_highlighted = actual_index
@@ -2991,6 +3042,14 @@ class ConsoleUtilitiesApp:
         ):
             self.state.we_patcher.league_search_active = False
             self.state.we_patcher.league_search_cursor = 0
+            return
+        if (
+            self.state.mode == "pes6_patcher"
+            and self.state.pes6_ps2_patcher.active_modal == "league_browser"
+            and self.state.pes6_ps2_patcher.league_search_active
+        ):
+            self.state.pes6_ps2_patcher.league_search_active = False
+            self.state.pes6_ps2_patcher.league_search_cursor = 0
             return
         if self.state.show_search_input:
             # Reset search state when closing search modal
@@ -3178,6 +3237,15 @@ class ConsoleUtilitiesApp:
                 from state import NHL05PS2PatcherState
 
                 self.state.nhl05_ps2_patcher = NHL05PS2PatcherState()
+                self.state.mode = "sports_patcher"
+                self.state.highlighted = 0
+        elif self.state.mode == "pes6_patcher":
+            if self.state.pes6_ps2_patcher.active_modal:
+                self.state.pes6_ps2_patcher.active_modal = None
+            else:
+                from state import PES6PS2PatcherState
+
+                self.state.pes6_ps2_patcher = PES6PS2PatcherState()
                 self.state.mode = "sports_patcher"
                 self.state.highlighted = 0
         elif self.state.mode == "system_settings":
@@ -3477,6 +3545,9 @@ class ConsoleUtilitiesApp:
             elif action == "nhl05_patcher":
                 self.state.mode = "nhl05_patcher"
                 self.state.highlighted = 0
+            elif action == "pes6_patcher":
+                self.state.mode = "pes6_patcher"
+                self.state.highlighted = 0
             elif action == "mvp_psp_patcher":
                 self.state.mode = "mvp_psp_patcher"
                 self.state.highlighted = 0
@@ -3507,6 +3578,9 @@ class ConsoleUtilitiesApp:
 
         elif self.state.mode == "nhl05_patcher":
             self._handle_nhl05_patcher_selection()
+
+        elif self.state.mode == "pes6_patcher":
+            self._handle_pes6_patcher_selection()
 
         elif self.state.mode == "file_explorer":
             self._handle_file_explorer_select()
@@ -4482,6 +4556,8 @@ class ConsoleUtilitiesApp:
             path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "nhl05_patcher_rom":
             path = self.settings.get("roms_dir", SCRIPT_DIR)
+        elif selection_type == "pes6_patcher_rom":
+            path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "nhl07_patcher_rom":
             path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "custom_folder":
@@ -4553,6 +4629,10 @@ class ConsoleUtilitiesApp:
             from services.file_listing import load_psp_iso_folder_contents
 
             loader = load_psp_iso_folder_contents
+        elif selection_type == "pes6_patcher_rom":
+            from services.file_listing import load_psp_iso_folder_contents
+
+            loader = load_psp_iso_folder_contents
         elif selection_type == "nhl07_patcher_rom":
             from services.file_listing import load_psp_iso_folder_contents
 
@@ -4612,7 +4692,7 @@ class ConsoleUtilitiesApp:
             "nhl94_gen_patcher_rom",
             "nbalive95_patcher_rom",
         )
-        is_psp_context = selection_type in ("nhl05_patcher_rom", "nhl07_patcher_rom", "mvp_psp_patcher_rom")
+        is_psp_context = selection_type in ("nhl05_patcher_rom", "pes6_patcher_rom", "nhl07_patcher_rom", "mvp_psp_patcher_rom")
         if is_psx_context:
             nav_loader = load_psx_rom_folder_contents
         elif is_snes_context:
@@ -5045,6 +5125,44 @@ class ConsoleUtilitiesApp:
             except Exception:
                 nhl05_st.rom_valid = False
                 nhl05_st.rom_info = None
+        elif selection_type == "pes6_patcher_rom":
+            from utils.zip_rom import (
+                is_zip,
+                extract_rom_from_zip,
+                cleanup_temp_dir as _zt_cleanup,
+            )
+
+            pes6_st = self.state.pes6_ps2_patcher
+            _zt_cleanup(pes6_st.zip_temp_dir)
+            pes6_st.zip_path = ""
+            pes6_st.zip_temp_dir = ""
+
+            if is_zip(path):
+                try:
+                    rom, tmp = extract_rom_from_zip(path, [".iso", ".cso"])
+                    pes6_st.zip_path = path
+                    pes6_st.zip_temp_dir = tmp
+                    path = rom
+                except ValueError:
+                    pes6_st.rom_valid = False
+                    pes6_st.rom_info = None
+                    pes6_st.rom_path = path
+                    self.state.folder_browser.show = False
+                    return
+
+            pes6_st.rom_path = path
+            try:
+                from services.pes6_ps2_patcher.patcher import PES6PS2Patcher
+
+                cache_dir = self.settings.get("work_dir", "workdir")
+                cache_dir = os.path.join(cache_dir, "pes6_cache")
+                patcher = PES6PS2Patcher(cache_dir)
+                rom_info = patcher.analyze_rom(path)
+                pes6_st.rom_info = rom_info
+                pes6_st.rom_valid = rom_info.is_valid
+            except Exception:
+                pes6_st.rom_valid = False
+                pes6_st.rom_info = None
         elif selection_type == "nhl07_patcher_rom":
             from utils.zip_rom import (
                 is_zip,
@@ -5410,6 +5528,14 @@ class ConsoleUtilitiesApp:
         ):
             self.state.iss_patcher.league_search_shift = (
                 not self.state.iss_patcher.league_search_shift
+            )
+        elif (
+            self.state.mode == "pes6_patcher"
+            and self.state.pes6_ps2_patcher.active_modal == "league_browser"
+            and self.state.pes6_ps2_patcher.league_search_active
+        ):
+            self.state.pes6_ps2_patcher.league_search_shift = (
+                not self.state.pes6_ps2_patcher.league_search_shift
             )
 
     def _navigate_keyboard_modal(
@@ -5896,6 +6022,14 @@ class ConsoleUtilitiesApp:
             iss.league_search_active = not iss.league_search_active
             if not iss.league_search_active:
                 iss.league_search_cursor = 0
+        elif (
+            self.state.mode == "pes6_patcher"
+            and self.state.pes6_ps2_patcher.active_modal == "league_browser"
+        ):
+            pes = self.state.pes6_ps2_patcher
+            pes.league_search_active = not pes.league_search_active
+            if not pes.league_search_active:
+                pes.league_search_cursor = 0
         elif (
             self.state.scraper_wizard.show
             and self.state.scraper_wizard.system_picker_active
@@ -10967,6 +11101,358 @@ class ConsoleUtilitiesApp:
                 nhl.patch_complete = False
             finally:
                 nhl.is_patching = False
+
+        threading.Thread(target=_patch, daemon=True).start()
+
+    def _handle_pes6_patcher_navigation(self, direction):
+        """Handle D-pad navigation for pes6_patcher mode and its modals."""
+        pes = self.state.pes6_ps2_patcher
+
+        if pes.active_modal == "league_browser":
+            if pes.league_search_active:
+                from ui.organisms.char_keyboard import CharKeyboard
+
+                keyboard = CharKeyboard()
+                total_chars = keyboard.get_total_chars("default")
+                chars_per_row = 13
+                if direction == "up":
+                    if pes.league_search_cursor >= chars_per_row:
+                        pes.league_search_cursor -= chars_per_row
+                elif direction == "down":
+                    if pes.league_search_cursor + chars_per_row < total_chars:
+                        pes.league_search_cursor += chars_per_row
+                elif direction == "left":
+                    if pes.league_search_cursor > 0:
+                        pes.league_search_cursor -= 1
+                elif direction == "right":
+                    if pes.league_search_cursor < total_chars - 1:
+                        pes.league_search_cursor += 1
+                return
+
+            from ui.screens.modals.league_browser_modal import league_browser_modal
+
+            filtered = league_browser_modal.get_filtered_leagues(self.state)
+            show_browse_all = (
+                not pes.all_leagues_loaded
+                and not pes.league_search_query
+                and not pes.is_fetching
+            )
+            max_items = (len(filtered) + (1 if show_browse_all else 0)) or 1
+            if direction in ("up", "left"):
+                pes.leagues_highlighted = (pes.leagues_highlighted - 1) % max_items
+            elif direction in ("down", "right"):
+                pes.leagues_highlighted = (pes.leagues_highlighted + 1) % max_items
+
+        elif pes.active_modal == "roster_preview":
+            league_data = pes.league_data
+            if not league_data or not hasattr(league_data, "teams"):
+                return
+            teams = league_data.teams
+            if direction == "left":
+                pes.roster_preview_team_index = (
+                    pes.roster_preview_team_index - 1
+                ) % max(len(teams), 1)
+                pes.roster_preview_player_index = 0
+            elif direction == "right":
+                pes.roster_preview_team_index = (
+                    pes.roster_preview_team_index + 1
+                ) % max(len(teams), 1)
+                pes.roster_preview_player_index = 0
+            elif direction == "up":
+                pes.roster_preview_player_index = max(
+                    0, pes.roster_preview_player_index - 1
+                )
+            elif direction == "down":
+                team_idx = pes.roster_preview_team_index
+                if 0 <= team_idx < len(teams):
+                    players = (
+                        teams[team_idx].players
+                        if hasattr(teams[team_idx], "players")
+                        else []
+                    )
+                    pes.roster_preview_player_index = min(
+                        pes.roster_preview_player_index + 1,
+                        max(len(players) - 1, 0),
+                    )
+
+        elif pes.active_modal is None:
+            from ui.screens.pes6_ps2_patcher_screen import pes6_ps2_patcher_screen
+
+            max_items = pes6_ps2_patcher_screen.get_count(self.state, self.settings)
+            if direction in ("up", "left"):
+                self.state.highlighted = (self.state.highlighted - 1) % max_items
+            elif direction in ("down", "right"):
+                self.state.highlighted = (self.state.highlighted + 1) % max_items
+
+    def _handle_pes6_patcher_selection(self):
+        """Handle item selection on the pes6_patcher main menu."""
+        pes = self.state.pes6_ps2_patcher
+
+        # If a modal is active, route to modal selection
+        if pes.active_modal == "league_browser":
+            self._handle_pes6_league_browser_selection()
+            return
+        if pes.active_modal == "roster_preview":
+            return
+        if pes.active_modal == "patch_progress":
+            if pes.patch_complete or pes.patch_error:
+                pes.active_modal = None
+            return
+
+        from ui.screens.pes6_ps2_patcher_screen import pes6_ps2_patcher_screen
+
+        action = pes6_ps2_patcher_screen.get_action(
+            self.state.highlighted, self.state, self.settings
+        )
+
+        if action == "select_league":
+            pes.active_modal = "league_browser"
+            pes.leagues_highlighted = 0
+            self._load_pes6_leagues()
+        elif action == "fetch_rosters":
+            self._start_pes6_roster_fetch()
+        elif action == "preview_rosters":
+            pes.active_modal = "roster_preview"
+            pes.roster_preview_team_index = 0
+            pes.roster_preview_player_index = 0
+            # Auto-fetch if league selected but data missing
+            if pes.selected_league and not pes.league_data and not pes.is_fetching:
+                self._start_pes6_roster_fetch()
+        elif action == "select_rom":
+            self._open_folder_browser("pes6_patcher_rom")
+        elif action == "patch_rom":
+            pes.active_modal = "patch_progress"
+            self._start_pes6_patching()
+
+    def _load_pes6_leagues(self):
+        """Populate available leagues for PES 6 league browser."""
+        pes = self.state.pes6_ps2_patcher
+        if not pes.available_leagues:
+            cache_dir = self.settings.get("work_dir", "workdir")
+            cache_dir = os.path.join(cache_dir, "pes6_cache")
+            from services.sports_api.espn_client import EspnClient
+
+            client = EspnClient(cache_dir)
+            pes.available_leagues = client.get_featured_leagues()
+
+    def _load_pes6_all_leagues(self):
+        """Background fetch of all ESPN soccer leagues for PES 6."""
+        import threading
+
+        pes = self.state.pes6_ps2_patcher
+        pes.is_fetching = True
+        pes.fetch_status = "Fetching all leagues..."
+        pes.fetch_error = ""
+
+        def _fetch():
+            try:
+                cache_dir = self.settings.get("work_dir", "workdir")
+                cache_dir = os.path.join(cache_dir, "pes6_cache")
+                from services.sports_api.espn_client import EspnClient
+
+                client = EspnClient(cache_dir)
+                leagues = client.get_leagues()
+                pes.available_leagues = leagues
+                pes.all_leagues_loaded = True
+            except Exception as e:
+                pes.fetch_error = str(e)
+            finally:
+                pes.is_fetching = False
+
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def _handle_pes6_league_browser_selection(self):
+        """Handle league selection from the PES 6 league browser modal."""
+        pes = self.state.pes6_ps2_patcher
+        from ui.screens.modals.league_browser_modal import league_browser_modal
+
+        # If on-screen keyboard is active, handle char input
+        if pes.league_search_active:
+            from ui.organisms.char_keyboard import CharKeyboard
+
+            keyboard = CharKeyboard()
+            new_text, is_done, toggle_shift = keyboard.handle_selection(
+                pes.league_search_cursor,
+                pes.league_search_query,
+                char_set="default",
+                shift_active=pes.league_search_shift,
+            )
+            if toggle_shift:
+                pes.league_search_shift = not pes.league_search_shift
+            pes.league_search_query = new_text
+            pes.leagues_highlighted = 0
+            if is_done:
+                pes.league_search_active = False
+                pes.league_search_cursor = 0
+            return
+
+        filtered = league_browser_modal.get_filtered_leagues(self.state)
+
+        # "Browse all leagues" is the virtual last item when not all are loaded
+        show_browse_all = (
+            not pes.all_leagues_loaded
+            and not pes.league_search_query
+            and not pes.is_fetching
+        )
+        if show_browse_all and pes.leagues_highlighted == len(filtered):
+            self._load_pes6_all_leagues()
+            return
+
+        if not filtered or pes.leagues_highlighted >= len(filtered):
+            return
+
+        selected = filtered[pes.leagues_highlighted]
+        pes.selected_league = selected
+        pes.active_modal = None
+
+        # Auto-fetch rosters for the selected league
+        league_id = selected.id if hasattr(selected, "id") else None
+        if league_id:
+            self._start_pes6_roster_fetch()
+
+    def _start_pes6_roster_fetch(self):
+        """Start background PES 6 PS2 roster fetch thread."""
+        import threading
+
+        pes = self.state.pes6_ps2_patcher
+
+        if pes.is_fetching or not pes.selected_league:
+            return
+
+        pes.is_fetching = True
+        pes.fetch_error = ""
+        pes.league_data = None
+
+        league_id = (
+            pes.selected_league.id
+            if hasattr(pes.selected_league, "id")
+            else None
+        )
+        season = pes.selected_season
+
+        if not league_id:
+            pes.is_fetching = False
+            pes.fetch_error = "No league ID"
+            return
+
+        cache_dir = self.settings.get("work_dir", "workdir")
+        cache_dir = os.path.join(cache_dir, "pes6_cache")
+
+        def _fetch():
+            try:
+                from services.pes6_ps2_patcher.patcher import PES6PS2Patcher
+
+                def on_status(msg):
+                    pes.fetch_status = msg
+
+                patcher = PES6PS2Patcher(cache_dir, on_status=on_status)
+
+                def progress(p, msg):
+                    pes.fetch_progress = p
+                    pes.fetch_status = msg
+
+                league_data = patcher.fetch_rosters(
+                    league_id, season, on_progress=progress
+                )
+                pes.league_data = league_data
+            except Exception as e:
+                pes.fetch_error = str(e)
+            finally:
+                pes.is_fetching = False
+
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def _start_pes6_patching(self):
+        """Start background PES 6 PS2 patching thread."""
+        import threading
+        import os
+
+        pes = self.state.pes6_ps2_patcher
+
+        if not pes.league_data or not pes.rom_path:
+            pes.patch_error = "Missing rosters or ISO"
+            return
+
+        if not pes.rom_valid:
+            pes.patch_error = "Invalid ISO"
+            return
+
+        pes.is_patching = True
+        pes.patch_error = ""
+        pes.patch_complete = False
+        pes.patch_output_path = ""
+
+        input_path = pes.rom_path
+        game_dir = os.path.dirname(input_path)
+        base_name = os.path.splitext(os.path.basename(input_path))[0]
+        ext = os.path.splitext(input_path)[1]
+
+        league_name = ""
+        if pes.selected_league and hasattr(pes.selected_league, "name"):
+            league_name = pes.selected_league.name
+        output_path = os.path.join(
+            game_dir, f"{base_name} - {league_name} {pes.selected_season}{ext}"
+        )
+
+        cache_dir = self.settings.get("work_dir", "workdir")
+        cache_dir = os.path.join(cache_dir, "pes6_cache")
+
+        def _patch():
+            try:
+                from services.pes6_ps2_patcher.patcher import PES6PS2Patcher
+
+                patcher = PES6PS2Patcher(cache_dir)
+
+                # Build slot mapping
+                rom_info = pes.rom_info
+                league_id = (
+                    pes.selected_league.id
+                    if hasattr(pes.selected_league, "id")
+                    else None
+                )
+                teams = (
+                    [tr.team for tr in pes.league_data.teams]
+                    if hasattr(pes.league_data, "teams")
+                    else []
+                )
+
+                slot_mapping = patcher.build_slot_mapping(rom_info, teams, league_id)
+
+                def progress(p, msg):
+                    pes.patch_progress = p
+                    pes.patch_status = msg
+
+                result = patcher.patch_rom(
+                    input_path,
+                    output_path,
+                    slot_mapping,
+                    rom_info,
+                    on_progress=progress,
+                )
+                pes.patch_complete = result.success
+                pes.patch_error = result.error if not result.success else ""
+                pes.patch_output_path = result.output_path if result.success else ""
+
+                if result.success and pes.zip_path:
+                    from utils.zip_rom import (
+                        create_output_zip,
+                        cleanup_temp_dir as _zclean,
+                    )
+
+                    zip_dir = os.path.dirname(pes.zip_path)
+                    zip_name = (
+                        os.path.splitext(os.path.basename(output_path))[0] + ".zip"
+                    )
+                    output_zip = os.path.join(zip_dir, zip_name)
+                    create_output_zip([output_path], output_zip)
+                    pes.patch_output_path = output_zip
+                    _zclean(pes.zip_temp_dir)
+                    pes.zip_temp_dir = ""
+            except Exception as e:
+                pes.patch_error = str(e)
+                pes.patch_complete = False
+            finally:
+                pes.is_patching = False
 
         threading.Thread(target=_patch, daemon=True).start()
 
