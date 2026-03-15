@@ -407,38 +407,75 @@ class PES6RomWriter:
                 pname = p.name if hasattr(p, "name") else str(p)
                 espn_players.append(clean(pname))
 
-        # Write ESPN players to the correct club team record slots.
-        # Club teams start at record 1472 (after 64 national teams × 23).
-        # Each club team has 32 record slots.
-        # ESPN team 0 → club slot 0 (records 1472-1503)
-        # ESPN team 1 → club slot 1 (records 1504-1535), etc.
+        # Write ESPN team players to club section blocks AND fill
+        # national section with cycling ESPN names.
+        #
+        # Each team's squad uses mostly contiguous club records
+        # (1472+team*32) plus a few from the national section (0-1471).
+        # We write each ESPN team to its club block, then fill the
+        # national section with all ESPN names cycling through.
         RECORD_SIZE = 124
         NAME_SIZE = 32
-        CLUB_START_REC = 1472  # 64 national teams × 23 players
-        CLUB_TEAM_SIZE = 32
+        CLUB_START = 1472  # 64 national × 23 players
+        CLUB_SIZE = 32
+        total_records = len(dec_data) // RECORD_SIZE
+
+        # Collect all ESPN names (last name only for compression)
+        all_espn = []
+        team_espn = []
+        for tr in league_data.teams:
+            players = tr.players if hasattr(tr, "players") else []
+            names = []
+            for p in players:
+                pname = p.name if hasattr(p, "name") else str(p)
+                full = clean(pname)
+                parts = full.split()
+                last = (parts[-1] if parts else full)[:15]
+                names.append(last)
+                all_espn.append(last)
+            team_espn.append(names)
 
         replaced = 0
-        for team_idx, tr in enumerate(league_data.teams):
-            players = tr.players if hasattr(tr, "players") else []
-            base_rec = CLUB_START_REC + team_idx * CLUB_TEAM_SIZE
 
-            for j, player in enumerate(players[:CLUB_TEAM_SIZE]):
-                rec = base_rec + j
+        def write_name(rec_off, name):
+            nonlocal replaced
+            new_bytes = name.encode("utf-16-le")
+            dec_data[rec_off:rec_off + NAME_SIZE] = b"\x00" * NAME_SIZE
+            wlen = min(len(new_bytes), NAME_SIZE - 2)
+            dec_data[rec_off:rec_off + wlen] = new_bytes[:wlen]
+            replaced += 1
+
+        # 1. Write each ESPN team to its club block
+        for t_idx, names in enumerate(team_espn):
+            base = CLUB_START + t_idx * CLUB_SIZE
+            for j, name in enumerate(names[:CLUB_SIZE]):
+                rec = base + j
                 rec_off = rec * RECORD_SIZE
                 if rec_off + NAME_SIZE > len(dec_data):
                     break
+                if dec_data[rec_off:rec_off + NAME_SIZE] == b"\x00" * NAME_SIZE:
+                    continue  # Skip empty
+                write_name(rec_off, name)
 
-                pname = player.name if hasattr(player, "name") else str(player)
-                full = clean(pname)
-                # Use last name to keep compressed size small
-                parts = full.split()
-                last = (parts[-1] if parts else full)[:15]
-                new_bytes = last.encode("utf-16-le")
+        # 2. Fill national section (0-1471) with cycling ESPN names
+        espn_idx = 0
+        for rec in range(CLUB_START):
+            rec_off = rec * RECORD_SIZE
+            if dec_data[rec_off:rec_off + NAME_SIZE] == b"\x00" * NAME_SIZE:
+                continue
+            if all_espn:
+                write_name(rec_off, all_espn[espn_idx % len(all_espn)])
+                espn_idx += 1
 
-                dec_data[rec_off:rec_off + NAME_SIZE] = b"\x00" * NAME_SIZE
-                wlen = min(len(new_bytes), NAME_SIZE - 2)
-                dec_data[rec_off:rec_off + wlen] = new_bytes[:wlen]
-                replaced += 1
+        # 3. Fill remaining club records (beyond patched teams)
+        remaining_start = CLUB_START + len(team_espn) * CLUB_SIZE
+        for rec in range(remaining_start, total_records):
+            rec_off = rec * RECORD_SIZE
+            if dec_data[rec_off:rec_off + NAME_SIZE] == b"\x00" * NAME_SIZE:
+                continue
+            if all_espn:
+                write_name(rec_off, all_espn[espn_idx % len(all_espn)])
+                espn_idx += 1
 
         if on_progress:
             on_progress(0.7, f"Replaced {replaced} names, compressing...")
