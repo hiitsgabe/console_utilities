@@ -159,9 +159,6 @@ class ConsoleUtilitiesApp:
         if pygame.joystick.get_count() > 0:
             self.joystick = pygame.joystick.Joystick(0)
             self.joystick.init()
-            print(f"Joystick detected: {self.joystick.get_name()}")
-        else:
-            print("No joystick detected, using keyboard")
 
         # Initialize theme
         self.theme = Theme()
