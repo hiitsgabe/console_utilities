@@ -6002,6 +6002,10 @@ class ConsoleUtilitiesApp:
                 self._process_renames()
             return
 
+        # In games mode without selection, Start should not navigate away
+        if self.state.mode == "games":
+            return
+
         # Handle patcher modals — Start should not navigate away
         if self.state.mode in ("we_patcher", "iss_patcher"):
             patcher = self.state.active_patcher

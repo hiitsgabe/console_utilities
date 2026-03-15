@@ -280,10 +280,13 @@ class DownloadsScreen:
             )
 
             # Speed + ETA below the progress bar
-            speed_text = self._format_speed(item.speed)
-            eta_text = self._format_eta(item.total_size, item.downloaded, item.speed)
-            if eta_text:
-                speed_text = f"{speed_text} - {eta_text}"
+            if item.speed > 0:
+                speed_text = self._format_speed(item.speed)
+                eta_text = self._format_eta(item.total_size, item.downloaded, item.speed)
+                if eta_text:
+                    speed_text = f"{speed_text} - {eta_text}"
+            else:
+                speed_text = "-"
             self.text.render(
                 screen,
                 speed_text,
