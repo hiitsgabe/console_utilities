@@ -100,14 +100,16 @@ class DownloadProgress:
             eta_text = self._format_eta(total_size, downloaded, speed)
             if eta_text:
                 speed_text = f"{speed_text} - {eta_text}"
-            self.text.render(
-                screen,
-                speed_text,
-                (rect.right, stats_y),
-                color=self.theme.text_secondary,
-                size=self.theme.font_size_sm,
-                align="right",
-            )
+        else:
+            speed_text = "-"
+        self.text.render(
+            screen,
+            speed_text,
+            (rect.right, stats_y),
+            color=self.theme.text_secondary,
+            size=self.theme.font_size_sm,
+            align="right",
+        )
 
         return rect
 
