@@ -2080,6 +2080,94 @@ def _write_cd_file_with_edc(rom: bytearray, lba: int, file_data: bytes):
         current_lba += 1
 
 
+def _read_cd_file_from_handle(f, lba: int, size: int) -> bytes:
+    """Read a file from Mode2/2352 CD sectors using file seeks."""
+    result = bytearray()
+    current_lba = lba
+    remaining = size
+    while remaining > 0:
+        f.seek(current_lba * 2352 + 24)
+        chunk = min(remaining, 2048)
+        result.extend(f.read(chunk))
+        remaining -= chunk
+        current_lba += 1
+    return bytes(result)
+
+
+def _write_cd_file_with_edc_to_handle(f, lba: int, file_data: bytes):
+    """Write file data to CD sectors via file seeks, recalculating EDC."""
+    current_lba = lba
+    offset = 0
+    while offset < len(file_data):
+        sector_off = current_lba * 2352
+        user_off = sector_off + 24
+        chunk = min(len(file_data) - offset, 2048)
+        # Write user data
+        f.seek(user_off)
+        f.write(file_data[offset : offset + chunk])
+        # Read back sector bytes 16..2071 for EDC calculation
+        f.seek(sector_off + 16)
+        sector_data = f.read(2056)
+        new_edc = _edc_compute(sector_data)
+        f.seek(sector_off + 2072)
+        f.write(struct.pack("<I", new_edc))
+        offset += chunk
+        current_lba += 1
+
+
+def _update_iso_dir_size_in_handle(f, dir_record_offset: int, new_size: int):
+    """Update file size in an ISO9660 directory record via file seeks."""
+    f.seek(dir_record_offset + 10)
+    f.write(struct.pack("<I", new_size))
+    f.seek(dir_record_offset + 14)
+    f.write(struct.pack(">I", new_size))
+    # Recalculate EDC for the sector containing this directory record
+    sector_off = (dir_record_offset // 2352) * 2352
+    f.seek(sector_off + 16)
+    sector_data = f.read(2056)
+    new_edc = _edc_compute(sector_data)
+    f.seek(sector_off + 2072)
+    f.write(struct.pack("<I", new_edc))
+
+
+def _build_tex_dir_map_from_dir(dir_data: bytearray) -> Tuple[dict, dict]:
+    """Parse pre-read directory data to find TEX file entries.
+
+    Same logic as _build_tex_dir_map but works with already-read dir_data.
+    """
+    sizes = {}
+    dir_offsets = {}
+    pos = 0
+    while pos < len(dir_data):
+        rec_len = dir_data[pos]
+        if rec_len == 0:
+            pos = ((pos // 2048) + 1) * 2048
+            continue
+        name_len = dir_data[pos + 32]
+        name = dir_data[pos + 33 : pos + 33 + name_len].decode(
+            "ascii", errors="replace"
+        )
+        if name.startswith("TEX_") and name.endswith(".BIN;1"):
+            idx_str = name[4:-6]
+            try:
+                idx = int(idx_str)
+                if idx < _TEX_COUNT:
+                    ext_size = struct.unpack_from("<I", dir_data, pos + 10)[0]
+                    sizes[idx] = ext_size
+                    sector_in_dir = pos // 2048
+                    offset_in_sector = pos % 2048
+                    abs_pos = (
+                        (_BIN_DIR_LBA + sector_in_dir) * 2352
+                        + 24
+                        + offset_in_sector
+                    )
+                    dir_offsets[idx] = abs_pos
+            except ValueError:
+                pass
+        pos += rec_len
+    return sizes, dir_offsets
+
+
 def _find_best_tex_match(target_rgb: Tuple[int, int, int]) -> Optional[int]:
     """Find the TEX index whose known jersey color is closest to target_rgb."""
     best_idx = None
@@ -2575,7 +2663,11 @@ class RomWriter:
     # ------------------------------------------------------------------
 
     def _ensure_tex_cache(self):
-        """Cache original TEX file data on first use for 3D jersey patching."""
+        """Cache original TEX file data on first use for 3D jersey patching.
+
+        Uses targeted file seeks instead of loading the entire ROM into memory,
+        so it works on devices with limited RAM (e.g. RG35xxSP with ~256MB).
+        """
         if self._tex_cache is not None:
             return
         if not os.path.exists(self.output_path):
@@ -2583,21 +2675,26 @@ class RomWriter:
             return
 
         with open(self.output_path, "rb") as f:
-            rom = f.read()
+            # Read only the directory sectors needed for TEX file lookup
+            dir_data = bytearray()
+            sectors = (_BIN_DIR_SIZE + 2047) // 2048
+            for s in range(sectors):
+                f.seek((_BIN_DIR_LBA + s) * 2352 + 24)
+                dir_data.extend(f.read(2048))
 
-        # Scan ISO9660 directory for TEX file sizes and record offsets
-        tex_sizes, tex_dir_offsets = _build_tex_dir_map(rom)
-        self._tex_sizes = tex_sizes
-        self._tex_dir_offsets = tex_dir_offsets
+            tex_sizes, tex_dir_offsets = _build_tex_dir_map_from_dir(dir_data)
+            self._tex_sizes = tex_sizes
+            self._tex_dir_offsets = tex_dir_offsets
 
-        tex_cache = {}
-        for idx in range(_TEX_COUNT):
-            size = tex_sizes.get(idx)
-            if size is None:
-                continue
-            lba = _TEX_BASE_LBA + idx * _TEX_LBA_STRIDE
-            tex_cache[idx] = _read_cd_file(rom, lba, size)
-        self._tex_cache = tex_cache
+            # Cache each TEX file by reading only its sectors
+            tex_cache = {}
+            for idx in range(_TEX_COUNT):
+                size = tex_sizes.get(idx)
+                if size is None:
+                    continue
+                lba = _TEX_BASE_LBA + idx * _TEX_LBA_STRIDE
+                tex_cache[idx] = _read_cd_file_from_handle(f, lba, size)
+            self._tex_cache = tex_cache
 
     def patch_3d_jersey(self, tex_index: int, target_rgb: Tuple[int, int, int]):
         """Patch a team's 3D jersey by copying the best color-matched TEX file.
@@ -2661,10 +2758,11 @@ class RomWriter:
             f.write(rom)
 
     def flush_tex_patches(self):
-        """Apply all queued 3D jersey TEX patches in a single ROM read/write.
+        """Apply all queued 3D jersey TEX patches using targeted file seeks.
 
-        Instead of reading+writing the entire ROM per team, this batches all
-        patches and applies them at once — reducing I/O from N full reads to 1.
+        Instead of loading the entire ROM into memory, each TEX patch is
+        written directly to the file at the correct sector offsets. This
+        works on devices with limited RAM (e.g. RG35xxSP).
         """
         if not self._pending_tex_patches or not os.path.exists(self.output_path):
             return
@@ -2675,39 +2773,30 @@ class RomWriter:
             return
 
         with open(self.output_path, "r+b") as f:
-            rom_data = f.read()
+            for tex_index, target_rgb in self._pending_tex_patches:
+                if tex_index not in self._tex_sizes:
+                    continue
 
-        rom = bytearray(rom_data)
-        del rom_data  # Free memory
+                best_idx = _find_best_tex_match(target_rgb)
+                if best_idx is None or best_idx == tex_index:
+                    continue
 
-        applied = 0
-        for tex_index, target_rgb in self._pending_tex_patches:
-            if tex_index not in self._tex_sizes:
-                continue
+                src_data = self._tex_cache[best_idx]
+                src_size = len(src_data)
+                dst_lba = _TEX_BASE_LBA + tex_index * _TEX_LBA_STRIDE
 
-            best_idx = _find_best_tex_match(target_rgb)
-            if best_idx is None or best_idx == tex_index:
-                continue
-
-            src_data = self._tex_cache[best_idx]
-            src_size = len(src_data)
-            dst_lba = _TEX_BASE_LBA + tex_index * _TEX_LBA_STRIDE
-
-            sectors_needed = (src_size + 2047) // 2048
-            padded = bytearray(src_data) + bytearray(
-                sectors_needed * 2048 - src_size
-            )
-            _write_cd_file_with_edc(rom, dst_lba, bytes(padded))
-
-            if tex_index in self._tex_dir_offsets:
-                _update_iso_dir_size(
-                    rom, self._tex_dir_offsets[tex_index], src_size
+                # Write TEX data to target sectors with EDC recalculation
+                sectors_needed = (src_size + 2047) // 2048
+                padded = bytearray(src_data) + bytearray(
+                    sectors_needed * 2048 - src_size
                 )
-            applied += 1
+                _write_cd_file_with_edc_to_handle(f, dst_lba, bytes(padded))
 
-        if applied > 0:
-            with open(self.output_path, "wb") as f:
-                f.write(rom)
+                # Update ISO9660 directory entry size
+                if tex_index in self._tex_dir_offsets:
+                    _update_iso_dir_size_in_handle(
+                        f, self._tex_dir_offsets[tex_index], src_size
+                    )
 
         self._pending_tex_patches = []
 

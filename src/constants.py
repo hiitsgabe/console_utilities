@@ -130,9 +130,9 @@ HIRES_IMAGE_SIZE = (400, 400)
 #                       Navigation Timing                            #
 # **************************************************************** #
 NAVIGATION_INITIAL_DELAY = 100  # ms before repeating starts
-NAVIGATION_START_RATE = 400  # ms between repeats when starting (slow)
-NAVIGATION_MAX_RATE = 100  # ms between repeats at maximum speed (fast)
-NAVIGATION_ACCELERATION = 0.90  # Acceleration factor per repeat
+NAVIGATION_START_RATE = 350  # ms between repeats when starting (slow)
+NAVIGATION_MAX_RATE = 40  # ms between repeats at maximum speed (fast)
+NAVIGATION_ACCELERATION = 0.85  # Acceleration factor per repeat (lower = faster ramp)
 
 # **************************************************************** #
 #                       Touch/Mouse Settings                         #
