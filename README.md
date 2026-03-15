@@ -1,6 +1,6 @@
 A note on this project: I'm building this to get my hands dirty with agentic AI and see what it can actually do for coding. This is a non-commercial, educational project by hiitsgabe.
 
-I know there's a lot of "AI slop" being sold to gamers right now, and I want to be clear: this isn't that. This is my personal sandbox for testing the limits of AI agents and sharing what I find. It might be experimental and a bit unstable, but it's a genuine effort to create something cool and helpful while I learn AI mechanics.
+I know there's a lot of "AI slop" being sold to gamers right now, and I want to be clear: this isn't that. This is my personal sandbox for testing the limits of AI agents while creating something useful. It is experimental and a bit unstable, but it's a genuine effort to create something cool and helpful while I improve my skills w/ AI.
 
 # 🎮 Console Utilities
 
