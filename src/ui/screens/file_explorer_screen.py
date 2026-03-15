@@ -54,10 +54,11 @@ class FileExplorerScreen:
         pygame.draw.rect(screen, self.theme.surface, breadcrumb_rect)
 
         breadcrumb_text = self._format_breadcrumb(fe.current_path, w)
+        font_sm = self.theme.font_size_sm
         self.text.render(
             screen, breadcrumb_text,
-            (self.theme.padding_md, breadcrumb_y + breadcrumb_h // 2),
-            color=self.theme.primary, size=self.theme.font_size_sm, v_align="center",
+            (self.theme.padding_md, breadcrumb_y + (breadcrumb_h - font_sm) // 2),
+            color=self.theme.primary, size=font_sm,
         )
 
         # Footer
@@ -76,9 +77,9 @@ class FileExplorerScreen:
         if not fe.entries:
             self.text.render(
                 screen, "This folder is empty",
-                (w // 2, list_y + list_h // 2),
+                (w // 2, list_y + list_h // 2 - self.theme.font_size_md // 2),
                 color=self.theme.text_secondary, size=self.theme.font_size_md,
-                align="center", v_align="center",
+                align="center",
             )
             rects["item_rects"] = []
             rects["scroll_offset"] = 0
@@ -148,10 +149,12 @@ class FileExplorerScreen:
             left_text = f"{len(fe.entries)} items"
             left_color = self.theme.text_secondary
 
+        font_sm = self.theme.font_size_sm
+        text_y = mid_y - font_sm // 2
         self.text.render(
             screen, left_text,
-            (rect.left + self.theme.padding_md, mid_y),
-            color=left_color, size=self.theme.font_size_sm, v_align="center",
+            (rect.left + self.theme.padding_md, text_y),
+            color=left_color, size=font_sm,
         )
 
         if input_mode == "touch":
@@ -160,9 +163,9 @@ class FileExplorerScreen:
             hints = self._get_button_hints(fe, input_mode)
             self.text.render(
                 screen, hints,
-                (rect.right - self.theme.padding_md, mid_y),
-                color=self.theme.text_secondary, size=self.theme.font_size_sm,
-                align="right", v_align="center",
+                (rect.right - self.theme.padding_md, text_y),
+                color=self.theme.text_secondary, size=font_sm,
+                align="right",
             )
         return rects
 
@@ -234,8 +237,8 @@ class FileExplorerScreen:
                 text_color = self.theme.background if i == fe.context_menu_highlighted else self.theme.error
 
             self.text.render(
-                screen, label, (menu_x + 20, item_y + item_h // 2),
-                color=text_color, size=self.theme.font_size_md, v_align="center",
+                screen, label, (menu_x + 20, item_y + (item_h - self.theme.font_size_md) // 2),
+                color=text_color, size=self.theme.font_size_md,
             )
             ctx_item_rects.append(item_rect)
         rects["context_menu_items"] = ctx_item_rects
@@ -361,8 +364,8 @@ class FileExplorerScreen:
                 color = self.theme.background
             else:
                 color = self.theme.text_primary
-            self.text.render(screen, label, (opt_rect.left + 12, opt_rect.centery),
-                             color=color, size=self.theme.font_size_md, v_align="center")
+            self.text.render(screen, label, (opt_rect.left + 12, opt_rect.centery - self.theme.font_size_md // 2),
+                             color=color, size=self.theme.font_size_md)
 
         rects["extract_options"] = [
             pygame.Rect(modal_rect.left + 15, modal_rect.top + 55 + i * 38, modal_rect.width - 30, 34)
@@ -389,8 +392,8 @@ class FileExplorerScreen:
         pygame.draw.rect(screen, self.theme.background, input_rect, border_radius=4)
         pygame.draw.rect(screen, self.theme.primary, input_rect, width=1, border_radius=4)
         self.text.render(screen, fe.input_modal_value or " ",
-                         (input_rect.left + 8, input_rect.centery),
-                         color=self.theme.text_primary, size=self.theme.font_size_md, v_align="center")
+                         (input_rect.left + 8, input_rect.centery - self.theme.font_size_md // 2),
+                         color=self.theme.text_primary, size=self.theme.font_size_md)
 
         kb_rect = pygame.Rect(modal_rect.left + 10, input_y + 40, modal_rect.width - 20, modal_h - 100)
         char_rects, _ = self.char_keyboard.render(
