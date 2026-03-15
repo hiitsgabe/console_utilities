@@ -264,9 +264,20 @@ class PES6PS2Patcher:
                 writer.write_team_name(slot, new_name, new_abbr)
                 teams_patched += 1
 
-            # TODO: Player name patching — files 485-492 contain a name
-            # table but the game does NOT read names from them for display.
-            # The actual source is unknown; needs further reverse engineering.
+            # -- Patch player names in file 55 --
+            # File 55 = 32B file header + 80B data header + zlib(option file data)
+            # The decompressed data contains player names as UTF-16LE
+            # at standard option file offsets.
+            if hasattr(self, '_league_data') and self._league_data:
+                if on_progress:
+                    on_progress(0.6, "Patching player names...")
+
+                writer.write_player_roster(
+                    self._league_data,
+                    on_progress=lambda p, m: on_progress(
+                        0.6 + 0.35 * p, m
+                    ) if on_progress else None,
+                )
 
             writer.finalize()
 
