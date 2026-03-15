@@ -784,6 +784,56 @@ class MVPPSPPatcherState:
 
 
 @dataclass
+class PES6PS2PatcherState:
+    """State for the PES 6 PS2 Patcher feature."""
+
+    # League selection
+    selected_league: Any = None
+    selected_season: int = field(default_factory=lambda: datetime.now().year)
+    available_leagues: List[Any] = field(default_factory=list)
+    all_leagues_loaded: bool = False
+    league_search_query: str = ""
+    league_search_cursor: int = 0
+    league_search_shift: bool = False
+    league_search_active: bool = False
+
+    # Fetched data
+    league_data: Any = None
+    fetch_progress: float = 0.0
+    fetch_status: str = ""
+    is_fetching: bool = False
+    fetch_error: str = ""
+
+    # ROM
+    rom_path: str = ""
+    rom_info: Any = None
+    rom_valid: bool = False
+    zip_path: str = ""
+    zip_temp_dir: str = ""
+
+    # Slot mapping
+    slot_mapping: List[Any] = field(default_factory=list)
+
+    # Patching
+    patch_progress: float = 0.0
+    patch_status: str = ""
+    is_patching: bool = False
+    patch_output_path: str = ""
+    patch_complete: bool = False
+    patch_error: str = ""
+
+    # Roster preview
+    roster_preview_team_index: int = 0
+    roster_preview_player_index: int = 0
+
+    # UI navigation
+    active_modal: Optional[str] = None
+    leagues_highlighted: int = 0
+    roster_teams_highlighted: int = 0
+    roster_players_highlighted: int = 0
+
+
+@dataclass
 class NHL94SNESPatcherState:
     """State for the NHL94 SNES Patcher feature."""
 
@@ -1056,6 +1106,9 @@ class AppState:
         # ---- NHL 05 PS2 Patcher ---- #
         self.nhl05_ps2_patcher = NHL05PS2PatcherState()
 
+        # ---- PES 6 PS2 Patcher ---- #
+        self.pes6_ps2_patcher = PES6PS2PatcherState()
+
         # ---- Steam Shortcut Creator ---- #
         self.steam_shortcut = SteamShortcutState()
 
@@ -1101,6 +1154,8 @@ class AppState:
             return self.nhl07_psp_patcher
         if self.mode == "nhl05_patcher":
             return self.nhl05_ps2_patcher
+        if self.mode == "pes6_patcher":
+            return self.pes6_ps2_patcher
         return self.we_patcher
 
     def reset_navigation(self):
