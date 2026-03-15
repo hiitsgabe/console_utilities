@@ -785,6 +785,25 @@ class ScreenManager:
             rects["item_rects"] = item_rects
             return rects
 
+        # NHL 05 PS2 Patcher modals
+        if state.nhl05_ps2_patcher.active_modal == "roster_preview":
+            modal_rect, content_rect, close_rect, item_rects = (
+                self.roster_preview_modal.render(screen, state)
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["item_rects"] = item_rects
+            return rects
+
+        if state.nhl05_ps2_patcher.active_modal == "patch_progress":
+            modal_rect, content_rect, close_rect, item_rects = (
+                self.patch_progress_modal.render(screen, state)
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["item_rects"] = item_rects
+            return rects
+
         # Render main screens based on mode
         if state.mode == "systems":
             dl_count = sum(
