@@ -12,6 +12,7 @@ old data.
 import shutil
 from typing import BinaryIO, Optional
 
+import struct
 from services.pes6_ps2_patcher.models import PES6TeamSlot, ISO_SECTOR_SIZE
 
 
@@ -90,6 +91,64 @@ class PES6RomWriter:
         self._fh.write(b"\x00" * slot.abbr_budget)
         self._fh.seek(slot.abbr_offset)
         self._fh.write(abbr_bytes)
+
+    # -----------------------------------------------------------------------
+    # Player name patching in 0_TEXT.AFS file 485
+    # -----------------------------------------------------------------------
+    # File 485 is uncompressed, 48-byte records, 6339 players.
+    # Record layout: 16B metadata + 32B ASCII name (null-padded).
+    # Players are alphabetically sorted by name.
+    # The metadata bytes 8-11 contain a pointer/ID that links to attributes.
+    # Players are grouped by team via these pointer values.
+    AFS_0TEXT_LBA = 14741
+    # All language variants of the name table (485-488, 490-492)
+    # Patch all of them since we don't know which one the game reads
+    NAME_TABLE_ENTRIES = [485, 486, 487, 488, 490, 491, 492]
+    NAME_RECORD_SIZE = 48
+    NAME_OFFSET_IN_RECORD = 16
+    NAME_MAX_BYTES = 32
+    NAME_TABLE_HEADER = 0x20  # 32-byte file header before records
+
+    def write_player_names(self, player_names, record_indices):
+        """Write player names to specific records in the name table.
+
+        Args:
+            player_names: List of new player name strings.
+            record_indices: List of record indices (0-based) to write to.
+                Must be same length as player_names.
+        """
+        if self._fh is None:
+            raise RuntimeError("Writer already finalized")
+
+        # Read AFS table
+        self._fh.seek(self.AFS_0TEXT_LBA * ISO_SECTOR_SIZE)
+        afs_header = self._fh.read(8)
+        num_files = struct.unpack_from("<I", afs_header, 4)[0]
+        afs_table = self._fh.read(num_files * 8)
+
+        # Write to ALL language variants of the name table
+        for entry_idx in self.NAME_TABLE_ENTRIES:
+            if entry_idx >= num_files:
+                continue
+
+            entry_off = struct.unpack_from(
+                "<I", afs_table, entry_idx * 8
+            )[0]
+            file_base = self.AFS_0TEXT_LBA * ISO_SECTOR_SIZE + entry_off
+
+            for name, rec_idx in zip(player_names, record_indices):
+                rec_off = (
+                    file_base
+                    + self.NAME_TABLE_HEADER
+                    + rec_idx * self.NAME_RECORD_SIZE
+                    + self.NAME_OFFSET_IN_RECORD
+                )
+                name_bytes = _truncate_utf8(name, self.NAME_MAX_BYTES - 1)
+
+                self._fh.seek(rec_off)
+                self._fh.write(b"\x00" * self.NAME_MAX_BYTES)
+                self._fh.seek(rec_off)
+                self._fh.write(name_bytes)
 
     # -----------------------------------------------------------------------
     # League name patching in OVER.AFS

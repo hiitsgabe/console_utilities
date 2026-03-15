@@ -253,7 +253,7 @@ class PES6PS2Patcher:
 
             for i, mapping in enumerate(slot_mapping):
                 if on_progress:
-                    pct = (i + 1) / total
+                    pct = 0.5 * (i + 1) / total
                     on_progress(pct, f"Patching {mapping.team.name}...")
 
                 slot = rom_info.team_slots[mapping.slot_index]
@@ -263,6 +263,10 @@ class PES6PS2Patcher:
 
                 writer.write_team_name(slot, new_name, new_abbr)
                 teams_patched += 1
+
+            # TODO: Player name patching — files 485-492 contain a name
+            # table but the game does NOT read names from them for display.
+            # The actual source is unknown; needs further reverse engineering.
 
             writer.finalize()
 
