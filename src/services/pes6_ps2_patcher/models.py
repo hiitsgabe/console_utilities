@@ -123,7 +123,21 @@ ESPN_LEAGUE_TO_RANGE: Dict[str, str] = {
     "ita.1": "serie_a",
     "ned.1": "eredivisie",
     "esp.1": "la_liga",
+    # Leagues without a native PES 6 range — replace the first club league (EPL)
+    "ger.1": "epl",
+    "por.1": "epl",
+    "bra.1": "epl",
+    "arg.1": "epl",
+    "usa.1": "epl",
+    "mex.1": "epl",
+    "jpn.1": "epl",
+    "col.1": "epl",
+    "chi.1": "epl",
 }
+
+# Fallback range for any league not in ESPN_LEAGUE_TO_RANGE
+# Uses EPL slots so teams appear in the first club league in-game
+DEFAULT_LEAGUE_RANGE = "epl"
 
 
 # ---------------------------------------------------------------------------
