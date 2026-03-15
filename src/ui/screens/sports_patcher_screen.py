@@ -18,7 +18,6 @@ class SportsPatcherScreen:
         ("NHL 05 - NHL 05 (PS2)", "nhl05_patcher"),
         ("NHL 07 - NHL 07 (PSP)", "nhl07_patcher"),
         ("MVP Baseball (PSP)", "mvp_psp_patcher"),
-        ("PES 6 - Pro Evolution Soccer 6 (PS2)", "pes6_patcher"),
     ]
 
     def __init__(self, theme: Theme = default_theme):
