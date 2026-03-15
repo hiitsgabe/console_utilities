@@ -2111,13 +2111,19 @@ class RomWriter:
         self._tex_dir_offsets = (
             None  # ISO9660 directory record offsets for size patching
         )
+        self._pending_tex_patches = []  # Queued (tex_index, target_rgb) for batch apply
 
-    def write_team(self, slot_index: int, team: WETeamRecord):
-        """Write team names, abbreviations, and force bars for a ROM slot.
+    def write_team(
+        self,
+        slot_index: int,
+        team: WETeamRecord,
+        players: List[WEPlayerRecord] = None,
+        include_flag: bool = True,
+    ):
+        """Write team names, abbreviations, force bars, players, and flag.
 
-        Team names are variable-length: each variant has a fixed byte budget
-        from the lun_nomiN[] tables.  Names are null-terminated within their
-        budget.  All 6 name variants + lowercase + 3 abbreviations are written.
+        Consolidates all writes into a single file open to minimize I/O
+        on slow storage (SD cards on handhelds).
         """
         if not os.path.exists(self.output_path):
             return
@@ -2131,9 +2137,17 @@ class RomWriter:
             self._write_force_bars(f, slot_index, team)
             self._write_jersey_colors(f, slot_index, team)
 
-        # Patch 3D jersey TEX file (ML teams are TEX indices 63-94)
+            # Write players in same file handle
+            if players is not None:
+                self._write_players_impl(f, slot_index, players)
+
+            # Write flag in same file handle
+            if include_flag:
+                self._write_flag_impl(f, slot_index, team)
+
+        # Queue 3D jersey TEX patch (ML teams are TEX indices 63-94)
         tex_index = 63 + slot_index
-        self.patch_3d_jersey(tex_index, team.kit_home)
+        self._pending_tex_patches.append((tex_index, team.kit_home))
 
     def _write_team_names(self, f, slot_index: int, team: WETeamRecord):
         """Write all 6 name variants + lowercase for an ML team slot.
@@ -2318,74 +2332,69 @@ class RomWriter:
         f.write(maglia1)
         f.write(maglia2)
 
+    def _write_players_impl(self, f, slot_index, players):
+        """Write player names + characteristics (uses existing file handle)."""
+        first_idx, count = _slot_player_range(slot_index)
+        for i in range(count):
+            global_idx = first_idx + i
+            if i < len(players):
+                p = players[i]
+                name_bytes = _encode_player_name(p.last_name)
+                carat_bytes = _encode_player_carat(p)
+            else:
+                name_bytes = _DUMMY_NAME
+                carat_bytes = _DUMMY_CARAT
+            _write_chunks(f, name_bytes, _nome_chunks(global_idx))
+            _write_chunks(f, carat_bytes, _carat_chunks(global_idx))
+
     def write_players(self, slot_index: int, players: List[WEPlayerRecord]):
         """Write player names + characteristics for a team slot."""
         if not os.path.exists(self.output_path):
             return
-
-        first_idx, count = _slot_player_range(slot_index)
-
         with open(self.output_path, "r+b") as f:
-            for i in range(count):
-                global_idx = first_idx + i
+            self._write_players_impl(f, slot_index, players)
 
-                if i < len(players):
-                    p = players[i]
-                    name_bytes = _encode_player_name(p.last_name)
-                    carat_bytes = _encode_player_carat(p)
-                else:
-                    name_bytes = _DUMMY_NAME
-                    carat_bytes = _DUMMY_CARAT
-
-                _write_chunks(f, name_bytes, _nome_chunks(global_idx))
-                _write_chunks(f, carat_bytes, _carat_chunks(global_idx))
-
-    def write_flag(self, slot_index: int, team: WETeamRecord):
-        """Write team flag (style byte + 16 colors) for an ML team slot.
-
-        Style: 1 byte written identically at 5 FORMA offsets.  All 95 entries
-        (63 national + 32 ML) are sequential at each FORMA offset.
-
-        Colors: 16 × unsigned short (32 bytes) written at the pre-computed
-        offset from _ML_COLOR_OFFSETS.  The color layout is non-sequential
-        in the ROM due to historical PS1 CD sector constraints.
-
-        If team.flag_style and team.flag_palette are set (from flag_analyzer),
-        uses those directly.  Otherwise falls back to style 1 (3 vertical
-        stripes) with 8×primary + 8×secondary from team colors.
-        """
-        if not os.path.exists(self.output_path):
-            return
+    def _write_flag_impl(self, f, slot_index, team):
+        """Write team flag data (uses existing file handle)."""
         if slot_index < 0 or slot_index >= _SQUADRE_ML:
             return
-
         style, color_data = _build_flag_data(team)
+        for forma_base in [
+            _OFS_BANDIERE_FORMA1,
+            _OFS_BANDIERE_FORMA2,
+            _OFS_BANDIERE_FORMA3,
+            _OFS_BANDIERE_FORMA4,
+            _OFS_BANDIERE_FORMA5,
+        ]:
+            off = forma_base + _SQUADRE_NAZ + slot_index
+            f.seek(off)
+            f.write(bytes([style]))
+        if slot_index in _ML_COLOR_OFFSETS:
+            chunks = _ML_COLOR_OFFSETS[slot_index]
+            _write_chunks(f, color_data, chunks)
 
+    def write_flag(self, slot_index: int, team: WETeamRecord):
+        """Write team flag (style byte + 16 colors) for an ML team slot."""
+        if not os.path.exists(self.output_path):
+            return
         with open(self.output_path, "r+b") as f:
-            # Write style byte at all 5 FORMA offsets
-            for forma_base in [
-                _OFS_BANDIERE_FORMA1,
-                _OFS_BANDIERE_FORMA2,
-                _OFS_BANDIERE_FORMA3,
-                _OFS_BANDIERE_FORMA4,
-                _OFS_BANDIERE_FORMA5,
-            ]:
-                # 63 national teams first, then 32 ML teams sequential
-                off = forma_base + _SQUADRE_NAZ + slot_index
-                f.seek(off)
-                f.write(bytes([style]))
-
-            # Write color data at the pre-computed offset
-            if slot_index in _ML_COLOR_OFFSETS:
-                chunks = _ML_COLOR_OFFSETS[slot_index]
-                _write_chunks(f, color_data, chunks)
+            self._write_flag_impl(f, slot_index, team)
 
     # ------------------------------------------------------------------
     # National team writers
     # ------------------------------------------------------------------
 
-    def write_nat_team(self, nat_index: int, team: WETeamRecord):
-        """Write team names, abbreviations, force bars, and jerseys for a national slot."""
+    def write_nat_team(
+        self,
+        nat_index: int,
+        team: WETeamRecord,
+        players: List[WEPlayerRecord] = None,
+        include_flag: bool = True,
+    ):
+        """Write national team names, abbreviations, force bars, players, and flag.
+
+        Consolidates all writes into a single file open.
+        """
         if not os.path.exists(self.output_path):
             return
         if nat_index < 0 or nat_index >= _SQUADRE_NAZ:
@@ -2398,8 +2407,14 @@ class RomWriter:
             self._write_nat_force_bars(f, nat_index, team)
             self._write_nat_jersey_colors(f, nat_index, team)
 
-        # Patch 3D jersey TEX file (national teams are TEX indices 0-62)
-        self.patch_3d_jersey(nat_index, team.kit_home)
+            if players is not None:
+                self._write_nat_players_impl(f, nat_index, players)
+
+            if include_flag:
+                self._write_nat_flag_impl(f, nat_index, team)
+
+        # Queue 3D jersey TEX patch (national teams are TEX indices 0-62)
+        self._pending_tex_patches.append((nat_index, team.kit_home))
 
     def _write_nat_team_names(self, f, nat_index: int, team: WETeamRecord):
         """Write all name variants for a national team slot."""
@@ -2505,59 +2520,55 @@ class RomWriter:
         f.write(maglia1)
         f.write(maglia2)
 
-    def write_nat_players(self, nat_index: int, players: List[WEPlayerRecord]):
-        """Write player names + characteristics for a national team slot.
+    def _write_nat_players_impl(self, f, nat_index, players):
+        """Write national player names + characteristics (uses existing file handle)."""
+        first_nat_idx, count = _nat_slot_player_range(nat_index)
+        for i in range(count):
+            nat_player_idx = first_nat_idx + i
+            if i < len(players):
+                p = players[i]
+                name_bytes = _encode_player_name(p.last_name)
+                carat_bytes = _encode_player_carat(p)
+            else:
+                name_bytes = _DUMMY_NAME
+                carat_bytes = _DUMMY_CARAT
+            _write_chunks(f, name_bytes, _nat_nome_chunks(nat_player_idx))
+            _write_chunks(f, carat_bytes, _nat_carat_chunks(nat_player_idx))
 
-        Writes up to 23 players; pads with dummies if fewer are provided.
-        """
+    def write_nat_players(self, nat_index: int, players: List[WEPlayerRecord]):
+        """Write player names + characteristics for a national team slot."""
         if not os.path.exists(self.output_path):
             return
         if nat_index < 0 or nat_index >= _SQUADRE_NAZ:
             return
-
-        first_nat_idx, count = _nat_slot_player_range(nat_index)
-
         with open(self.output_path, "r+b") as f:
-            for i in range(count):
-                nat_player_idx = first_nat_idx + i
+            self._write_nat_players_impl(f, nat_index, players)
 
-                if i < len(players):
-                    p = players[i]
-                    name_bytes = _encode_player_name(p.last_name)
-                    carat_bytes = _encode_player_carat(p)
-                else:
-                    name_bytes = _DUMMY_NAME
-                    carat_bytes = _DUMMY_CARAT
-
-                _write_chunks(f, name_bytes, _nat_nome_chunks(nat_player_idx))
-                _write_chunks(f, carat_bytes, _nat_carat_chunks(nat_player_idx))
+    def _write_nat_flag_impl(self, f, nat_index, team):
+        """Write national flag data (uses existing file handle)."""
+        if nat_index < 0 or nat_index >= _SQUADRE_NAZ:
+            return
+        style, color_data = _build_flag_data(team)
+        for forma_base in [
+            _OFS_BANDIERE_FORMA1,
+            _OFS_BANDIERE_FORMA2,
+            _OFS_BANDIERE_FORMA3,
+            _OFS_BANDIERE_FORMA4,
+            _OFS_BANDIERE_FORMA5,
+        ]:
+            off = forma_base + nat_index
+            f.seek(off)
+            f.write(bytes([style]))
+        if nat_index in _NAT_COLOR_OFFSETS:
+            chunks = _NAT_COLOR_OFFSETS[nat_index]
+            _write_chunks(f, color_data, chunks)
 
     def write_nat_flag(self, nat_index: int, team: WETeamRecord):
         """Write flag (style byte + 16 colors) for a national team slot."""
         if not os.path.exists(self.output_path):
             return
-        if nat_index < 0 or nat_index >= _SQUADRE_NAZ:
-            return
-
-        style, color_data = _build_flag_data(team)
-
         with open(self.output_path, "r+b") as f:
-            # Write style byte at all 5 FORMA offsets
-            for forma_base in [
-                _OFS_BANDIERE_FORMA1,
-                _OFS_BANDIERE_FORMA2,
-                _OFS_BANDIERE_FORMA3,
-                _OFS_BANDIERE_FORMA4,
-                _OFS_BANDIERE_FORMA5,
-            ]:
-                off = forma_base + nat_index
-                f.seek(off)
-                f.write(bytes([style]))
-
-            # Write color data at the pre-computed national offset
-            if nat_index in _NAT_COLOR_OFFSETS:
-                chunks = _NAT_COLOR_OFFSETS[nat_index]
-                _write_chunks(f, color_data, chunks)
+            self._write_nat_flag_impl(f, nat_index, team)
 
     # ------------------------------------------------------------------
     # 3D jersey patching (TEX files on CD)
@@ -2648,6 +2659,57 @@ class RomWriter:
 
         with open(self.output_path, "wb") as f:
             f.write(rom)
+
+    def flush_tex_patches(self):
+        """Apply all queued 3D jersey TEX patches in a single ROM read/write.
+
+        Instead of reading+writing the entire ROM per team, this batches all
+        patches and applies them at once — reducing I/O from N full reads to 1.
+        """
+        if not self._pending_tex_patches or not os.path.exists(self.output_path):
+            return
+
+        self._ensure_tex_cache()
+        if not self._tex_cache:
+            self._pending_tex_patches = []
+            return
+
+        with open(self.output_path, "r+b") as f:
+            rom_data = f.read()
+
+        rom = bytearray(rom_data)
+        del rom_data  # Free memory
+
+        applied = 0
+        for tex_index, target_rgb in self._pending_tex_patches:
+            if tex_index not in self._tex_sizes:
+                continue
+
+            best_idx = _find_best_tex_match(target_rgb)
+            if best_idx is None or best_idx == tex_index:
+                continue
+
+            src_data = self._tex_cache[best_idx]
+            src_size = len(src_data)
+            dst_lba = _TEX_BASE_LBA + tex_index * _TEX_LBA_STRIDE
+
+            sectors_needed = (src_size + 2047) // 2048
+            padded = bytearray(src_data) + bytearray(
+                sectors_needed * 2048 - src_size
+            )
+            _write_cd_file_with_edc(rom, dst_lba, bytes(padded))
+
+            if tex_index in self._tex_dir_offsets:
+                _update_iso_dir_size(
+                    rom, self._tex_dir_offsets[tex_index], src_size
+                )
+            applied += 1
+
+        if applied > 0:
+            with open(self.output_path, "wb") as f:
+                f.write(rom)
+
+        self._pending_tex_patches = []
 
     def verify_patches(self, original_path: str, slot_mapping, we_teams) -> str:
         """Compare original vs patched ROM AND read-back the output to confirm.
