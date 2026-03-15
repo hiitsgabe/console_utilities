@@ -1,19 +1,22 @@
 # Sports ROM Patcher
 
-The Sports ROM Patcher lets you update team rosters in retro sports games using real-world data from public sports APIs. It supports soccer, hockey, and baseball titles across multiple console platforms.
+The Sports ROM Patcher lets you update team rosters in retro sports games using real-world data from public sports APIs. It supports soccer, hockey, baseball, and basketball titles across multiple console platforms.
 
 **Important:** You must provide your own ROM or ISO file dumped from an original game copy that you legally own. This project does not provide, distribute, or link to any game files. The developers assume no responsibility for any misuse of this tool.
 
 ## Supported Platforms
 
-| Platform | Sport | ROM Format |
-|----------|-------|------------|
-| PS1 | Soccer | `.bin` (Mode2/2352) |
-| SNES | Soccer | `.sfc` |
-| SNES | Baseball | `.sfc` / `.smc` |
-| Genesis | Hockey | `.bin` |
-| SNES | Hockey | `.sfc` / `.smc` |
-| PSP | Hockey | `.iso` |
+| Platform | Sport | Game | ROM Format |
+|----------|-------|------|------------|
+| PS1 | Soccer | Winning Eleven 2002 | `.bin` (Mode2/2352) |
+| SNES | Soccer | Int. Superstar Soccer | `.sfc` |
+| SNES | Baseball | Ken Griffey Jr. MLB | `.sfc` / `.smc` |
+| PSP | Baseball | MVP Baseball | `.iso` |
+| Genesis | Basketball | NBA Live 95 | `.bin` / `.md` |
+| SNES | Hockey | NHL 94 | `.sfc` / `.smc` |
+| Genesis | Hockey | NHL 94 | `.bin` |
+| PS2 | Hockey | NHL 05 | `.iso` |
+| PSP | Hockey | NHL 07 | `.iso` |
 
 ## How It Works
 
@@ -89,6 +92,26 @@ The patcher writes updated data into a **new output file**, leaving your origina
 - **No License Advantage**: The original game has real MLB teams but fake player names (no MLBPA license), making a roster patcher especially valuable — every player name gets replaced with the real one
 - **Modern Team Mapping**: Maps all 30 current MLB teams to the 28 ROM slots, including franchise moves (Montreal Expos → Washington Nationals, California Angels → Los Angeles Angels, Florida Marlins → Miami Marlins). Arizona and Tampa Bay have no ROM slot (expansion teams added after 1994)
 
+### PSP Baseball Patcher
+
+- **Game**: MVP Baseball (EA Sports, 2005)
+- **Team Slots**: 30 MLB teams + special teams
+- **Complex Archive Stack**: The game stores roster data in a custom database format within the ISO (ISO image > EA BIGF archive > RefPack compressed CSV tables)
+- **What Gets Patched**: Player attributes (contact, power, speed, fielding, arm), pitcher attributes (velocity, movement, control), roster assignments, and team associations
+- **Cross-Referenced Tables**: Player data is linked across multiple tables (bios, attributes, left/right splits, pitching, rosters) via 9-digit hex hash IDs
+- **Non-Destructive**: The patcher copies the full ISO before modifying it
+- **Modern Team Mapping**: Maps all 30 current MLB teams including franchise name changes (Angels → ANA, Marlins → FLA, Nationals → WAS)
+
+### Genesis Basketball Patcher
+
+- **Game**: NBA Live 95 (EA Sports, 1994)
+- **Team Slots**: 27 NBA teams + 2 All-Star teams + 1 special team, 12 players per team
+- **Architecture**: Big-endian Motorola 68000 ROM with variable-length player records
+- **What Gets Patched**: Player names (variable-length last/first format), 16 player ratings (0–99 scale: goals, 3pt, FT, dunking, stealing, blocks, rebounds, passing, awareness, speed, quickness, jumping, dribbling, strength), positions, and jersey numbers
+- **Checksum Bypass**: Disables the game's internal ROM checksum routine so the modified ROM boots correctly
+- **Variable-Length Records**: Player records are packed adjacently with variable-length names — the patcher fits names within each team's existing byte budget
+- **Modern Team Mapping**: Maps all 30 current NBA teams to the 27 ROM slots, including franchise relocations (OKC → Seattle, BKN → New Jersey, CHA → Charlotte). Toronto, Memphis, and New Orleans have no ROM slot
+
 ### Genesis Hockey Patcher
 
 - **Team Slots**: 26 teams
@@ -118,17 +141,26 @@ The patcher writes updated data into a **new output file**, leaving your origina
   5. Recompresses the database files
   6. Rebuilds the archive and writes it back into the ISO
 
+### PS2 Hockey Patcher
+
+- **Game**: NHL 05 (EA Sports, 2004)
+- **Team Slots**: 30 NHL teams
+- **Architecture**: PS2 ISO with roster data stored in custom EA database files
+- **What Gets Patched**: Player names, jersey numbers, player attributes and ratings, roster assignments, and team associations
+- **Non-Destructive**: The patcher copies the full ISO before modifying it
+
 ## Data Providers
 
 The patcher fetches real-world roster and statistics data from sports APIs. You can choose between providers in Settings depending on the sport:
 
 | Provider | Sports | Auth Required | Season Coverage |
 |----------|--------|--------------|-----------------|
-| ESPN | Baseball, Hockey, Soccer | No | Current season |
+| ESPN | Baseball, Basketball, Hockey, Soccer | No | Current season |
 | Public Hockey API | Hockey | No | 1993 to present |
 | API-Football | Soccer | Yes (paid key) | Multiple seasons |
 
 - **Baseball**: ESPN provides current-season MLB roster and statistics data (AVG, HR, RBI, OPS, ERA, W, SV, etc.).
+- **Basketball**: ESPN provides current-season NBA roster and statistics data (PTS, REB, AST, STL, BLK, FG%, 3P%, etc.).
 - **Hockey**: Choose between ESPN (current season, no setup) or the Public Hockey API (historical seasons back to 1993, no setup).
 - **Soccer**: ESPN works out of the box for the current season. API-Football supports historical seasons and additional leagues but requires a paid API key.
 
