@@ -407,75 +407,43 @@ class PES6RomWriter:
                 pname = p.name if hasattr(p, "name") else str(p)
                 espn_players.append(clean(pname))
 
-        # Write ESPN team players to club section blocks AND fill
-        # national section with cycling ESPN names.
-        #
-        # Each team's squad uses mostly contiguous club records
-        # (1472+team*32) plus a few from the national section (0-1471).
-        # We write each ESPN team to its club block, then fill the
-        # national section with all ESPN names cycling through.
+        # Write ESPN player names to ALL non-empty records.
+        # Club section (1472+) has teams mixed within 32-record blocks.
+        # National section (0-1471) has players shared across teams.
+        # We replace ALL records with cycling ESPN last names to ensure
+        # every displayed player gets a modern name.
         RECORD_SIZE = 124
         NAME_SIZE = 32
-        CLUB_START = 1472  # 64 national × 23 players
-        CLUB_SIZE = 32
         total_records = len(dec_data) // RECORD_SIZE
 
         # Collect all ESPN names (last name only for compression)
         all_espn = []
-        team_espn = []
         for tr in league_data.teams:
             players = tr.players if hasattr(tr, "players") else []
-            names = []
             for p in players:
                 pname = p.name if hasattr(p, "name") else str(p)
                 full = clean(pname)
                 parts = full.split()
                 last = (parts[-1] if parts else full)[:15]
-                names.append(last)
                 all_espn.append(last)
-            team_espn.append(names)
+
+        if not all_espn:
+            return
 
         replaced = 0
+        espn_idx = 0
+        for rec in range(total_records):
+            rec_off = rec * RECORD_SIZE
+            if dec_data[rec_off:rec_off + NAME_SIZE] == b"\x00" * NAME_SIZE:
+                continue
 
-        def write_name(rec_off, name):
-            nonlocal replaced
+            name = all_espn[espn_idx % len(all_espn)]
             new_bytes = name.encode("utf-16-le")
             dec_data[rec_off:rec_off + NAME_SIZE] = b"\x00" * NAME_SIZE
             wlen = min(len(new_bytes), NAME_SIZE - 2)
             dec_data[rec_off:rec_off + wlen] = new_bytes[:wlen]
+            espn_idx += 1
             replaced += 1
-
-        # 1. Write each ESPN team to its club block
-        for t_idx, names in enumerate(team_espn):
-            base = CLUB_START + t_idx * CLUB_SIZE
-            for j, name in enumerate(names[:CLUB_SIZE]):
-                rec = base + j
-                rec_off = rec * RECORD_SIZE
-                if rec_off + NAME_SIZE > len(dec_data):
-                    break
-                if dec_data[rec_off:rec_off + NAME_SIZE] == b"\x00" * NAME_SIZE:
-                    continue  # Skip empty
-                write_name(rec_off, name)
-
-        # 2. Fill national section (0-1471) with cycling ESPN names
-        espn_idx = 0
-        for rec in range(CLUB_START):
-            rec_off = rec * RECORD_SIZE
-            if dec_data[rec_off:rec_off + NAME_SIZE] == b"\x00" * NAME_SIZE:
-                continue
-            if all_espn:
-                write_name(rec_off, all_espn[espn_idx % len(all_espn)])
-                espn_idx += 1
-
-        # 3. Fill remaining club records (beyond patched teams)
-        remaining_start = CLUB_START + len(team_espn) * CLUB_SIZE
-        for rec in range(remaining_start, total_records):
-            rec_off = rec * RECORD_SIZE
-            if dec_data[rec_off:rec_off + NAME_SIZE] == b"\x00" * NAME_SIZE:
-                continue
-            if all_espn:
-                write_name(rec_off, all_espn[espn_idx % len(all_espn)])
-                espn_idx += 1
 
         if on_progress:
             on_progress(0.7, f"Replaced {replaced} names, compressing...")
