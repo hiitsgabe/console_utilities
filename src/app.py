@@ -375,14 +375,12 @@ class ConsoleUtilitiesApp:
                         return False
 
                 elif event.type == pygame.JOYBUTTONDOWN:
-                    log_error(f"MAPPING JOYBUTTONDOWN: button={event.button}")
                     if current_time - last_input_time > 300:
                         mapping[button_key] = event.button
                         current_index += 1
                         last_input_time = current_time
 
                 elif event.type == pygame.JOYHATMOTION:
-                    log_error(f"MAPPING JOYHATMOTION: value={event.value}")
                     if current_time - last_input_time > 300:
                         hat_x, hat_y = event.value
                         if button_key == "up" and hat_y == 1:
@@ -904,12 +902,10 @@ class ConsoleUtilitiesApp:
                     self.state._from_web_companion = False
 
                 elif event.type == pygame.JOYBUTTONDOWN:
-                    log_error(f"JOYBUTTONDOWN: button={event.button}, joy={event.joy}")
                     self.state.input_mode = "gamepad"
                     self._handle_joystick_event(event)
 
                 elif event.type == pygame.JOYHATMOTION:
-                    log_error(f"JOYHATMOTION: value={event.value}, joy={event.joy}")
                     self.state.input_mode = "gamepad"
                     self._handle_joystick_event(event)
 
