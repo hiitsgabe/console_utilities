@@ -884,6 +884,55 @@ class SyncthingState:
 
 
 @dataclass
+class FileExplorerState:
+    """State for the file explorer screen."""
+
+    current_path: str = ""
+    entries: List[Any] = field(default_factory=list)  # List of dicts from service
+    highlighted: int = 0
+    scroll_offset: int = 0
+    selected: Set[int] = field(default_factory=set)
+
+    # Clipboard (stores full paths, not indices)
+    clipboard_paths: List[str] = field(default_factory=list)
+    clipboard_mode: str = ""  # "copy" or "cut"
+
+    # Context menu
+    context_menu_open: bool = False
+    context_menu_highlighted: int = 0
+    context_menu_actions: List[Any] = field(default_factory=list)  # List of (action_id, label)
+
+    # Text viewer
+    viewer_open: bool = False
+    viewer_content: List[str] = field(default_factory=list)
+    viewer_title: str = ""
+    viewer_scroll: int = 0
+    viewer_truncated: bool = False
+
+    # Extract modal
+    extract_modal_open: bool = False
+    extract_target: str = ""
+    extract_highlighted: int = 0  # 0 = current folder, 1 = subfolder
+
+    # Delete confirmation
+    delete_modal_open: bool = False
+    delete_targets: List[str] = field(default_factory=list)
+    delete_highlighted: int = 0  # 0 = Yes, 1 = No
+
+    # Rename / New folder input
+    input_modal_open: bool = False
+    input_modal_title: str = ""
+    input_modal_value: str = ""
+    input_modal_action: str = ""  # "rename" or "mkdir"
+
+    # Keyboard input index (for char_keyboard navigation)
+    kb_selected_index: int = 0
+
+    # Error display
+    error_message: str = ""
+
+
+@dataclass
 class UIRects:
     """Stores rectangles for clickable UI elements."""
 
@@ -1013,6 +1062,9 @@ class AppState:
         # ---- Syncthing Save Sync ---- #
         self.syncthing = SyncthingState()
 
+        # ---- File Explorer ---- #
+        self.file_explorer = FileExplorerState()
+
         # ---- Auth Token Input ---- #
         self.auth_token_input = AuthTokenInputState()
 
@@ -1080,6 +1132,16 @@ class AppState:
             self.credits_scroll_offset = 0
         elif new_mode == "syncthing":
             self.syncthing.highlighted = 0
+        elif new_mode == "file_explorer":
+            self.file_explorer.highlighted = 0
+            self.file_explorer.scroll_offset = 0
+            self.file_explorer.selected = set()
+            self.file_explorer.context_menu_open = False
+            self.file_explorer.viewer_open = False
+            self.file_explorer.extract_modal_open = False
+            self.file_explorer.delete_modal_open = False
+            self.file_explorer.input_modal_open = False
+            self.file_explorer.error_message = ""
 
     def close_all_modals(self):
         """Close all modal dialogs."""
@@ -1100,6 +1162,12 @@ class AppState:
         self.auth_token_input.show = False
         self.steam_shortcut.show = False
         self.we_patcher.active_modal = None
+        self.file_explorer.context_menu_open = False
+        self.file_explorer.viewer_open = False
+        self.file_explorer.extract_modal_open = False
+        self.file_explorer.delete_modal_open = False
+        self.file_explorer.input_modal_open = False
+        self.file_explorer.error_message = ""
 
     def get_current_game_list(self) -> List[Any]:
         """Get the current game list (filtered or full)."""
