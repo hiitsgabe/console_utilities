@@ -444,41 +444,38 @@ class PES6RomWriter:
             ">I", zlib.adler32(bytes(dec_data)) & 0xFFFFFFFF
         )
 
-        # Build compressed: zlib_header(2) + deflate + adler32(4) + tail
-        new_comp = b"\x78\xda" + new_deflate + new_adler + tail_data
+        # Build new main stream: header(2) + deflate + adler(4)
+        new_main = b"\x78\xda" + new_deflate + new_adler
 
-        # Update offset fields in the 80-byte data header
-        size_diff = len(new_deflate) - deflate_size
-        for i in range(12, 36, 4):
-            old = struct.unpack_from("<I", raw55, 32 + i)[0]
-            if old > 0:
-                struct.pack_into("<I", raw55, 32 + i, old + size_diff)
-        old_cs = struct.unpack_from("<I", raw55, 32 + 52)[0]
-        struct.pack_into("<I", raw55, 32 + 52, old_cs + size_diff)
+        # The compressed data has sections AFTER the main stream
+        # (squad assignments, team config, etc.) at fixed offsets.
+        # We MUST pad the main stream to its original size so these
+        # sections stay at their original positions.
+        comp_size = struct.unpack_from("<I", raw55, 32 + 52)[0]
 
-        # Build final entry
-        new_entry = bytes(raw55[:skip]) + new_comp
-        # Update file header size field
-        fh = bytearray(raw55[:32])
-        struct.pack_into("<I", fh, 4, len(new_entry) - 32)
-        new_entry = bytes(fh) + new_entry[32:]
+        if len(new_main) <= comp_size:
+            # Pad to exact original compressed size
+            padded_main = new_main + b"\x00" * (comp_size - len(new_main))
 
-        if len(new_entry) <= allocated:
+            # Replace ONLY the main stream, keep all sections intact
+            raw55[skip : skip + comp_size] = padded_main
+
+            # Update comp_size field to actual new size
+            struct.pack_into("<I", raw55, 32 + 52, len(new_main))
+
+            # Write back — NO other header changes needed
             self._fh.seek(abs_entry)
-            self._fh.write(new_entry)
-            self._fh.write(b"\x00" * (allocated - len(new_entry)))
-            # Update AFS entry size
-            self._fh.seek(
-                self.AFS_0TEXT_LBA * ISO_SECTOR_SIZE
-                + 8 + self.FILE55_INDEX * 8 + 4
-            )
-            self._fh.write(struct.pack("<I", len(new_entry)))
+            self._fh.write(bytes(raw55))
 
             if on_progress:
                 on_progress(1.0, f"Done! {replaced} players patched")
         else:
             if on_progress:
-                on_progress(1.0, "Warning: recompressed data too large")
+                on_progress(
+                    1.0,
+                    f"Warning: compressed data too large "
+                    f"({len(new_main):,} > {comp_size:,})",
+                )
 
     def finalize(self):
         """Flush and close the output file."""
