@@ -2,6 +2,8 @@ A note on this project: I'm building this to get my hands dirty with agentic AI 
 
 I know there's a lot of "AI slop" being sold to gamers right now, and I want to be clear: this isn't that. This is my personal sandbox for testing the limits of AI agents while creating something useful. It is experimental and a bit unstable, but it's a genuine effort to create something cool and helpful while I improve my skills w/ AI.
 
+I will never ask you to donate money to this project, or for me, because of this. The only thing I ask is that if you find a bug, you use the issues here on GitHub to report it so I can make it better for everyone. You can also use issues to give ideas. Pull requests are welcomed, help me build this!  :) 
+
 # 🎮 Console Utilities
 
 <div align="center">
