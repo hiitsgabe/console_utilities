@@ -14,12 +14,14 @@ References:
 """
 
 import os
+import struct
 from typing import List, Optional
 
 from services.pes6_ps2_patcher.models import (
     ISO_SECTOR_SIZE,
     SLES_LBA,
     SLES_SIZE,
+    AFS_0TEXT_LBA,
     TOTAL_TEAMS,
     PES6TeamSlot,
     PES6RomInfo,
@@ -206,6 +208,77 @@ class PES6RomReader:
             slots.append(slot)
 
         return slots
+
+    def read_player_name_table(self):
+        """Read all player names from 0_TEXT.AFS file 485.
+
+        Returns list of (record_index, pointer, name) tuples sorted by pointer.
+        The pointer groups players by team — consecutive pointers belong
+        to the same team.
+        """
+        with open(self.iso_path, "rb") as f:
+            f.seek(AFS_0TEXT_LBA * ISO_SECTOR_SIZE)
+            afs_hdr = f.read(8)
+            num_files = struct.unpack_from("<I", afs_hdr, 4)[0]
+            afs_tbl = f.read(num_files * 8)
+
+            entry_off = struct.unpack_from("<I", afs_tbl, 485 * 8)[0]
+            entry_sz = struct.unpack_from("<I", afs_tbl, 485 * 8 + 4)[0]
+            f.seek(AFS_0TEXT_LBA * ISO_SECTOR_SIZE + entry_off)
+            data = f.read(entry_sz)
+
+        players = []
+        header_size = 0x20
+        record_size = 48
+        num_records = (len(data) - header_size) // record_size
+
+        for i in range(num_records):
+            rec_off = header_size + i * record_size
+            ptr = struct.unpack_from("<I", data, rec_off + 8)[0]
+            name_bytes = data[rec_off + 16 : rec_off + 48]
+            name = name_bytes.split(b"\x00")[0].decode("ascii", errors="replace")
+            if ptr and name:
+                players.append((i, ptr, name))
+
+        return players
+
+    def find_team_player_indices(self, team_slot_index):
+        """Find player record indices that belong to a specific team.
+
+        Uses the team name table's team slot index to find the corresponding
+        pointer range in the player name table. Teams are grouped by
+        consecutive pointer values.
+
+        Args:
+            team_slot_index: 0-based team index from read_team_slots()
+
+        Returns:
+            List of (record_index, name) for players on this team.
+        """
+        all_players = self.read_player_name_table()
+
+        # Sort by pointer
+        by_ptr = sorted(all_players, key=lambda x: x[1])
+
+        # Split into team clusters using gaps
+        # A gap >= 5 between consecutive pointers indicates a team boundary
+        teams = []
+        team_start = 0
+        for j in range(1, len(by_ptr)):
+            gap = by_ptr[j][1] - by_ptr[j - 1][1]
+            if gap >= 5:
+                teams.append(by_ptr[team_start:j])
+                team_start = j
+        teams.append(by_ptr[team_start:])
+
+        # The team clusters are ordered by pointer value.
+        # We need to map our team_slot_index to a cluster.
+        # This is approximate — the pointer ordering follows the game's
+        # internal team ordering which may differ from the name table ordering.
+        if team_slot_index < len(teams):
+            return [(idx, name) for idx, _, name in teams[team_slot_index]]
+
+        return []
 
     def get_rom_info(self) -> PES6RomInfo:
         """Return PES6RomInfo with validation status and team slots."""

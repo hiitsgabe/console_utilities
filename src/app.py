@@ -11411,6 +11411,9 @@ class ConsoleUtilitiesApp:
 
                 slot_mapping = patcher.build_slot_mapping(rom_info, teams, league_id)
 
+                # Store league data so patcher can access player rosters
+                patcher._league_data = pes.league_data
+
                 def progress(p, msg):
                     pes.patch_progress = p
                     pes.patch_status = msg
