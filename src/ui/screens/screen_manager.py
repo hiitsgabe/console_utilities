@@ -50,6 +50,7 @@ from .nhl07_psp_patcher_screen import NHL07PSPPatcherScreen
 from .nhl05_ps2_patcher_screen import NHL05PS2PatcherScreen
 from .syncthing_screen import SyncthingScreen
 from .downloads_screen import DownloadsScreen
+from .file_explorer_screen import FileExplorerScreen
 from .scraper_downloads_screen import ScraperDownloadsScreen
 from ui.molecules.status_footer import StatusFooter, StatusFooterItem
 
@@ -88,6 +89,7 @@ class ScreenManager:
         self.nhl07_psp_patcher_screen = NHL07PSPPatcherScreen(theme)
         self.nhl05_ps2_patcher_screen = NHL05PS2PatcherScreen(theme)
         self.syncthing_screen = SyncthingScreen(theme)
+        self.file_explorer_screen = FileExplorerScreen(theme)
 
         # Initialize modals
         self.search_modal = SearchModal(theme)
@@ -1112,6 +1114,10 @@ class ScreenManager:
             rects["back"] = back_rect
             rects["item_rects"] = item_rects
             rects["scroll_offset"] = scroll_offset
+
+        elif state.mode == "file_explorer":
+            fe_rects = self.file_explorer_screen.render(screen, state, state.input_mode)
+            rects.update(fe_rects)
 
         # Render stacked status footers on non-download screens
         if state.mode not in ("downloads", "scraper_downloads"):

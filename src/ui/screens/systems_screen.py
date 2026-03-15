@@ -15,6 +15,7 @@ _ALL_ROOT_ENTRIES = [
     ("Sports Game Updater", "sports_patcher"),
     ("Syncthing Sync", "syncthing"),
     ("Utils", "utils"),
+    ("File Explorer", "file_explorer"),
     ("Settings", "settings"),
     ("Credits", "credits"),
 ]
