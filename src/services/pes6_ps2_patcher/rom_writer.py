@@ -341,9 +341,9 @@ class PES6RomWriter:
     def write_player_roster(self, league_data, on_progress=None):
         """Replace player names in file 55 for all teams in league_data.
 
-        Decompresses the option file data from file 55, finds each
-        existing player name (UTF-16LE), replaces with ESPN names,
-        recompresses, and writes back.
+        File 55 contains zlib-compressed player records (124 bytes each).
+        Uses raw deflate recompression with manual Adler-32 to produce
+        output compatible with the game's custom decompressor.
         """
         if self._fh is None:
             raise RuntimeError("Writer already finalized")
@@ -367,19 +367,34 @@ class PES6RomWriter:
         entry_sz = struct.unpack_from(
             "<I", afs_table, self.FILE55_INDEX * 8 + 4
         )[0]
+        if self.FILE55_INDEX + 1 < num_files:
+            next_off = struct.unpack_from(
+                "<I", afs_table, (self.FILE55_INDEX + 1) * 8
+            )[0]
+            allocated = next_off - entry_off
+        else:
+            allocated = entry_sz
 
         abs_entry = self.AFS_0TEXT_LBA * ISO_SECTOR_SIZE + entry_off
 
         # Read file 55
         self._fh.seek(abs_entry)
-        raw55 = self._fh.read(entry_sz)
+        raw55 = bytearray(self._fh.read(entry_sz))
 
-        # Decompress: skip 32B file header + 80B data header
+        # Decompress using raw deflate to find exact stream boundaries
         skip = self.FILE55_HEADER_SIZE + self.FILE55_DATA_HEADER_SIZE
+        comp_data = raw55[skip:]
+
         try:
-            dec_data = bytearray(zlib.decompress(raw55[skip:]))
+            dobj = zlib.decompressobj(-15)  # Raw deflate
+            dec_data = bytearray(dobj.decompress(comp_data[2:]))  # Skip 78 DA
+            unused = dobj.unused_data
         except zlib.error:
-            return  # Can't decompress, skip player patching
+            return
+
+        deflate_size = len(comp_data) - 2 - len(unused)
+        # Tail = everything after zlib header(2) + deflate + adler32(4)
+        tail_data = comp_data[2 + deflate_size + 4:]
 
         if on_progress:
             on_progress(0.1, "Preparing players...")
@@ -392,45 +407,29 @@ class PES6RomWriter:
                 pname = p.name if hasattr(p, "name") else str(p)
                 espn_players.append(clean(pname))
 
-        # The decompressed data contains 124-byte player records
-        # starting at offset 0 with stride 124.
-        # Name = first 32 bytes of each record (UTF-16LE, 15 chars max)
-        # Shirt name = bytes 32-47 (ASCII, 15 chars max)
+        # Replace ALL non-empty player records with ESPN names.
+        # The game pulls players from scattered PIDs across the
+        # entire player pool, so we replace every name.
         RECORD_SIZE = 124
-        NAME_SIZE = 32  # UTF-16LE
-        SHIRT_SIZE = 16  # ASCII
+        NAME_SIZE = 32
         total_records = len(dec_data) // RECORD_SIZE
 
-        # Replace player names at exact record boundaries
         replaced = 0
         espn_idx = 0
         for rec in range(total_records):
-            if espn_idx >= len(espn_players):
-                break
-
             rec_off = rec * RECORD_SIZE
-            # Only replace if there's an existing name (non-zero)
             if dec_data[rec_off] == 0 and dec_data[rec_off + 1] == 0:
-                continue  # Empty record, skip
+                continue
 
-            new_name = espn_players[espn_idx][:15]
+            full_name = espn_players[espn_idx % len(espn_players)]
+            # Use last name only to keep compressed size small
+            parts = full_name.split()
+            new_name = (parts[-1] if parts else full_name)[:15]
             new_bytes = new_name.encode("utf-16-le")
 
-            # Write name (zero-fill first, then write)
             dec_data[rec_off:rec_off + NAME_SIZE] = b"\x00" * NAME_SIZE
-            write_len = min(len(new_bytes), NAME_SIZE - 2)
-            dec_data[rec_off:rec_off + write_len] = new_bytes[:write_len]
-
-            # Write shirt name (last name, uppercase, ASCII)
-            parts = new_name.split()
-            shirt = (parts[-1] if parts else new_name).upper()[:15]
-            shirt_bytes = shirt.encode("ascii", errors="replace")
-            dec_data[rec_off + 32:rec_off + 32 + SHIRT_SIZE] = (
-                b"\x00" * SHIRT_SIZE
-            )
-            dec_data[rec_off + 32:rec_off + 32 + len(shirt_bytes)] = (
-                shirt_bytes
-            )
+            wlen = min(len(new_bytes), NAME_SIZE - 2)
+            dec_data[rec_off:rec_off + wlen] = new_bytes[:wlen]
 
             espn_idx += 1
             replaced += 1
@@ -438,27 +437,42 @@ class PES6RomWriter:
         if on_progress:
             on_progress(0.7, f"Replaced {replaced} names, compressing...")
 
-        # Recompress
-        recompressed = zlib.compress(bytes(dec_data), 6)
+        # Recompress using raw deflate + manual Adler-32
+        cobj = zlib.compressobj(9, zlib.DEFLATED, -15)
+        new_deflate = cobj.compress(bytes(dec_data)) + cobj.flush()
+        new_adler = struct.pack(
+            ">I", zlib.adler32(bytes(dec_data)) & 0xFFFFFFFF
+        )
 
-        # Build new entry: keep original headers intact
-        new_entry = raw55[:skip] + recompressed
+        # Build compressed: zlib_header(2) + deflate + adler32(4) + tail
+        new_comp = b"\x78\xda" + new_deflate + new_adler + tail_data
 
-        # Check allocated space
-        if self.FILE55_INDEX + 1 < num_files:
-            next_off = struct.unpack_from(
-                "<I", afs_table, (self.FILE55_INDEX + 1) * 8
-            )[0]
-            allocated = next_off - entry_off
-        else:
-            allocated = entry_sz
+        # Update offset fields in the 80-byte data header
+        size_diff = len(new_deflate) - deflate_size
+        for i in range(12, 36, 4):
+            old = struct.unpack_from("<I", raw55, 32 + i)[0]
+            if old > 0:
+                struct.pack_into("<I", raw55, 32 + i, old + size_diff)
+        old_cs = struct.unpack_from("<I", raw55, 32 + 52)[0]
+        struct.pack_into("<I", raw55, 32 + 52, old_cs + size_diff)
+
+        # Build final entry
+        new_entry = bytes(raw55[:skip]) + new_comp
+        # Update file header size field
+        fh = bytearray(raw55[:32])
+        struct.pack_into("<I", fh, 4, len(new_entry) - 32)
+        new_entry = bytes(fh) + new_entry[32:]
 
         if len(new_entry) <= allocated:
-            # Keep original entry size — pad with zeros to match
-            padded = new_entry + b"\x00" * (entry_sz - len(new_entry))
             self._fh.seek(abs_entry)
-            self._fh.write(padded)
-            # DON'T update AFS entry size — keep original
+            self._fh.write(new_entry)
+            self._fh.write(b"\x00" * (allocated - len(new_entry)))
+            # Update AFS entry size
+            self._fh.seek(
+                self.AFS_0TEXT_LBA * ISO_SECTOR_SIZE
+                + 8 + self.FILE55_INDEX * 8 + 4
+            )
+            self._fh.write(struct.pack("<I", len(new_entry)))
 
             if on_progress:
                 on_progress(1.0, f"Done! {replaced} players patched")
