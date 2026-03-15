@@ -17,7 +17,7 @@ Users select a soccer league from ESPN, fetch current rosters, select a PES 6 IS
 
 | File | LBA | Size | Contents |
 |------|-----|------|----------|
-| `SLES_542.03` | 323 | 3.0 MB | Game executable — team names at `0x2DE4A8` |
+| `SLES_542.03` | 323 | 3.0 MB | Game executable — team names/abbreviations |
 | `NTGUI2EU.ELF` | 1816 | 5.0 MB | Main game binary |
 | `0_TEXT.AFS` | 14741 | 410 MB | 9,806 files — textures, kits, emblems, player DB |
 | `E_TEXT.AFS` | 224414 | 24 MB | 421 files — English text/localization |
@@ -25,35 +25,60 @@ Users select a soccer league from ESPN, fetch current rosters, select a PES 6 IS
 
 ### Team Names (SLES_542.03)
 
-- Located at offset `0x2DE4A8` in the executable
-- ~178 teams: English Premier League (fake names), Ligue 1, Serie A, Eredivisie, La Liga, plus licensed clubs, national teams, and ML/custom teams
-- Format: null-terminated UTF-8 string (16-byte aligned) + null-terminated abbreviation (8-byte aligned)
-- Names must fit within existing byte budget (no executable growth)
+**Location**: Starts at national teams around `0x2DDCE0`, clubs at `0x2DE4A8`, ends at `~0x2DF600` in `SLES_542.03`.
+
+**Format**: Variable-length null-terminated UTF-8 strings, **8-byte aligned**. Entries alternate: team name, abbreviation, team name, abbreviation, etc. Each string is padded with nulls to the next 8-byte boundary.
+
+**Total**: 277 string pairs (name + abbreviation), occupying ~4,400 bytes.
+
+**Team ranges** (pair index, confirmed from ISO dump):
+
+| Range | Count | League / Category |
+|-------|-------|-------------------|
+| 24-55 | 32 | National teams (Austria → Wales) |
+| 56-63 | 8 | African nations (Angola → Tunisia) |
+| 64-68 | 5 | CONCACAF (Costa Rica → USA) |
+| 69-80 | 12 | South America + Asia (Argentina → Australia) |
+| 81-88 | 8 | Classic teams (Classic England → Classic Brazil) |
+| 88-108 | 20 | English Premier League (Arsenal licensed, rest fake names) |
+| 108-128 | 20 | Ligue 1 (AJ Auxerre → Valenciennes FC) |
+| 128-148 | 20 | Serie A (Ascoli → Udinese) |
+| 148-166 | 18 | Eredivisie (ADO Den Haag → Willem II) |
+| 166-186 | 20 | La Liga (Athletic Club → R. Zaragoza) |
+| 186-205 | 19 | Other European clubs (Bruxelles, Copenhagen, Bayern, Juventus, etc.) |
+| 205-210 | 5 | South American clubs (Patagonia, Pampas — fake names) |
+| 210-228 | 18 | Custom Team A-R (ZZA → ZZR) |
+| 228-245 | 17 | Extra national teams (Bosnia → Uzbekistan) |
+| 245-263 | 18 | ML/zodiac teams (ML United → WE Japan) |
+| 263-277 | 14 | All-Stars + shop teams |
+
+**Write constraint**: New names must fit within the existing byte budget per entry. Names that would overflow are truncated. The total region size (4,400 bytes) is fixed — the executable cannot grow.
 
 ### AFS Archive Format
 
 - Magic: `AFS\x00`
 - Header: 4-byte magic + 4-byte file count
 - File table: N entries of (4-byte offset, 4-byte size) relative to AFS start
-- Files are concatenated after the table
-- Sub-files use a 32-byte header + zlib-compressed payload:
-  - Bytes 0-3: unknown/magic
-  - Bytes 4-7: unknown
-  - Bytes 8-11: decompressed size (LE uint32)
-  - Bytes 12-31: padding/zeros
-  - Bytes 32+: zlib stream (starts with `78 DA`)
+- Files concatenated after table
+
+Sub-files observed to use a 32-byte header + zlib payload:
+- Bytes 0-3: unknown/magic
+- Bytes 8-11: decompressed size (LE uint32)
+- Bytes 32+: zlib stream (starts with `78 DA`)
+
+**Note**: Not all AFS entries may follow this pattern. The reader must check for the zlib magic at offset 32 and handle uncompressed entries.
 
 ### Key AFS Entries (0_TEXT.AFS)
 
-| Index | Decompressed Size | Purpose |
-|-------|-------------------|---------|
-| 32 | 4,576 B | Player database header |
-| 33 | 66,688 B | Player database (format TBD) |
-| 34 | ~4 KB | Fake player database header |
-| 35 | ~30 KB | Fake player database |
-| 535 | 92 KB | Flags & emblems (texture container) |
-| 536 | 196 KB | Flags & emblems (texture container) |
-| 5473-6831 | ~125 KB each | Team kits |
+| Index | Compressed | Decompressed | Purpose |
+|-------|-----------|--------------|---------|
+| 32 | 2,001 B | 4,576 B | Player database header |
+| 33 | 20,677 B | 66,688 B | Player database (format TBD) |
+| 34 | 2,101 B | TBD | Fake player database header |
+| 35 | 29,697 B | TBD | Fake player database |
+| 535 | 94,400 B | TBD | Flags & emblems (texture container) |
+| 536 | 201,216 B | TBD | Flags & emblems (texture container) |
+| 5473-6831 | ~125 KB each | TBD | Team kits |
 
 ## Architecture
 
@@ -61,58 +86,64 @@ Users select a soccer league from ESPN, fetch current rosters, select a PES 6 IS
 
 | File | Responsibility |
 |------|---------------|
-| `models.py` | PES6 team/player data structures, team index mappings (178 slots), re-exports shared sports models |
+| `models.py` | PES6 team/player data structures, 277-slot team index mapping, re-exports shared sports models |
 | `patcher.py` | Orchestrator: fetch rosters → map stats → patch ISO |
-| `rom_reader.py` | Parse ISO 9660, extract AFS entries, decompress zlib, read team/player data |
-| `rom_writer.py` | Write patched team names to SLES, recompress/replace AFS entries, emblem injection |
-| `stat_mapper.py` | Map ESPN soccer stats to PES 6 attributes (0-99 scale, 26 stats + 23 specials) |
-| `afs_handler.py` | AFS archive read/write/repack |
-| `ps2_texture.py` | PS2 texture: swizzle/unswizzle, TXS parsing, PNG→PS2 conversion |
+| `rom_reader.py` | Parse ISO 9660, extract AFS entries via seek (no full load), decompress zlib, read team/player data from SLES |
+| `rom_writer.py` | Write patched team names to SLES in-place within ISO, recompress/replace AFS entries, emblem injection |
+| `stat_mapper.py` | Map API-Football stats to PES 6 attributes (0-99 scale) — Phase 2b only |
+| `afs_handler.py` | AFS archive seek-based read/write (no full 410 MB load — read entries on demand via offset table) |
+
+`ps2_texture.py` placed in `src/utils/` for reuse across PS2 patchers (NHL 05, future PS2 games).
 
 ### State (`src/state.py`)
 
 ```python
 @dataclass
 class PES6PS2PatcherState:
-    selected_season: int  # current season
-    selected_league: Any  # league from ESPN browser
-    league_data: Any  # LeagueData for preview
-    rosters: Any  # Dict[str, List[Player]]
-    team_stats: Any
-    fetch_progress: float
-    fetch_status: str
-    is_fetching: bool
-    fetch_error: str
+    selected_season: int = field(
+        default_factory=lambda: datetime.now().year
+    )
+    selected_league: Any = None
 
-    rom_path: str
-    rom_info: Any
-    rom_valid: bool
-    zip_path: str
-    zip_temp_dir: str
+    # Fetched data
+    rosters: Any = None  # Dict[str, List[Player]]
+    team_stats: Any = None
+    league_data: Any = None  # LeagueData (for roster preview modal)
+    fetch_progress: float = 0.0
+    fetch_status: str = ""
+    is_fetching: bool = False
+    fetch_error: str = ""
 
-    patch_progress: float
-    patch_status: str
-    is_patching: bool
-    patch_output_path: str
-    patch_complete: bool
-    patch_error: str
+    # ROM
+    rom_path: str = ""
+    rom_info: Any = None
+    rom_valid: bool = False
+    zip_path: str = ""
+    zip_temp_dir: str = ""
 
-    roster_preview_team_index: int
-    roster_preview_player_index: int
-    active_modal: Optional[str]  # "league_browser", "roster_preview", "patch_progress"
+    # Patching
+    patch_progress: float = 0.0
+    patch_status: str = ""
+    is_patching: bool = False
+    patch_output_path: str = ""
+    patch_complete: bool = False
+    patch_error: str = ""
 
-    # League browser (reuse WE2002 pattern)
-    league_search_query: str
-    league_browser_highlighted: int
-    league_browser_leagues: Any
-    leagues_highlighted: int
-    roster_teams_highlighted: int
-    roster_players_highlighted: int
+    # Roster preview
+    roster_preview_team_index: int = 0
+    roster_preview_player_index: int = 0
+
+    # UI
+    active_modal: Optional[str] = None  # "league_browser", "roster_preview", "patch_progress"
+    leagues_highlighted: int = 0
+    roster_teams_highlighted: int = 0
+    roster_players_highlighted: int = 0
+    league_search_query: str = ""
 ```
 
 ### UI (`src/ui/screens/pes6_ps2_patcher_screen.py`)
 
-Step-by-step list screen (same as NHL 05, WE2002):
+Step-by-step list screen (same pattern as NHL 05, WE2002):
 
 1. **Select League** — opens league browser modal (reuse `LeagueBrowserModal`)
 2. **Fetch Rosters** — fetches from ESPN soccer API
@@ -120,74 +151,86 @@ Step-by-step list screen (same as NHL 05, WE2002):
 4. **Select ISO** — folder browser filtered to .iso/.zip
 5. **Patch ROM** — writes patched ISO
 
-### ESPN Integration
+### Data Source
 
-Reuse existing `src/services/sports_api/espn_client.py` soccer endpoints. Same league browser as WE2002 patcher — user picks from available ESPN soccer leagues (Premier League, La Liga, Serie A, Bundesliga, Ligue 1, Brasileirão, etc.).
+**ESPN** for squad rosters (names, positions, jersey numbers, team logos, team colors). Same `espn_client.py` soccer endpoints used by WE2002 patcher.
+
+**ESPN does not provide player stats** for soccer. For Phase 2b (player database with attributes), `ApiFootballClient` (api-football.io, requires API key) would be needed, same as WE2002 patcher. Phase 1 and 2a do not require stats.
+
+### ISO Write-Back
+
+SLES_542.03 is modified **in-place within the ISO** at its known LBA (323). The file size does not change. This is the same approach used by the NHL 05 PS2 patcher (`rom_writer.py` writes directly to the output ISO copy at sector offsets).
+
+For AFS entries, the writer seeks to `AFS_LBA * 2048 + entry_offset` in the ISO and writes the modified data. No ISO filesystem rebuild is needed as long as file sizes don't grow.
+
+### AFS Handler — Memory Strategy
+
+`0_TEXT.AFS` is 410 MB — cannot be loaded into memory on handheld consoles. The AFS handler will:
+
+1. Read only the AFS header + file table (offset/size pairs) into memory (~80 KB for 9,806 entries)
+2. Read individual entries on demand via `seek()` to `AFS_LBA * 2048 + entry_offset`
+3. Write modified entries back at the same position, updating size in the file table
+4. Only the file table and modified entries are kept in memory
 
 ## Patching Strategy
 
 ### Phase 1: Team Names (MVP)
 
-- Read team name table from SLES executable at `0x2DE4A8`
-- Map ESPN teams to PES 6 ROM slots (by league → team matching)
-- Write new team names and abbreviations, null-padded within existing byte budget
-- If a league doesn't exist in PES 6, user selects which existing league slots to replace
+- Parse the team name string table from SLES executable (277 entries, ~4,400 bytes)
+- Map ESPN teams to PES 6 ROM slots by matching league → slot range
+- Derive mapping at runtime by reading existing team names from ROM and matching to ESPN names
+- Write new team names and abbreviations, null-padded, within each entry's existing byte budget
+- For leagues not in PES 6 (e.g., Bundesliga beyond Bayern), user selects which slot range to replace
+- For promoted/relegated teams: if an ESPN team has no matching slot, assign it to the closest available slot in the league's range (or an unused custom Team A-R slot)
 
-### Phase 2: Player Database
-
-- Reverse engineer the on-disc player format in `0_TEXT.AFS[32-33]`
-- The 66,688-byte decompressed file does not match the 124-byte option file record format
-- PESEditor source (PeterC10/PESEditor, nthachus/pes-editor) documents the option file format:
-  - 124 bytes per player, UTF-16LE names (32 bytes), shirt name (16 bytes)
-  - 26 ability stats (0-99, 7-bit), 23 special abilities (1-bit)
-  - 12 position slots, physical attributes, nationality
-- Need to determine how this maps to the on-disc format
-- Fallback: generate option file and embed as save data
-
-### Phase 3: Emblems
-
-- Download ESPN team logo PNGs
-- Resize to match existing emblem dimensions (64×64 or 128×128)
-- Quantize to palette (16 or 256 colors)
-- Swizzle pixel data to PS2 memory layout (4-bit unswizzle algorithm available)
-- Replace in AFS files 535-536 (TXS texture containers)
-- TXS format: zlib-compressed archive with named sub-files and a file table
-
-### Kit Colors
+### Phase 2a: Kit Colors
 
 - Extract ESPN `color`/`alternateColor` hex values
 - Convert to PS2 palette format
 - Write to kit data entries in 0_TEXT.AFS (files 5473-6831)
+- Independent of player database — can ship separately
 
-### AFS Repacking
+### Phase 2b: Player Database
 
-- Measure slack space between consecutive AFS entries
-- If new compressed data ≤ original size: write in-place, update size in AFS table
-- If larger: investigate relocation or truncation strategies
-- Update AFS file table offsets/sizes after any modifications
+- Reverse engineer the on-disc player format in `0_TEXT.AFS[32-33]`
+- File 33 decompresses to 66,688 bytes — does not match 124-byte option file records
+- PESEditor source documents the option file format (124B/player, 26 stats, 23 specials)
+- Need to determine how on-disc format differs
+- Requires API-Football for player stats (ESPN provides no soccer stats)
+- Fallback: generate option file and embed as save data alongside ISO
 
-## Team Slot Mapping
+### Phase 3: Emblems
 
-178 slots identified in SLES executable at `0x2DE4A8`:
+- Download ESPN team logo PNGs
+- Resize to match existing emblem dimensions (64×64 or 128×128, to be confirmed from AFS 535-536)
+- Quantize to palette (16 or 256 colors)
+- Swizzle pixel data to PS2 memory layout (4-bit unswizzle algorithm available)
+- Replace in AFS files 535-536 (TXS texture containers, zlib-compressed)
+- TXS format: zlib-compressed archive with named sub-files and file table
 
-- **English clubs** (0-22): Fake names (Arsenal is licensed, rest are "West Midlands Village", "Lancashire", etc.)
-- **French clubs** (23-46): Ligue 1 (AJ Auxerre, Bordeaux, Lyon, PSG, etc.)
-- **Italian clubs** (47-63): Serie A (Ascoli, Atalanta, AC Milan, Juventus, etc.)
-- **Dutch clubs** (64-82): Eredivisie (Ajax, PSV, Feyenoord, etc.)
-- **Spanish clubs** (83-107): La Liga (Barcelona, Real Madrid, Valencia, etc.)
-- **Other European clubs** (108-127): Belgian, Czech, Danish, German, Greek, Portuguese, Scottish, Swedish, Turkish, Ukrainian
-- **South American** (128-131): Patagonia, Pampas (fake names)
-- **Custom/ML teams** (132-177): Team A-R, zodiac teams, national teams, etc.
+## Team Slot Mapping Strategy
+
+At runtime, `rom_reader.py` parses all 277 team name/abbreviation pairs from the SLES executable. The patcher then:
+
+1. Groups slots by league range (known from the fixed slot layout above)
+2. When user selects an ESPN league, matches ESPN team names to existing ROM team names in the corresponding range
+3. For exact matches (e.g., "Barcelona" → "F.C. Barcelona"), maps directly
+4. For close matches, uses fuzzy string matching
+5. For no match (promoted team), assigns to first unused custom slot (Team A-R range, indices 210-228)
+6. User can override any mapping in the preview step
 
 ## Risks and Mitigations
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| On-disc player format unknown | Can't patch rosters in Phase 2 | Investigate files 32-35; fallback to option file embed |
-| AFS entry grows after recompression | Corrupts ISO | Measure slack; in-place-only writes with size check |
-| PS2 texture swizzle wrong | Garbled emblems | Test with existing textures first (roundtrip verify) |
-| Team slot mapping incomplete | Wrong teams patched | Full 178-slot map from SLES dump confirmed |
-| SLES executable checksum | Game crashes | PS2 games rarely verify ELF checksums; test on PCSX2 |
+| On-disc player format unknown | Can't patch rosters in Phase 2b | Investigate files 32-35; fallback to option file embed |
+| AFS entry grows after recompression | Corrupts ISO | In-place-only writes; reject if new compressed size > original |
+| PS2 texture swizzle wrong | Garbled emblems | Roundtrip verify: unswizzle existing → re-swizzle → compare |
+| SLES executable checksum | Game crashes | PS2 games rarely verify; test on PCSX2 first |
+| Team name overflow | Truncated names | Measure each entry's byte budget from ROM; truncate with warning |
+| 410 MB AFS memory | OOM on handhelds | Seek-based AFS handler, no full load |
+| ESPN has no soccer stats | Can't set player attributes | Phase 2b uses API-Football (requires API key); Phase 1 doesn't need stats |
+| Promoted/relegated teams | No matching ROM slot | Use custom Team A-R slots (18 available); user override in preview |
 
 ## Open Source References
 
@@ -200,6 +243,7 @@ Reuse existing `src/services/sports_api/espn_client.py` soccer endpoints. Same l
 
 ## Phasing
 
-1. **Phase 1 (MVP)**: Team names + abbreviations + league browser + ESPN integration
-2. **Phase 2**: Player database (pending format reverse engineering) + kit colors
-3. **Phase 3**: Emblem/logo injection (PS2 texture conversion)
+1. **Phase 1 (MVP)**: Team names + abbreviations in SLES executable + league browser + ESPN integration + roster preview
+2. **Phase 2a**: Kit colors (ESPN team colors → AFS kit palette entries)
+3. **Phase 2b**: Player database (pending format reverse engineering, requires API-Football)
+4. **Phase 3**: Emblem/logo injection (PS2 texture conversion + swizzle)
