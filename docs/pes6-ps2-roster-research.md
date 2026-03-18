@@ -400,3 +400,26 @@ The `.tmrv` files are **artifacts from the Bomba Patch modding tool**. The tool:
 4. Leaves the `.tmrv` files on the ISO (not used at runtime)
 
 This confirms the user's hypothesis: Bomba Patch **injects option file data** into the ISO using a custom tool that reads `.tmrv` format files.
+
+## Final Analysis: Player-Team Ordering
+
+### Confirmed: Players are NOT grouped by team in file[35]
+Known Cruzeiro players are scattered across the entire player database:
+- Indices: 1140, 1451, 1703, 1916, 2016, 2277, 2475, 2677, 3195, 3222, 3889, 4025, 4078, 4107, 4186, 4267, 4338, 4387
+- Each falls in a DIFFERENT 32-player club block
+- No mathematical pattern (modulo, stride) produces consistent team IDs
+
+### Confirmed: No byte-per-player team table exists in the ISO
+Full 1.9GB byte-by-byte scan checking `data[base + player_idx]` for all possible base offsets found zero matches where Cruzeiro and ATL MG players share distinct team values.
+
+### Player Database Structure
+- Indices 1-1472: National team players (23 per team, 64 teams)
+- Indices 1473+: Club team players (32 per block, ~120 blocks)
+- Within each block, players are from MULTIPLE different teams
+- No position-based ordering detected
+
+### What CAN be done now
+1. Find any player by name in file[35]
+2. Read/write player stats, names, shirt names
+3. Read/write team names in SLPM
+4. The team-player mapping remains the final unsolved piece
