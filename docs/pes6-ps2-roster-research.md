@@ -473,3 +473,134 @@ file[35] player records → The actual player data at those indices
 ```
 
 The edit.ovl squad table IS the roster mapping. We found it earlier but dismissed it because the player names at those indices didn't match expected team rosters. Now we understand WHY: the table references scattered indices, and the Bomba Patch put the right players at those scattered positions.
+
+---
+
+## Agent Prompt: PCSX2 RAM Dump for Roster Extraction
+
+**Copy this entire section and give it to Claude Code on your local machine with PCSX2 installed.**
+
+---
+
+### Task: Boot Bomba Patch 77 ISO in PCSX2 and dump RAM to find the club team roster table
+
+### Prerequisites
+- PCSX2 v2.6.3+ installed
+- PS2 BIOS files configured
+- Bomba_Patch_77.iso available (1.9GB, Bomba Patch 77 Geomatrix)
+- Python 3 with struct and zlib modules
+
+### Background
+
+We are reverse-engineering the PES6/WE10 PS2 roster system from the Bomba Patch 77 ISO. We have decoded:
+- **Player database**: 0_TEXT.AFS file[35] has 4873 player records (124 bytes each, zlib compressed)
+- **Team names**: SLPM executable at offset 0x2BEC00 has team names (e.g., team 7 = "Atletico MG", team 8 = "Cruzeiro")
+- **National team slots** (indices 1-1472): Contain updated national team rosters, NOT Brazilian clubs
+- **Club team slots** (indices 1473+, 32 per block): Where Brazilian/European club players are scattered
+
+### The unsolved piece
+
+We know specific player indices for known teams:
+- **Atletico MG**: [440, 745, 1060, 1170, 1470, 1983, 1996, 2030, 2100, 2115, 2218, 2294, 2329, 2451, 2711, 4000, 4086, 4364, 4439, 4723]
+- **Cruzeiro**: [1140, 1451, 1703, 1916, 2016, 2277, 2475, 2677, 3195, 3222, 3889, 4025, 4078, 4107, 4186, 4267, 4338, 4387]
+
+These players are **scattered across different PES6 club blocks** (not grouped together). The game must have a runtime roster table in PS2 RAM that maps these scattered indices to their team. We cannot find this table in the static ISO binary -- it is constructed at runtime by MIPS overlay code.
+
+### Steps
+
+#### 1. Boot the ISO in PCSX2
+- Load Bomba_Patch_77.iso
+- Wait for the main menu to fully load (where you can see Exhibition/League/etc.)
+- This ensures the roster data is initialized in RAM
+
+#### 2. Dump PS2 RAM
+- In PCSX2: go to Debug > Memory Dump or use the debugger
+- Alternatively, use PCSX2 command line or Lua scripting to dump RAM
+- Dump the full 32MB EE RAM (addresses 0x00000000 to 0x01FFFFFF) to a file called ram_dump.bin
+- If PCSX2 does not have a direct dump option, you can use save states (.p2s files) which contain RAM
+
+#### 3. Search the RAM dump for the roster table
+
+Run this Python script on the dump:
+
+```python
+import struct
+
+atletico_ids = {440, 745, 1060, 1170, 1470, 1983, 1996, 2030, 2100, 2115, 2218, 2294, 2329, 2451, 2711, 4000, 4086, 4364, 4439, 4723}
+cruzeiro_ids = {1140, 1451, 1703, 1916, 2016, 2277, 2475, 2677, 3195, 3222, 3889, 4025, 4078, 4107, 4186, 4267, 4338, 4387}
+
+with open("ram_dump.bin", "rb") as f:
+    ram = f.read()
+
+print(f"RAM dump: {len(ram)} bytes")
+
+for target_name, target_ids in [("ATL MG", atletico_ids), ("Cruzeiro", cruzeiro_ids)]:
+    best = (0, 0, [])
+    for start in range(0, len(ram) - 128, 2):
+        hits = []
+        seen = set()
+        for i in range(64):
+            off = start + i * 2
+            if off + 2 > len(ram): break
+            v = struct.unpack_from('<H', ram, off)[0]
+            if v in target_ids and v not in seen:
+                hits.append((i, v))
+                seen.add(v)
+        if len(hits) > best[1]:
+            best = (start, len(hits), hits)
+            if len(hits) >= 8:
+                print(f"\n*** {target_name}: {len(hits)} players at RAM 0x{start:08X} ***")
+                for slot, pid in hits:
+                    print(f"  pos {slot}: ID {pid}")
+                vals = [struct.unpack_from('<H', ram, start + i*2)[0] for i in range(64)]
+                print(f"  Full block: {vals}")
+                break
+    
+    print(f"\n{target_name} best: {best[1]} unique at 0x{best[0]:08X}")
+    for slot, pid in best[2]:
+        print(f"  pos {slot}: ID {pid}")
+```
+
+#### 4. Extract the roster table structure
+
+Once you find the RAM address where team rosters live, run this to extract ALL teams:
+
+```python
+import struct
+
+with open("ram_dump.bin", "rb") as f:
+    ram = f.read()
+
+# Replace ROSTER_ADDR with the address found in step 3
+ROSTER_ADDR = 0x00000000  # <-- fill this in from step 3
+TEAM_SIZE = 32  # players per club team (or 23 for national)
+ENTRY_SIZE = 2  # bytes per entry (u16) - adjust to 4 if u32
+
+for team in range(150):
+    offset = ROSTER_ADDR + team * TEAM_SIZE * ENTRY_SIZE
+    players = []
+    for i in range(TEAM_SIZE):
+        if ENTRY_SIZE == 2:
+            pid = struct.unpack_from('<H', ram, offset + i * ENTRY_SIZE)[0]
+        else:
+            pid = struct.unpack_from('<I', ram, offset + i * ENTRY_SIZE)[0] & 0xFFFF
+        if 0 < pid < 4873:
+            players.append(pid)
+    if players:
+        print(f"Team {team:3d}: {players}")
+```
+
+#### 5. Save the results
+
+Save the output to a file and bring it back to the research VM. The key information we need:
+- The RAM address of the roster table
+- The entry format (u16 or u32, team size, total teams)
+- The full roster dump for ALL teams
+- Which team index maps to which SLPM team name
+
+### What this unlocks
+
+Once we have the RAM roster table, we can:
+1. Find where the same data exists in the ISO (edit.ovl or another file)
+2. Build a patcher that writes new rosters directly to the ISO
+3. Create a complete roster update tool for PES6 PS2
