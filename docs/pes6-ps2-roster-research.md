@@ -334,3 +334,69 @@ Even without the roster mapping, we can:
 - Recompress file[35] with zlib, update WESYS container
 - Update AFS entry offsets/sizes
 - Write modified files back to ISO
+
+## Additional Tables Found in SLPM Executable
+
+### Player Lookup Table at SLPM 0x2C7010
+- Located right after the team name table
+- Contains u16 player IDs sorted cross-nationally (Spain→Slovakia→Slovenia→Serbia→Czech→Denmark)
+- NOT a roster table — appears to be a face/appearance grouping or rendering order table
+- Player IDs reference file[34]/file[35] indices
+
+### Complete List of What Was Searched
+Every approach tried to find team-player roster assignments:
+
+| Location | Method | Result |
+|----------|--------|--------|
+| edit.ovl (full) | u16 scan | Only formation position data found |
+| edit.ovl (full) | u32 scan | Formation data with duplicate IDs |
+| edit.ovl tail | Decryption with PES6 key | Garbage — tail is not encrypted OF |
+| defaultdataset.ovl | u16/u32 scan | No roster data |
+| SLPM (full 2.9MB) | u16 density scan | Cross-national lookup tables only |
+| SLPM after team names | u16 unique ID blocks | Appearance grouping table |
+| 0_TEXT file[33] | Section analysis | Formation/role config, not rosters |
+| 0_TEXT file[34] | Record analysis | No team field in player records |
+| 0_TEXT file[35] | Record byte scan | byte 112 = nationality, not team |
+| 0_TEXT files[47-58] | Raw scan | Kit/config data |
+| Entire ISO | Mmap scan for known ATL MG player IDs | Zero clusters found |
+
+### Conclusion
+The team-player roster assignment is **not stored as a static data table** anywhere in the ISO. It is most likely:
+1. Generated programmatically by MIPS code in the overlay at boot time
+2. Derived from player nationality + index ranges at runtime
+3. Stored in a format that uses indirection through multiple tables
+
+**Required next step**: PCSX2 emulation with RAM dump to observe the runtime roster structure.
+
+## BREAKTHROUGH #2: Bomba Patch Custom Files
+
+### Extra Files in Bomba Patch (not in WE10)
+```
+IOP/UNIFORME.tmrv       (4,188 bytes) - Team roster + player data
+IOP/UNIFORME.tmrv.plrv  (124 bytes)   - Single player record template
+IOP/UNIFORME.tmrv.tmrv  (4,188 bytes) - Duplicate of UNIFORME.tmrv
+```
+
+### UNIFORME.tmrv Format (Team Roster File)
+```
+Offset 0x00-0x3F: Header = 32 u16 player IDs (team roster, 0 = empty slot)
+Offset 0x40+:     33 player records × 124 bytes each (embedded player data)
+```
+
+- The 32 u16 player IDs in the header are **file[35] record indices**
+- The 33 player records contain the actual player data (name UTF-16LE + shirt + stats)
+- This is a **club team** format (32 player slots)
+- The player records appear to be the data that gets PATCHED into file[35]
+
+### Example: UNIFORME.tmrv decoded (appears to be Hull City data)
+Header IDs: 1507 (McGregor), 1508 (Davies), 1517 (Mancienne), 1512 (Livermore), ...
+Player records: Pollitt, Henchoz, Coleman, Francis, ...
+
+### Key Insight
+The `.tmrv` files are **artifacts from the Bomba Patch modding tool**. The tool:
+1. Reads `.tmrv` files containing team rosters + player data
+2. Writes player records to file[35] in 0_TEXT.AFS at the specified indices
+3. Writes roster assignments to the OVER.AFS overlay (location still being investigated)
+4. Leaves the `.tmrv` files on the ISO (not used at runtime)
+
+This confirms the user's hypothesis: Bomba Patch **injects option file data** into the ISO using a custom tool that reads `.tmrv` format files.
