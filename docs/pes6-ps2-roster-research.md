@@ -423,3 +423,53 @@ Full 1.9GB byte-by-byte scan checking `data[base + player_idx]` for all possible
 2. Read/write player stats, names, shirt names
 3. Read/write team names in SLPM
 4. The team-player mapping remains the final unsolved piece
+
+## BREAKTHROUGH #3: National Team Slots = Updated National Teams, NOT Brazilian Clubs
+
+### Discovery
+The national team slots (indices 1-1472, 23 per team) contain **updated national team rosters**, not Brazilian club teams:
+- Slot 7 (indices 162-184): Updated GREEK national team (Galitisios, Holebas, Samaras, Karnezis)
+- Slot 8 (indices 185-207): Updated NORTHERN IRELAND national team (Norwood, Lafferty, McAuley)
+
+The Bomba Patch SLPM team names (0=Swansea, 7=Atletico MG, 8=Cruzeiro) do NOT map to national team slots. The Brazilian club teams are in the **CLUB team section** (indices 1473+, 32 players per team).
+
+### Current Understanding
+- National team slots (1-1472): Updated national team rosters (same nationality structure as PES6)
+- Club team slots (1473+): Where the Brazilian/European club teams live (32 per block)
+- SLPM team names are a UI layer — the actual player data mapping follows PES6 club block structure
+- Need to determine: which SLPM team name maps to which club block
+
+### Next Step
+Use ESPN 2017 squad data for ALL teams to match players to file[35] indices, then determine which club blocks contain which Bomba Patch teams.
+
+## Key Finding: Bomba Patch Scatters Players Across Original PES6 Club Blocks
+
+### Evidence
+Using ESPN 2017 squad data matched to file[35] indices:
+
+| Team | Players Found | Club Blocks Used |
+|------|--------------|-----------------|
+| Atletico MG | 6 | blocks 7, 19, 26, 38, 71, 79 |
+| Cruzeiro | 4 | blocks 54, 79, 82, 87 |
+| Flamengo | 3 | blocks 13, 18, 61 |
+| Gremio | 6 | blocks 5, 15, 39, 54, 59, 86 |
+| Palmeiras | 5 | blocks 21, 49, 57, 82, 93 |
+| Corinthians | 5 | blocks 7, 14, 31, 89, 101 |
+
+Each team's players are scattered across **many different PES6 club blocks**. No team occupies a single block.
+
+### Interpretation
+Bomba Patch replaces individual players WITHIN their original PES6 club team. For example:
+- Robinho (ATL MG) is at index 1703 = club block 7 (originally Wigan Athletic in PES6)
+- Victor (ATL MG) is at index 2329 = club block 26 (originally Real Sociedad in PES6)
+
+The Bomba Patch modders replaced specific PES6 club players with Brazilian players, keeping each player in their original PES6 club's slot. The squad assignment table in edit.ovl (0x12F2EC) then maps these scattered indices to the Bomba Patch team names.
+
+### Updated Architecture Understanding
+```
+SLPM team names → Team display names (Atletico MG, Cruzeiro, etc.)
+edit.ovl squad table (0x12F2EC) → Maps team_id → list of player indices  
+file[35] player records → The actual player data at those indices
+```
+
+The edit.ovl squad table IS the roster mapping. We found it earlier but dismissed it because the player names at those indices didn't match expected team rosters. Now we understand WHY: the table references scattered indices, and the Bomba Patch put the right players at those scattered positions.
