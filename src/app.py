@@ -9328,6 +9328,7 @@ class ConsoleUtilitiesApp:
         we.is_patching = True
         we.patch_error = ""
         we.patch_complete = False
+        we.patch_status = "Starting, this may take a while..."
 
         input_path = we.rom_path  # data track .bin
 
@@ -10003,6 +10004,7 @@ class ConsoleUtilitiesApp:
         nhl.patch_error = ""
         nhl.patch_complete = False
         nhl.patch_output_path = ""
+        nhl.patch_status = "Starting, this may take a while..."
 
         input_path = nhl.rom_path
         game_dir = os.path.dirname(input_path)
@@ -10243,6 +10245,7 @@ class ConsoleUtilitiesApp:
         kgj.patch_error = ""
         kgj.patch_complete = False
         kgj.patch_output_path = ""
+        kgj.patch_status = "Starting, this may take a while..."
 
         input_path = kgj.rom_path
         game_dir = os.path.dirname(input_path)
@@ -10476,6 +10479,7 @@ class ConsoleUtilitiesApp:
         nba.patch_error = ""
         nba.patch_complete = False
         nba.patch_output_path = ""
+        nba.patch_status = "Starting, this may take a while..."
 
         input_path = nba.rom_path
         game_dir = os.path.dirname(input_path)
@@ -10711,6 +10715,7 @@ class ConsoleUtilitiesApp:
         mvp.patch_error = ""
         mvp.patch_complete = False
         mvp.patch_output_path = ""
+        mvp.patch_status = "Starting, this may take a while..."
 
         input_path = mvp.rom_path
         game_dir = os.path.dirname(input_path)
@@ -10952,6 +10957,7 @@ class ConsoleUtilitiesApp:
         nhl.patch_error = ""
         nhl.patch_complete = False
         nhl.patch_output_path = ""
+        nhl.patch_status = "Starting, this may take a while..."
 
         input_path = nhl.rom_path
         game_dir = os.path.dirname(input_path)
@@ -11199,6 +11205,7 @@ class ConsoleUtilitiesApp:
         nhl.patch_error = ""
         nhl.patch_complete = False
         nhl.patch_output_path = ""
+        nhl.patch_status = "Starting, this may take a while..."
 
         input_path = nhl.rom_path
         game_dir = os.path.dirname(input_path)
@@ -11623,6 +11630,7 @@ class ConsoleUtilitiesApp:
         nhl.patch_error = ""
         nhl.patch_complete = False
         nhl.patch_output_path = ""
+        nhl.patch_status = "Starting, this may take a while..."
 
         input_path = nhl.rom_path
         game_dir = os.path.dirname(input_path)
@@ -11714,6 +11722,7 @@ class ConsoleUtilitiesApp:
         iss.is_patching = True
         iss.patch_error = ""
         iss.patch_complete = False
+        iss.patch_status = "Starting, this may take a while..."
 
         input_path = iss.rom_path
         league_name = (
