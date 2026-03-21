@@ -9,6 +9,14 @@ import pygame
 from ui.theme import Theme, default_theme
 from ui.templates.list_screen import ListScreenTemplate
 from ui.atoms.text import Text
+from services.rom_finder import RomFinderConfig
+
+ROM_FINDER_CONFIG = RomFinderConfig(
+    search_terms=["NBA Live 95"],
+    system_folders=["genesis", "megadrive", "md", "segagenesis"],
+    file_extensions=[".bin", ".md", ".gen", ".zip"],
+    system_type="genesis",
+)
 
 
 class NBALive95PatcherScreen:
@@ -57,7 +65,16 @@ class NBALive95PatcherScreen:
             rom_value = "Invalid ROM"
         else:
             rom_value = "Not selected"
-        items.append(("3. Select ROM (.md/.zip)", rom_value, "select_rom"))
+        if nba.rom_select_mode == "auto":
+            if nba.auto_detect_downloading:
+                rom_value = "Downloading..."
+            elif nba.auto_detect_status == "not_found":
+                rom_value = "ROM not found"
+            elif not nba.rom_path:
+                rom_value = "Press A to search"
+            items.append(("3. Auto-detect ROM \u25c0\u25b6", rom_value, "auto_detect_rom"))
+        else:
+            items.append(("3. Select ROM (.md/.zip)", rom_value, "select_rom"))
 
         # -- 4. Patch ROM --
         if nba.patch_complete:

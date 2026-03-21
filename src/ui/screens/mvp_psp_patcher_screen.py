@@ -9,6 +9,14 @@ import pygame
 from ui.theme import Theme, default_theme
 from ui.templates.list_screen import ListScreenTemplate
 from ui.atoms.text import Text
+from services.rom_finder import RomFinderConfig
+
+ROM_FINDER_CONFIG = RomFinderConfig(
+    search_terms=["MVP Baseball"],
+    system_folders=["psp", "playstationportable"],
+    file_extensions=[".iso", ".cso", ".zip"],
+    system_type="psp",
+)
 
 
 class MVPPSPPatcherScreen:
@@ -57,7 +65,16 @@ class MVPPSPPatcherScreen:
             rom_value = "Invalid ISO"
         else:
             rom_value = "Not selected"
-        items.append(("3. Select ISO (.iso/.zip)", rom_value, "select_rom"))
+        if mvp.rom_select_mode == "auto":
+            if mvp.auto_detect_downloading:
+                rom_value = "Downloading..."
+            elif mvp.auto_detect_status == "not_found":
+                rom_value = "ROM not found"
+            elif not mvp.rom_path:
+                rom_value = "Press A to search"
+            items.append(("3. Auto-detect ISO \u25c0\u25b6", rom_value, "auto_detect_rom"))
+        else:
+            items.append(("3. Select ISO (.iso/.zip)", rom_value, "select_rom"))
 
         # -- 4. Patch ISO --
         if mvp.patch_complete:
