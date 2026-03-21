@@ -414,8 +414,10 @@ class DownloadsScreen:
         hints = []
         if queue.items and 0 <= queue.highlighted < len(queue.items):
             item = queue.items[queue.highlighted]
-            if item.status == "waiting":
+            if item.status in ("waiting", "failed", "cancelled"):
                 hints.append(get_button_hint("select", "Remove", input_mode))
+            elif item.status in ("downloading", "extracting", "moving"):
+                hints.append(get_button_hint("select", "Cancel", input_mode))
 
         hints.append(get_button_hint("back", "Back", input_mode))
         hint_text = " | ".join(hints)

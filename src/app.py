@@ -3574,12 +3574,14 @@ class ConsoleUtilitiesApp:
             self._handle_downloads_selection()
 
     def _handle_downloads_selection(self):
-        """Handle downloads screen selection (remove waiting item)."""
+        """Handle downloads screen selection (cancel/remove item)."""
         queue = self.state.download_queue
         if queue.items and 0 <= queue.highlighted < len(queue.items):
             item = queue.items[queue.highlighted]
-            if item.status == "waiting":
+            if item.status in ("waiting", "failed", "cancelled"):
                 self.download_manager.remove_from_queue(queue.highlighted)
+            elif item.status in ("downloading", "extracting", "moving"):
+                self.download_manager.cancel_current()
 
     def _show_download_all_confirm(self):
         """Show confirmation modal for downloading all games."""
