@@ -1079,7 +1079,9 @@ class ISSRomWriter:
             self._f.write(text.encode("ascii", errors="replace"))
 
     def finalize(self):
-        """Close the output file."""
+        """Flush, sync, and close the output file."""
         if self._f:
+            self._f.flush()
+            os.fsync(self._f.fileno())
             self._f.close()
             self._f = None

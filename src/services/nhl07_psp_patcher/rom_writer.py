@@ -104,6 +104,8 @@ class NHL07PSPRomWriter:
                             copied / src_size * 0.3,  # Copy is 30% of total
                             f"Copying ISO... {copied // (1024 * 1024)}MB",
                         )
+                dst.flush()
+                os.fsync(dst.fileno())
             return True
         except Exception:
             return False
@@ -316,6 +318,8 @@ class NHL07PSPRomWriter:
                 remaining = db_orig_size - len(new_viv_bytes)
                 if remaining > 0:
                     f.write(b"\x00" * remaining)
+                f.flush()
+                os.fsync(f.fileno())
 
             # Update ISO 9660 directory entry size if db.viv size changed
             new_size = len(new_viv_bytes)
@@ -329,6 +333,8 @@ class NHL07PSPRomWriter:
                         # Size (BE) at record offset +14
                         f.seek(dir_entry_offset + 14)
                         f.write(struct.pack(">I", new_size))
+                        f.flush()
+                        os.fsync(f.fileno())
 
             if on_progress:
                 on_progress(1.0, "Complete")

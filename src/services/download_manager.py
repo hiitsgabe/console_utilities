@@ -369,8 +369,11 @@ class DownloadManager:
 
             os.makedirs(self.work_dir, exist_ok=True)
 
-            # Use parallel downloads if server supports ranges and file is large
+            # Use parallel downloads if server supports ranges and file is large.
+            # IA CDN throttles concurrent auth requests — use 2 workers instead of 4.
             if accept_ranges == "bytes" and total_size > PARALLEL_MIN_SIZE:
+                ia_auth = has_auth and "archive.org" in url
+                workers = 2 if ia_auth else PARALLEL_WORKERS
                 return self._download_file_parallel(
                     item,
                     resolved_url,
@@ -378,6 +381,7 @@ class DownloadManager:
                     total_size,
                     request_headers,
                     cookies,
+                    num_workers=workers,
                 )
 
             # Fall back to single-stream download
