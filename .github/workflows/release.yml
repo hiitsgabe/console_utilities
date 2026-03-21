@@ -16,6 +16,8 @@ on:
 jobs:
   resolve-version:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
       version: ${{ steps.resolve.outputs.VERSION }}
     steps:
