@@ -9346,11 +9346,11 @@ class ConsoleUtilitiesApp:
 
         # Get game files, excluding previous output files
         game_base, game_files = self._get_game_files(input_path)
-        new_prefix = f"{game_base} - {safe_league} {season}"
+        new_prefix = f"{safe_league} {season} - {game_base}"
 
         # Detect if input is already a patched output (contains league prefix)
         data_basename = os.path.basename(input_path)
-        if f"- {safe_league} {season}" in data_basename:
+        if f"{safe_league} {season} -" in data_basename:
             # Re-patch in place — input IS the previous output
             output_bin = input_path
             # Use the input itself as the only game file
@@ -10010,7 +10010,7 @@ class ConsoleUtilitiesApp:
         ext = os.path.splitext(input_path)[1]
         season = nhl.selected_season
         season_label = f"{season}-{season + 1}"
-        output_path = os.path.join(game_dir, f"{base_name} - NHL {season_label}{ext}")
+        output_path = os.path.join(game_dir, f"NHL {season_label} - {base_name}{ext}")
 
         cache_dir = self.settings.get("work_dir", "workdir")
         cache_dir = os.path.join(cache_dir, "nhl_cache")
@@ -10249,7 +10249,7 @@ class ConsoleUtilitiesApp:
         base_name = os.path.splitext(os.path.basename(input_path))[0]
         ext = os.path.splitext(input_path)[1]
         season = kgj.selected_season
-        output_path = os.path.join(game_dir, f"{base_name} - MLB {season}{ext}")
+        output_path = os.path.join(game_dir, f"MLB {season} - {base_name}{ext}")
 
         cache_dir = self.settings.get("work_dir", "workdir")
         cache_dir = os.path.join(cache_dir, "mlb_cache")
@@ -10483,7 +10483,7 @@ class ConsoleUtilitiesApp:
         ext = os.path.splitext(input_path)[1]
         season = nba.selected_season
         output_path = os.path.join(
-            game_dir, f"{base_name} - NBA {season}-{str(season + 1)[-2:]}{ext}"
+            game_dir, f"NBA {season}-{str(season + 1)[-2:]} - {base_name}{ext}"
         )
 
         cache_dir = self.settings.get("work_dir", "workdir")
@@ -10717,7 +10717,7 @@ class ConsoleUtilitiesApp:
         base_name = os.path.splitext(os.path.basename(input_path))[0]
         ext = os.path.splitext(input_path)[1]
         season = mvp.selected_season
-        output_path = os.path.join(game_dir, f"{base_name} - MLB {season}{ext}")
+        output_path = os.path.join(game_dir, f"MLB {season} - {base_name}{ext}")
 
         cache_dir = self.settings.get("work_dir", "workdir")
         cache_dir = os.path.join(cache_dir, "mlb_cache")
@@ -10959,7 +10959,7 @@ class ConsoleUtilitiesApp:
         ext = os.path.splitext(input_path)[1]
         season = nhl.selected_season
         season_label = f"{season}-{season + 1}"
-        output_path = os.path.join(game_dir, f"{base_name} - NHL {season_label}{ext}")
+        output_path = os.path.join(game_dir, f"NHL {season_label} - {base_name}{ext}")
 
         cache_dir = self.settings.get("work_dir", "workdir")
         cache_dir = os.path.join(cache_dir, "nhl_cache")
@@ -11206,7 +11206,7 @@ class ConsoleUtilitiesApp:
         ext = os.path.splitext(input_path)[1]
         season = nhl.selected_season
         season_label = f"{season}-{season + 1}"
-        output_path = os.path.join(game_dir, f"{base_name} - NHL {season_label}{ext}")
+        output_path = os.path.join(game_dir, f"NHL {season_label} - {base_name}{ext}")
 
         cache_dir = self.settings.get("work_dir", "workdir")
         cache_dir = os.path.join(cache_dir, "nhl_cache")
@@ -11630,7 +11630,7 @@ class ConsoleUtilitiesApp:
         ext = os.path.splitext(input_path)[1]
         season = nhl.selected_season
         season_label = f"{season}-{season + 1}"
-        output_path = os.path.join(game_dir, f"{base_name} - NHL {season_label}{ext}")
+        output_path = os.path.join(game_dir, f"NHL {season_label} - {base_name}{ext}")
 
         cache_dir = self.settings.get("work_dir", "workdir")
         cache_dir = os.path.join(cache_dir, "nhl_cache")
