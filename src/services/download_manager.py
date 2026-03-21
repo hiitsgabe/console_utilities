@@ -155,7 +155,7 @@ class DownloadManager:
         with self._lock:
             if 0 <= index < len(self.queue.items):
                 item = self.queue.items[index]
-                if item.status == "waiting":
+                if item.status in ("waiting", "failed", "cancelled"):
                     self.queue.items.pop(index)
                     # Adjust highlighted index if needed
                     if self.queue.highlighted >= len(self.queue.items):
