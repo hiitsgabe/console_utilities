@@ -9,6 +9,14 @@ from ui.theme import Theme, default_theme
 from ui.templates.list_screen import ListScreenTemplate
 from ui.atoms.text import Text
 from services.we_patcher.translations.we2002 import LANGUAGES, LANGUAGE_CODES
+from services.rom_finder import RomFinderConfig
+
+ROM_FINDER_CONFIG = RomFinderConfig(
+    search_terms=["World Soccer Winning Eleven 2002", "ISS Pro Evolution 2"],
+    system_folders=["psx", "ps1", "psone", "playstation", "playstation1", "playstationone"],
+    file_extensions=[".bin", ".cue", ".zip"],
+    system_type="psx",
+)
 
 
 class WePatcherScreen:
@@ -112,7 +120,20 @@ class WePatcherScreen:
             rom_value = "Invalid ROM"
         else:
             rom_value = "Not selected"
-        items.append((f"{step_rom}. Select ROM (.bin/.zip)", rom_value, "select_rom"))
+        if we.rom_select_mode == "auto":
+            if we.auto_detect_downloading:
+                rom_value = "Downloading..."
+            elif we.auto_detect_status == "not_found":
+                rom_value = "ROM not found"
+            elif not we.rom_path:
+                rom_value = "Press A to search"
+            items.append(
+                (f"{step_rom}. Auto-detect ROM \u25c0\u25b6", rom_value, "auto_detect_rom")
+            )
+        else:
+            items.append(
+                (f"{step_rom}. Select ROM (.bin/.zip)", rom_value, "select_rom")
+            )
 
         # ── Patch ROM ───────────────────────────────────────────────────────
         step_patch = "5" if provider == "api_football" else "4"

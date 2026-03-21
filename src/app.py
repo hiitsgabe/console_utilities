@@ -984,6 +984,9 @@ class ConsoleUtilitiesApp:
             # Update image cache (process loaded images from background threads)
             self.image_cache.update()
 
+            # Poll auto-detect ROM downloads for completion
+            self._poll_auto_detect_downloads()
+
             # Web companion: process incoming actions + push state
             if self.web_companion and self.web_companion._running:
                 self.web_companion.process_actions(self.state)
@@ -1619,6 +1622,12 @@ class ConsoleUtilitiesApp:
                     delta = -1 if direction == "left" else 1
                     self._cycle_we_patcher_language(delta)
                     return
+                if action in ("select_rom", "auto_detect_rom"):
+                    we.rom_select_mode = (
+                        "auto" if we.rom_select_mode == "manual" else "manual"
+                    )
+                    we.auto_detect_status = ""
+                    return
 
             max_items = we_patcher_screen.get_count(self.state, self.settings)
             if direction in ("up", "left"):
@@ -1685,6 +1694,12 @@ class ConsoleUtilitiesApp:
                     nhl.rosters = None
                     nhl.league_data = None
                     return
+                if action in ("select_rom", "auto_detect_rom"):
+                    nhl.rom_select_mode = (
+                        "auto" if nhl.rom_select_mode == "manual" else "manual"
+                    )
+                    nhl.auto_detect_status = ""
+                    return
 
             max_items = nhl94_snes_patcher_screen.get_count(self.state, self.settings)
             if direction in ("up", "left"):
@@ -1731,6 +1746,17 @@ class ConsoleUtilitiesApp:
         elif kgj.active_modal is None:
             from ui.screens.kgj_mlb_patcher_screen import kgj_mlb_patcher_screen
 
+            if direction in ("left", "right"):
+                action = kgj_mlb_patcher_screen.get_action(
+                    self.state.highlighted, self.state, self.settings
+                )
+                if action in ("select_rom", "auto_detect_rom"):
+                    kgj.rom_select_mode = (
+                        "auto" if kgj.rom_select_mode == "manual" else "manual"
+                    )
+                    kgj.auto_detect_status = ""
+                    return
+
             max_items = kgj_mlb_patcher_screen.get_count(self.state, self.settings)
             if direction in ("up", "left"):
                 self.state.highlighted = (self.state.highlighted - 1) % max_items
@@ -1776,6 +1802,17 @@ class ConsoleUtilitiesApp:
         elif mvp.active_modal is None:
             from ui.screens.mvp_psp_patcher_screen import mvp_psp_patcher_screen
 
+            if direction in ("left", "right"):
+                action = mvp_psp_patcher_screen.get_action(
+                    self.state.highlighted, self.state, self.settings
+                )
+                if action in ("select_rom", "auto_detect_rom"):
+                    mvp.rom_select_mode = (
+                        "auto" if mvp.rom_select_mode == "manual" else "manual"
+                    )
+                    mvp.auto_detect_status = ""
+                    return
+
             max_items = mvp_psp_patcher_screen.get_count(self.state, self.settings)
             if direction in ("up", "left"):
                 self.state.highlighted = (self.state.highlighted - 1) % max_items
@@ -1820,6 +1857,17 @@ class ConsoleUtilitiesApp:
 
         elif nba.active_modal is None:
             from ui.screens.nbalive95_patcher_screen import nbalive95_patcher_screen
+
+            if direction in ("left", "right"):
+                action = nbalive95_patcher_screen.get_action(
+                    self.state.highlighted, self.state, self.settings
+                )
+                if action in ("select_rom", "auto_detect_rom"):
+                    nba.rom_select_mode = (
+                        "auto" if nba.rom_select_mode == "manual" else "manual"
+                    )
+                    nba.auto_detect_status = ""
+                    return
 
             max_items = nbalive95_patcher_screen.get_count(self.state, self.settings)
             if direction in ("up", "left"):
@@ -1885,6 +1933,12 @@ class ConsoleUtilitiesApp:
                     )
                     nhl.rosters = None
                     nhl.league_data = None
+                    return
+                if action in ("select_rom", "auto_detect_rom"):
+                    nhl.rom_select_mode = (
+                        "auto" if nhl.rom_select_mode == "manual" else "manual"
+                    )
+                    nhl.auto_detect_status = ""
                     return
 
             max_items = nhl94_genesis_patcher_screen.get_count(
@@ -1952,6 +2006,12 @@ class ConsoleUtilitiesApp:
                     nhl.rosters = None
                     nhl.league_data = None
                     return
+                if action in ("select_rom", "auto_detect_rom"):
+                    nhl.rom_select_mode = (
+                        "auto" if nhl.rom_select_mode == "manual" else "manual"
+                    )
+                    nhl.auto_detect_status = ""
+                    return
 
             max_items = nhl07_psp_patcher_screen.get_count(self.state, self.settings)
             if direction in ("up", "left"):
@@ -2015,6 +2075,12 @@ class ConsoleUtilitiesApp:
                     )
                     nhl.rosters = None
                     nhl.league_data = None
+                    return
+                if action in ("select_rom", "auto_detect_rom"):
+                    nhl.rom_select_mode = (
+                        "auto" if nhl.rom_select_mode == "manual" else "manual"
+                    )
+                    nhl.auto_detect_status = ""
                     return
 
             max_items = nhl05_ps2_patcher_screen.get_count(self.state, self.settings)
@@ -8925,6 +8991,64 @@ class ConsoleUtilitiesApp:
             self._open_color_picker()
         elif action == "select_rom":
             self._open_folder_browser("we_patcher_rom")
+        elif action == "auto_detect_rom":
+            from services.rom_finder import RomFinder, _resolve_cue_track1
+            from ui.screens.we_patcher_screen import ROM_FINDER_CONFIG
+
+            roms_dir = self.settings.get("roms_dir", "")
+            finder = RomFinder()
+            we.auto_detect_status = ""
+            result = finder.find(ROM_FINDER_CONFIG, roms_dir, self.data)
+
+            if result.status == "found_local":
+                rom_path = result.local_path
+                if rom_path.lower().endswith(".cue"):
+                    bin_path = _resolve_cue_track1(rom_path)
+                    if bin_path:
+                        rom_path = bin_path
+                    else:
+                        we.rom_path = ""
+                        we.rom_valid = False
+                        we.auto_detect_status = "not_found"
+                        return
+                if rom_path.lower().endswith(".zip"):
+                    from utils.zip_rom import extract_rom_from_zip
+
+                    try:
+                        extracted, temp_dir = extract_rom_from_zip(
+                            rom_path, ROM_FINDER_CONFIG.file_extensions
+                        )
+                        we.zip_path = rom_path
+                        we.zip_temp_dir = temp_dir
+                        rom_path = extracted
+                    except (ValueError, Exception):
+                        we.rom_path = ""
+                        we.rom_valid = False
+                        return
+                we.rom_path = rom_path
+                try:
+                    from services.we_patcher import RomReader
+
+                    reader = RomReader(rom_path)
+                    we.rom_info = reader.get_rom_info()
+                    we.rom_valid = reader.validate_rom()
+                except Exception:
+                    we.rom_valid = False
+                    we.rom_info = None
+                we.slot_mapping = []
+            elif result.status == "found_remote":
+                we.auto_detect_downloading = True
+                we.auto_detect_download_filename = result.remote_entry.get(
+                    "filename", ""
+                )
+                system_data = self._inject_ia_auth(result.system_data)
+                self.download_manager.add_to_queue(
+                    [result.remote_entry],
+                    system_data,
+                    system_data.get("name", ""),
+                )
+            else:
+                we.auto_detect_status = "not_found"
         elif action == "patch_rom":
             we.active_modal = "patch_progress"
             self._start_patching()
@@ -9413,6 +9537,12 @@ class ConsoleUtilitiesApp:
                         )
                         iss.league_data = None
                     return
+                if action in ("select_rom", "auto_detect_rom"):
+                    iss.rom_select_mode = (
+                        "auto" if iss.rom_select_mode == "manual" else "manual"
+                    )
+                    iss.auto_detect_status = ""
+                    return
             max_items = iss_patcher_screen.get_count(self.state, self.settings)
             if direction in ("up", "left"):
                 self.state.highlighted = (self.state.highlighted - 1) % max_items
@@ -9467,6 +9597,55 @@ class ConsoleUtilitiesApp:
             self._open_color_picker()
         elif action == "select_rom":
             self._open_folder_browser("iss_patcher_rom")
+        elif action == "auto_detect_rom":
+            from services.rom_finder import RomFinder
+            from ui.screens.iss_patcher_screen import ROM_FINDER_CONFIG
+
+            roms_dir = self.settings.get("roms_dir", "")
+            finder = RomFinder()
+            iss.auto_detect_status = ""
+            result = finder.find(ROM_FINDER_CONFIG, roms_dir, self.data)
+
+            if result.status == "found_local":
+                rom_path = result.local_path
+                if rom_path.lower().endswith(".zip"):
+                    from utils.zip_rom import extract_rom_from_zip
+
+                    try:
+                        extracted, temp_dir = extract_rom_from_zip(
+                            rom_path, ROM_FINDER_CONFIG.file_extensions
+                        )
+                        iss.zip_path = rom_path
+                        iss.zip_temp_dir = temp_dir
+                        rom_path = extracted
+                    except (ValueError, Exception):
+                        iss.rom_path = ""
+                        iss.rom_valid = False
+                        return
+                iss.rom_path = rom_path
+                try:
+                    from services.iss_patcher import ISSRomReader
+
+                    reader = ISSRomReader(rom_path)
+                    iss.rom_info = reader.get_rom_info()
+                    iss.rom_valid = reader.validate_rom()
+                except Exception:
+                    iss.rom_valid = False
+                    iss.rom_info = None
+                iss.slot_mapping = []
+            elif result.status == "found_remote":
+                iss.auto_detect_downloading = True
+                iss.auto_detect_download_filename = result.remote_entry.get(
+                    "filename", ""
+                )
+                system_data = self._inject_ia_auth(result.system_data)
+                self.download_manager.add_to_queue(
+                    [result.remote_entry],
+                    system_data,
+                    system_data.get("name", ""),
+                )
+            else:
+                iss.auto_detect_status = "not_found"
         elif action == "patch_rom":
             iss.active_modal = "patch_progress"
             self._start_iss_patching()
@@ -9513,6 +9692,57 @@ class ConsoleUtilitiesApp:
                 self._start_nhl94_roster_fetch()
         elif action == "select_rom":
             self._open_folder_browser("nhl94_patcher_rom")
+        elif action == "auto_detect_rom":
+            from services.rom_finder import RomFinder
+            from ui.screens.nhl94_snes_patcher_screen import ROM_FINDER_CONFIG
+
+            roms_dir = self.settings.get("roms_dir", "")
+            finder = RomFinder()
+            nhl.auto_detect_status = ""
+            result = finder.find(ROM_FINDER_CONFIG, roms_dir, self.data)
+
+            if result.status == "found_local":
+                rom_path = result.local_path
+                if rom_path.lower().endswith(".zip"):
+                    from utils.zip_rom import extract_rom_from_zip
+
+                    try:
+                        extracted, temp_dir = extract_rom_from_zip(
+                            rom_path, ROM_FINDER_CONFIG.file_extensions
+                        )
+                        nhl.zip_path = rom_path
+                        nhl.zip_temp_dir = temp_dir
+                        rom_path = extracted
+                    except (ValueError, Exception):
+                        nhl.rom_path = ""
+                        nhl.rom_valid = False
+                        return
+                nhl.rom_path = rom_path
+                try:
+                    from services.nhl94_snes_patcher import NHL94SNESPatcher
+
+                    cache_dir = self.settings.get("work_dir", "workdir")
+                    cache_dir = os.path.join(cache_dir, "nhl_cache")
+                    patcher = NHL94SNESPatcher(cache_dir)
+                    rom_info = patcher.analyze_rom(rom_path)
+                    nhl.rom_info = rom_info
+                    nhl.rom_valid = rom_info.is_valid
+                except Exception:
+                    nhl.rom_valid = False
+                    nhl.rom_info = None
+            elif result.status == "found_remote":
+                nhl.auto_detect_downloading = True
+                nhl.auto_detect_download_filename = result.remote_entry.get(
+                    "filename", ""
+                )
+                system_data = self._inject_ia_auth(result.system_data)
+                self.download_manager.add_to_queue(
+                    [result.remote_entry],
+                    system_data,
+                    system_data.get("name", ""),
+                )
+            else:
+                nhl.auto_detect_status = "not_found"
         elif action == "patch_rom":
             nhl.active_modal = "patch_progress"
             self._start_nhl94_patching()
@@ -9862,6 +10092,57 @@ class ConsoleUtilitiesApp:
                 self._start_kgj_mlb_roster_fetch()
         elif action == "select_rom":
             self._open_folder_browser("kgj_mlb_patcher_rom")
+        elif action == "auto_detect_rom":
+            from services.rom_finder import RomFinder
+            from ui.screens.kgj_mlb_patcher_screen import ROM_FINDER_CONFIG
+
+            roms_dir = self.settings.get("roms_dir", "")
+            finder = RomFinder()
+            kgj.auto_detect_status = ""
+            result = finder.find(ROM_FINDER_CONFIG, roms_dir, self.data)
+
+            if result.status == "found_local":
+                rom_path = result.local_path
+                if rom_path.lower().endswith(".zip"):
+                    from utils.zip_rom import extract_rom_from_zip
+
+                    try:
+                        extracted, temp_dir = extract_rom_from_zip(
+                            rom_path, ROM_FINDER_CONFIG.file_extensions
+                        )
+                        kgj.zip_path = rom_path
+                        kgj.zip_temp_dir = temp_dir
+                        rom_path = extracted
+                    except (ValueError, Exception):
+                        kgj.rom_path = ""
+                        kgj.rom_valid = False
+                        return
+                kgj.rom_path = rom_path
+                try:
+                    from services.kgj_mlb_patcher import KGJMLBPatcher
+
+                    cache_dir = self.settings.get("work_dir", "workdir")
+                    cache_dir = os.path.join(cache_dir, "mlb_cache")
+                    patcher = KGJMLBPatcher(cache_dir)
+                    rom_info = patcher.analyze_rom(rom_path)
+                    kgj.rom_info = rom_info
+                    kgj.rom_valid = rom_info.is_valid
+                except Exception:
+                    kgj.rom_valid = False
+                    kgj.rom_info = None
+            elif result.status == "found_remote":
+                kgj.auto_detect_downloading = True
+                kgj.auto_detect_download_filename = result.remote_entry.get(
+                    "filename", ""
+                )
+                system_data = self._inject_ia_auth(result.system_data)
+                self.download_manager.add_to_queue(
+                    [result.remote_entry],
+                    system_data,
+                    system_data.get("name", ""),
+                )
+            else:
+                kgj.auto_detect_status = "not_found"
         elif action == "patch_rom":
             kgj.active_modal = "patch_progress"
             self._start_kgj_mlb_patching()
@@ -10044,6 +10325,57 @@ class ConsoleUtilitiesApp:
                 self._start_nbalive95_roster_fetch()
         elif action == "select_rom":
             self._open_folder_browser("nbalive95_patcher_rom")
+        elif action == "auto_detect_rom":
+            from services.rom_finder import RomFinder
+            from ui.screens.nbalive95_patcher_screen import ROM_FINDER_CONFIG
+
+            roms_dir = self.settings.get("roms_dir", "")
+            finder = RomFinder()
+            nba.auto_detect_status = ""
+            result = finder.find(ROM_FINDER_CONFIG, roms_dir, self.data)
+
+            if result.status == "found_local":
+                rom_path = result.local_path
+                if rom_path.lower().endswith(".zip"):
+                    from utils.zip_rom import extract_rom_from_zip
+
+                    try:
+                        extracted, temp_dir = extract_rom_from_zip(
+                            rom_path, ROM_FINDER_CONFIG.file_extensions
+                        )
+                        nba.zip_path = rom_path
+                        nba.zip_temp_dir = temp_dir
+                        rom_path = extracted
+                    except (ValueError, Exception):
+                        nba.rom_path = ""
+                        nba.rom_valid = False
+                        return
+                nba.rom_path = rom_path
+                try:
+                    from services.nbalive95_patcher import NBALive95Patcher
+
+                    cache_dir = self.settings.get("work_dir", "workdir")
+                    cache_dir = os.path.join(cache_dir, "nba_cache")
+                    patcher = NBALive95Patcher(cache_dir)
+                    rom_info = patcher.analyze_rom(rom_path)
+                    nba.rom_info = rom_info
+                    nba.rom_valid = rom_info.is_valid
+                except Exception:
+                    nba.rom_valid = False
+                    nba.rom_info = None
+            elif result.status == "found_remote":
+                nba.auto_detect_downloading = True
+                nba.auto_detect_download_filename = result.remote_entry.get(
+                    "filename", ""
+                )
+                system_data = self._inject_ia_auth(result.system_data)
+                self.download_manager.add_to_queue(
+                    [result.remote_entry],
+                    system_data,
+                    system_data.get("name", ""),
+                )
+            else:
+                nba.auto_detect_status = "not_found"
         elif action == "patch_rom":
             nba.active_modal = "patch_progress"
             self._start_nbalive95_patching()
@@ -10228,6 +10560,57 @@ class ConsoleUtilitiesApp:
                 self._start_mvp_psp_roster_fetch()
         elif action == "select_rom":
             self._open_folder_browser("mvp_psp_patcher_rom")
+        elif action == "auto_detect_rom":
+            from services.rom_finder import RomFinder
+            from ui.screens.mvp_psp_patcher_screen import ROM_FINDER_CONFIG
+
+            roms_dir = self.settings.get("roms_dir", "")
+            finder = RomFinder()
+            mvp.auto_detect_status = ""
+            result = finder.find(ROM_FINDER_CONFIG, roms_dir, self.data)
+
+            if result.status == "found_local":
+                rom_path = result.local_path
+                if rom_path.lower().endswith(".zip"):
+                    from utils.zip_rom import extract_rom_from_zip
+
+                    try:
+                        extracted, temp_dir = extract_rom_from_zip(
+                            rom_path, ROM_FINDER_CONFIG.file_extensions
+                        )
+                        mvp.zip_path = rom_path
+                        mvp.zip_temp_dir = temp_dir
+                        rom_path = extracted
+                    except (ValueError, Exception):
+                        mvp.rom_path = ""
+                        mvp.rom_valid = False
+                        return
+                mvp.rom_path = rom_path
+                try:
+                    from services.mvp_psp_patcher import MVPPSPPatcher
+
+                    cache_dir = self.settings.get("work_dir", "workdir")
+                    cache_dir = os.path.join(cache_dir, "mlb_cache")
+                    patcher = MVPPSPPatcher(cache_dir)
+                    rom_info = patcher.analyze_rom(rom_path)
+                    mvp.rom_info = rom_info
+                    mvp.rom_valid = rom_info.is_valid
+                except Exception:
+                    mvp.rom_valid = False
+                    mvp.rom_info = None
+            elif result.status == "found_remote":
+                mvp.auto_detect_downloading = True
+                mvp.auto_detect_download_filename = result.remote_entry.get(
+                    "filename", ""
+                )
+                system_data = self._inject_ia_auth(result.system_data)
+                self.download_manager.add_to_queue(
+                    [result.remote_entry],
+                    system_data,
+                    system_data.get("name", ""),
+                )
+            else:
+                mvp.auto_detect_status = "not_found"
         elif action == "patch_rom":
             mvp.active_modal = "patch_progress"
             self._start_mvp_psp_patching()
@@ -10411,6 +10794,57 @@ class ConsoleUtilitiesApp:
                 self._start_nhl94_gen_roster_fetch()
         elif action == "select_rom":
             self._open_folder_browser("nhl94_gen_patcher_rom")
+        elif action == "auto_detect_rom":
+            from services.rom_finder import RomFinder
+            from ui.screens.nhl94_genesis_patcher_screen import ROM_FINDER_CONFIG
+
+            roms_dir = self.settings.get("roms_dir", "")
+            finder = RomFinder()
+            nhl.auto_detect_status = ""
+            result = finder.find(ROM_FINDER_CONFIG, roms_dir, self.data)
+
+            if result.status == "found_local":
+                rom_path = result.local_path
+                if rom_path.lower().endswith(".zip"):
+                    from utils.zip_rom import extract_rom_from_zip
+
+                    try:
+                        extracted, temp_dir = extract_rom_from_zip(
+                            rom_path, ROM_FINDER_CONFIG.file_extensions
+                        )
+                        nhl.zip_path = rom_path
+                        nhl.zip_temp_dir = temp_dir
+                        rom_path = extracted
+                    except (ValueError, Exception):
+                        nhl.rom_path = ""
+                        nhl.rom_valid = False
+                        return
+                nhl.rom_path = rom_path
+                try:
+                    from services.nhl94_genesis_patcher import NHL94GenesisPatcher
+
+                    cache_dir = self.settings.get("work_dir", "workdir")
+                    cache_dir = os.path.join(cache_dir, "nhl_cache")
+                    patcher = NHL94GenesisPatcher(cache_dir)
+                    rom_info = patcher.analyze_rom(rom_path)
+                    nhl.rom_info = rom_info
+                    nhl.rom_valid = rom_info.is_valid
+                except Exception:
+                    nhl.rom_valid = False
+                    nhl.rom_info = None
+            elif result.status == "found_remote":
+                nhl.auto_detect_downloading = True
+                nhl.auto_detect_download_filename = result.remote_entry.get(
+                    "filename", ""
+                )
+                system_data = self._inject_ia_auth(result.system_data)
+                self.download_manager.add_to_queue(
+                    [result.remote_entry],
+                    system_data,
+                    system_data.get("name", ""),
+                )
+            else:
+                nhl.auto_detect_status = "not_found"
         elif action == "patch_rom":
             nhl.active_modal = "patch_progress"
             self._start_nhl94_gen_patching()
@@ -10607,6 +11041,57 @@ class ConsoleUtilitiesApp:
                 self._start_nhl07_roster_fetch()
         elif action == "select_rom":
             self._open_folder_browser("nhl07_patcher_rom")
+        elif action == "auto_detect_rom":
+            from services.rom_finder import RomFinder
+            from ui.screens.nhl07_psp_patcher_screen import ROM_FINDER_CONFIG
+
+            roms_dir = self.settings.get("roms_dir", "")
+            finder = RomFinder()
+            nhl.auto_detect_status = ""
+            result = finder.find(ROM_FINDER_CONFIG, roms_dir, self.data)
+
+            if result.status == "found_local":
+                rom_path = result.local_path
+                if rom_path.lower().endswith(".zip"):
+                    from utils.zip_rom import extract_rom_from_zip
+
+                    try:
+                        extracted, temp_dir = extract_rom_from_zip(
+                            rom_path, ROM_FINDER_CONFIG.file_extensions
+                        )
+                        nhl.zip_path = rom_path
+                        nhl.zip_temp_dir = temp_dir
+                        rom_path = extracted
+                    except (ValueError, Exception):
+                        nhl.rom_path = ""
+                        nhl.rom_valid = False
+                        return
+                nhl.rom_path = rom_path
+                try:
+                    from services.nhl07_psp_patcher import NHL07PSPPatcher
+
+                    cache_dir = self.settings.get("work_dir", "workdir")
+                    cache_dir = os.path.join(cache_dir, "nhl_cache")
+                    patcher = NHL07PSPPatcher(cache_dir)
+                    rom_info = patcher.analyze_rom(rom_path)
+                    nhl.rom_info = rom_info
+                    nhl.rom_valid = rom_info.is_valid
+                except Exception:
+                    nhl.rom_valid = False
+                    nhl.rom_info = None
+            elif result.status == "found_remote":
+                nhl.auto_detect_downloading = True
+                nhl.auto_detect_download_filename = result.remote_entry.get(
+                    "filename", ""
+                )
+                system_data = self._inject_ia_auth(result.system_data)
+                self.download_manager.add_to_queue(
+                    [result.remote_entry],
+                    system_data,
+                    system_data.get("name", ""),
+                )
+            else:
+                nhl.auto_detect_status = "not_found"
         elif action == "patch_rom":
             nhl.active_modal = "patch_progress"
             self._start_nhl07_patching()
@@ -10803,9 +11288,237 @@ class ConsoleUtilitiesApp:
                 self._start_nhl05_roster_fetch()
         elif action == "select_rom":
             self._open_folder_browser("nhl05_patcher_rom")
+        elif action == "auto_detect_rom":
+            from services.rom_finder import RomFinder
+            from ui.screens.nhl05_ps2_patcher_screen import ROM_FINDER_CONFIG
+
+            roms_dir = self.settings.get("roms_dir", "")
+            finder = RomFinder()
+            nhl.auto_detect_status = ""
+            result = finder.find(ROM_FINDER_CONFIG, roms_dir, self.data)
+
+            if result.status == "found_local":
+                rom_path = result.local_path
+                if rom_path.lower().endswith(".zip"):
+                    from utils.zip_rom import extract_rom_from_zip
+
+                    try:
+                        extracted, temp_dir = extract_rom_from_zip(
+                            rom_path, ROM_FINDER_CONFIG.file_extensions
+                        )
+                        nhl.zip_path = rom_path
+                        nhl.zip_temp_dir = temp_dir
+                        rom_path = extracted
+                    except (ValueError, Exception):
+                        nhl.rom_path = ""
+                        nhl.rom_valid = False
+                        return
+                nhl.rom_path = rom_path
+                try:
+                    from services.nhl05_ps2_patcher.patcher import NHL05PS2Patcher
+
+                    cache_dir = self.settings.get("work_dir", "workdir")
+                    cache_dir = os.path.join(cache_dir, "nhl_cache")
+                    patcher = NHL05PS2Patcher(cache_dir)
+                    rom_info = patcher.analyze_rom(rom_path)
+                    nhl.rom_info = rom_info
+                    nhl.rom_valid = rom_info.is_valid
+                except Exception:
+                    nhl.rom_valid = False
+                    nhl.rom_info = None
+            elif result.status == "found_remote":
+                nhl.auto_detect_downloading = True
+                nhl.auto_detect_download_filename = result.remote_entry.get(
+                    "filename", ""
+                )
+                system_data = self._inject_ia_auth(result.system_data)
+                self.download_manager.add_to_queue(
+                    [result.remote_entry],
+                    system_data,
+                    system_data.get("name", ""),
+                )
+            else:
+                nhl.auto_detect_status = "not_found"
         elif action == "patch_rom":
             nhl.active_modal = "patch_progress"
             self._start_nhl05_patching()
+
+    def _poll_auto_detect_downloads(self):
+        """Check if any auto-detect ROM download has completed."""
+        patcher_modes = {
+            "we_patcher": (self.state.we_patcher, "ui.screens.we_patcher_screen"),
+            "iss_patcher": (self.state.iss_patcher, "ui.screens.iss_patcher_screen"),
+            "nhl94_patcher": (
+                self.state.nhl94_patcher,
+                "ui.screens.nhl94_snes_patcher_screen",
+            ),
+            "nhl94_gen_patcher": (
+                self.state.nhl94_gen_patcher,
+                "ui.screens.nhl94_genesis_patcher_screen",
+            ),
+            "kgj_mlb_patcher": (
+                self.state.kgj_mlb_patcher,
+                "ui.screens.kgj_mlb_patcher_screen",
+            ),
+            "nbalive95_patcher": (
+                self.state.nbalive95_patcher,
+                "ui.screens.nbalive95_patcher_screen",
+            ),
+            "nhl05_ps2_patcher": (
+                self.state.nhl05_ps2_patcher,
+                "ui.screens.nhl05_ps2_patcher_screen",
+            ),
+            "nhl07_psp_patcher": (
+                self.state.nhl07_psp_patcher,
+                "ui.screens.nhl07_psp_patcher_screen",
+            ),
+            "mvp_psp_patcher": (
+                self.state.mvp_psp_patcher,
+                "ui.screens.mvp_psp_patcher_screen",
+            ),
+        }
+
+        for mode, (patcher_st, screen_module) in patcher_modes.items():
+            if not patcher_st.auto_detect_downloading:
+                continue
+
+            target_fn = patcher_st.auto_detect_download_filename
+            for item in self.state.download_queue.items:
+                game_fn = (
+                    item.game.get("filename", "")
+                    if isinstance(item.game, dict)
+                    else ""
+                )
+                if game_fn == target_fn and item.status == "completed":
+                    patcher_st.auto_detect_downloading = False
+                    patcher_st.auto_detect_download_filename = ""
+                    self._auto_detect_post_download(mode, patcher_st, screen_module)
+                    break
+                elif game_fn == target_fn and item.status == "failed":
+                    patcher_st.auto_detect_downloading = False
+                    patcher_st.auto_detect_download_filename = ""
+                    break
+
+    def _auto_detect_post_download(self, mode, patcher_st, screen_module):
+        """After auto-detect download completes, find and validate the ROM."""
+        from services.rom_finder import RomFinder, _resolve_cue_track1
+
+        mod = __import__(screen_module, fromlist=["ROM_FINDER_CONFIG"])
+        config = mod.ROM_FINDER_CONFIG
+
+        roms_dir = self.settings.get("roms_dir", "")
+        finder = RomFinder()
+        local_path = finder._scan_local(config, roms_dir)
+
+        if not local_path:
+            return
+
+        if local_path.lower().endswith(".cue"):
+            bin_path = _resolve_cue_track1(local_path)
+            if bin_path:
+                local_path = bin_path
+            else:
+                return
+
+        if local_path.lower().endswith(".zip"):
+            from utils.zip_rom import extract_rom_from_zip
+
+            try:
+                extracted, temp_dir = extract_rom_from_zip(
+                    local_path, config.file_extensions
+                )
+                patcher_st.zip_path = local_path
+                patcher_st.zip_temp_dir = temp_dir
+                local_path = extracted
+            except (ValueError, Exception):
+                return
+
+        patcher_st.rom_path = local_path
+        self._validate_auto_detect_rom(mode, patcher_st, local_path)
+
+    def _validate_auto_detect_rom(self, mode, patcher_st, rom_path):
+        """Validate an auto-detected ROM using the appropriate patcher."""
+        try:
+            if mode == "we_patcher":
+                from services.we_patcher import RomReader
+
+                reader = RomReader(rom_path)
+                patcher_st.rom_info = reader.get_rom_info()
+                patcher_st.rom_valid = reader.validate_rom()
+                patcher_st.slot_mapping = []
+            elif mode == "iss_patcher":
+                from services.iss_patcher import ISSRomReader
+
+                reader = ISSRomReader(rom_path)
+                patcher_st.rom_info = reader.get_rom_info()
+                patcher_st.rom_valid = reader.validate_rom()
+                patcher_st.slot_mapping = []
+            elif mode == "nhl94_patcher":
+                from services.nhl94_snes_patcher import NHL94SNESPatcher
+
+                cache_dir = self.settings.get("work_dir", "workdir")
+                cache_dir = os.path.join(cache_dir, "nhl_cache")
+                patcher = NHL94SNESPatcher(cache_dir)
+                rom_info = patcher.analyze_rom(rom_path)
+                patcher_st.rom_info = rom_info
+                patcher_st.rom_valid = rom_info.is_valid
+            elif mode == "nhl94_gen_patcher":
+                from services.nhl94_genesis_patcher import NHL94GenesisPatcher
+
+                cache_dir = self.settings.get("work_dir", "workdir")
+                cache_dir = os.path.join(cache_dir, "nhl_cache")
+                patcher = NHL94GenesisPatcher(cache_dir)
+                rom_info = patcher.analyze_rom(rom_path)
+                patcher_st.rom_info = rom_info
+                patcher_st.rom_valid = rom_info.is_valid
+            elif mode == "kgj_mlb_patcher":
+                from services.kgj_mlb_patcher import KGJMLBPatcher
+
+                cache_dir = self.settings.get("work_dir", "workdir")
+                cache_dir = os.path.join(cache_dir, "mlb_cache")
+                patcher = KGJMLBPatcher(cache_dir)
+                rom_info = patcher.analyze_rom(rom_path)
+                patcher_st.rom_info = rom_info
+                patcher_st.rom_valid = rom_info.is_valid
+            elif mode == "nbalive95_patcher":
+                from services.nbalive95_patcher import NBALive95Patcher
+
+                cache_dir = self.settings.get("work_dir", "workdir")
+                cache_dir = os.path.join(cache_dir, "nba_cache")
+                patcher = NBALive95Patcher(cache_dir)
+                rom_info = patcher.analyze_rom(rom_path)
+                patcher_st.rom_info = rom_info
+                patcher_st.rom_valid = rom_info.is_valid
+            elif mode == "nhl05_ps2_patcher":
+                from services.nhl05_ps2_patcher.patcher import NHL05PS2Patcher
+
+                cache_dir = self.settings.get("work_dir", "workdir")
+                cache_dir = os.path.join(cache_dir, "nhl_cache")
+                patcher = NHL05PS2Patcher(cache_dir)
+                rom_info = patcher.analyze_rom(rom_path)
+                patcher_st.rom_info = rom_info
+                patcher_st.rom_valid = rom_info.is_valid
+            elif mode == "nhl07_psp_patcher":
+                from services.nhl07_psp_patcher import NHL07PSPPatcher
+
+                cache_dir = self.settings.get("work_dir", "workdir")
+                cache_dir = os.path.join(cache_dir, "nhl_cache")
+                patcher = NHL07PSPPatcher(cache_dir)
+                rom_info = patcher.analyze_rom(rom_path)
+                patcher_st.rom_info = rom_info
+                patcher_st.rom_valid = rom_info.is_valid
+            elif mode == "mvp_psp_patcher":
+                from services.mvp_psp_patcher import MVPPSPPatcher
+
+                cache_dir = self.settings.get("work_dir", "workdir")
+                cache_dir = os.path.join(cache_dir, "mlb_cache")
+                patcher = MVPPSPPatcher(cache_dir)
+                rom_info = patcher.analyze_rom(rom_path)
+                patcher_st.rom_info = rom_info
+                patcher_st.rom_valid = rom_info.is_valid
+        except Exception:
+            patcher_st.rom_valid = False
+            patcher_st.rom_info = None
 
     def _start_nhl05_roster_fetch(self):
         """Start background NHL 05 PS2 roster fetch thread."""

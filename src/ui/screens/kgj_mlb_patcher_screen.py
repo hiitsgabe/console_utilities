@@ -11,6 +11,14 @@ from datetime import datetime
 from ui.theme import Theme, default_theme
 from ui.templates.list_screen import ListScreenTemplate
 from ui.atoms.text import Text
+from services.rom_finder import RomFinderConfig
+
+ROM_FINDER_CONFIG = RomFinderConfig(
+    search_terms=["Ken Griffey Jr. Presents Major League Baseball"],
+    system_folders=["snes", "supernintendo", "superfamicom", "sfc"],
+    file_extensions=[".sfc", ".smc", ".zip"],
+    system_type="snes",
+)
 
 
 class KGJMLBPatcherScreen:
@@ -59,7 +67,16 @@ class KGJMLBPatcherScreen:
             rom_value = "Invalid ROM"
         else:
             rom_value = "Not selected"
-        items.append(("3. Select ROM (.sfc/.zip)", rom_value, "select_rom"))
+        if kgj.rom_select_mode == "auto":
+            if kgj.auto_detect_downloading:
+                rom_value = "Downloading..."
+            elif kgj.auto_detect_status == "not_found":
+                rom_value = "ROM not found"
+            elif not kgj.rom_path:
+                rom_value = "Press A to search"
+            items.append(("3. Auto-detect ROM \u25c0\u25b6", rom_value, "auto_detect_rom"))
+        else:
+            items.append(("3. Select ROM (.sfc/.zip)", rom_value, "select_rom"))
 
         # -- 4. Patch ROM --
         if kgj.patch_complete:

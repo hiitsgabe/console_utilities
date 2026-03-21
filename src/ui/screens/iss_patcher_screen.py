@@ -8,6 +8,14 @@ import pygame
 from ui.theme import Theme, default_theme
 from ui.templates.list_screen import ListScreenTemplate
 from ui.atoms.text import Text
+from services.rom_finder import RomFinderConfig
+
+ROM_FINDER_CONFIG = RomFinderConfig(
+    search_terms=["International Superstar Soccer"],
+    system_folders=["snes", "supernintendo", "superfamicom", "sfc"],
+    file_extensions=[".sfc", ".smc", ".zip"],
+    system_type="snes",
+)
 
 
 class ISSPatcherScreen:
@@ -102,7 +110,20 @@ class ISSPatcherScreen:
             rom_value = "Invalid ROM"
         else:
             rom_value = "Not selected"
-        items.append((f"{step_rom}. Select ROM (.sfc/.zip)", rom_value, "select_rom"))
+        if iss.rom_select_mode == "auto":
+            if iss.auto_detect_downloading:
+                rom_value = "Downloading..."
+            elif iss.auto_detect_status == "not_found":
+                rom_value = "ROM not found"
+            elif not iss.rom_path:
+                rom_value = "Press A to search"
+            items.append(
+                (f"{step_rom}. Auto-detect ROM \u25c0\u25b6", rom_value, "auto_detect_rom")
+            )
+        else:
+            items.append(
+                (f"{step_rom}. Select ROM (.sfc/.zip)", rom_value, "select_rom")
+            )
 
         # ── Patch ROM ─────────────────────────────────────────────────────
         step_patch = "5" if provider == "api_football" else "4"

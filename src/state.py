@@ -452,6 +452,10 @@ class ISSPatcherState:
     rom_path: str = ""
     rom_info: Any = None
     rom_valid: bool = False
+    rom_select_mode: str = "manual"  # "manual" | "auto"
+    auto_detect_downloading: bool = False
+    auto_detect_download_filename: str = ""
+    auto_detect_status: str = ""  # "" | "not_found" | "searching"
     zip_path: str = ""  # Original ZIP path if ROM was extracted from ZIP
     zip_temp_dir: str = ""  # Temp dir for extracted ZIP contents
     # Slot mapping
@@ -498,6 +502,10 @@ class WePatcherState:
     rom_path: str = ""
     rom_info: Any = None
     rom_valid: bool = False
+    rom_select_mode: str = "manual"  # "manual" | "auto"
+    auto_detect_downloading: bool = False
+    auto_detect_download_filename: str = ""
+    auto_detect_status: str = ""  # "" | "not_found" | "searching"
     zip_path: str = ""  # Original ZIP path if ROM was extracted from ZIP
     zip_temp_dir: str = ""  # Temp dir for extracted ZIP contents
     # Slot mapping
@@ -549,6 +557,9 @@ class NHL07PSPPatcherState:
     rom_path: str = ""
     rom_info: Any = None
     rom_valid: bool = False
+    rom_select_mode: str = "manual"  # "manual" | "auto"
+    auto_detect_downloading: bool = False
+    auto_detect_download_filename: str = ""
     zip_path: str = ""
     zip_temp_dir: str = ""
 
@@ -592,6 +603,9 @@ class NHL05PS2PatcherState:
     rom_path: str = ""
     rom_info: Any = None
     rom_valid: bool = False
+    rom_select_mode: str = "manual"  # "manual" | "auto"
+    auto_detect_downloading: bool = False
+    auto_detect_download_filename: str = ""
     zip_path: str = ""
     zip_temp_dir: str = ""
 
@@ -637,6 +651,9 @@ class NHL94GenesisPatcherState:
     rom_path: str = ""
     rom_info: Any = None
     rom_valid: bool = False
+    rom_select_mode: str = "manual"  # "manual" | "auto"
+    auto_detect_downloading: bool = False
+    auto_detect_download_filename: str = ""
     zip_path: str = ""
     zip_temp_dir: str = ""
 
@@ -677,6 +694,9 @@ class KGJMLBPatcherState:
     rom_path: str = ""
     rom_info: Any = None
     rom_valid: bool = False
+    rom_select_mode: str = "manual"  # "manual" | "auto"
+    auto_detect_downloading: bool = False
+    auto_detect_download_filename: str = ""
     zip_path: str = ""
     zip_temp_dir: str = ""
 
@@ -724,6 +744,9 @@ class NBALive95PatcherState:
     rom_path: str = ""
     rom_info: Any = None
     rom_valid: bool = False
+    rom_select_mode: str = "manual"  # "manual" | "auto"
+    auto_detect_downloading: bool = False
+    auto_detect_download_filename: str = ""
     zip_path: str = ""
     zip_temp_dir: str = ""
 
@@ -764,6 +787,9 @@ class MVPPSPPatcherState:
     rom_path: str = ""
     rom_info: Any = None
     rom_valid: bool = False
+    rom_select_mode: str = "manual"  # "manual" | "auto"
+    auto_detect_downloading: bool = False
+    auto_detect_download_filename: str = ""
     zip_path: str = ""
     zip_temp_dir: str = ""
 
@@ -811,6 +837,9 @@ class NHL94SNESPatcherState:
     rom_path: str = ""
     rom_info: Any = None
     rom_valid: bool = False
+    rom_select_mode: str = "manual"  # "manual" | "auto"
+    auto_detect_downloading: bool = False
+    auto_detect_download_filename: str = ""
     zip_path: str = ""
     zip_temp_dir: str = ""
 
