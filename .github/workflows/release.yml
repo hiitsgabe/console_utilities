@@ -1,17 +1,9 @@
 name: Build and Release
 
 on:
-  push:
-    tags:
-      - 'v*'  # Triggers on version tags like v1.0.0
-  workflow_dispatch:  # Allow manual trigger
+  workflow_dispatch:  # Manual trigger, auto-increments version
     branches:
-      - main  # Only allow manual trigger from main
-    inputs:
-      version:
-        description: 'Version tag (e.g., v1.0.0). Leave empty to auto-increment.'
-        required: false
-        type: string
+      - main
 
 jobs:
   resolve-version:
@@ -29,34 +21,26 @@ jobs:
       - name: Resolve version
         id: resolve
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.version }}" ]; then
-            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          elif [ "${{ github.event_name }}" = "push" ]; then
-            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-          else
-            # Auto-increment from latest tag
-            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-            echo "Latest tag: $LATEST_TAG"
-            IFS='.' read -r VMAJOR VMINOR VPATCH <<< "${LATEST_TAG#v}"
-            VPATCH=$((VPATCH + 1))
-            if [ "$VPATCH" -gt 9 ]; then
-              VPATCH=0
-              VMINOR=$((VMINOR + 1))
-              if [ "$VMINOR" -gt 9 ]; then
-                VMINOR=0
-                VMAJOR=$((VMAJOR + 1))
-              fi
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "Latest tag: $LATEST_TAG"
+          IFS='.' read -r VMAJOR VMINOR VPATCH <<< "${LATEST_TAG#v}"
+          VPATCH=$((VPATCH + 1))
+          if [ "$VPATCH" -gt 9 ]; then
+            VPATCH=0
+            VMINOR=$((VMINOR + 1))
+            if [ "$VMINOR" -gt 9 ]; then
+              VMINOR=0
+              VMAJOR=$((VMAJOR + 1))
             fi
-            VERSION="v${VMAJOR}.${VMINOR}.${VPATCH}"
-            echo "Auto-incremented version: $VERSION"
-            echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-
-            # Create and push the tag
-            git config user.name "github-actions"
-            git config user.email "github-actions@github.com"
-            git tag "$VERSION"
-            git push origin "$VERSION"
           fi
+          VERSION="v${VMAJOR}.${VMINOR}.${VPATCH}"
+          echo "Auto-incremented version: $VERSION"
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git tag "$VERSION"
+          git push origin "$VERSION"
 
   download-bundled-data:
     runs-on: ubuntu-latest

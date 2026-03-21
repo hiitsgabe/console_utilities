@@ -217,16 +217,10 @@ lint:
 test:
 	$(CONDA_ACTIVATE) pytest
 
-# Create release via GitHub Actions (auto-increments version if not specified)
-# Usage: make release or make release VERSION=v1.0.0
+# Create release via GitHub Actions (auto-increments version from latest tag)
 release:
-	@if [ -n "$(VERSION)" ]; then \
-		echo "Triggering release with version $(VERSION)..."; \
-		gh workflow run release.yml -f version=$(VERSION); \
-	else \
-		echo "Triggering release with auto-incremented version..."; \
-		gh workflow run release.yml; \
-	fi
+	@echo "Triggering release with auto-incremented version..."
+	@gh workflow run release.yml
 	@echo "Check progress: gh run list --workflow=release.yml"
 
 # ─── Appetize.io Cloud Emulator ───────────────────────────────
