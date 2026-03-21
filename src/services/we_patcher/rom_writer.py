@@ -28,6 +28,12 @@ import shutil
 import unicodedata
 from typing import List, Optional, Tuple
 
+
+def _sync(f):
+    """Flush and fsync to ensure writes hit disk (critical on exFAT/FUSE)."""
+    f.flush()
+    os.fsync(f.fileno())
+
 from .models import WETeamRecord, WEPlayerRecord
 
 # ---------------------------------------------------------------------------
@@ -2190,9 +2196,20 @@ _DUMMY_CARAT = bytes(12)
 
 class RomWriter:
     def __init__(self, rom_path: str, output_path: str):
-        """Copy the ROM to output_path for patching. The original is never modified."""
-        if os.path.exists(rom_path):
+        """Copy the ROM to output_path for patching. The original is never modified.
+
+        If rom_path and output_path resolve to the same file (re-patch), the
+        copy is skipped and the file is patched in-place.
+        """
+        self._in_place = os.path.abspath(rom_path) == os.path.abspath(output_path)
+        if not self._in_place and os.path.exists(rom_path):
             shutil.copy2(rom_path, output_path)
+            # Sync the new file to disk before patching begins
+            fd = os.open(output_path, os.O_RDONLY)
+            try:
+                os.fsync(fd)
+            finally:
+                os.close(fd)
         self.output_path = output_path
         self._tex_cache = None  # Original TEX file data (avoids re-read corruption)
         self._tex_sizes = None  # TEX file sizes from ISO9660 directory
@@ -2232,6 +2249,7 @@ class RomWriter:
             # Write flag in same file handle
             if include_flag:
                 self._write_flag_impl(f, slot_index, team)
+            _sync(f)
 
         # Queue 3D jersey TEX patch (ML teams are TEX indices 63-94)
         tex_index = 63 + slot_index
@@ -2441,6 +2459,7 @@ class RomWriter:
             return
         with open(self.output_path, "r+b") as f:
             self._write_players_impl(f, slot_index, players)
+            _sync(f)
 
     def _write_flag_impl(self, f, slot_index, team):
         """Write team flag data (uses existing file handle)."""
@@ -2467,6 +2486,7 @@ class RomWriter:
             return
         with open(self.output_path, "r+b") as f:
             self._write_flag_impl(f, slot_index, team)
+            _sync(f)
 
     # ------------------------------------------------------------------
     # National team writers
@@ -2500,6 +2520,7 @@ class RomWriter:
 
             if include_flag:
                 self._write_nat_flag_impl(f, nat_index, team)
+            _sync(f)
 
         # Queue 3D jersey TEX patch (national teams are TEX indices 0-62)
         self._pending_tex_patches.append((nat_index, team.kit_home))
@@ -2631,6 +2652,7 @@ class RomWriter:
             return
         with open(self.output_path, "r+b") as f:
             self._write_nat_players_impl(f, nat_index, players)
+            _sync(f)
 
     def _write_nat_flag_impl(self, f, nat_index, team):
         """Write national flag data (uses existing file handle)."""
@@ -2657,6 +2679,7 @@ class RomWriter:
             return
         with open(self.output_path, "r+b") as f:
             self._write_nat_flag_impl(f, nat_index, team)
+            _sync(f)
 
     # ------------------------------------------------------------------
     # 3D jersey patching (TEX files on CD)
@@ -2756,6 +2779,7 @@ class RomWriter:
 
         with open(self.output_path, "wb") as f:
             f.write(rom)
+            _sync(f)
 
     def flush_tex_patches(self):
         """Apply all queued 3D jersey TEX patches using targeted file seeks.
@@ -2797,6 +2821,7 @@ class RomWriter:
                     _update_iso_dir_size_in_handle(
                         f, self._tex_dir_offsets[tex_index], src_size
                     )
+            _sync(f)
 
         self._pending_tex_patches = []
 
@@ -2879,37 +2904,46 @@ class RomWriter:
         lines.append("--- PHASE 2: ORIGINAL vs PATCHED DIFF ---")
         total_changed = 0
         total_checked = 0
+        skip_diff = self._in_place or (
+            os.path.abspath(original_path) == os.path.abspath(self.output_path)
+        )
 
-        with open(original_path, "rb") as orig, open(self.output_path, "rb") as patched:
-            for mapping in slot_mapping:
-                si = mapping.slot_index
-                team_name = (
-                    mapping.real_team.name
-                    if hasattr(mapping, "real_team")
-                    else f"slot {si}"
-                )
-                we_team = we_teams.get(si)
-                lines.append(f"\n  Slot {si}: {team_name}")
-
-                checks = self._get_check_points(si)
-                for label, offset, size in checks:
-                    orig.seek(offset)
-                    orig_data = orig.read(size)
-                    patched.seek(offset)
-                    patch_data = patched.read(size)
-                    changed = orig_data != patch_data
-                    total_checked += 1
-                    if changed:
-                        total_changed += 1
-                    # Show readable representation
-                    orig_repr = self._format_bytes(orig_data)
-                    patch_repr = self._format_bytes(patch_data)
-                    lines.append(
-                        f"    {label} @{offset}: {orig_repr} -> {patch_repr} {'CHANGED' if changed else 'SAME'}"
+        if skip_diff:
+            lines.append("  (In-place re-patch — diff vs original skipped)")
+            total_changed = -1  # sentinel: diff was skipped
+        else:
+            with open(original_path, "rb") as orig, open(self.output_path, "rb") as patched:
+                for mapping in slot_mapping:
+                    si = mapping.slot_index
+                    team_name = (
+                        mapping.real_team.name
+                        if hasattr(mapping, "real_team")
+                        else f"slot {si}"
                     )
+                    we_team = we_teams.get(si)
+                    lines.append(f"\n  Slot {si}: {team_name}")
+
+                    checks = self._get_check_points(si)
+                    for label, offset, size in checks:
+                        orig.seek(offset)
+                        orig_data = orig.read(size)
+                        patched.seek(offset)
+                        patch_data = patched.read(size)
+                        changed = orig_data != patch_data
+                        total_checked += 1
+                        if changed:
+                            total_changed += 1
+                        orig_repr = self._format_bytes(orig_data)
+                        patch_repr = self._format_bytes(patch_data)
+                        lines.append(
+                            f"    {label} @{offset}: {orig_repr} -> {patch_repr} {'CHANGED' if changed else 'SAME'}"
+                        )
 
         lines.append("")
-        lines.append(f"  Diff totals: {total_changed}/{total_checked} regions changed")
+        if total_changed == -1:
+            lines.append("  Diff skipped (re-patch mode)")
+        else:
+            lines.append(f"  Diff totals: {total_changed}/{total_checked} regions changed")
         lines.append("")
 
         # --- Phase 3: Read-back verification on output file ---
@@ -2984,7 +3018,10 @@ class RomWriter:
         # --- Summary ---
         lines.append("--- SUMMARY ---")
         lines.append(f"ROM format: {'Mode2/2352 OK' if is_mode2 else 'WRONG FORMAT'}")
-        lines.append(f"Diff: {total_changed}/{total_checked} regions changed")
+        if total_changed == -1:
+            lines.append("Diff: skipped (in-place re-patch)")
+        else:
+            lines.append(f"Diff: {total_changed}/{total_checked} regions changed")
         lines.append(f"Read-back: {readback_ok} OK, {readback_fail} FAIL")
         if total_changed == 0:
             lines.append("")

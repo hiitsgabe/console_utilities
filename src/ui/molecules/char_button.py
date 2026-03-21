@@ -56,7 +56,10 @@ class CharButton:
 
         # Special buttons get different treatment
         if special and not selected:
-            if char == "DONE":
+            if char == "SHIFT" and highlighted:
+                bg_color = self.theme.primary
+                text_color = self.theme.background
+            elif char == "DONE":
                 bg_color = self.theme.secondary_dark
                 text_color = self.theme.text_primary
             elif char == "DEL":
@@ -69,8 +72,8 @@ class CharButton:
         # Draw background
         pygame.draw.rect(screen, bg_color, rect, border_radius=self.theme.radius_sm)
 
-        # Draw border if selected
-        if selected:
+        # Draw border if selected or shift is active
+        if selected or (highlighted and char == "SHIFT"):
             pygame.draw.rect(
                 screen,
                 self.theme.primary_light,

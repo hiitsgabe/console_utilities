@@ -350,6 +350,8 @@ class NHL94GenesisRomWriter:
                 os.makedirs(output_dir, exist_ok=True)
             with open(self.output_path, "wb") as f:
                 f.write(self.data)
+                f.flush()
+                os.fsync(f.fileno())
             return True
         except Exception:
             return False

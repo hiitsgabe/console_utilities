@@ -149,7 +149,7 @@ class Grid:
         if total_rows <= visible_rows:
             return 0
 
-        context = 1
+        context = min(1, visible_rows - 1)
         min_scroll = max(0, highlighted_row - visible_rows + context + 1)
         max_scroll = max(0, min(highlighted_row - context, total_rows - visible_rows))
 

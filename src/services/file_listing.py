@@ -554,7 +554,7 @@ def load_psx_rom_folder_contents(path: str) -> List[Dict[str, Any]]:
 
     try:
         entries = os.listdir(path)
-    except PermissionError:
+    except OSError:
         return items
 
     dirs = []
@@ -622,7 +622,7 @@ def load_snes_rom_folder_contents(path: str) -> List[Dict[str, Any]]:
 
     try:
         entries = os.listdir(path)
-    except PermissionError:
+    except OSError:
         return items
 
     dirs = []
@@ -663,7 +663,7 @@ def load_genesis_rom_folder_contents(path: str) -> List[Dict[str, Any]]:
 
     try:
         entries = os.listdir(path)
-    except PermissionError:
+    except OSError:
         return items
 
     dirs = []
@@ -704,7 +704,7 @@ def load_psp_iso_folder_contents(path: str) -> List[Dict[str, Any]]:
 
     try:
         entries = os.listdir(path)
-    except PermissionError:
+    except OSError:
         return items
 
     dirs = []

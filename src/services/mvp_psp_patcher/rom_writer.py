@@ -90,6 +90,8 @@ class MVPPSPRomWriter:
                     if not chunk:
                         break
                     dst.write(chunk)
+                dst.flush()
+                os.fsync(dst.fileno())
             return True
         except Exception:
             return False
@@ -222,6 +224,8 @@ class MVPPSPRomWriter:
             with open(self.output_path, "r+b") as f:
                 f.seek(db_offset)
                 f.write(new_db)
+                f.flush()
+                os.fsync(f.fileno())
 
             return True
         except Exception:

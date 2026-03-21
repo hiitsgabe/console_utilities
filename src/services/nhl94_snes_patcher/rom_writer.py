@@ -301,6 +301,8 @@ class NHL94SNESRomWriter:
 
             with open(self.output_path, "wb") as f:
                 f.write(self.data)
+                f.flush()
+                os.fsync(f.fileno())
             return True
         except Exception:
             return False

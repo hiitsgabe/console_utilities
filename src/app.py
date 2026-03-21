@@ -9223,16 +9223,24 @@ class ConsoleUtilitiesApp:
         # Get game files, excluding previous output files
         game_base, game_files = self._get_game_files(input_path)
         new_prefix = f"{game_base} - {safe_league} {season}"
-        # Re-scan excluding any files from a previous run with this prefix
-        game_base, game_files = self._get_game_files(
-            input_path, exclude_prefix=new_prefix
-        )
 
-        # Data track output path (same folder, renamed)
+        # Detect if input is already a patched output (contains league prefix)
         data_basename = os.path.basename(input_path)
-        output_bin = os.path.join(
-            game_dir, new_prefix + data_basename[len(game_base) :]
-        )
+        if f"- {safe_league} {season}" in data_basename:
+            # Re-patch in place — input IS the previous output
+            output_bin = input_path
+            # Use the input itself as the only game file
+            game_files = []
+        else:
+            # Re-scan excluding any files from a previous run with this prefix
+            game_base, game_files = self._get_game_files(
+                input_path, exclude_prefix=new_prefix
+            )
+
+            # Data track output path (same folder, renamed)
+            output_bin = os.path.join(
+                game_dir, new_prefix + data_basename[len(game_base) :]
+            )
 
         def _patch():
             try:
