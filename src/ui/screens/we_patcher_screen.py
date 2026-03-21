@@ -12,9 +12,10 @@ from services.we_patcher.translations.we2002 import LANGUAGES, LANGUAGE_CODES
 from services.rom_finder import RomFinderConfig
 
 ROM_FINDER_CONFIG = RomFinderConfig(
-    search_terms=["World Soccer Winning Eleven 2002", "ISS Pro Evolution 2"],
+    search_terms=["World Soccer Winning Eleven 2002"],
     system_folders=["psx", "ps1", "psone", "playstation", "playstation1", "playstationone"],
     file_extensions=[".bin", ".cue", ".zip"],
+    preferred_region="Japan",
     system_type="psx",
 )
 

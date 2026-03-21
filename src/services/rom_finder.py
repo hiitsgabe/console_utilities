@@ -20,6 +20,7 @@ class RomFinderConfig:
     system_folders: List[str]
     file_extensions: List[str]
     system_type: str
+    preferred_region: str = "USA"  # Region to prefer in tiebreakers
 
 
 @dataclass
@@ -81,11 +82,12 @@ _USA_RE = re.compile(r"\(USA\)", re.IGNORECASE)
 _BETA_DEMO_RE = re.compile(r"\b(beta|demo|proto|sample)\b", re.IGNORECASE)
 
 
-def _tiebreak_sort_key(filename: str) -> Tuple:
-    """Return a sort key tuple: prefer (USA), non-beta/demo, shorter names."""
-    has_usa = 0 if _USA_RE.search(filename) else 1
+def _tiebreak_sort_key(filename: str, preferred_region: str = "USA") -> Tuple:
+    """Return a sort key tuple: prefer region, non-beta/demo, shorter names."""
+    fn_lower = filename.lower()
+    has_pref = 0 if f"({preferred_region.lower()})" in fn_lower else 1
     is_beta = 1 if _BETA_DEMO_RE.search(filename) else 0
-    return (has_usa, is_beta, len(filename))
+    return (has_pref, is_beta, len(filename))
 
 
 # ── CUE Parsing ─────────────────────────────────────────────────────────
@@ -154,7 +156,8 @@ class RomFinder:
         if not candidates:
             return None
 
-        candidates.sort(key=lambda p: _tiebreak_sort_key(os.path.basename(p)))
+        region = config.preferred_region
+        candidates.sort(key=lambda p: _tiebreak_sort_key(os.path.basename(p), region))
         return candidates[0]
 
     def _search_cache(
@@ -211,8 +214,9 @@ class RomFinder:
         if not candidates:
             return None, None
 
+        region = config.preferred_region
         candidates.sort(
-            key=lambda pair: _tiebreak_sort_key(pair[0].get("filename", ""))
+            key=lambda pair: _tiebreak_sort_key(pair[0].get("filename", ""), region)
         )
         return candidates[0]
 
