@@ -217,10 +217,17 @@ lint:
 test:
 	$(CONDA_ACTIVATE) pytest
 
-# Create release and upload to GitHub
-# Usage: make release VERSION=v1.0.0
+# Create release via GitHub Actions (auto-increments version if not specified)
+# Usage: make release or make release VERSION=v1.0.0
 release:
-	@./scripts/local_release.sh $(VERSION)
+	@if [ -n "$(VERSION)" ]; then \
+		echo "Triggering release with version $(VERSION)..."; \
+		gh workflow run release.yml -f version=$(VERSION); \
+	else \
+		echo "Triggering release with auto-incremented version..."; \
+		gh workflow run release.yml; \
+	fi
+	@echo "Check progress: gh run list --workflow=release.yml"
 
 # ─── Appetize.io Cloud Emulator ───────────────────────────────
 # Upload APK to Appetize.io and get a browser link

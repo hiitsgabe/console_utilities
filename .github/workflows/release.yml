@@ -9,11 +9,53 @@ on:
       - main  # Only allow manual trigger from main
     inputs:
       version:
-        description: 'Version tag (e.g., v1.0.0)'
-        required: true
+        description: 'Version tag (e.g., v1.0.0). Leave empty to auto-increment.'
+        required: false
         type: string
 
 jobs:
+  resolve-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.VERSION }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version
+        id: resolve
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            # Auto-increment from latest tag
+            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+            echo "Latest tag: $LATEST_TAG"
+            IFS='.' read -r VMAJOR VMINOR VPATCH <<< "${LATEST_TAG#v}"
+            VPATCH=$((VPATCH + 1))
+            if [ "$VPATCH" -gt 9 ]; then
+              VPATCH=0
+              VMINOR=$((VMINOR + 1))
+              if [ "$VMINOR" -gt 9 ]; then
+                VMINOR=0
+                VMAJOR=$((VMAJOR + 1))
+              fi
+            fi
+            VERSION="v${VMAJOR}.${VMINOR}.${VPATCH}"
+            echo "Auto-incremented version: $VERSION"
+            echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+            # Create and push the tag
+            git config user.name "github-actions"
+            git config user.email "github-actions@github.com"
+            git tag "$VERSION"
+            git push origin "$VERSION"
+          fi
+
   download-bundled-data:
     runs-on: ubuntu-latest
     steps:
@@ -36,7 +78,7 @@ jobs:
           retention-days: 1
 
   build-pygame-bundle:
-    needs: [download-bundled-data]
+    needs: [resolve-version, download-bundled-data]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -44,12 +86,7 @@ jobs:
 
       - name: Get version
         id: version
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-          fi
+        run: echo "VERSION=${{ needs.resolve-version.outputs.version }}" >> $GITHUB_OUTPUT
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -81,7 +118,7 @@ jobs:
           retention-days: 30
 
   build-macos:
-    needs: [download-bundled-data]
+    needs: [resolve-version, download-bundled-data]
     runs-on: macos-latest
     steps:
       - name: Checkout code
@@ -89,12 +126,7 @@ jobs:
 
       - name: Get version
         id: version
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-          fi
+        run: echo "VERSION=${{ needs.resolve-version.outputs.version }}" >> $GITHUB_OUTPUT
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -122,7 +154,7 @@ jobs:
           retention-days: 30
 
   build-windows:
-    needs: [download-bundled-data]
+    needs: [resolve-version, download-bundled-data]
     runs-on: windows-latest
     steps:
       - name: Checkout code
@@ -131,12 +163,7 @@ jobs:
       - name: Get version
         id: version
         shell: bash
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-          fi
+        run: echo "VERSION=${{ needs.resolve-version.outputs.version }}" >> $GITHUB_OUTPUT
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -183,7 +210,7 @@ jobs:
           retention-days: 30
 
   build-android:
-    needs: [download-bundled-data]
+    needs: [resolve-version, download-bundled-data]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -191,12 +218,7 @@ jobs:
 
       - name: Get version
         id: version
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-          fi
+        run: echo "VERSION=${{ needs.resolve-version.outputs.version }}" >> $GITHUB_OUTPUT
 
       - name: Download bundled data
         uses: actions/download-artifact@v4
@@ -252,7 +274,7 @@ jobs:
           retention-days: 30
 
   release:
-    needs: [build-pygame-bundle, build-macos, build-windows, build-android]
+    needs: [resolve-version, build-pygame-bundle, build-macos, build-windows, build-android]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -288,12 +310,7 @@ jobs:
 
       - name: Get version
         id: version
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-          fi
+        run: echo "VERSION=${{ needs.resolve-version.outputs.version }}" >> $GITHUB_OUTPUT
 
       - name: Generate release notes with AI
         id: ai_notes
