@@ -99,8 +99,10 @@ class FolderBrowserModal:
             "ia_download_folder",
             "steam_shortcut",
             "scraper_batch_folder",
+            "syncthing_base_path",
+            "custom_save_source",
             "folder",
-        )
+        ) or selection_type.startswith(("syncthing_override_", "custom_save_map_"))
 
         # List area (below path, above buttons if shown)
         button_height = 44

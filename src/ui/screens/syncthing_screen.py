@@ -2,6 +2,8 @@
 Syncthing Sync screen - Configure save sync between devices.
 """
 
+import os
+
 import pygame
 from typing import List, Dict, Any, Tuple, Optional, Set
 
@@ -139,7 +141,9 @@ class SyncthingScreen:
         _add_item("Sync All Systems", "sync_all")
 
         if role == "host":
-            _add_item("Change Base Path", "change_base_path")
+            base_path = settings.get("syncthing_base_path", "")
+            base_label = os.path.basename(base_path) or base_path if base_path else "Not set"
+            _add_item(("Change Base Path", base_label), "change_base_path")
 
         # System list
         _add_divider("--- SYSTEMS ---")
