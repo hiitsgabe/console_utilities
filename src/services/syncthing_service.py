@@ -315,7 +315,16 @@ class SyncthingService:
                 continue
 
             # Create directory
-            os.makedirs(path, exist_ok=True)
+            try:
+                os.makedirs(path, exist_ok=True)
+            except OSError as e:
+                log_error(
+                    f"Syncthing: cannot create {path}",
+                    type(e).__name__,
+                    str(e),
+                )
+                errors.append(system)
+                continue
 
             if self.add_folder(folder_id, f"{system} saves", path, device_ids):
                 success += 1

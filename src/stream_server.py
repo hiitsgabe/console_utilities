@@ -144,6 +144,22 @@ wrap.addEventListener('wheel', e => {
     e.preventDefault();
     send({type: 'wheel', dy: e.deltaY > 0 ? -1 : 1});
 }, {passive: false});
+
+// Keyboard events
+document.addEventListener('keydown', e => {
+    const key = e.key;
+    const mapped = {
+        'ArrowUp': 'up', 'ArrowDown': 'down', 'ArrowLeft': 'left', 'ArrowRight': 'right',
+        'Enter': 'return', 'Escape': 'escape', 'Backspace': 'backspace', ' ': 'space'
+    };
+    if (mapped[key]) {
+        e.preventDefault();
+        send({type: 'keydown', key: mapped[key]});
+    } else if (key.length === 1) {
+        e.preventDefault();
+        send({type: 'keydown', key: 'char', char: key});
+    }
+});
 </script>
 </body>
 </html>"""
@@ -317,6 +333,36 @@ class StreamServer:
             dy = int(data.get("dy", 0))
             evt = pygame.event.Event(pygame.MOUSEWHEEL, x=0, y=dy)
             pygame.event.post(evt)
+
+        elif event_type == "keydown":
+            key_name = data.get("key", "")
+            key_map = {
+                "up": pygame.K_UP,
+                "down": pygame.K_DOWN,
+                "left": pygame.K_LEFT,
+                "right": pygame.K_RIGHT,
+                "return": pygame.K_RETURN,
+                "escape": pygame.K_ESCAPE,
+                "backspace": pygame.K_BACKSPACE,
+                "space": pygame.K_SPACE,
+            }
+            if key_name == "char":
+                char = data.get("char", "")
+                if char:
+                    pg_key = getattr(pygame, f"K_{char.lower()}", 0)
+                    evt = pygame.event.Event(
+                        pygame.KEYDOWN,
+                        key=pg_key, mod=0, unicode=char,
+                        web_companion=True,
+                    )
+                    pygame.event.post(evt)
+            elif key_name in key_map:
+                evt = pygame.event.Event(
+                    pygame.KEYDOWN,
+                    key=key_map[key_name], mod=0, unicode="",
+                    web_companion=True,
+                )
+                pygame.event.post(evt)
 
 
 def _patch_flip(server):

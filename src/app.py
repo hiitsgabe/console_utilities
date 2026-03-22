@@ -4794,6 +4794,7 @@ class ConsoleUtilitiesApp:
         elif selection_type == "syncthing_base_path":
             self.settings["syncthing_base_path"] = path
             save_settings(self.settings)
+            self.state.syncthing.status_message = f"Base path: {path}"
         elif selection_type == "nsz_keys":
             self.settings["nsz_keys_path"] = path
             save_settings(self.settings)
@@ -6457,37 +6458,48 @@ class ConsoleUtilitiesApp:
         host_device_id = self.settings.get("syncthing_host_device_id", "")
 
         device_ids = self._get_syncthing_remote_device_ids()
-        if not device_ids:
+        if not device_ids and role != "host":
             self.state.syncthing.status_message = "No devices paired yet"
             self.state.syncthing.configuring = False
             return
 
         def do_sync():
-            # Add host device if console
-            if role == "console" and host_device_id:
-                self.syncthing_service.add_device(host_device_id, "game-saves-host")
+            try:
+                # Add host device if console
+                if role == "console" and host_device_id:
+                    self.syncthing_service.add_device(host_device_id, "game-saves-host")
 
-            success, skipped, errors = self.syncthing_service.configure_all_systems(
-                role=role,
-                device_ids=device_ids,
-                base_path=self.settings.get("syncthing_base_path", ""),
-                folder_overrides=self.settings.get("syncthing_folder_overrides", {}),
-            )
-
-            # Update status
-            self.state.syncthing.system_statuses = (
-                self.syncthing_service.get_system_sync_status()
-            )
-            self.state.syncthing.configuring = False
-
-            if errors:
-                self.state.syncthing.status_message = (
-                    f"Done: {success} added, {len(errors)} failed"
+                success, skipped, errors = self.syncthing_service.configure_all_systems(
+                    role=role,
+                    device_ids=device_ids,
+                    base_path=self.settings.get("syncthing_base_path", ""),
+                    folder_overrides=self.settings.get("syncthing_folder_overrides", {}),
                 )
-            elif success == 0 and skipped > 0:
-                self.state.syncthing.status_message = "All systems already configured"
-            else:
-                self.state.syncthing.status_message = f"Configured {success} systems"
+
+                # Update status
+                self.state.syncthing.system_statuses = (
+                    self.syncthing_service.get_system_sync_status()
+                )
+
+                if errors:
+                    self.state.syncthing.status_message = (
+                        f"Done: {success} added, {len(errors)} failed"
+                    )
+                elif success == 0 and skipped > 0:
+                    self.state.syncthing.status_message = "All systems already configured"
+                else:
+                    self.state.syncthing.status_message = f"Configured {success} systems"
+            except Exception as e:
+                import traceback
+
+                log_error(
+                    "Syncthing sync failed",
+                    type(e).__name__,
+                    traceback.format_exc(),
+                )
+                self.state.syncthing.status_message = f"Error: {e}"
+            finally:
+                self.state.syncthing.configuring = False
 
         threading.Thread(target=do_sync, daemon=True).start()
 
