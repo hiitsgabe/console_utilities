@@ -97,3 +97,32 @@ def test_decode_device_id_known_value():
     result = SyncthingService.decode_device_id(raw)
     # Known correct value for SHA-256("") device ID
     assert result == "4OYMIQU-Y7QOBJR-GX36TEJ-S35ZEQD-T24QPEM-SNZGTFB-ESWMRW6-CSXBKQD"
+
+
+def test_extract_ip_from_addresses_ipv4():
+    """Extracts IPv4 address from tcp:// address list."""
+    addresses = ["tcp://192.168.1.50:22000", "quic://192.168.1.50:22000"]
+    ip = SyncthingService._extract_ip(addresses)
+    assert ip == "192.168.1.50"
+
+
+def test_extract_ip_skips_ipv6():
+    """IPv6 addresses are skipped, returns first IPv4."""
+    addresses = [
+        "tcp://[fe80::1%25eth0]:22000",
+        "tcp://10.0.0.5:22000",
+    ]
+    ip = SyncthingService._extract_ip(addresses)
+    assert ip == "10.0.0.5"
+
+
+def test_extract_ip_empty():
+    """Empty address list returns empty string."""
+    assert SyncthingService._extract_ip([]) == ""
+
+
+def test_extract_ip_skips_zero_address():
+    """Addresses like tcp://0.0.0.0:22000 are skipped."""
+    addresses = ["tcp://0.0.0.0:22000", "tcp://192.168.1.5:22000"]
+    ip = SyncthingService._extract_ip(addresses)
+    assert ip == "192.168.1.5"
