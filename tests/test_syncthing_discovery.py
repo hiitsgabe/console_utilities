@@ -126,3 +126,78 @@ def test_extract_ip_skips_zero_address():
     addresses = ["tcp://0.0.0.0:22000", "tcp://192.168.1.5:22000"]
     ip = SyncthingService._extract_ip(addresses)
     assert ip == "192.168.1.5"
+
+
+import socket
+from unittest.mock import patch, MagicMock
+
+
+def test_discover_local_devices_filters_own_id():
+    """Own device ID is excluded from results."""
+    device_id_bytes = bytes(range(32))
+    address = b"tcp://192.168.1.50:22000"
+    proto = b"\x0A" + bytes([len(device_id_bytes)]) + device_id_bytes
+    proto += b"\x12" + bytes([len(address)]) + address
+    packet = struct.pack(">I", 0x2EA7D90B) + proto
+
+    own_id = SyncthingService.decode_device_id(device_id_bytes)
+
+    mock_sock = MagicMock()
+    mock_sock.recvfrom = MagicMock(
+        side_effect=[(packet, ("192.168.1.50", 21027)), socket.timeout]
+    )
+
+    with patch("socket.socket", return_value=mock_sock):
+        results = SyncthingService.discover_local_devices(
+            timeout=1, own_device_id=own_id
+        )
+
+    assert len(results) == 0
+
+
+def test_discover_local_devices_returns_found_device():
+    """Discovered device appears in results with device_id and ip."""
+    device_id_bytes = bytes(range(32))
+    address = b"tcp://192.168.1.99:22000"
+    proto = b"\x0A" + bytes([len(device_id_bytes)]) + device_id_bytes
+    proto += b"\x12" + bytes([len(address)]) + address
+    packet = struct.pack(">I", 0x2EA7D90B) + proto
+
+    mock_sock = MagicMock()
+    mock_sock.recvfrom = MagicMock(
+        side_effect=[(packet, ("192.168.1.99", 21027)), socket.timeout]
+    )
+
+    with patch("socket.socket", return_value=mock_sock):
+        results = SyncthingService.discover_local_devices(
+            timeout=1, own_device_id="DIFFERENT-DEVICE-ID"
+        )
+
+    assert len(results) == 1
+    assert results[0]["ip"] == "192.168.1.99"
+    assert results[0]["device_id"] == SyncthingService.decode_device_id(device_id_bytes)
+
+
+def test_discover_local_devices_deduplicates():
+    """Duplicate broadcasts from same device produce single result."""
+    device_id_bytes = bytes(range(32))
+    address = b"tcp://192.168.1.99:22000"
+    proto = b"\x0A" + bytes([len(device_id_bytes)]) + device_id_bytes
+    proto += b"\x12" + bytes([len(address)]) + address
+    packet = struct.pack(">I", 0x2EA7D90B) + proto
+
+    mock_sock = MagicMock()
+    mock_sock.recvfrom = MagicMock(
+        side_effect=[
+            (packet, ("192.168.1.99", 21027)),
+            (packet, ("192.168.1.99", 21027)),
+            socket.timeout,
+        ]
+    )
+
+    with patch("socket.socket", return_value=mock_sock):
+        results = SyncthingService.discover_local_devices(
+            timeout=1, own_device_id="DIFFERENT-DEVICE-ID"
+        )
+
+    assert len(results) == 1

@@ -4,7 +4,9 @@ Communicates with local Syncthing instance to auto-configure shared folders.
 """
 
 import os
+import socket
 import struct
+import threading
 import traceback
 import xml.etree.ElementTree as ET
 from typing import Dict, List, Optional, Tuple, Any
@@ -191,6 +193,101 @@ class SyncthingService:
                 if ip != "0.0.0.0":
                     return ip
         return ""
+
+    @staticmethod
+    def discover_local_devices(
+        timeout: int = 31,
+        own_device_id: str = "",
+        stop_event: Optional["threading.Event"] = None,
+        on_device_found: Optional[Any] = None,
+        on_tick: Optional[Any] = None,
+    ) -> List[Dict[str, str]]:
+        """
+        Listen for Syncthing LDP broadcasts on UDP 21027.
+
+        Args:
+            timeout: How long to listen in seconds (default 31, covers one full broadcast cycle)
+            own_device_id: This device's ID to filter out
+            stop_event: Threading event to signal early stop (e.g., Back button)
+            on_device_found: Callback(device_dict) called when a new device is found
+            on_tick: Callback(seconds_left) called each second for countdown
+
+        Returns:
+            List of dicts with keys: device_id, name, ip
+        """
+        import time
+
+        results = {}  # device_id -> {device_id, name, ip}
+
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            # Try SO_REUSEPORT first (needed on Linux when Syncthing holds the port)
+            try:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+            except (AttributeError, OSError):
+                pass
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.settimeout(1.0)  # 1-second recv timeout for responsive stop/tick
+            sock.bind(("", 21027))
+        except OSError:
+            # Can't bind — port unavailable or permission denied
+            return []
+
+        start = time.monotonic()
+        try:
+            while True:
+                elapsed = time.monotonic() - start
+                if elapsed >= timeout:
+                    break
+
+                remaining = max(0, int(timeout - elapsed))
+
+                if stop_event and stop_event.is_set():
+                    break
+
+                if on_tick:
+                    on_tick(remaining)
+
+                try:
+                    data, addr = sock.recvfrom(4096)
+                except socket.timeout:
+                    continue
+                except OSError:
+                    break  # Socket closed (stop_event)
+                except StopIteration:
+                    break  # Mock side_effect exhausted (tests)
+
+                result = SyncthingService.decode_ldp_announce(data)
+                if result is None:
+                    continue
+
+                raw_id, addresses = result
+                device_id = SyncthingService.decode_device_id(raw_id)
+
+                if device_id == own_device_id:
+                    continue
+                if device_id in results:
+                    continue
+
+                ip = SyncthingService._extract_ip(addresses)
+                if not ip:
+                    continue
+
+                # Short ID as fallback name
+                short_id = device_id[:7]
+                device = {
+                    "device_id": device_id,
+                    "name": short_id,
+                    "ip": ip,
+                }
+                results[device_id] = device
+
+                if on_device_found:
+                    on_device_found(device)
+        finally:
+            sock.close()
+
+        return list(results.values())
 
     def is_running(self) -> bool:
         """Check if Syncthing is reachable."""
