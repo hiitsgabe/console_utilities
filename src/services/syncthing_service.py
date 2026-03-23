@@ -131,6 +131,52 @@ class SyncthingService:
 
         return device_id, addresses
 
+    @staticmethod
+    def _luhn_base32_check(s: str) -> str:
+        """Calculate Luhn check character for a base32 string."""
+        # Syncthing uses a custom Luhn mod 32 algorithm
+        # Reference: syncthing/lib/protocol/deviceid.go
+        LUHN_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+        factor = 1
+        sum_val = 0
+        n = len(LUHN_ALPHABET)
+
+        for char in s:
+            code_point = LUHN_ALPHABET.index(char)
+            addend = factor * code_point
+            factor = 1 if factor == 2 else 2
+            addend = (addend // n) + (addend % n)
+            sum_val += addend
+
+        remainder = sum_val % n
+        check_code_point = (n - remainder) % n
+        return LUHN_ALPHABET[check_code_point]
+
+    @staticmethod
+    def decode_device_id(raw_bytes: bytes) -> str:
+        """
+        Convert 32 raw bytes to Syncthing's display format.
+        Format: XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX
+
+        Algorithm (from syncthing/lib/protocol/deviceid.go):
+        1. Base32 encode 32 bytes -> 52 chars
+        2. Split into 4 groups of 13 chars
+        3. Append Luhn check char to each 13-char group -> 56 chars total
+        4. Split into 8 groups of 7, joined by dashes
+        """
+        import base64
+
+        b32 = base64.b32encode(raw_bytes).decode("ascii").rstrip("=")
+
+        # Insert Luhn check after every 13 chars
+        luhnified = ""
+        for i in range(0, len(b32), 13):
+            chunk = b32[i : i + 13]
+            luhnified += chunk + SyncthingService._luhn_base32_check(chunk)
+
+        # Split into groups of 7 with dashes
+        return "-".join(luhnified[i : i + 7] for i in range(0, len(luhnified), 7))
+
     def is_running(self) -> bool:
         """Check if Syncthing is reachable."""
         try:
