@@ -4,6 +4,7 @@ Communicates with local Syncthing instance to auto-configure shared folders.
 """
 
 import os
+import struct
 import traceback
 import xml.etree.ElementTree as ET
 from typing import Dict, List, Optional, Tuple, Any
@@ -56,6 +57,79 @@ class SyncthingService:
             "X-API-Key": self.api_key,
             "Content-Type": "application/json",
         }
+
+    LDP_MAGIC = 0x2EA7D90B
+
+    @staticmethod
+    def _decode_varint(data: bytes, offset: int) -> Tuple[int, int]:
+        """Decode a protobuf varint. Returns (value, bytes_consumed)."""
+        result = 0
+        shift = 0
+        consumed = 0
+        while offset < len(data):
+            byte = data[offset]
+            result |= (byte & 0x7F) << shift
+            offset += 1
+            consumed += 1
+            if not (byte & 0x80):
+                break
+            shift += 7
+        return result, consumed
+
+    @staticmethod
+    def decode_ldp_announce(data: bytes) -> Optional[Tuple[bytes, List[str]]]:
+        """
+        Decode a Syncthing Local Discovery Protocol v4 announcement.
+        Returns (device_id_bytes, addresses) or None if invalid.
+        """
+        if len(data) < 4:
+            return None
+
+        magic = struct.unpack(">I", data[:4])[0]
+        if magic != SyncthingService.LDP_MAGIC:
+            return None
+
+        # Parse protobuf fields manually
+        device_id = b""
+        addresses = []
+        offset = 4
+
+        while offset < len(data):
+            if offset >= len(data):
+                break
+            tag_val, consumed = SyncthingService._decode_varint(data, offset)
+            offset += consumed
+            field_number = tag_val >> 3
+            wire_type = tag_val & 0x07
+
+            if wire_type == 0:  # Varint
+                _, consumed = SyncthingService._decode_varint(data, offset)
+                offset += consumed
+            elif wire_type == 1:  # 64-bit fixed
+                offset += 8
+            elif wire_type == 5:  # 32-bit fixed
+                offset += 4
+            elif wire_type == 2:  # Length-delimited
+                length, consumed = SyncthingService._decode_varint(data, offset)
+                offset += consumed
+                field_data = data[offset : offset + length]
+                offset += length
+
+                if field_number == 1:
+                    device_id = field_data
+                elif field_number == 2:
+                    try:
+                        addresses.append(field_data.decode("utf-8"))
+                    except UnicodeDecodeError:
+                        pass
+            else:
+                # Unknown wire type — can't determine size, bail
+                break
+
+        if not device_id:
+            return None
+
+        return device_id, addresses
 
     def is_running(self) -> bool:
         """Check if Syncthing is reachable."""
