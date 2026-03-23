@@ -1,0 +1,78 @@
+"""Tests for Syncthing Local Discovery Protocol decoding."""
+
+import sys
+import os
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+
+# Import the module directly to avoid triggering services/__init__.py
+import importlib.util as _ilu
+_spec = _ilu.spec_from_file_location(
+    "syncthing_service",
+    os.path.join(os.path.dirname(__file__), "..", "src", "services", "syncthing_service.py"),
+)
+_mod = _ilu.module_from_spec(_spec)
+_spec.loader.exec_module(_mod)
+SyncthingService = _mod.SyncthingService
+
+
+def test_decode_varint_single_byte():
+    """Single-byte varints (0-127) decode correctly."""
+    data = bytes([0x20])
+    value, consumed = SyncthingService._decode_varint(data, 0)
+    assert value == 0x20
+    assert consumed == 1
+
+
+def test_decode_varint_multi_byte():
+    """Multi-byte varints decode correctly."""
+    # 300 = 0xAC 0x02
+    data = bytes([0xAC, 0x02])
+    value, consumed = SyncthingService._decode_varint(data, 0)
+    assert value == 300
+    assert consumed == 2
+
+
+import struct
+
+
+def test_decode_ldp_announce_valid():
+    """Valid LDP packet decodes to device ID bytes + addresses."""
+    device_id_bytes = bytes(range(32))
+    address = b"tcp://192.168.1.50:22000"
+
+    proto = b"\x0A" + bytes([len(device_id_bytes)]) + device_id_bytes
+    proto += b"\x12" + bytes([len(address)]) + address
+
+    packet = struct.pack(">I", 0x2EA7D90B) + proto
+
+    result = SyncthingService.decode_ldp_announce(packet)
+    assert result is not None
+    raw_id, addresses = result
+    assert raw_id == device_id_bytes
+    assert addresses == ["tcp://192.168.1.50:22000"]
+
+
+def test_decode_ldp_announce_bad_magic():
+    """Packet with wrong magic number returns None."""
+    packet = struct.pack(">I", 0xDEADBEEF) + b"\x0A\x20" + bytes(32)
+    result = SyncthingService.decode_ldp_announce(packet)
+    assert result is None
+
+
+def test_decode_ldp_announce_skips_unknown_fields():
+    """Packet with field 3 (instance_id) is decoded without error."""
+    device_id_bytes = bytes(range(32))
+    address = b"tcp://10.0.0.1:22000"
+
+    proto = b"\x0A" + bytes([len(device_id_bytes)]) + device_id_bytes
+    proto += b"\x12" + bytes([len(address)]) + address
+    proto += b"\x18\x05"  # instance_id = 5
+
+    packet = struct.pack(">I", 0x2EA7D90B) + proto
+
+    result = SyncthingService.decode_ldp_announce(packet)
+    assert result is not None
+    raw_id, addresses = result
+    assert raw_id == device_id_bytes
+    assert addresses == ["tcp://10.0.0.1:22000"]
