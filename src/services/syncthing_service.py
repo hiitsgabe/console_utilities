@@ -177,6 +177,21 @@ class SyncthingService:
         # Split into groups of 7 with dashes
         return "-".join(luhnified[i : i + 7] for i in range(0, len(luhnified), 7))
 
+    @staticmethod
+    def _extract_ip(addresses: List[str]) -> str:
+        """Extract first usable IPv4 address from Syncthing address list.
+        Addresses are like 'tcp://192.168.1.50:22000'. Skips IPv6 and 0.0.0.0."""
+        import re
+
+        for addr in addresses:
+            # Match tcp:// or quic:// followed by IPv4:port
+            m = re.match(r"(?:tcp|quic)://(\d+\.\d+\.\d+\.\d+):\d+", addr)
+            if m:
+                ip = m.group(1)
+                if ip != "0.0.0.0":
+                    return ip
+        return ""
+
     def is_running(self) -> bool:
         """Check if Syncthing is reachable."""
         try:
