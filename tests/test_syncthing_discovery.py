@@ -76,3 +76,24 @@ def test_decode_ldp_announce_skips_unknown_fields():
     raw_id, addresses = result
     assert raw_id == device_id_bytes
     assert addresses == ["tcp://10.0.0.1:22000"]
+
+
+def test_decode_device_id_format():
+    """Raw 32 bytes encode to Syncthing's XXXXXXX-XXXXXXX-... format."""
+    raw = bytes(32)
+    result = SyncthingService.decode_device_id(raw)
+    # 8 groups of 7 chars separated by dashes = 56 chars + 7 dashes = 63 chars
+    parts = result.split("-")
+    assert len(parts) == 8
+    assert len(result) == 63
+    import re
+    assert re.match(r"^[A-Z2-7]{7}(-[A-Z2-7]{7}){7}$", result)
+
+
+def test_decode_device_id_known_value():
+    """Verify against a known Syncthing device ID encoding."""
+    import hashlib
+    raw = hashlib.sha256(b"").digest()
+    result = SyncthingService.decode_device_id(raw)
+    # Known correct value for SHA-256("") device ID
+    assert result == "4OYMIQU-Y7QOBJR-GX36TEJ-S35ZEQD-T24QPEM-SNZGTFB-ESWMRW6-CSXBKQD"
