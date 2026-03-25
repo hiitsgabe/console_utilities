@@ -289,6 +289,30 @@ class SyncthingService:
 
         return list(results.values())
 
+    def resolve_device_names(self, devices: List[Dict[str, str]]) -> List[Dict[str, str]]:
+        """
+        Resolve device names from local Syncthing config.
+        Updates the 'name' field for any device whose ID is known locally.
+        Returns the same list with names updated in-place.
+        """
+        try:
+            config = self.get_config()
+            known = {}
+            for d in config.get("devices", []):
+                did = d.get("deviceID", "")
+                dname = d.get("name", "")
+                if did and dname:
+                    known[did] = dname
+
+            for device in devices:
+                did = device.get("device_id", "")
+                if did in known:
+                    device["name"] = known[did]
+        except Exception:
+            pass  # Best-effort — keep short ID fallback
+
+        return devices
+
     def is_running(self) -> bool:
         """Check if Syncthing is reachable."""
         try:
