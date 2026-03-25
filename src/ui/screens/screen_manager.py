@@ -48,6 +48,7 @@ from .nhl94_snes_patcher_screen import NHL94SNESPatcherScreen
 from .nhl94_genesis_patcher_screen import NHL94GenesisPatcherScreen
 from .nhl07_psp_patcher_screen import NHL07PSPPatcherScreen
 from .nhl05_ps2_patcher_screen import NHL05PS2PatcherScreen
+from .pes6_ps2_patcher_screen import PES6PS2PatcherScreen
 from .syncthing_screen import SyncthingScreen
 from .downloads_screen import DownloadsScreen
 from .file_explorer_screen import FileExplorerScreen
@@ -88,6 +89,7 @@ class ScreenManager:
         self.nhl94_gen_patcher_screen = NHL94GenesisPatcherScreen(theme)
         self.nhl07_psp_patcher_screen = NHL07PSPPatcherScreen(theme)
         self.nhl05_ps2_patcher_screen = NHL05PS2PatcherScreen(theme)
+        self.pes6_ps2_patcher_screen = PES6PS2PatcherScreen(theme)
         self.syncthing_screen = SyncthingScreen(theme)
         self.file_explorer_screen = FileExplorerScreen(theme)
 
@@ -806,6 +808,36 @@ class ScreenManager:
             rects["item_rects"] = item_rects
             return rects
 
+        # PES6 PS2 Patcher modals
+        if state.pes6_ps2_patcher.active_modal == "league_browser":
+            if hasattr(self, "league_browser_modal"):
+                modal_rect, content_rect, close_rect, char_rects, item_rects = (
+                    self.league_browser_modal.render(screen, state, settings)
+                )
+                rects["modal"] = modal_rect
+                rects["close"] = close_rect
+                rects["char_rects"] = char_rects
+                rects["item_rects"] = item_rects
+            return rects
+
+        if state.pes6_ps2_patcher.active_modal == "roster_preview":
+            modal_rect, content_rect, close_rect, item_rects = (
+                self.roster_preview_modal.render(screen, state)
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["item_rects"] = item_rects
+            return rects
+
+        if state.pes6_ps2_patcher.active_modal == "patch_progress":
+            modal_rect, content_rect, close_rect, item_rects = (
+                self.patch_progress_modal.render(screen, state)
+            )
+            rects["modal"] = modal_rect
+            rects["close"] = close_rect
+            rects["item_rects"] = item_rects
+            return rects
+
         # Render main screens based on mode
         if state.mode == "systems":
             dl_count = sum(
@@ -1064,6 +1096,14 @@ class ScreenManager:
                 self.nhl05_ps2_patcher_screen.season_arrow_right
             )
 
+        elif state.mode == "pes6_ps2_patcher":
+            back_rect, item_rects, scroll_offset = self.pes6_ps2_patcher_screen.render(
+                screen, state.highlighted, state, settings
+            )
+            rects["back"] = back_rect
+            rects["item_rects"] = item_rects
+            rects["scroll_offset"] = scroll_offset
+
         elif state.mode == "syncthing":
             if state.syncthing.custom_step == "file_select":
                 import os
@@ -1092,6 +1132,16 @@ class ScreenManager:
                 back_rect, item_rects, scroll_offset = (
                     self.syncthing_screen.render_role_select(
                         screen, state.syncthing.highlighted
+                    )
+                )
+            elif state.syncthing.step == "discovery":
+                back_rect, item_rects, scroll_offset = (
+                    self.syncthing_screen.render_discovery(
+                        screen,
+                        state.syncthing.highlighted,
+                        state.syncthing.discovery_scanning,
+                        state.syncthing.discovery_seconds_left,
+                        state.syncthing.discovery_results,
                     )
                 )
             elif state.syncthing.step == "device_id_input":
