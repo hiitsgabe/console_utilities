@@ -325,6 +325,98 @@ class SyncthingScreen:
         )
         return len(items)
 
+    def render_discovery(
+        self,
+        screen: pygame.Surface,
+        highlighted: int,
+        scanning: bool,
+        seconds_left: int,
+        results: List[Dict[str, str]],
+    ) -> Tuple[Optional[pygame.Rect], List[pygame.Rect], int]:
+        """Render discovery scanning/results screen."""
+        items = []
+        divider_indices = set()
+
+        if scanning:
+            divider_indices.add(0)
+            items.append(f"--- Scanning... ({seconds_left}s remaining) ---")
+        else:
+            divider_indices.add(0)
+            if results:
+                items.append("--- Devices Found ---")
+            else:
+                items.append("--- No Devices Found ---")
+
+        # Show discovered devices
+        for device in results:
+            name = device.get("name", "Unknown")
+            ip = device.get("ip", "")
+            items.append((name, ip))
+
+        # Action buttons
+        divider_indices.add(len(items))
+        items.append("--- OPTIONS ---")
+
+        if not scanning:
+            items.append("Scan Again")
+        items.append("Enter Manually")
+
+        return self.template.render(
+            screen,
+            title="Syncthing Sync",
+            items=items,
+            highlighted=highlighted,
+            selected=set(),
+            show_back=True,
+            item_height=40,
+            get_label=lambda x: x[0] if isinstance(x, tuple) else x,
+            get_secondary=lambda x: x[1] if isinstance(x, tuple) else None,
+            item_spacing=8,
+            divider_indices=divider_indices,
+        )
+
+    def get_discovery_action(
+        self, index: int, results: List[Dict[str, str]], scanning: bool
+    ) -> str:
+        """Get action for discovery screen item."""
+        # Layout: [divider, *devices, divider, ?scan_again, enter_manually]
+        device_count = len(results)
+
+        # Divider at index 0
+        if index == 0:
+            return "none"
+
+        # Device items: index 1 through device_count
+        if 1 <= index <= device_count:
+            return f"select_device_{index - 1}"
+
+        # Options divider
+        options_divider = device_count + 1
+        if index == options_divider:
+            return "none"
+
+        # After options divider
+        after_divider = index - options_divider - 1
+        if scanning:
+            # Only "Enter Manually" (no "Scan Again" while scanning)
+            if after_divider == 0:
+                return "enter_manually"
+        else:
+            if after_divider == 0:
+                return "scan_again"
+            elif after_divider == 1:
+                return "enter_manually"
+
+        return "none"
+
+    def get_discovery_item_count(
+        self, results: List[Dict[str, str]], scanning: bool
+    ) -> int:
+        """Get total item count for discovery screen."""
+        # divider + devices + divider + options
+        options = 1 if scanning else 2  # enter_manually only while scanning, +scan_again after
+        return 1 + len(results) + 1 + options
+
 
 # Default instance
 syncthing_screen = SyncthingScreen()
