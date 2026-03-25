@@ -56,9 +56,7 @@ class DownloadManager:
     def _make_session() -> requests.Session:
         """Create a requests session with connection pooling."""
         s = requests.Session()
-        adapter = requests.adapters.HTTPAdapter(
-            pool_connections=6, pool_maxsize=6
-        )
+        adapter = requests.adapters.HTTPAdapter(pool_connections=6, pool_maxsize=6)
         s.mount("https://", adapter)
         s.mount("http://", adapter)
         return s
@@ -490,9 +488,7 @@ class DownloadManager:
         for i in range(num_workers):
             start = i * chunk_size
             end = (
-                (total_size - 1)
-                if i == num_workers - 1
-                else ((i + 1) * chunk_size - 1)
+                (total_size - 1) if i == num_workers - 1 else ((i + 1) * chunk_size - 1)
             )
             chunks.append((start, end))
 
@@ -549,15 +545,11 @@ class DownloadManager:
                     speed_samples.append(instant_speed)
                     if len(speed_samples) > 4:
                         speed_samples.pop(0)
-                    item.speed = (
-                        sum(speed_samples) / len(speed_samples)
-                    )
+                    item.speed = sum(speed_samples) / len(speed_samples)
                     last_downloaded = item.downloaded
                     last_update = current_time
                     if total_size > 0:
-                        item.progress = (
-                            item.downloaded / total_size
-                        )
+                        item.progress = item.downloaded / total_size
 
             # Final progress update
             item.downloaded = sum(progress_array)

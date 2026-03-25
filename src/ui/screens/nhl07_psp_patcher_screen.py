@@ -87,7 +87,9 @@ class NHL07PSPPatcherScreen:
                 rom_value = "ROM not found"
             elif not nhl.rom_path:
                 rom_value = "Press A to search"
-            items.append(("3. Auto-detect ISO \u25c0\u25b6", rom_value, "auto_detect_rom"))
+            items.append(
+                ("3. Auto-detect ISO \u25c0\u25b6", rom_value, "auto_detect_rom")
+            )
         else:
             items.append(("3. Select ISO (.iso/.zip)", rom_value, "select_rom"))
 

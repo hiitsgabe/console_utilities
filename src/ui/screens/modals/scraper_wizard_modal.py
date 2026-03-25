@@ -1487,7 +1487,9 @@ class ScraperWizardModal:
         for i, (label, nav_type) in enumerate(buttons):
             btn_rect = pygame.Rect(x, btn_y, btn_w, btn_h)
             is_highlighted = nav_focused and i == self._nav_bar_index
-            bg_color = self.theme.primary if is_highlighted else self.theme.surface_hover
+            bg_color = (
+                self.theme.primary if is_highlighted else self.theme.surface_hover
+            )
             pygame.draw.rect(
                 screen,
                 bg_color,

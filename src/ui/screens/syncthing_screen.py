@@ -256,7 +256,9 @@ class SyncthingScreen:
                 selected_indices.add(i + 1)  # +1 for header
 
         # Confirm button
-        count_text = f"Confirm ({len(selected)} files)" if selected else "Select files above"
+        count_text = (
+            f"Confirm ({len(selected)} files)" if selected else "Select files above"
+        )
         items.append(count_text)
 
         return self.template.render(
@@ -414,7 +416,9 @@ class SyncthingScreen:
     ) -> int:
         """Get total item count for discovery screen."""
         # divider + devices + divider + options
-        options = 1 if scanning else 2  # enter_manually only while scanning, +scan_again after
+        options = (
+            1 if scanning else 2
+        )  # enter_manually only while scanning, +scan_again after
         return 1 + len(results) + 1 + options
 
 

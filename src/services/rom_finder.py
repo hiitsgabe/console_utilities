@@ -118,9 +118,7 @@ def _resolve_cue_track1(cue_path: str) -> Optional[str]:
 class RomFinder:
     """Finds ROMs by scanning local folders and cached remote listings."""
 
-    def _scan_local(
-        self, config: RomFinderConfig, roms_dir: str
-    ) -> Optional[str]:
+    def _scan_local(self, config: RomFinderConfig, roms_dir: str) -> Optional[str]:
         """Scan local system folders for a matching ROM file.
 
         Returns the best match path, or None if nothing found.
@@ -185,9 +183,7 @@ class RomFinder:
                 # Determine cache file path
                 if cache_dir:
                     url_hash = hashlib.md5(url.encode()).hexdigest()
-                    cache_path = os.path.join(
-                        cache_dir, "listings", f"{url_hash}.json"
-                    )
+                    cache_path = os.path.join(cache_dir, "listings", f"{url_hash}.json")
                 else:
                     from services.file_listing import _get_listing_cache_path
 
@@ -205,8 +201,7 @@ class RomFinder:
                 for entry in entries:
                     fname = entry.get("filename", "")
                     best_score = max(
-                        _fuzzy_score(term, fname)
-                        for term in config.search_terms
+                        _fuzzy_score(term, fname) for term in config.search_terms
                     )
                     if best_score >= 50:
                         candidates.append((entry, system))

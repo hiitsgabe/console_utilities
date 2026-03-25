@@ -113,7 +113,11 @@ class DownloadStatusBar:
                 active_item.progress,
                 fill_color=self.theme.secondary,
             )
-        elif active_item and active_item.status in ("extracting", "moving", "processing"):
+        elif active_item and active_item.status in (
+            "extracting",
+            "moving",
+            "processing",
+        ):
             # Draw compact progress bar for extraction/moving
             bar_width = 100
             bar_height = 10
@@ -139,7 +143,13 @@ class DownloadStatusBar:
 
         # Show if any items are in progress or waiting
         for item in queue.items:
-            if item.status in ("waiting", "downloading", "extracting", "moving", "processing"):
+            if item.status in (
+                "waiting",
+                "downloading",
+                "extracting",
+                "moving",
+                "processing",
+            ):
                 return True
 
         return False

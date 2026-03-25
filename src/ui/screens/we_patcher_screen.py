@@ -13,7 +13,14 @@ from services.rom_finder import RomFinderConfig
 
 ROM_FINDER_CONFIG = RomFinderConfig(
     search_terms=["World Soccer Winning Eleven 2002"],
-    system_folders=["psx", "ps1", "psone", "playstation", "playstation1", "playstationone"],
+    system_folders=[
+        "psx",
+        "ps1",
+        "psone",
+        "playstation",
+        "playstation1",
+        "playstationone",
+    ],
     file_extensions=[".bin", ".cue", ".zip"],
     preferred_region="Japan",
     system_type="psx",
@@ -129,7 +136,11 @@ class WePatcherScreen:
             elif not we.rom_path:
                 rom_value = "Press A to search"
             items.append(
-                (f"{step_rom}. Auto-detect ROM \u25c0\u25b6", rom_value, "auto_detect_rom")
+                (
+                    f"{step_rom}. Auto-detect ROM \u25c0\u25b6",
+                    rom_value,
+                    "auto_detect_rom",
+                )
             )
         else:
             items.append(

@@ -34,6 +34,7 @@ def _sync(f):
     f.flush()
     os.fsync(f.fileno())
 
+
 from .models import WETeamRecord, WEPlayerRecord
 
 # ---------------------------------------------------------------------------
@@ -2163,9 +2164,7 @@ def _build_tex_dir_map_from_dir(dir_data: bytearray) -> Tuple[dict, dict]:
                     sector_in_dir = pos // 2048
                     offset_in_sector = pos % 2048
                     abs_pos = (
-                        (_BIN_DIR_LBA + sector_in_dir) * 2352
-                        + 24
-                        + offset_in_sector
+                        (_BIN_DIR_LBA + sector_in_dir) * 2352 + 24 + offset_in_sector
                     )
                     dir_offsets[idx] = abs_pos
             except ValueError:
@@ -2912,7 +2911,10 @@ class RomWriter:
             lines.append("  (In-place re-patch — diff vs original skipped)")
             total_changed = -1  # sentinel: diff was skipped
         else:
-            with open(original_path, "rb") as orig, open(self.output_path, "rb") as patched:
+            with (
+                open(original_path, "rb") as orig,
+                open(self.output_path, "rb") as patched,
+            ):
                 for mapping in slot_mapping:
                     si = mapping.slot_index
                     team_name = (
@@ -2943,7 +2945,9 @@ class RomWriter:
         if total_changed == -1:
             lines.append("  Diff skipped (re-patch mode)")
         else:
-            lines.append(f"  Diff totals: {total_changed}/{total_checked} regions changed")
+            lines.append(
+                f"  Diff totals: {total_changed}/{total_checked} regions changed"
+            )
         lines.append("")
 
         # --- Phase 3: Read-back verification on output file ---

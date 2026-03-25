@@ -237,15 +237,19 @@ class WePatcher:
             # ML slot writes (0-31) — single file open per team
             if mapping.slot_index < 32:
                 writer.write_team(
-                    mapping.slot_index, we_team,
-                    players=we_team.players, include_flag=True,
+                    mapping.slot_index,
+                    we_team,
+                    players=we_team.players,
+                    include_flag=True,
                 )
 
             # National slot writes (0-62) — single file open per team
             if mapping.nat_index is not None:
                 writer.write_nat_team(
-                    mapping.nat_index, we_team,
-                    players=we_team.players, include_flag=True,
+                    mapping.nat_index,
+                    we_team,
+                    players=we_team.players,
+                    include_flag=True,
                 )
 
         # Apply all 3D jersey TEX patches in one ROM read/write
