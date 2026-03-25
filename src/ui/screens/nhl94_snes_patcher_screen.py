@@ -103,9 +103,7 @@ class NHL94SNESPatcherScreen:
                 ("3. Auto-detect ROM \u25c0\u25b6", rom_value, "auto_detect_rom")
             )
         else:
-            items.append(
-                ("3. Select ROM (.sfc/.smc/.zip)", rom_value, "select_rom")
-            )
+            items.append(("3. Select ROM (.sfc/.smc/.zip)", rom_value, "select_rom"))
 
         # ── 4. Patch ROM ─────────────────────────────────────────────────
         if nhl.patch_complete:

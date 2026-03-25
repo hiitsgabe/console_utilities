@@ -282,7 +282,9 @@ class DownloadsScreen:
             # Speed + ETA below the progress bar
             if item.speed > 0:
                 speed_text = self._format_speed(item.speed)
-                eta_text = self._format_eta(item.total_size, item.downloaded, item.speed)
+                eta_text = self._format_eta(
+                    item.total_size, item.downloaded, item.speed
+                )
                 if eta_text:
                     speed_text = f"{speed_text} - {eta_text}"
             else:
@@ -304,9 +306,7 @@ class DownloadsScreen:
             label = (
                 "Processing..."
                 if item.status == "processing"
-                else "Extracting..."
-                if item.status == "extracting"
-                else "Moving..."
+                else "Extracting..." if item.status == "extracting" else "Moving..."
             )
             # Progress bar above center
             bar_rect = pygame.Rect(rect.left, rect.centery - 14, rect.width, 14)

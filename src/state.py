@@ -989,7 +989,9 @@ class FileExplorerState:
     # Context menu
     context_menu_open: bool = False
     context_menu_highlighted: int = 0
-    context_menu_actions: List[Any] = field(default_factory=list)  # List of (action_id, label)
+    context_menu_actions: List[Any] = field(
+        default_factory=list
+    )  # List of (action_id, label)
 
     # Text viewer
     viewer_open: bool = False

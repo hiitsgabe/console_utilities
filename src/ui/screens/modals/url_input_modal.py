@@ -56,6 +56,10 @@ class UrlInputModal:
         # Determine title based on context
         if context == "direct_download":
             title = "Download from URL"
+        elif context == "syncthing_device_id":
+            title = "Enter Host Device ID"
+        elif context == "custom_save_name":
+            title = "Enter Save Name"
         else:
             title = "Enter Archive URL"
 

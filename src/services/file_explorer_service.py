@@ -16,12 +16,14 @@ def list_directory(path: str) -> Tuple[List[dict], str]:
             try:
                 stat = os.stat(full_path)
                 is_dir = os.path.isdir(full_path)
-                entries.append({
-                    "name": name,
-                    "is_dir": is_dir,
-                    "size": None if is_dir else stat.st_size,
-                    "modified": stat.st_mtime,
-                })
+                entries.append(
+                    {
+                        "name": name,
+                        "is_dir": is_dir,
+                        "size": None if is_dir else stat.st_size,
+                        "modified": stat.st_mtime,
+                    }
+                )
             except (PermissionError, OSError):
                 continue
         entries.sort(key=lambda e: (not e["is_dir"], e["name"].lower()))
@@ -212,9 +214,28 @@ def format_size(size_bytes: Optional[int]) -> str:
 
 
 _TEXT_EXTENSIONS = {
-    ".txt", ".md", ".cfg", ".conf", ".ini", ".json", ".xml", ".yaml", ".yml",
-    ".log", ".csv", ".py", ".sh", ".bat", ".lua", ".js", ".html", ".css",
-    ".toml", ".rst", ".nfo", ".readme",
+    ".txt",
+    ".md",
+    ".cfg",
+    ".conf",
+    ".ini",
+    ".json",
+    ".xml",
+    ".yaml",
+    ".yml",
+    ".log",
+    ".csv",
+    ".py",
+    ".sh",
+    ".bat",
+    ".lua",
+    ".js",
+    ".html",
+    ".css",
+    ".toml",
+    ".rst",
+    ".nfo",
+    ".readme",
 }
 
 _ARCHIVE_EXTENSIONS = {".zip", ".rar"}

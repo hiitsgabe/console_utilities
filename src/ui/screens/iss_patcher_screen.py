@@ -118,7 +118,11 @@ class ISSPatcherScreen:
             elif not iss.rom_path:
                 rom_value = "Press A to search"
             items.append(
-                (f"{step_rom}. Auto-detect ROM \u25c0\u25b6", rom_value, "auto_detect_rom")
+                (
+                    f"{step_rom}. Auto-detect ROM \u25c0\u25b6",
+                    rom_value,
+                    "auto_detect_rom",
+                )
             )
         else:
             items.append(

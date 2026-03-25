@@ -74,7 +74,9 @@ class KGJMLBPatcherScreen:
                 rom_value = "ROM not found"
             elif not kgj.rom_path:
                 rom_value = "Press A to search"
-            items.append(("3. Auto-detect ROM \u25c0\u25b6", rom_value, "auto_detect_rom"))
+            items.append(
+                ("3. Auto-detect ROM \u25c0\u25b6", rom_value, "auto_detect_rom")
+            )
         else:
             items.append(("3. Select ROM (.sfc/.zip)", rom_value, "select_rom"))
 

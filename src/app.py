@@ -1519,9 +1519,11 @@ class ConsoleUtilitiesApp:
                 )
                 max_items = len(items)
             elif step == "discovery":
-                max_items = self.screen_manager.syncthing_screen.get_discovery_item_count(
-                    self.state.syncthing.discovery_results,
-                    self.state.syncthing.discovery_scanning,
+                max_items = (
+                    self.screen_manager.syncthing_screen.get_discovery_item_count(
+                        self.state.syncthing.discovery_results,
+                        self.state.syncthing.discovery_scanning,
+                    )
                 )
                 device_count = len(self.state.syncthing.discovery_results)
                 divider_indices = {0, device_count + 1}
@@ -4772,7 +4774,12 @@ class ConsoleUtilitiesApp:
             "nhl94_gen_patcher_rom",
             "nbalive95_patcher_rom",
         )
-        is_psp_context = selection_type in ("nhl05_patcher_rom", "nhl07_patcher_rom", "mvp_psp_patcher_rom", "pes6_ps2_patcher_rom")
+        is_psp_context = selection_type in (
+            "nhl05_patcher_rom",
+            "nhl07_patcher_rom",
+            "mvp_psp_patcher_rom",
+            "pes6_ps2_patcher_rom",
+        )
         if is_psx_context:
             nav_loader = load_psx_rom_folder_contents
         elif is_snes_context:
@@ -6121,7 +6128,14 @@ class ConsoleUtilitiesApp:
                 wizard.system_picker_cursor = 0
         elif self.state.mode == "file_explorer":
             fe = self.state.file_explorer
-            if fe.context_menu_open or fe.viewer_open or fe.delete_modal_open or fe.extract_modal_open or fe.input_modal_open or fe.error_message:
+            if (
+                fe.context_menu_open
+                or fe.viewer_open
+                or fe.delete_modal_open
+                or fe.extract_modal_open
+                or fe.input_modal_open
+                or fe.error_message
+            ):
                 return
             if fe.clipboard_paths:
                 self._file_explorer_paste()
@@ -6539,7 +6553,10 @@ class ConsoleUtilitiesApp:
                     self.state.syncthing.custom_selected_files.add(filename)
             else:
                 # Confirm button
-                if self.state.syncthing.custom_selected_files and self.state.syncthing.custom_step == "file_select":
+                if (
+                    self.state.syncthing.custom_selected_files
+                    and self.state.syncthing.custom_step == "file_select"
+                ):
                     self.state.syncthing.custom_step = "creating"
                     self._create_custom_save("files")
                 else:
@@ -6677,7 +6694,11 @@ class ConsoleUtilitiesApp:
         if role == "host":
             config = self.syncthing_service.get_config()
             my_id = self.syncthing_service.get_device_id()
-            return [d["deviceID"] for d in config.get("devices", []) if d["deviceID"] != my_id]
+            return [
+                d["deviceID"]
+                for d in config.get("devices", [])
+                if d["deviceID"] != my_id
+            ]
         else:
             host_id = self.settings.get("syncthing_host_device_id", "")
             return [host_id] if host_id else []
@@ -7598,7 +7619,12 @@ class ConsoleUtilitiesApp:
         self.screen_manager.scraper_wizard_modal.clear_thumbs()
 
     def _navigate_scraper_list(
-        self, wizard, direction, max_items, attr, has_button=False,
+        self,
+        wizard,
+        direction,
+        max_items,
+        attr,
+        has_button=False,
         nav_bar_count=0,
     ):
         """Navigate a scraper wizard list with optional action button and navbar.
@@ -7668,29 +7694,45 @@ class ConsoleUtilitiesApp:
         elif step == "game_select":
             max_items = len(wizard.search_results) or 1
             self._navigate_scraper_list(
-                wizard, direction, max_items, "selected_game_index",
-                has_button=True, nav_bar_count=4,
+                wizard,
+                direction,
+                max_items,
+                "selected_game_index",
+                has_button=True,
+                nav_bar_count=4,
             )
 
         elif step == "image_select":
             max_items = len(wizard.available_images) or 1
             self._navigate_scraper_list(
-                wizard, direction, max_items, "image_highlighted",
-                has_button=True, nav_bar_count=4,
+                wizard,
+                direction,
+                max_items,
+                "image_highlighted",
+                has_button=True,
+                nav_bar_count=4,
             )
 
         elif step == "video_select":
             max_items = 1 + len(wizard.available_videos)
             self._navigate_scraper_list(
-                wizard, direction, max_items, "video_highlighted",
-                has_button=True, nav_bar_count=4,
+                wizard,
+                direction,
+                max_items,
+                "video_highlighted",
+                has_button=True,
+                nav_bar_count=4,
             )
 
         elif step == "rom_list":
             max_items = len(wizard.batch_roms) or 1
             self._navigate_scraper_list(
-                wizard, direction, max_items, "batch_current_index",
-                has_button=True, nav_bar_count=4,
+                wizard,
+                direction,
+                max_items,
+                "batch_current_index",
+                has_button=True,
+                nav_bar_count=4,
             )
 
         elif step == "batch_options":
@@ -7700,8 +7742,12 @@ class ConsoleUtilitiesApp:
             )
             max_items = (9 if mixed else 7) + 1
             self._navigate_scraper_list(
-                wizard, direction, max_items, "image_highlighted",
-                has_button=True, nav_bar_count=4,
+                wizard,
+                direction,
+                max_items,
+                "image_highlighted",
+                has_button=True,
+                nav_bar_count=4,
             )
 
         elif step in ("complete", "batch_complete", "error"):
@@ -8263,7 +8309,8 @@ class ConsoleUtilitiesApp:
         if not query:
             return [("Auto (detect from folder)", "")] + list(self._ALL_SYSTEMS)
         return [
-            (name, sid) for name, sid in self._ALL_SYSTEMS
+            (name, sid)
+            for name, sid in self._ALL_SYSTEMS
             if query in name.lower() or query in sid.lower()
         ]
 
@@ -8276,6 +8323,7 @@ class ConsoleUtilitiesApp:
         if wizard.system_picker_search_active:
             # Navigate on-screen keyboard
             from ui.organisms.char_keyboard import CharKeyboard
+
             keyboard = CharKeyboard()
             total_chars = keyboard.get_total_chars("default")
             chars_per_row = 13
@@ -8303,12 +8351,10 @@ class ConsoleUtilitiesApp:
         if wizard.system_picker_search_active:
             # Character selected from keyboard
             modal = self.screen_manager.scraper_wizard_modal
-            new_text, is_done, toggle_shift = (
-                modal.handle_system_picker_key(
-                    wizard.system_picker_cursor,
-                    wizard.system_picker_search,
-                    shift_active=wizard.system_picker_shift,
-                )
+            new_text, is_done, toggle_shift = modal.handle_system_picker_key(
+                wizard.system_picker_cursor,
+                wizard.system_picker_search,
+                shift_active=wizard.system_picker_shift,
             )
             if toggle_shift:
                 wizard.system_picker_shift = not wizard.system_picker_shift
@@ -11644,9 +11690,7 @@ class ConsoleUtilitiesApp:
             target_fn = patcher_st.auto_detect_download_filename
             for item in self.state.download_queue.items:
                 game_fn = (
-                    item.game.get("filename", "")
-                    if isinstance(item.game, dict)
-                    else ""
+                    item.game.get("filename", "") if isinstance(item.game, dict) else ""
                 )
                 if game_fn == target_fn and item.status == "completed":
                     patcher_st.auto_detect_downloading = False
@@ -12172,7 +12216,8 @@ class ConsoleUtilitiesApp:
                     pes.league_data = ld
 
                 league_data = patcher.fetch_league(
-                    league_id, season,
+                    league_id,
+                    season,
                     on_progress=progress,
                     on_partial_data=on_partial,
                 )
@@ -12224,7 +12269,9 @@ class ConsoleUtilitiesApp:
                     pes.patch_progress = p
                     pes.patch_status = msg
 
-                slot_mapping = patcher.create_slot_mapping(pes.league_data, pes.rom_info)
+                slot_mapping = patcher.create_slot_mapping(
+                    pes.league_data, pes.rom_info
+                )
                 pes.slot_mapping = slot_mapping
 
                 result = patcher.patch_rom(
@@ -12643,9 +12690,7 @@ class ConsoleUtilitiesApp:
             from services.file_explorer_service import _TEXT_EXTENSIONS
 
             if ext.lower() in _TEXT_EXTENSIONS:
-                lines, truncated, err = file_explorer_service.read_text_file(
-                    full_path
-                )
+                lines, truncated, err = file_explorer_service.read_text_file(full_path)
                 if err:
                     fe.error_message = err
                 else:
@@ -12705,7 +12750,14 @@ class ConsoleUtilitiesApp:
     def _open_file_explorer_context_menu(self):
         """Build and open the context menu for the file explorer."""
         fe = self.state.file_explorer
-        if fe.context_menu_open or fe.viewer_open or fe.delete_modal_open or fe.extract_modal_open or fe.input_modal_open or fe.error_message:
+        if (
+            fe.context_menu_open
+            or fe.viewer_open
+            or fe.delete_modal_open
+            or fe.extract_modal_open
+            or fe.input_modal_open
+            or fe.error_message
+        ):
             return
 
         actions = []
@@ -12785,9 +12837,7 @@ class ConsoleUtilitiesApp:
                         )
             elif fe.entries and 0 <= fe.highlighted < len(fe.entries):
                 targets.append(
-                    os.path.join(
-                        fe.current_path, fe.entries[fe.highlighted]["name"]
-                    )
+                    os.path.join(fe.current_path, fe.entries[fe.highlighted]["name"])
                 )
             if targets:
                 fe.delete_modal_open = True
@@ -12804,9 +12854,7 @@ class ConsoleUtilitiesApp:
                         )
             elif fe.entries and 0 <= fe.highlighted < len(fe.entries):
                 paths.append(
-                    os.path.join(
-                        fe.current_path, fe.entries[fe.highlighted]["name"]
-                    )
+                    os.path.join(fe.current_path, fe.entries[fe.highlighted]["name"])
                 )
             if paths:
                 fe.clipboard_paths = paths
@@ -12823,9 +12871,7 @@ class ConsoleUtilitiesApp:
                         )
             elif fe.entries and 0 <= fe.highlighted < len(fe.entries):
                 paths.append(
-                    os.path.join(
-                        fe.current_path, fe.entries[fe.highlighted]["name"]
-                    )
+                    os.path.join(fe.current_path, fe.entries[fe.highlighted]["name"])
                 )
             if paths:
                 fe.clipboard_paths = paths
@@ -12849,9 +12895,7 @@ class ConsoleUtilitiesApp:
             if fe.entries and 0 <= fe.highlighted < len(fe.entries):
                 entry = fe.entries[fe.highlighted]
                 full_path = os.path.join(fe.current_path, entry["name"])
-                lines, truncated, err = file_explorer_service.read_text_file(
-                    full_path
-                )
+                lines, truncated, err = file_explorer_service.read_text_file(full_path)
                 if err:
                     fe.error_message = err
                 else:
@@ -12912,9 +12956,7 @@ class ConsoleUtilitiesApp:
                 return
 
             if action == "mkdir":
-                ok, err = file_explorer_service.create_folder(
-                    fe.current_path, value
-                )
+                ok, err = file_explorer_service.create_folder(fe.current_path, value)
                 if not ok:
                     fe.error_message = err
                 self._refresh_file_explorer()
@@ -12940,7 +12982,13 @@ class ConsoleUtilitiesApp:
                 fe.viewer_scroll += page_size
             return
 
-        if fe.context_menu_open or fe.delete_modal_open or fe.extract_modal_open or fe.input_modal_open or fe.error_message:
+        if (
+            fe.context_menu_open
+            or fe.delete_modal_open
+            or fe.extract_modal_open
+            or fe.input_modal_open
+            or fe.error_message
+        ):
             return
 
         # Page through file list
