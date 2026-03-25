@@ -97,8 +97,6 @@ class SyncthingService:
         offset = 4
 
         while offset < len(data):
-            if offset >= len(data):
-                break
             tag_val, consumed = SyncthingService._decode_varint(data, offset)
             offset += consumed
             field_number = tag_val >> 3
@@ -254,8 +252,6 @@ class SyncthingService:
                     continue
                 except OSError:
                     break  # Socket closed (stop_event)
-                except StopIteration:
-                    break  # Mock side_effect exhausted (tests)
 
                 result = SyncthingService.decode_ldp_announce(data)
                 if result is None:
@@ -289,7 +285,9 @@ class SyncthingService:
 
         return list(results.values())
 
-    def resolve_device_names(self, devices: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    def resolve_device_names(
+        self, devices: List[Dict[str, str]]
+    ) -> List[Dict[str, str]]:
         """
         Resolve device names from local Syncthing config.
         Updates the 'name' field for any device whose ID is known locally.
