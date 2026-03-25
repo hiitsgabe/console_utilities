@@ -860,6 +860,58 @@ class NHL94SNESPatcherState:
 
 
 @dataclass
+class PES6PS2PatcherState:
+    """State for the PES6 PS2 Patcher feature."""
+
+    selected_season: int = field(default_factory=lambda: datetime.now().year)
+    selected_league: Any = None
+    available_leagues: List[Any] = field(default_factory=list)
+
+    # Fetched data
+    league_data: Any = None
+    fetch_progress: float = 0.0
+    fetch_status: str = ""
+    is_fetching: bool = False
+    fetch_error: str = ""
+
+    # ROM
+    rom_path: str = ""
+    rom_info: Any = None
+    rom_valid: bool = False
+    rom_select_mode: str = "manual"  # "manual" | "auto"
+    auto_detect_downloading: bool = False
+    auto_detect_download_filename: str = ""
+    zip_path: str = ""
+    zip_temp_dir: str = ""
+
+    # Slot mapping
+    slot_mapping: List[Any] = field(default_factory=list)
+
+    # Patching
+    patch_progress: float = 0.0
+    patch_status: str = ""
+    is_patching: bool = False
+    patch_output_path: str = ""
+    patch_complete: bool = False
+    patch_error: str = ""
+
+    # Roster preview
+    roster_preview_team_index: int = 0
+    roster_preview_player_index: int = 0
+
+    # UI navigation
+    active_modal: Optional[str] = None
+    auto_detect_status: str = ""
+
+    # League browser (shared fields for league_browser_modal)
+    league_search_query: str = ""
+    league_search_active: bool = False
+    league_search_cursor: int = 0
+    league_search_shift: bool = False
+    leagues_highlighted: int = 0
+
+
+@dataclass
 class AuthTokenInputState:
     """State for auth token input modal."""
 
@@ -877,7 +929,7 @@ class SyncthingState:
     """State for Syncthing save sync screen."""
 
     step: str = (
-        "checking"  # "checking", "not_found", "role_select", "device_id_input", "configured"
+        "checking"  # "checking", "not_found", "role_select", "discovery", "configured"
     )
     device_id: str = ""  # This device's ID
     host_device_id_input: str = ""  # Input for host device ID (console mode)
@@ -891,6 +943,14 @@ class SyncthingState:
     highlighted: int = 0
     configuring: bool = False  # True during async configure
     configure_result: str = ""  # "success", "partial", "error"
+
+    # Discovery
+    discovery_results: List[Dict[str, str]] = field(
+        default_factory=list
+    )  # found devices: [{device_id, name, ip}]
+    discovery_scanning: bool = False
+    discovery_seconds_left: int = 0
+    discovery_stop_event: Any = None  # threading.Event, typed as Any to avoid import
 
     # Custom saves
     custom_saves: List[Dict[str, Any]] = field(
@@ -1085,6 +1145,9 @@ class AppState:
         # ---- NHL 05 PS2 Patcher ---- #
         self.nhl05_ps2_patcher = NHL05PS2PatcherState()
 
+        # ---- PES6 PS2 Patcher ---- #
+        self.pes6_ps2_patcher = PES6PS2PatcherState()
+
         # ---- Steam Shortcut Creator ---- #
         self.steam_shortcut = SteamShortcutState()
 
@@ -1130,6 +1193,8 @@ class AppState:
             return self.nhl07_psp_patcher
         if self.mode == "nhl05_patcher":
             return self.nhl05_ps2_patcher
+        if self.mode == "pes6_ps2_patcher":
+            return self.pes6_ps2_patcher
         return self.we_patcher
 
     def reset_navigation(self):
