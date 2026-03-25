@@ -132,6 +132,24 @@ import socket
 from unittest.mock import patch, MagicMock
 
 
+def _make_recvfrom_side_effect(packets):
+    """Return a side_effect function that yields packets then always times out."""
+    packets = list(packets)
+    call_count = [0]
+
+    def side_effect(_bufsize):
+        idx = call_count[0]
+        call_count[0] += 1
+        if idx < len(packets):
+            item = packets[idx]
+            if isinstance(item, type) and issubclass(item, BaseException):
+                raise item
+            return item
+        raise socket.timeout
+
+    return side_effect
+
+
 def test_discover_local_devices_filters_own_id():
     """Own device ID is excluded from results."""
     device_id_bytes = bytes(range(32))
@@ -143,8 +161,8 @@ def test_discover_local_devices_filters_own_id():
     own_id = SyncthingService.decode_device_id(device_id_bytes)
 
     mock_sock = MagicMock()
-    mock_sock.recvfrom = MagicMock(
-        side_effect=[(packet, ("192.168.1.50", 21027)), socket.timeout]
+    mock_sock.recvfrom = _make_recvfrom_side_effect(
+        [(packet, ("192.168.1.50", 21027))]
     )
 
     with patch("socket.socket", return_value=mock_sock):
@@ -164,8 +182,8 @@ def test_discover_local_devices_returns_found_device():
     packet = struct.pack(">I", 0x2EA7D90B) + proto
 
     mock_sock = MagicMock()
-    mock_sock.recvfrom = MagicMock(
-        side_effect=[(packet, ("192.168.1.99", 21027)), socket.timeout]
+    mock_sock.recvfrom = _make_recvfrom_side_effect(
+        [(packet, ("192.168.1.99", 21027))]
     )
 
     with patch("socket.socket", return_value=mock_sock):
@@ -187,11 +205,10 @@ def test_discover_local_devices_deduplicates():
     packet = struct.pack(">I", 0x2EA7D90B) + proto
 
     mock_sock = MagicMock()
-    mock_sock.recvfrom = MagicMock(
-        side_effect=[
+    mock_sock.recvfrom = _make_recvfrom_side_effect(
+        [
             (packet, ("192.168.1.99", 21027)),
             (packet, ("192.168.1.99", 21027)),
-            socket.timeout,
         ]
     )
 
