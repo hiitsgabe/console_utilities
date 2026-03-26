@@ -158,18 +158,43 @@ def test_roster_map_get_team_player_count():
     assert rm.get_team_player_count(999) == 0
 
 
-def _load_rom_writer_module():
-    """Load rom_writer module via importlib."""
-    spec = _ilu.spec_from_file_location(
-        "rom_writer",
-        os.path.join(
-            os.path.dirname(__file__),
-            "..", "src", "services", "pes6_ps2_patcher", "rom_writer.py",
-        ),
+def _ensure_pes6_package():
+    """Set up package hierarchy so relative imports work in pes6_ps2_patcher."""
+    import types
+
+    pkg_dir = os.path.join(
+        os.path.dirname(__file__), "..", "src", "services", "pes6_ps2_patcher",
     )
-    mod = _ilu.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+    if "services" not in sys.modules:
+        sp = types.ModuleType("services")
+        sp.__path__ = [os.path.join(os.path.dirname(__file__), "..", "src", "services")]
+        sys.modules["services"] = sp
+    if "services.pes6_ps2_patcher" not in sys.modules:
+        pp = types.ModuleType("services.pes6_ps2_patcher")
+        pp.__path__ = [pkg_dir]
+        sys.modules["services.pes6_ps2_patcher"] = pp
+    if "services.pes6_ps2_patcher.models" not in sys.modules:
+        ms = _ilu.spec_from_file_location(
+            "services.pes6_ps2_patcher.models",
+            os.path.join(pkg_dir, "models.py"),
+        )
+        mm = _ilu.module_from_spec(ms)
+        sys.modules["services.pes6_ps2_patcher.models"] = mm
+        ms.loader.exec_module(mm)
+    return pkg_dir
+
+
+def _load_rom_writer_module():
+    """Load rom_writer module via importlib with package context for relative imports."""
+    pkg_dir = _ensure_pes6_package()
+    rw_spec = _ilu.spec_from_file_location(
+        "services.pes6_ps2_patcher.rom_writer",
+        os.path.join(pkg_dir, "rom_writer.py"),
+    )
+    rw_mod = _ilu.module_from_spec(rw_spec)
+    rw_mod.__package__ = "services.pes6_ps2_patcher"
+    rw_spec.loader.exec_module(rw_mod)
+    return rw_mod
 
 
 def test_write_stat_field_basic():
