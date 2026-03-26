@@ -6,44 +6,15 @@ from .models import PES6PlayerAttributes, PES6PlayerRecord
 
 
 POSITION_MAP = {
-    "Goalkeeper": 0,
-    "Defender": 1,
-    "Midfielder": 4,
-    "Forward": 9,
+    "Goalkeeper": 0,    # GK
+    "Defender": 2,      # CBT (most common defender type)
+    "Midfielder": 6,    # CMF (most common midfielder type)
+    "Forward": 11,      # CF
 }
 
-NATIONALITY_MAP = {
-    "Brazil": 50,
-    "Argentina": 28,
-    "Colombia": 33,
-    "Uruguay": 29,
-    "Chile": 31,
-    "Paraguay": 30,
-    "Ecuador": 34,
-    "Peru": 32,
-    "Venezuela": 35,
-    "Bolivia": 36,
-    "Mexico": 40,
-    "USA": 42,
-    "England": 2,
-    "Spain": 24,
-    "France": 1,
-    "Germany": 19,
-    "Italy": 18,
-    "Portugal": 13,
-    "Netherlands": 6,
-    "Belgium": 7,
-    "Croatia": 52,
-    "Serbia": 53,
-    "Japan": 55,
-    "South Korea": 56,
-    "Nigeria": 62,
-    "Cameroon": 63,
-    "Ghana": 64,
-    "Senegal": 65,
-    "Ivory Coast": 66,
-    "Egypt": 59,
-}
+from .models import EUR_NATIONALITY_MAP
+
+NATIONALITY_MAP = EUR_NATIONALITY_MAP
 
 
 class StatMapper:
@@ -152,7 +123,7 @@ class StatMapper:
                     "balance": 65,
                 }
             )
-        elif pos_code in (1, 2):  # CB/SB
+        elif pos_code in (1, 2, 3, 5):  # CWP, CBT, SB, WB
             base.update(
                 {
                     "defence": 75,
@@ -163,7 +134,7 @@ class StatMapper:
                     "jump": 65,
                 }
             )
-        elif pos_code in (3, 4, 5):  # DMF/CMF/SMF
+        elif pos_code in (4, 6, 7):  # DMF, CMF, SMF
             base.update(
                 {
                     "short_pass_accuracy": 70,
@@ -172,7 +143,7 @@ class StatMapper:
                     "teamwork": 70,
                 }
             )
-        elif pos_code in (6, 7):  # AMF/WF
+        elif pos_code in (8, 9):  # AMF, WG
             base.update(
                 {
                     "attack": 70,
@@ -182,7 +153,7 @@ class StatMapper:
                     "speed": 70,
                 }
             )
-        elif pos_code in (8, 9):  # SS/CF
+        elif pos_code in (10, 11):  # SS, CF
             base.update(
                 {
                     "attack": 80,
