@@ -193,6 +193,49 @@ class SyncthingService:
         return ""
 
     @staticmethod
+    def _discover_via_rest_api(
+        own_device_id: str = "",
+        on_device_found: Optional[Any] = None,
+    ) -> List[Dict[str, str]]:
+        """Discover devices using the local Syncthing REST API.
+        Fallback when UDP port 21027 is unavailable (held by local Syncthing)."""
+        api_key = SyncthingService.detect_api_key()
+        if not api_key:
+            return []
+
+        try:
+            r = requests.get(
+                f"{SYNCTHING_API_URL}/rest/system/discovery",
+                headers={"X-API-Key": api_key},
+                verify=False,
+                timeout=5,
+            )
+            if r.status_code != 200:
+                return []
+            data = r.json()
+        except Exception:
+            return []
+
+        results = []
+        for device_id, info in data.items():
+            if device_id == own_device_id:
+                continue
+            addresses = info.get("addresses", [])
+            ip = SyncthingService._extract_ip(addresses)
+            if not ip:
+                continue
+            device = {
+                "device_id": device_id,
+                "name": device_id[:7],
+                "ip": ip,
+            }
+            results.append(device)
+            if on_device_found:
+                on_device_found(device)
+
+        return results
+
+    @staticmethod
     def discover_local_devices(
         timeout: int = 31,
         own_device_id: str = "",
@@ -201,7 +244,11 @@ class SyncthingService:
         on_tick: Optional[Any] = None,
     ) -> List[Dict[str, str]]:
         """
-        Listen for Syncthing LDP broadcasts on UDP 21027.
+        Discover Syncthing devices on the local network.
+
+        First tries UDP LDP broadcasts on port 21027. If the port is
+        unavailable (e.g. local Syncthing holds it), falls back to
+        querying the local Syncthing REST API for already-discovered devices.
 
         Args:
             timeout: How long to listen in seconds (default 31, covers one full broadcast cycle)
@@ -228,8 +275,10 @@ class SyncthingService:
             sock.settimeout(1.0)  # 1-second recv timeout for responsive stop/tick
             sock.bind(("", 21027))
         except OSError:
-            # Can't bind — port unavailable or permission denied
-            return []
+            # Can't bind — local Syncthing holds the port; use REST API instead
+            return SyncthingService._discover_via_rest_api(
+                own_device_id, on_device_found
+            )
 
         start = time.monotonic()
         try:
@@ -418,6 +467,108 @@ class SyncthingService:
                 "Syncthing: add_folder failed", type(e).__name__, traceback.format_exc()
             )
             return False
+
+    def get_pending_devices(self) -> Dict[str, Any]:
+        """Get pending device requests (devices wanting to connect).
+        Returns dict keyed by device ID with name/address/time."""
+        try:
+            r = requests.get(
+                f"{self.api_url}/rest/cluster/pending/devices",
+                headers=self._headers(),
+                timeout=5,
+            )
+            if r.status_code == 200:
+                return r.json()
+        except Exception:
+            pass
+        return {}
+
+    def get_pending_folders(self) -> Dict[str, Any]:
+        """Get pending folder requests (folders offered by remote devices).
+        Returns dict keyed by folder ID with offeredBy info."""
+        try:
+            r = requests.get(
+                f"{self.api_url}/rest/cluster/pending/folders",
+                headers=self._headers(),
+                timeout=5,
+            )
+            if r.status_code == 200:
+                return r.json()
+        except Exception:
+            pass
+        return {}
+
+    def accept_pending_devices_and_folders(
+        self,
+        base_path: str = "",
+    ) -> Tuple[int, int]:
+        """Accept all pending devices and folders.
+
+        Adds pending devices with autoAcceptFolders=True, then accepts
+        pending folders with appropriate paths.
+
+        Args:
+            base_path: Base path for save folders (host mode)
+
+        Returns:
+            Tuple of (devices_accepted, folders_accepted)
+        """
+        devices_accepted = 0
+        folders_accepted = 0
+
+        # Accept pending devices
+        pending_devices = self.get_pending_devices()
+        for device_id, info in pending_devices.items():
+            name = info.get("name", device_id[:7])
+            if self.add_device(device_id, name):
+                devices_accepted += 1
+
+        # Accept pending folders
+        pending_folders = self.get_pending_folders()
+        existing = set(self.get_existing_folder_ids())
+
+        for folder_id, info in pending_folders.items():
+            if folder_id in existing:
+                continue
+
+            # Determine label and offering device IDs
+            offered_by = info.get("offeredBy", {})
+            device_ids = list(offered_by.keys())
+            if not device_ids:
+                continue
+
+            # Use first offerer's label, fall back to folder_id
+            first_offer = next(iter(offered_by.values()), {})
+            label = first_offer.get("label", folder_id)
+
+            # Derive path: if folder_id matches our saves-{system} pattern,
+            # use the standard host path; otherwise use base_path + folder_id
+            system = None
+            if folder_id.startswith("saves-"):
+                system = folder_id[len("saves-"):]
+
+            if system and system in SYNC_SYSTEMS:
+                path = os.path.join(
+                    base_path
+                    or os.path.join(os.path.expanduser("~"), "game-saves"),
+                    system,
+                )
+            else:
+                path = os.path.join(
+                    base_path
+                    or os.path.join(os.path.expanduser("~"), "game-saves"),
+                    folder_id,
+                )
+
+            try:
+                os.makedirs(path, exist_ok=True)
+            except OSError:
+                continue
+
+            if self.add_folder(folder_id, label, path, device_ids):
+                folders_accepted += 1
+
+        return devices_accepted, folders_accepted
 
     def remove_folder(self, folder_id: str) -> bool:
         """Remove a shared folder."""
