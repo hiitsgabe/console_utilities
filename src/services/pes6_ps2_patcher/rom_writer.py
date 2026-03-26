@@ -6,7 +6,7 @@ import struct
 import zlib
 from typing import List
 
-from .models import PES6PlayerRecord, PES6PlayerAttributes, RomInfo
+from .models import PES6PlayerRecord, PES6PlayerAttributes, RomInfo, ATTR_OFFSETS, SMALL_FIELD_OFFSETS, IDENTITY_OFFSETS, FLAG_OFFSETS
 
 
 class RomWriter:
@@ -129,7 +129,8 @@ class RomWriter:
         """Write team names to club team slots in the SLPM executable.
 
         Args:
-            team_names: List of (name, abbreviation) tuples in order.
+            team_names: List of (index, name, abbreviation) tuples.
+                        index is the position within the club name table.
         """
         if self._file is None:
             raise RuntimeError("Call begin() first")
@@ -138,12 +139,12 @@ class RomWriter:
         if club_start is None:
             return
 
-        entries = self._scan_name_entries(club_start, max_entries=130)
+        entries = self._scan_name_entries(club_start, max_entries=200)
 
-        for i, (new_name, new_abbrev) in enumerate(team_names):
-            if i >= len(entries):
-                break
-            offset, name_size, abbrev_offset = entries[i]
+        for entry_index, new_name, new_abbrev in team_names:
+            if entry_index >= len(entries):
+                continue
+            offset, name_size, abbrev_offset = entries[entry_index]
 
             max_name_len = name_size - 1
             name_bytes = new_name[:max_name_len].encode("ascii", errors="replace")
@@ -196,12 +197,30 @@ class RomWriter:
             self._file.close()
             self._file = None
 
-    def _write_record(self, data: bytearray, offset: int, player: PES6PlayerRecord):
-        """Write player name and position into a 124-byte record.
+    def _write_stat_field(
+        self, data: bytearray, record_start: int,
+        offset: int, shift: int, mask: int, value: int
+    ):
+        """Write a bit-packed value into the player record.
 
-        Modifies: name, shirt name, nameEdited flag, registered position.
-        Stats, shirt number, and other fields are preserved from original.
+        All offsets are relative to byte 48 of the record.
+        Reads 16-bit LE from [abs_off-1, abs_off], modifies field, writes back.
         """
+        abs_off = record_start + 48 + offset
+        # Read 16-bit LE
+        lo = data[abs_off - 1] if abs_off > 0 else 0
+        hi = data[abs_off] if abs_off < len(data) else 0
+        existing = lo | (hi << 8)
+        # Clear field bits, set new value
+        existing = (existing & ~(mask << shift)) | ((value & mask) << shift)
+        # Write back
+        if abs_off > 0:
+            data[abs_off - 1] = existing & 0xFF
+        if abs_off < len(data):
+            data[abs_off] = (existing >> 8) & 0xFF
+
+    def _write_record(self, data: bytearray, offset: int, player: PES6PlayerRecord):
+        """Write a complete player record including all attributes."""
         # Bytes 0-31: Name (UTF-16LE, 16 chars max including null)
         name_encoded = player.name[:15].encode("utf-16-le")
         name_field = name_encoded + b"\x00" * (32 - len(name_encoded))
@@ -212,11 +231,52 @@ class RomWriter:
         shirt_field = shirt_encoded + b"\x00" * (16 - len(shirt_encoded))
         data[offset + 32 : offset + 48] = shirt_field
 
-        # Byte 51 (stats offset 3, bit 0): nameEdited flag — MUST be 1
-        data[offset + 51] = data[offset + 51] | 0x01
+        # Registered position
+        pos_off, pos_shift, pos_mask = IDENTITY_OFFSETS["regPos"]
+        self._write_stat_field(data, offset, pos_off, pos_shift, pos_mask, player.position)
 
-        # Byte 54 (stats offset 6): registered position in bits 4-7
-        data[offset + 54] = (data[offset + 54] & 0x0F) | ((player.position & 0xF) << 4)
+        # Nationality
+        nat_off, nat_shift, nat_mask = IDENTITY_OFFSETS["nationality"]
+        self._write_stat_field(data, offset, nat_off, nat_shift, nat_mask, player.nationality)
+
+        # Age (stored as age - 15)
+        age_off, age_shift, age_mask = IDENTITY_OFFSETS["age"]
+        age_stored = max(0, min(31, player.age - 15))
+        self._write_stat_field(data, offset, age_off, age_shift, age_mask, age_stored)
+
+        # Height (stored as height - 148)
+        h_off, h_shift, h_mask = IDENTITY_OFFSETS["height"]
+        h_stored = max(0, min(63, player.height - 148))
+        self._write_stat_field(data, offset, h_off, h_shift, h_mask, h_stored)
+
+        # Weight (raw kg)
+        w_off, w_shift, w_mask = IDENTITY_OFFSETS["weight"]
+        self._write_stat_field(data, offset, w_off, w_shift, w_mask, min(127, player.weight))
+
+        # All 26 core attributes (7-bit, 1-99)
+        if player.attributes:
+            for attr_name, (a_off, a_shift, a_mask) in ATTR_OFFSETS.items():
+                value = getattr(player.attributes, attr_name, 50)
+                value = max(1, min(99, value))
+                self._write_stat_field(data, offset, a_off, a_shift, a_mask, value)
+
+            # Small fields: consistency, condition
+            c_off, c_shift, c_mask = SMALL_FIELD_OFFSETS["consistency"]
+            self._write_stat_field(
+                data, offset, c_off, c_shift, c_mask,
+                max(0, min(7, player.attributes.consistency))
+            )
+            cond_off, cond_shift, cond_mask = SMALL_FIELD_OFFSETS["condition"]
+            self._write_stat_field(
+                data, offset, cond_off, cond_shift, cond_mask,
+                max(0, min(7, player.attributes.condition))
+            )
+
+        # Flags written last so they are not clobbered by attribute bit-writes:
+        # nameEdited, shirtEdited, abilityEdited
+        for flag_name, (f_off, f_shift) in FLAG_OFFSETS.items():
+            abs_off = offset + 48 + f_off
+            data[abs_off] = data[abs_off] | (1 << f_shift)
 
     def _find_zlib_start(self, container: bytearray) -> int:
         """Find zlib stream start in WESYS container."""
