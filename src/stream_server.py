@@ -352,14 +352,18 @@ class StreamServer:
                     pg_key = getattr(pygame, f"K_{char.lower()}", 0)
                     evt = pygame.event.Event(
                         pygame.KEYDOWN,
-                        key=pg_key, mod=0, unicode=char,
+                        key=pg_key,
+                        mod=0,
+                        unicode=char,
                         web_companion=True,
                     )
                     pygame.event.post(evt)
             elif key_name in key_map:
                 evt = pygame.event.Event(
                     pygame.KEYDOWN,
-                    key=key_map[key_name], mod=0, unicode="",
+                    key=key_map[key_name],
+                    mod=0,
+                    unicode="",
                     web_companion=True,
                 )
                 pygame.event.post(evt)
