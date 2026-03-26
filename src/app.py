@@ -6739,7 +6739,9 @@ class ConsoleUtilitiesApp:
                     role=role,
                     device_ids=device_ids,
                     base_path=self.settings.get("syncthing_base_path", ""),
-                    folder_overrides=self.settings.get("syncthing_folder_overrides", {}),
+                    folder_overrides=self.settings.get(
+                        "syncthing_folder_overrides", {}
+                    ),
                 )
 
                 # Host: accept any pending device/folder requests from consoles
@@ -6770,7 +6772,9 @@ class ConsoleUtilitiesApp:
                 if parts:
                     self.state.syncthing.status_message = ". ".join(parts)
                 elif skipped > 0:
-                    self.state.syncthing.status_message = "All systems already configured"
+                    self.state.syncthing.status_message = (
+                        "All systems already configured"
+                    )
                 else:
                     self.state.syncthing.status_message = "No changes needed"
             except Exception as e:

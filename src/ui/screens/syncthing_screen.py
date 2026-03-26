@@ -142,7 +142,9 @@ class SyncthingScreen:
 
         if role == "host":
             base_path = settings.get("syncthing_base_path", "")
-            base_label = os.path.basename(base_path) or base_path if base_path else "Not set"
+            base_label = (
+                os.path.basename(base_path) or base_path if base_path else "Not set"
+            )
             _add_item(("Change Base Path", base_label), "change_base_path")
 
         # System list

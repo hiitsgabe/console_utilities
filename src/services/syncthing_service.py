@@ -545,18 +545,16 @@ class SyncthingService:
             # use the standard host path; otherwise use base_path + folder_id
             system = None
             if folder_id.startswith("saves-"):
-                system = folder_id[len("saves-"):]
+                system = folder_id[len("saves-") :]
 
             if system and system in SYNC_SYSTEMS:
                 path = os.path.join(
-                    base_path
-                    or os.path.join(os.path.expanduser("~"), "game-saves"),
+                    base_path or os.path.join(os.path.expanduser("~"), "game-saves"),
                     system,
                 )
             else:
                 path = os.path.join(
-                    base_path
-                    or os.path.join(os.path.expanduser("~"), "game-saves"),
+                    base_path or os.path.join(os.path.expanduser("~"), "game-saves"),
                     folder_id,
                 )
 

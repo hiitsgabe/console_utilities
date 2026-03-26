@@ -6,10 +6,10 @@ from .models import PES6PlayerAttributes, PES6PlayerRecord
 
 
 POSITION_MAP = {
-    "Goalkeeper": 0,    # GK
-    "Defender": 2,      # CBT (most common defender type)
-    "Midfielder": 6,    # CMF (most common midfielder type)
-    "Forward": 11,      # CF
+    "Goalkeeper": 0,  # GK
+    "Defender": 2,  # CBT (most common defender type)
+    "Midfielder": 6,  # CMF (most common midfielder type)
+    "Forward": 11,  # CF
 }
 
 from .models import EUR_NATIONALITY_MAP

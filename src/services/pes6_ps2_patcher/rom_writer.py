@@ -6,7 +6,15 @@ import struct
 import zlib
 from typing import List
 
-from .models import PES6PlayerRecord, PES6PlayerAttributes, RomInfo, ATTR_OFFSETS, SMALL_FIELD_OFFSETS, IDENTITY_OFFSETS, FLAG_OFFSETS
+from .models import (
+    PES6PlayerRecord,
+    PES6PlayerAttributes,
+    RomInfo,
+    ATTR_OFFSETS,
+    SMALL_FIELD_OFFSETS,
+    IDENTITY_OFFSETS,
+    FLAG_OFFSETS,
+)
 
 
 class RomWriter:
@@ -198,8 +206,13 @@ class RomWriter:
             self._file = None
 
     def _write_stat_field(
-        self, data: bytearray, record_start: int,
-        offset: int, shift: int, mask: int, value: int
+        self,
+        data: bytearray,
+        record_start: int,
+        offset: int,
+        shift: int,
+        mask: int,
+        value: int,
     ):
         """Write a bit-packed value into the player record.
 
@@ -233,11 +246,15 @@ class RomWriter:
 
         # Registered position
         pos_off, pos_shift, pos_mask = IDENTITY_OFFSETS["regPos"]
-        self._write_stat_field(data, offset, pos_off, pos_shift, pos_mask, player.position)
+        self._write_stat_field(
+            data, offset, pos_off, pos_shift, pos_mask, player.position
+        )
 
         # Nationality
         nat_off, nat_shift, nat_mask = IDENTITY_OFFSETS["nationality"]
-        self._write_stat_field(data, offset, nat_off, nat_shift, nat_mask, player.nationality)
+        self._write_stat_field(
+            data, offset, nat_off, nat_shift, nat_mask, player.nationality
+        )
 
         # Age (stored as age - 15)
         age_off, age_shift, age_mask = IDENTITY_OFFSETS["age"]
@@ -251,7 +268,9 @@ class RomWriter:
 
         # Weight (raw kg)
         w_off, w_shift, w_mask = IDENTITY_OFFSETS["weight"]
-        self._write_stat_field(data, offset, w_off, w_shift, w_mask, min(127, player.weight))
+        self._write_stat_field(
+            data, offset, w_off, w_shift, w_mask, min(127, player.weight)
+        )
 
         # All 26 core attributes (7-bit, 1-99)
         if player.attributes:
@@ -263,13 +282,21 @@ class RomWriter:
             # Small fields: consistency, condition
             c_off, c_shift, c_mask = SMALL_FIELD_OFFSETS["consistency"]
             self._write_stat_field(
-                data, offset, c_off, c_shift, c_mask,
-                max(0, min(7, player.attributes.consistency))
+                data,
+                offset,
+                c_off,
+                c_shift,
+                c_mask,
+                max(0, min(7, player.attributes.consistency)),
             )
             cond_off, cond_shift, cond_mask = SMALL_FIELD_OFFSETS["condition"]
             self._write_stat_field(
-                data, offset, cond_off, cond_shift, cond_mask,
-                max(0, min(7, player.attributes.condition))
+                data,
+                offset,
+                cond_off,
+                cond_shift,
+                cond_mask,
+                max(0, min(7, player.attributes.condition)),
             )
 
         # Flags written last so they are not clobbered by attribute bit-writes:
