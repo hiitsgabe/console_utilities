@@ -101,99 +101,67 @@ class PES6Patcher:
             tr for tr in league_data.teams if tr.players and not tr.error
         ]
 
-        # Read team names from the ISO for name-based matching
+        # Build name → ram_index map from roster map
+        roster_map = RosterMap()
+        available_slots = roster_map.get_slot_range(slot_start, slot_end)
         iso_team_names = {}
-        if rom_info and rom_info.is_valid:
-            reader = RomReader(rom_info.path)
-            iso_team_names = reader.read_team_names(rom_info)
+        for ram_idx in available_slots:
+            name = roster_map.get_team_name(ram_idx)
+            if name:
+                iso_team_names[name] = ram_idx
 
-        slpm_off = self.roster_map.slpm_offset
-        used_indices = set()
-        unmatched_teams = []
-
-        # First pass: name-based matching
+        # Name-based matching: only explicitly matched teams are patched
         for team_roster in teams_with_players:
             espn_name = team_roster.team.name
-            team_name_idx = self._match_team_name(espn_name, iso_team_names)
+            roster_idx = self._match_team_name(espn_name, iso_team_names)
 
-            if team_name_idx is None:
-                unmatched_teams.append(team_roster)
+            if roster_idx is None:
                 continue
 
-            # Convert team name index to roster map index
-            roster_idx = team_name_idx - slpm_off
             player_ids = self.roster_map.get_team_player_ids(roster_idx)
             if not player_ids:
-                unmatched_teams.append(team_roster)
                 continue
 
-            used_indices.add(roster_idx)
-            iso_name = iso_team_names.get(team_name_idx, f"Club {team_name_idx}")
+            # Reverse-lookup the iso name from the roster map
+            iso_name = roster_map.get_team_name(roster_idx) or f"Club {roster_idx}"
             mappings.append(
                 SlotMapping(
                     espn_team=team_roster.team,
                     ram_index=roster_idx,
-                    slpm_index=team_name_idx,
+                    slpm_index=roster_idx,
                     slot_name=iso_name,
                     player_ids=player_ids,
                 )
             )
 
-        # Second pass: assign unmatched ESPN teams to unused ROM slots
-        if unmatched_teams:
-            available = sorted(self.roster_map.get_slot_range(slot_start, slot_end))
-            unused_slots = [
-                idx
-                for idx in available
-                if idx not in used_indices
-                and len(self.roster_map.get_team_player_ids(idx)) >= 20
-            ]
-            for team_roster in unmatched_teams:
-                if not unused_slots:
-                    break
-                roster_idx = unused_slots.pop(0)
-                player_ids = self.roster_map.get_team_player_ids(roster_idx)
-                used_indices.add(roster_idx)
-                team_name_idx = roster_idx + slpm_off
-                iso_name = iso_team_names.get(team_name_idx, f"Club {roster_idx}")
-                mappings.append(
-                    SlotMapping(
-                        espn_team=team_roster.team,
-                        ram_index=roster_idx,
-                        slpm_index=team_name_idx,
-                        slot_name=iso_name,
-                        player_ids=player_ids,
-                    )
-                )
-
         return mappings
 
     def _match_team_name(
-        self, espn_name: str, iso_teams: Dict[int, str]
+        self, espn_name: str, iso_teams: Dict[str, int]
     ) -> Optional[int]:
         """Find the best matching ROM team for an ESPN team name.
 
         Uses normalized comparison (strip accents, lowercase) with known
-        aliases for common mismatches between ESPN and Bomba Patch names.
+        aliases for common mismatches between ESPN and EUR ROM names.
+        iso_teams maps team name → ram_index.
         """
         ALIASES = {
-            "atletico-mg": ["atletico mg", "cam"],
-            "athletico-pr": ["atletico pr", "apr"],
-            "atletico mineiro": ["atletico mg"],
-            "sao paulo": ["sao paulo"],
-            "gremio": ["gremio"],
-            "vasco da gama": ["vasco"],
-            "rb bragantino": ["bragantino", "red bull bragantino"],
-            "red bull bragantino": ["bragantino", "red bull bragantino"],
-            "cuiaba": ["cuiaba"],
-            "america-mg": ["america mg"],
-            "internacional": ["internacional"],
-            "ceara": ["ceara"],
-            "goias": ["goias"],
-            "fortaleza": ["fortaleza"],
-            "juventude": ["juventude"],
-            "coritiba": ["coritiba"],
-            "avai": ["avai"],
+            "atletico-madrid": ["atletico de madrid", "at. madrid"],
+            "wolverhampton-wanderers": ["wolverhampton", "wolves"],
+            "inter-milan": ["internazionale", "inter"],
+            "paris-saint-germain": ["paris sg"],
+            "borussia-dortmund": ["bor. dortmund"],
+            "bayern-munich": ["bayern munchen", "fc bayern"],
+            "rb-leipzig": ["rasenballsport leipzig"],
+            "tottenham-hotspur": ["tottenham", "spurs"],
+            "manchester-united": ["man united", "manchester utd"],
+            "manchester-city": ["man city", "manchester c"],
+            "newcastle-united": ["newcastle utd", "newcastle"],
+            "west-ham-united": ["west ham", "west ham utd"],
+            "athletic-club": ["athletic bilbao", "ath. bilbao"],
+            "deportivo-la-coruna": ["deportivo", "rc deportivo"],
+            "real-sociedad": ["r. sociedad"],
+            "real-betis": ["r. betis"],
         }
 
         def normalize(s):
@@ -206,29 +174,29 @@ class PES6Patcher:
         norm_espn = normalize(espn_name)
 
         # Direct match
-        for idx, iso_name in iso_teams.items():
+        for iso_name, ram_idx in iso_teams.items():
             if normalize(iso_name) == norm_espn:
-                return idx
+                return ram_idx
 
         # Alias match (normalize alias keys to handle hyphens)
         for alias_key, variants in ALIASES.items():
             if normalize(alias_key) == norm_espn:
                 for variant in variants:
-                    for idx, iso_name in iso_teams.items():
+                    for iso_name, ram_idx in iso_teams.items():
                         if normalize(iso_name) == normalize(variant):
-                            return idx
+                            return ram_idx
                 break
 
         # Word-level match: check if all words of one name appear in the other
         espn_words = set(norm_espn.split())
-        for idx, iso_name in iso_teams.items():
+        for iso_name, ram_idx in iso_teams.items():
             norm_iso = normalize(iso_name)
             iso_words = set(norm_iso.split())
             # ISO name's words all found in ESPN name, or vice versa
             if iso_words and iso_words.issubset(espn_words):
-                return idx
+                return ram_idx
             if espn_words and espn_words.issubset(iso_words):
-                return idx
+                return ram_idx
 
         return None
 
@@ -282,7 +250,8 @@ class PES6Patcher:
             if on_progress:
                 on_progress(0.9, "Writing team names...")
 
-            # Write team names to SLPM
+            # Write team names to SLPM at correct club table positions
+            # ram_index maps to club table entry (same numbering as roster)
             team_names = []
             for mapping in slot_mapping:
                 name = self._sanitize_name(mapping.espn_team.name)[:23]
@@ -292,7 +261,8 @@ class PES6Patcher:
                     else name[:3].upper()
                 )
                 code = self._sanitize_name(code)
-                team_names.append((name, code))
+                # ram_index is the club table entry index
+                team_names.append((mapping.ram_index, name, code))
             writer.write_team_names(team_names)
 
             if on_progress:
