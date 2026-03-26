@@ -11,8 +11,8 @@ from .models import RomInfo
 class RomReader:
     """Reads PES6/WE10 PS2 ISO files."""
 
-    # Known 0_TEXT.AFS offsets: Bomba Patch, WE10 Japan, PES6 Europe
-    AFS_CANDIDATES = [0x2F1FA000, 0x2297C800, 0x01CCA800]
+    # Known 0_TEXT.AFS offsets: PES6 Europe (SLES-54203)
+    AFS_CANDIDATES = [0x01CCA800]
     SLPM_TEAM_NAME_OFFSET = 0x2BEC00
     WESYS_MAGICS = {0x00000600, 0x00010000}
     RECORD_SIZE = 124
