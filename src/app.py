@@ -3866,6 +3866,8 @@ class ConsoleUtilitiesApp:
             current = self.settings.get("filter_region", "none")
             idx = regions.index(current) if current in regions else 0
             self.settings["filter_region"] = regions[(idx + 1) % len(regions)]
+            # Clear legacy usa_only so it doesn't override filter_region
+            self.settings.pop("usa_only", None)
             save_settings(self.settings)
         elif action == "toggle_dedupe_game_list":
             self.settings["dedupe_game_list"] = not self.settings.get(
@@ -6441,8 +6443,13 @@ class ConsoleUtilitiesApp:
         self.state.syncthing.status_message = ""
 
         def check_syncthing():
-            # Try to detect API key
+            # Try to detect API key (re-detect if saved key is stale)
             api_key = self.settings.get("syncthing_api_key", "")
+            if api_key:
+                # Verify the saved key still works (not stale)
+                test_svc = SyncthingService(api_key=api_key)
+                if not test_svc.get_device_id():
+                    api_key = ""  # Stale key, force re-detection
             if not api_key:
                 api_key = SyncthingService.detect_api_key()
                 if api_key:
@@ -6735,19 +6742,37 @@ class ConsoleUtilitiesApp:
                     folder_overrides=self.settings.get("syncthing_folder_overrides", {}),
                 )
 
+                # Host: accept any pending device/folder requests from consoles
+                devices_accepted = 0
+                folders_accepted = 0
+                if role == "host":
+                    devices_accepted, folders_accepted = (
+                        self.syncthing_service.accept_pending_devices_and_folders(
+                            base_path=self.settings.get("syncthing_base_path", ""),
+                        )
+                    )
+
                 # Update status
                 self.state.syncthing.system_statuses = (
                     self.syncthing_service.get_system_sync_status()
                 )
 
+                # Build status message
+                parts = []
                 if errors:
-                    self.state.syncthing.status_message = (
-                        f"Done: {success} added, {len(errors)} failed"
-                    )
-                elif success == 0 and skipped > 0:
+                    parts.append(f"{success} added, {len(errors)} failed")
+                elif success > 0:
+                    parts.append(f"Configured {success} systems")
+                if devices_accepted:
+                    parts.append(f"{devices_accepted} device(s) accepted")
+                if folders_accepted:
+                    parts.append(f"{folders_accepted} folder(s) accepted")
+                if parts:
+                    self.state.syncthing.status_message = ". ".join(parts)
+                elif skipped > 0:
                     self.state.syncthing.status_message = "All systems already configured"
                 else:
-                    self.state.syncthing.status_message = f"Configured {success} systems"
+                    self.state.syncthing.status_message = "No changes needed"
             except Exception as e:
                 import traceback
 
