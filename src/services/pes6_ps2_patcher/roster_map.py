@@ -44,9 +44,30 @@ class RosterMap:
         self._meta = data.get("meta", {})
 
     def get_team_player_ids(self, ram_index: int) -> List[int]:
-        """Return list of file[35] player indices for a team."""
+        """Get flat list of player indices for a team."""
         team = self._teams.get(str(ram_index), {})
+        # New format: players = [{idx, pos}, ...]
+        players = team.get("players")
+        if players and len(players) > 0 and isinstance(players[0], dict):
+            return [p["idx"] for p in players]
+        # Old format: pi = [int, ...]
         return team.get("pi", [])
+
+    def get_team_players(self, ram_index: int) -> List[Dict[str, int]]:
+        """Get list of player entries with idx and pos."""
+        team = self._teams.get(str(ram_index), {})
+        return team.get("players", [])
+
+    def get_team_name(self, ram_index: int) -> str:
+        """Get team name from roster map."""
+        team = self._teams.get(str(ram_index), {})
+        return team.get("name", "")
+
+    def get_team_player_count(self, ram_index: int) -> int:
+        """Get number of valid players for a team."""
+        team = self._teams.get(str(ram_index), {})
+        players = team.get("players", [])
+        return team.get("player_count", len(players))
 
     def get_team_roster_slots(self, ram_index: int) -> List[int]:
         """Return all 32 roster slots (including zeros for empty)."""
