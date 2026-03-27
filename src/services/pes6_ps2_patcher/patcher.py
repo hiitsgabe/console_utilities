@@ -91,9 +91,9 @@ class PES6Patcher:
     ) -> List[SlotMapping]:
         """Map ESPN teams sequentially to ROM club slots.
 
-        Assigns each ESPN team to the next available club slot starting
-        from slot_start. The chosen league replaces whatever teams
-        were in those slots. No name matching — purely sequential.
+        Gets the list of available team IDs from the roster map and
+        assigns each ESPN team to the next slot. The chosen league
+        replaces whatever teams were in those slots.
         """
         mappings = []
 
@@ -102,22 +102,23 @@ class PES6Patcher:
         ]
 
         roster_map = RosterMap()
+        available_ids = roster_map.get_all_team_indices()
 
         for i, team_roster in enumerate(teams_with_players):
-            slot_idx = slot_start + i
-            if slot_idx >= slot_end:
+            if i >= len(available_ids):
                 break
 
-            player_ids = roster_map.get_team_player_ids(slot_idx)
+            team_id = available_ids[i]
+            player_ids = roster_map.get_team_player_ids(team_id)
             if not player_ids:
                 continue
 
-            iso_name = roster_map.get_team_name(slot_idx) or f"Club {slot_idx}"
+            iso_name = roster_map.get_team_name(team_id) or f"Club {team_id}"
             mappings.append(
                 SlotMapping(
                     espn_team=team_roster.team,
-                    ram_index=slot_idx,
-                    slpm_index=slot_idx,
+                    ram_index=team_id,
+                    slpm_index=team_id,
                     slot_name=iso_name,
                     player_ids=player_ids,
                 )
