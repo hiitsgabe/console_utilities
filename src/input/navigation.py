@@ -194,18 +194,22 @@ class NavigationHandler:
         }
         return mapping.get(direction, (0, 0))
 
-    def handle_continuous(self, on_navigate: Callable[[str, tuple], None]) -> None:
+    def handle_continuous(self, on_navigate: Callable[[str, tuple], None]) -> bool:
         """
         Handle continuous navigation for all held directions.
 
         Args:
             on_navigate: Callback function(direction, hat_value) for navigation
+
+        Returns:
+            True if navigation occurred (screen needs redraw).
         """
         for direction in self.DIRECTIONS:
             if self.should_navigate(direction):
                 hat = self.get_hat_value(direction)
                 on_navigate(direction, hat)
-                break  # Only process one direction per frame
+                return True  # Only process one direction per frame
+        return False
 
     def reset(self) -> None:
         """Reset all navigation state."""

@@ -192,11 +192,7 @@ class MenuItem:
         )
 
         # Draw lines on either side
-        font = pygame.font.Font(
-            getattr(self.theme, "font_path", None),
-            self.theme.font_size_sm,
-        )
-        text_width = font.size(label)[0]
+        text_width = self.text.measure(label, size=self.theme.font_size_sm)[0]
         gap = 10
 
         line_y = rect.centery
