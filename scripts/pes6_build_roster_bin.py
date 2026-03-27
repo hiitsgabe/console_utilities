@@ -1,240 +1,204 @@
 #!/usr/bin/env python3
 """
-Build assets/pes6_roster_map.bin from PES6 EUR PCSX2 save state.
+Build assets/pes6_roster_map.bin from PES6 EUR CSV data + ISO player positions.
 
-Extracts team names and player ID mappings from EE RAM. Each club team
-has exactly 32 contiguous player IDs in the player DB.
+Reads team/roster CSVs (extracted from pesapi database) and player positions
+from the PES6 EUR ISO's decompressed player DB.
 
 Binary format: PES6RM magic + version(u16) + orig_size(u32) + comp_size(u32) + zlib(JSON)
+
+Usage:
+    python scripts/pes6_build_roster_bin.py <path_to_pes6_eur.iso>
 """
-import struct
+import csv
 import json
-import zlib
-import sys
 import os
+import struct
+import sys
+import zlib
 
-# PES6 EUR RAM addresses (discovered from SLES-54203 save state analysis)
-ARSENAL_NAME_ADDR = 0x003DDCA8  # "Arsenal\0" in team name table
-CLUB_PLAYER_BASE_ID = 1338  # 1-based, first club team's first player in DB
-DB_START = 0x018415B0  # Start of player DB in RAM
-RECORD_SIZE = 124  # Bytes per player record
-PLAYERS_PER_TEAM = 32
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+ROSTER_CSV = os.path.join(SCRIPT_DIR, "pes6_eur_roster.csv")
+TEAMS_CSV = os.path.join(SCRIPT_DIR, "pes6_eur_teams.csv")
+OUTPUT_BIN = os.path.join(SCRIPT_DIR, "..", "assets", "pes6_roster_map.bin")
 
-
-def extract_ee_ram(path):
-    """Extract EE RAM from PCSX2 save state (.p2s)."""
-    import zstandard
-
-    with open(path, "rb") as f:
-        data = f.read()
-    pos = 0
-    while pos < len(data):
-        idx = data.find(b"PK\x03\x04", pos)
-        if idx == -1:
-            break
-        comp_size = struct.unpack_from("<I", data, idx + 18)[0]
-        uncomp_size = struct.unpack_from("<I", data, idx + 22)[0]
-        fname_len = struct.unpack_from("<H", data, idx + 26)[0]
-        extra_len = struct.unpack_from("<H", data, idx + 28)[0]
-        fname = data[idx + 30 : idx + 30 + fname_len]
-        data_start = idx + 30 + fname_len + extra_len
-        if fname == b"eeMemory.bin":
-            dctx = zstandard.ZstdDecompressor()
-            return dctx.decompress(
-                data[data_start : data_start + comp_size],
-                max_output_size=uncomp_size,
-            )
-        pos = data_start + comp_size if comp_size > 0 else idx + 4
-    return None
+RECORD_SIZE = 124
 
 
-def parse_team_name_entry(ram, offset):
-    """Parse a variable-length team name entry.
+def read_iso_db(iso_path):
+    """Decompress the player DB from the PES6 EUR ISO."""
+    sys.path.insert(0, os.path.join(SCRIPT_DIR, "..", "src"))
+    import importlib.util as ilu
+    import types
 
-    Format: name (padded to 8-byte boundary, null-terminated) + abbreviation (8 bytes).
-    Returns (name, abbreviation, total_entry_size) or None if invalid.
-    """
-    # Read name (scan for null, then round up to 8-byte boundary)
-    name_end = ram.find(b"\x00", offset, offset + 48)
-    if name_end == -1:
-        return None
-    name = ram[offset:name_end].decode("ascii", errors="replace")
-    if not name or not name[0].isalpha():
-        return None
+    # Stub dependencies for standalone execution
+    for m in ["constants", "utils", "utils.logging"]:
+        if m not in sys.modules:
+            sys.modules[m] = types.ModuleType(m)
+    sys.modules["constants"].BUILD_TARGET = "source"
+    sys.modules["constants"].DEV_MODE = True
+    sys.modules["utils.logging"].log_error = lambda *a: None
+    sys.modules["services"] = types.ModuleType("services")
+    sys.modules["services"].__path__ = [os.path.join(SCRIPT_DIR, "..", "src", "services")]
+    pkg = types.ModuleType("services.pes6_ps2_patcher")
+    pkg.__path__ = [os.path.join(SCRIPT_DIR, "..", "src", "services", "pes6_ps2_patcher")]
+    sys.modules["services.pes6_ps2_patcher"] = pkg
+    sa = types.ModuleType("services.sports_api")
+    sam = types.ModuleType("services.sports_api.models")
+    for cls in ["League", "Player", "PlayerStats", "Team", "TeamRoster", "LeagueData"]:
+        setattr(sam, cls, type(cls, (), {}))
+    sys.modules["services.sports_api"] = sa
+    sys.modules["services.sports_api.models"] = sam
 
-    # Name field: padded to 8-byte boundary
-    name_field_size = ((len(name) + 9) // 8) * 8
+    mspec = ilu.spec_from_file_location(
+        "services.pes6_ps2_patcher.models",
+        os.path.join(SCRIPT_DIR, "..", "src", "services", "pes6_ps2_patcher", "models.py"),
+    )
+    mmod = ilu.module_from_spec(mspec)
+    sys.modules["services.pes6_ps2_patcher.models"] = mmod
+    mspec.loader.exec_module(mmod)
 
-    # Abbreviation follows: 8 bytes
-    abbr_offset = offset + name_field_size
-    abbr = ram[abbr_offset : abbr_offset + 8].split(b"\x00")[0].decode("ascii", errors="replace")
+    rspec = ilu.spec_from_file_location(
+        "services.pes6_ps2_patcher.rom_reader",
+        os.path.join(SCRIPT_DIR, "..", "src", "services", "pes6_ps2_patcher", "rom_reader.py"),
+    )
+    rmod = ilu.module_from_spec(rspec)
+    rmod.__package__ = "services.pes6_ps2_patcher"
+    rspec.loader.exec_module(rmod)
 
-    entry_size = name_field_size + 8
-    return name, abbr, entry_size
+    reader = rmod.RomReader(iso_path)
+    rom_info = reader.validate()
+    if not rom_info.is_valid:
+        print(f"Invalid ISO: {iso_path}")
+        sys.exit(1)
+
+    with open(iso_path, "rb") as f:
+        db = reader._decompress_wesys(f, rom_info.file35_offset, rom_info.file35_size)
+
+    print(f"ISO: {rom_info.num_players} players, DB: {len(db)} bytes")
+    return db
 
 
-def get_player_name(ram, idx_1based):
-    """Read player name from DB by 1-based index."""
-    off = DB_START + (idx_1based - 1) * RECORD_SIZE
-    if off < 0 or off + 32 > len(ram):
+def get_position(db, player_id):
+    """Read registered position from decompressed player DB."""
+    off = player_id * RECORD_SIZE
+    pos_off = off + 48 + 5  # regPos: offset 6 from byte 48, read 16-bit LE from [off-1, off]
+    if pos_off + 1 >= len(db):
+        return 0
+    return ((db[pos_off] | (db[pos_off + 1] << 8)) >> 4) & 0x0F
+
+
+def get_name(db, player_id):
+    """Read player name from decompressed player DB."""
+    off = player_id * RECORD_SIZE
+    if off + 32 > len(db):
         return ""
     try:
-        return ram[off : off + 32].decode("utf-16-le").split("\x00")[0]
+        return db[off : off + 32].decode("utf-16-le").split("\x00")[0]
     except Exception:
         return ""
 
 
-def get_player_position(ram, idx_1based):
-    """Read player's registered position from DB (byte 48+6, bits 4-7)."""
-    off = DB_START + (idx_1based - 1) * RECORD_SIZE
-    abs_pos = off + 48 + 6  # regPos offset relative to byte 48
-    if abs_pos < 0 or abs_pos >= len(ram):
-        return 0
-    # 16-bit LE read from [abs_pos-1, abs_pos], shift 4, mask 0x0F
-    lo = ram[abs_pos - 1]
-    hi = ram[abs_pos]
-    val = (lo | (hi << 8)) >> 4
-    return val & 0x0F
-
-
-def find_club_teams(ram):
-    """Parse club team names starting from Arsenal.
-
-    Returns list of (name, abbreviation, team_index) tuples.
-    """
-    teams = []
-    offset = ARSENAL_NAME_ADDR
-    team_idx = 0
-
-    consecutive_nulls = 0
-    while offset < len(ram) - 32:
-        result = parse_team_name_entry(ram, offset)
-        if result is None:
-            # Skip 8-byte null padding blocks
-            if ram[offset : offset + 8] == b"\x00" * 8:
-                offset += 8
-                consecutive_nulls += 1
-                if consecutive_nulls > 4:  # Too many gaps = end of table
-                    break
-                continue
-            break
-        consecutive_nulls = 0
-
-        name, abbr, entry_size = result
-        teams.append((name, abbr, team_idx))
-        offset += entry_size
-        team_idx += 1
-
-        # Safety limit
-        if team_idx > 300:
-            break
-
-    return teams
-
-
-def find_national_teams(ram):
-    """Parse national team names by scanning backwards from Arsenal.
-
-    Returns list of (name, abbreviation, team_index) in reverse order.
-    """
-    # Scan backwards from Arsenal to find national teams
-    teams = []
-    offset = ARSENAL_NAME_ADDR
-
-    # Go back one entry at a time
-    # We need to find entry boundaries going backwards, which is tricky
-    # with variable-length entries. Use a heuristic: scan back for abbreviation
-    # patterns (3 uppercase letters followed by nulls at 8-byte boundaries)
-    # For now, just report that we found the club teams and national teams
-    # need a separate approach.
-    return teams
-
-
 def main():
-    ss_path = (
-        sys.argv[1]
-        if len(sys.argv) > 1
-        else os.path.expanduser(
-            "~/Library/Application Support/PCSX2/sstates/SLES-54203 (7D2AF924).01.p2s"
-        )
-    )
-
-    print(f"Reading save state: {ss_path}")
-    ram = extract_ee_ram(ss_path)
-    if ram is None:
-        print("Failed to extract EE RAM")
+    if len(sys.argv) < 2:
+        print(f"Usage: {sys.argv[0]} <path_to_pes6_eur.iso>")
         sys.exit(1)
-    print(f"EE RAM: {len(ram)} bytes ({len(ram) / 1024 / 1024:.1f} MB)")
 
-    # Parse club teams from name table
-    club_teams = find_club_teams(ram)
-    print(f"Found {len(club_teams)} club teams")
+    iso_path = sys.argv[1]
+    db = read_iso_db(iso_path)
 
-    # Build roster map
-    teams_json = {}
-    total_players = 0
+    # Read teams CSV
+    teams = {}
+    with open(TEAMS_CSV) as f:
+        for row in csv.DictReader(f):
+            tid = int(row["team_id"])
+            teams[tid] = {
+                "name": row["team_name"],
+                "real_name": row["team_real_name"] or row["team_name"],
+                "abbr": row["team_short"],
+                "league": row["league"],
+                "category": row["league_category"],
+            }
 
-    for name, abbr, team_idx in club_teams:
-        start_id = CLUB_PLAYER_BASE_ID + team_idx * PLAYERS_PER_TEAM
-        players = []
+    # Read roster CSV — club teams only
+    team_players = {}
+    with open(ROSTER_CSV) as f:
+        for row in csv.DictReader(f):
+            if row["league_category"] != "Club":
+                continue
+            tid = int(row["team_id"])
+            pid = int(row["player_id"])
 
-        for slot in range(PLAYERS_PER_TEAM):
-            pid = start_id + slot
-            pos = get_player_position(ram, pid)
-            player_name = get_player_name(ram, pid)
-            if player_name:  # Only include players with names
-                players.append({"idx": pid, "pos": pos, "name": player_name})
+            if tid not in team_players:
+                team_players[tid] = []
 
-        teams_json[str(team_idx)] = {
-            "name": name,
-            "abbr": abbr,
-            "ri": team_idx,
-            "player_count": len(players),
-            "players": players,
-        }
-        total_players += len(players)
+            pos = get_position(db, pid)
+            iso_name = get_name(db, pid)
 
-        # Show first team as verification
-        if team_idx < 3:
-            first_names = [get_player_name(ram, p["idx"]) for p in players[:3]]
-            print(f"  [{team_idx}] {name} ({abbr}): {len(players)} players, first: {first_names}")
+            team_players[tid].append(
+                {
+                    "idx": pid,
+                    "pos": pos,
+                    "name": iso_name or row["player_name"],
+                    "shirt": int(row["shirt_number"]) if row["shirt_number"] else 0,
+                    "starter": int(row["starter"]),
+                }
+            )
 
-    compact = {
+    # Build JSON
+    roster_json = {
         "meta": {
             "version": "pes6-eur",
             "game_id": "SLES-54203",
-            "arsenal_name_addr": f"0x{ARSENAL_NAME_ADDR:08X}",
-            "club_player_base_id": CLUB_PLAYER_BASE_ID,
-            "players_per_team": PLAYERS_PER_TEAM,
-            "total_players": total_players,
-            "total_teams": len(teams_json),
+            "source": "pesapi + ISO positions",
+            "total_teams": len(team_players),
+            "total_players": sum(len(v) for v in team_players.values()),
         },
-        "teams": teams_json,
+        "teams": {},
     }
 
-    # Serialize and compress
-    json_bytes = json.dumps(compact, separators=(",", ":")).encode("utf-8")
-    compressed = zlib.compress(json_bytes, 9)
+    for tid in sorted(team_players.keys()):
+        t = teams[tid]
+        players = team_players[tid]
+        # Sort: starters first, then by shirt number
+        players.sort(key=lambda p: (-p["starter"], p["shirt"]))
 
-    # Write binary
-    magic = b"PES6RM"
-    version = struct.pack("<H", 3)  # Version 3 = PES6 EUR format
+        roster_json["teams"][str(tid)] = {
+            "name": t["name"],
+            "real_name": t["real_name"],
+            "abbr": t["abbr"],
+            "league": t["league"],
+            "ri": tid,
+            "player_count": len(players),
+            "players": players,
+        }
+
+    # Compress and write binary
+    json_bytes = json.dumps(roster_json, separators=(",", ":")).encode("utf-8")
+    compressed = zlib.compress(json_bytes, 9)
     header = (
-        magic
-        + version
+        b"PES6RM"
+        + struct.pack("<H", 4)  # Version 4
         + struct.pack("<I", len(json_bytes))
         + struct.pack("<I", len(compressed))
     )
-    output = header + compressed
 
-    out_path = os.path.join(os.path.dirname(__file__), "..", "assets", "pes6_roster_map.bin")
-    with open(out_path, "wb") as f:
-        f.write(output)
+    with open(OUTPUT_BIN, "wb") as f:
+        f.write(header + compressed)
 
-    print(f"\nTeams: {len(teams_json)}")
-    print(f"Total players: {total_players}")
-    print(f"JSON: {len(json_bytes)} bytes -> Binary: {len(output)} bytes")
-    print(f"Written to: {out_path}")
+    print(f"Teams: {len(team_players)}")
+    print(f"Players: {sum(len(v) for v in team_players.values())}")
+    print(f"JSON: {len(json_bytes)} bytes -> Binary: {len(header) + len(compressed)} bytes")
+    print(f"Written to: {OUTPUT_BIN}")
+
+    # Show sample
+    for tid in sorted(team_players.keys())[:3]:
+        t = teams[tid]
+        p = team_players[tid]
+        print(f"  [{tid}] {t['real_name']} ({t['abbr']}): {len(p)} players")
+        for pl in p[:3]:
+            s = "*" if pl["starter"] else ""
+            print(f"    ID={pl['idx']:5d} pos={pl['pos']:2d} #{pl['shirt']:2d} {pl['name']} {s}")
 
 
 if __name__ == "__main__":
