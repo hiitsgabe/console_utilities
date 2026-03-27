@@ -52,11 +52,17 @@ html, body { width: 100%; height: 100%; background: #000; overflow: hidden; touc
 </head>
 <body>
 <div id="status"></div>
+<button id="reload" style="position:fixed;top:6px;left:8px;z-index:10;background:rgba(0,0,0,0.6);color:#4f4;border:1px solid #4f4;border-radius:4px;padding:4px 10px;font-size:12px;font-family:monospace;cursor:pointer">Reload</button>
 <div id="wrap"><img id="screen" src="/mjpeg"></div>
 <script>
 const wrap = document.getElementById('wrap');
 const img = document.getElementById('screen');
 const status = document.getElementById('status');
+
+document.getElementById('reload').addEventListener('click', () => {
+    img.src = '';
+    setTimeout(() => { img.src = '/mjpeg?' + Date.now(); }, 100);
+});
 
 const GAME_W = {width};
 const GAME_H = {height};

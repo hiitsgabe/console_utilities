@@ -1021,6 +1021,7 @@ html, body {
     <div id="companionView">
         <div class="thumbnail-wrap" id="thumbWrap">
             <img id="thumbImg" src="/mjpeg" alt="Screen">
+            <button class="thumb-toggle" id="thumbReload" style="right:50px">Reload</button>
             <button class="thumb-toggle" id="thumbToggle">Hide</button>
         </div>
         <div class="content" id="content"></div>
@@ -1129,6 +1130,13 @@ thumbToggle.addEventListener('click', (e) => {
     thumbToggle.textContent = thumbVisible ? 'Hide' : 'Show';
 });
 
+// Reload MJPEG stream
+document.getElementById('thumbReload').addEventListener('click', (e) => {
+    e.stopPropagation();
+    thumbImg.src = '';
+    setTimeout(() => { thumbImg.src = '/mjpeg?' + Date.now(); }, 100);
+});
+
 // SSE connection
 function connectSSE() {
     if (evtSource) {
@@ -1176,6 +1184,15 @@ function sendAction(obj) {
 
 function renderState(state) {
     titleEl.textContent = state.title || 'Console Utilities';
+
+    // Auto-switch to Files tab when file_explorer mode is active
+    if (state.screen_type === 'switch_tab') {
+        if (state.tab === 'files' && activeTab !== 'files') {
+            const filesBtn = tabBar.querySelector('button[data-tab="files"]');
+            if (filesBtn) filesBtn.click();
+        }
+        return;
+    }
 
     switch (state.screen_type) {
         case 'text_input': renderTextInput(state); break;
@@ -1246,9 +1263,68 @@ function renderTextInput(state) {
 
 function renderList(state) {
     const items = state.items || [];
+
+    // --- Incremental update: if the list DOM already exists with same item count, just patch classes/status ---
+    const existingList = content.querySelector('.list-items');
+    if (existingList) {
+        const existingItems = existingList.querySelectorAll('.list-item');
+        const nonDividerCount = items.filter(it => !it.is_divider).length;
+        const existingNonDividers = existingList.querySelectorAll('.list-item:not(.divider)');
+        // Check if structure matches (same items, same wizard_action, same search presence)
+        const prevWizard = content.dataset.wizardAction || '';
+        const curWizard = state.wizard_action || '';
+        const prevHasSearch = content.dataset.hasSearch || '';
+        const curHasSearch = (state.search !== undefined && state.search !== null) ? '1' : '';
+        const prevHasActions = content.dataset.hasGameActions || '';
+        const curHasActions = state.game_actions ? '1' : '';
+        if (existingNonDividers.length === nonDividerCount &&
+            existingItems.length === items.length &&
+            prevWizard === curWizard && prevHasSearch === curHasSearch &&
+            prevHasActions === curHasActions) {
+            // Patch each item in-place (no innerHTML rebuild)
+            let needScroll = false;
+            items.forEach((item, i) => {
+                const el = existingItems[i];
+                if (!el || item.is_divider) return;
+                const wasHighlighted = el.classList.contains('highlighted');
+                const isHighlighted = i === state.highlighted;
+                if (wasHighlighted !== isHighlighted) {
+                    el.classList.toggle('highlighted', isHighlighted);
+                    if (isHighlighted) needScroll = true;
+                }
+                const wasSelected = el.classList.contains('selected');
+                const isSelected = !!item.selected;
+                if (wasSelected !== isSelected) {
+                    el.classList.toggle('selected', isSelected);
+                }
+                // Update status text if present
+                const statusEl = el.querySelector('.item-status');
+                if (statusEl && item.status) {
+                    statusEl.textContent = item.status;
+                }
+                // Update progress bar if present
+                const progressBar = el.querySelector('.item-progress-bar');
+                if (progressBar && item.progress !== undefined) {
+                    progressBar.style.width = Math.round(item.progress * 100) + '%';
+                }
+            });
+            // Update selected count in game actions bar if present
+            const selCountEl = content.querySelector('.game-sel-count');
+            if (selCountEl && state.selected_count !== undefined) {
+                selCountEl.textContent = state.selected_count + ' selected';
+            }
+            if (needScroll) {
+                const hl = content.querySelector('.list-item.highlighted');
+                if (hl) hl.scrollIntoView({block: 'nearest', behavior: 'auto'});
+            }
+            return;
+        }
+    }
+
+    // --- Full render ---
     let html = '';
 
-    // Search bar if search is present
+    // Search bar if search is present or game screen needs search initiation
     if (state.search !== undefined && state.search !== null) {
         const searchType = state.searchable ? 'filter' : 'search';
         html += `<div class="search-bar">
@@ -1256,6 +1332,20 @@ function renderList(state) {
                    placeholder="Search..." autocomplete="off" data-search-type="${searchType}">
             <button class="btn" onclick="doSearch()">Go</button>
         </div>`;
+    }
+
+    // Game actions bar (download selected, search, download all)
+    if (state.game_actions) {
+        html += `<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center">`;
+        html += `<button class="btn" style="flex:0 0 auto;padding:8px 12px;font-size:13px" onclick="sendAction({action:'search',text:''})">Search</button>`;
+        if (state.selected_count > 0) {
+            html += `<span class="game-sel-count" style="font-size:13px;color:var(--text-dim)">${state.selected_count} selected</span>`;
+            html += `<button class="btn primary" style="flex:0 0 auto;padding:8px 12px;font-size:13px" onclick="sendAction({action:'download_selected'})">Download</button>`;
+        }
+        if (state.show_download_all) {
+            html += `<button class="btn" style="flex:0 0 auto;padding:8px 12px;font-size:13px;margin-left:auto" onclick="sendAction({action:'download_all'})">Download All</button>`;
+        }
+        html += `</div>`;
     }
 
     html += '<div class="list-items">';
@@ -1309,6 +1399,9 @@ function renderList(state) {
         } else if (state.wizard_action === 'scraper_batch_options') {
             html += `<button class="btn primary" onclick="sendAction({action:'select'})">Toggle</button>`;
             html += `<button class="btn" onclick="sendAction({action:'start'})">Start Batch</button>`;
+        } else if (state.wizard_action === 'downloads') {
+            html += `<button class="btn" onclick="sendAction({action:'select'})">Cancel/Remove</button>`;
+            html += `<button class="btn" onclick="sendAction({action:'back'})">Back</button>`;
         } else {
             html += `<button class="btn primary" onclick="sendAction({action:'select'})">Select</button>`;
             html += `<button class="btn" onclick="sendAction({action:'back'})">Back</button>`;
@@ -1317,6 +1410,11 @@ function renderList(state) {
     }
 
     content.innerHTML = html;
+
+    // Store metadata for incremental updates
+    content.dataset.wizardAction = state.wizard_action || '';
+    content.dataset.hasSearch = (state.search !== undefined && state.search !== null) ? '1' : '';
+    content.dataset.hasGameActions = state.game_actions ? '1' : '';
 
     // Auto-scroll to highlighted
     const highlighted = content.querySelector('.list-item.highlighted');

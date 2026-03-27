@@ -228,11 +228,30 @@ def serialize_web_state(state, settings=None, data=None):
                 "input_type": "password",
                 "cursor": state.ia_login.cursor_position,
             }
+        elif step == "complete":
+            return {
+                "screen_type": "confirm",
+                "title": "Internet Archive",
+                "message": "Login successful!",
+                "buttons": ["OK", ""],
+                "selected": 0,
+            }
+        elif step == "error":
+            return {
+                "screen_type": "confirm",
+                "title": "Internet Archive - Login Error",
+                "message": getattr(state.ia_login, "error_message", "")
+                or "Login failed",
+                "buttons": ["Retry", "Cancel"],
+                "selected": 0,
+            }
         else:
             return {
                 "screen_type": "loading",
                 "title": "Internet Archive",
-                "message": f"Login: {step}",
+                "message": "Testing credentials..."
+                if step == "testing"
+                else f"Login: {step}",
                 "progress": 0,
             }
 
@@ -459,6 +478,10 @@ def serialize_web_state(state, settings=None, data=None):
                 "progress": 0,
             }
 
+    # Steam shortcut modal
+    if state.steam_shortcut.show:
+        return _serialize_steam_shortcut(state.steam_shortcut)
+
     # Scraper wizard
     if state.scraper_wizard.show:
         return _serialize_scraper_wizard(state.scraper_wizard)
@@ -569,12 +592,16 @@ def serialize_web_state(state, settings=None, data=None):
         system_name = ""
         if data and state.selected_system < len(data):
             system_name = data[state.selected_system].get("name", "")
+        show_download_all = (settings or {}).get("show_download_all", False)
         return {
             "screen_type": "list",
             "title": system_name or "Games",
             "items": items,
             "highlighted": state.highlighted,
             "search": state.search.query if state.search.mode else "",
+            "game_actions": True,
+            "selected_count": len(state.selected_games),
+            "show_download_all": show_download_all,
         }
 
     if state.mode == "settings":
@@ -631,6 +658,7 @@ def serialize_web_state(state, settings=None, data=None):
             "title": "Downloads",
             "items": items,
             "highlighted": state.download_queue.highlighted,
+            "wizard_action": "downloads",
         }
 
     # Patcher screens — use actual screen items
@@ -640,6 +668,11 @@ def serialize_web_state(state, settings=None, data=None):
         "nhl94_patcher",
         "nhl94_gen_patcher",
         "nhl07_patcher",
+        "kgj_mlb_patcher",
+        "nbalive95_patcher",
+        "mvp_psp_patcher",
+        "nhl05_patcher",
+        "pes6_ps2_patcher",
     ):
         fields = _build_patcher_fields(state, settings)
         title_map = {
@@ -648,6 +681,11 @@ def serialize_web_state(state, settings=None, data=None):
             "nhl94_patcher": "NHL 94 SNES Patcher",
             "nhl94_gen_patcher": "NHL 94 Genesis Patcher",
             "nhl07_patcher": "NHL 07 PSP Patcher",
+            "kgj_mlb_patcher": "KGJ MLB Patcher",
+            "nbalive95_patcher": "NBA Live 95 Patcher",
+            "mvp_psp_patcher": "MVP Baseball PSP Patcher",
+            "nhl05_patcher": "NHL 05 PS2 Patcher",
+            "pes6_ps2_patcher": "PES6 PS2 Patcher",
         }
         return {
             "screen_type": "form",
@@ -806,6 +844,17 @@ def serialize_web_state(state, settings=None, data=None):
             "highlighted": getattr(state, "system_settings_highlighted", 0),
         }
 
+    if state.mode == "syncthing":
+        return _serialize_syncthing(state, settings)
+
+    if state.mode == "file_explorer":
+        # Switch the web companion to the Files tab
+        return {
+            "screen_type": "switch_tab",
+            "tab": "files",
+            "title": "File Explorer",
+        }
+
     if state.mode == "credits":
         return {
             "screen_type": "details",
@@ -871,6 +920,26 @@ def _build_patcher_fields(state, settings):
             from ui.screens.nhl07_psp_patcher_screen import nhl07_psp_patcher_screen
 
             items = nhl07_psp_patcher_screen._get_items(state, settings)
+        elif state.mode == "kgj_mlb_patcher":
+            from ui.screens.kgj_mlb_patcher_screen import kgj_mlb_patcher_screen
+
+            items = kgj_mlb_patcher_screen._get_items(state, settings)
+        elif state.mode == "nbalive95_patcher":
+            from ui.screens.nbalive95_patcher_screen import nbalive95_patcher_screen
+
+            items = nbalive95_patcher_screen._get_items(state, settings)
+        elif state.mode == "mvp_psp_patcher":
+            from ui.screens.mvp_psp_patcher_screen import mvp_psp_patcher_screen
+
+            items = mvp_psp_patcher_screen._get_items(state, settings)
+        elif state.mode == "nhl05_patcher":
+            from ui.screens.nhl05_ps2_patcher_screen import nhl05_ps2_patcher_screen
+
+            items = nhl05_ps2_patcher_screen._get_items(state, settings)
+        elif state.mode == "pes6_ps2_patcher":
+            from ui.screens.pes6_ps2_patcher_screen import pes6_ps2_patcher_screen
+
+            items = pes6_ps2_patcher_screen._get_items(state, settings)
         else:
             items = []
 
@@ -1390,6 +1459,15 @@ def _serialize_scraper_wizard(wizard):
             "wizard_action": "scraper_rom_list",
         }
 
+    if step == "edit_name":
+        return {
+            "screen_type": "text_input",
+            "title": "Edit Game Name",
+            "text": getattr(wizard, "search_name", ""),
+            "input_type": "text",
+            "cursor": getattr(wizard, "search_name_cursor", 0),
+        }
+
     if step == "batch_options":
         items = _build_batch_options(wizard)
         return {
@@ -1398,6 +1476,43 @@ def _serialize_scraper_wizard(wizard):
             "items": items,
             "highlighted": wizard.image_highlighted,
             "wizard_action": "scraper_batch_options",
+        }
+
+    if step == "batch_processing":
+        current = getattr(wizard, "batch_current_index", 0)
+        total = len(getattr(wizard, "batch_roms", []))
+        return {
+            "screen_type": "loading",
+            "title": "Batch Scraping",
+            "message": getattr(wizard, "current_download", "")
+            or f"Processing {current}/{total}",
+            "progress": int((current / total * 100) if total else 0),
+        }
+
+    if getattr(wizard, "system_picker_active", False):
+        # System picker overlay during batch options
+        items = []
+        search = getattr(wizard, "system_picker_search", "")
+        try:
+            from app import ConsoleUtilitiesApp
+
+            all_systems = [("Auto (detect from folder)", "")] + list(
+                ConsoleUtilitiesApp._ALL_SYSTEMS
+            )
+            query = search.lower().strip()
+            for name, sid in all_systems:
+                if query and query not in name.lower() and query not in sid.lower():
+                    continue
+                items.append({"name": name, "selected": False})
+        except Exception:
+            pass
+        return {
+            "screen_type": "list",
+            "title": "Select System",
+            "items": items,
+            "highlighted": getattr(wizard, "system_picker_highlighted", 0),
+            "search": search,
+            "searchable": True,
         }
 
     if step in ("searching", "downloading", "updating_metadata", "batch_scraping"):
@@ -1459,6 +1574,224 @@ def _build_batch_options(wizard):
         }
     )
     return items
+
+
+def _serialize_syncthing(state, settings):
+    """Serialize syncthing screen state based on current step."""
+    sync = state.syncthing
+    step = sync.step
+
+    if step == "checking":
+        return {
+            "screen_type": "loading",
+            "title": "Syncthing Sync",
+            "message": "Checking Syncthing connection...",
+            "progress": 0,
+        }
+
+    if step == "not_found":
+        items = [
+            {"name": "--- Syncthing not found ---", "is_divider": True},
+            {"name": "--- Install Syncthing and ---", "is_divider": True},
+            {"name": "--- make sure it is running ---", "is_divider": True},
+            {"name": "Retry Connection", "selected": False},
+        ]
+        return {
+            "screen_type": "list",
+            "title": "Syncthing Sync",
+            "items": items,
+            "highlighted": sync.highlighted,
+        }
+
+    if step == "role_select":
+        items = [
+            {"name": "--- SELECT ROLE ---", "is_divider": True},
+            {"name": "Host (Computer)", "selected": False},
+            {"name": "Console (Knulli/Android)", "selected": False},
+        ]
+        return {
+            "screen_type": "list",
+            "title": "Syncthing Sync",
+            "items": items,
+            "highlighted": sync.highlighted,
+        }
+
+    if step == "discovery":
+        items = []
+        if sync.discovery_scanning:
+            items.append(
+                {
+                    "name": f"--- Scanning... ({sync.discovery_seconds_left}s remaining) ---",
+                    "is_divider": True,
+                }
+            )
+        else:
+            label = (
+                "--- Devices Found ---"
+                if sync.discovery_results
+                else "--- No Devices Found ---"
+            )
+            items.append({"name": label, "is_divider": True})
+
+        for device in sync.discovery_results:
+            name = device.get("name", "Unknown")
+            ip = device.get("ip", "")
+            items.append({"name": f"{name} ({ip})" if ip else name, "selected": False})
+
+        items.append({"name": "--- OPTIONS ---", "is_divider": True})
+        if not sync.discovery_scanning:
+            items.append({"name": "Scan Again", "selected": False})
+        items.append({"name": "Enter Manually", "selected": False})
+
+        return {
+            "screen_type": "list",
+            "title": "Syncthing Sync",
+            "items": items,
+            "highlighted": sync.highlighted,
+        }
+
+    if step == "configured":
+        from ui.screens.syncthing_screen import syncthing_screen
+        from services.syncthing_service import SYNC_SYSTEMS
+
+        display_items, actions, divider_indices = (
+            syncthing_screen._build_configured_items(
+                settings or {},
+                sync.device_id,
+                sync.system_statuses,
+                sync.status_message,
+                custom_saves=sync.custom_saves,
+                custom_statuses=sync.custom_statuses,
+            )
+        )
+        items = []
+        for i, item in enumerate(display_items):
+            if i in divider_indices:
+                items.append(
+                    {"name": str(item), "is_divider": True}
+                )
+            elif isinstance(item, tuple):
+                items.append(
+                    {"name": f"{item[0]}: {item[1]}", "selected": False}
+                )
+            else:
+                items.append({"name": str(item), "selected": False})
+
+        # Handle custom save sub-steps
+        if sync.custom_step == "name_input":
+            return {
+                "screen_type": "text_input",
+                "title": "Custom Save - Name",
+                "text": sync.custom_name_input,
+                "input_type": "text",
+                "cursor": sync.custom_name_cursor,
+            }
+        if sync.custom_step == "file_select":
+            file_items = [
+                {
+                    "name": f"--- Select files in {os.path.basename(sync.custom_source_path)} ---",
+                    "is_divider": True,
+                }
+            ]
+            for filename in sync.custom_file_list:
+                file_items.append(
+                    {
+                        "name": filename,
+                        "selected": filename in sync.custom_selected_files,
+                    }
+                )
+            count = len(sync.custom_selected_files)
+            file_items.append(
+                {
+                    "name": f"Confirm ({count} files)" if count else "Select files above",
+                    "selected": False,
+                }
+            )
+            return {
+                "screen_type": "list",
+                "title": "Custom Save - Files",
+                "items": file_items,
+                "highlighted": sync.custom_file_highlighted,
+                "multi_select": True,
+            }
+
+        return {
+            "screen_type": "list",
+            "title": "Syncthing Sync",
+            "items": items,
+            "highlighted": sync.highlighted,
+        }
+
+    # Fallback for unknown syncthing step
+    return {
+        "screen_type": "loading",
+        "title": "Syncthing Sync",
+        "message": step,
+        "progress": 0,
+    }
+
+
+def _serialize_steam_shortcut(shortcut):
+    """Serialize steam shortcut creator state based on current step."""
+    step = shortcut.step
+
+    if step == "search":
+        return {
+            "screen_type": "text_input",
+            "title": "Steam Shortcut - Search",
+            "text": shortcut.search_query,
+            "input_type": "text",
+            "cursor": shortcut.cursor_position,
+        }
+
+    if step == "results":
+        items = []
+        for i, game in enumerate(shortcut.search_results):
+            name = game.get("name", "")
+            items.append(
+                {
+                    "name": name,
+                    "selected": i == shortcut.selected_index,
+                }
+            )
+        if shortcut.has_more:
+            items.append({"name": "Load More...", "selected": False})
+        return {
+            "screen_type": "list",
+            "title": "Select Game",
+            "items": items,
+            "highlighted": shortcut.selected_index,
+        }
+
+    if step == "complete":
+        game_name = (
+            shortcut.selected_game.get("name", "")
+            if shortcut.selected_game
+            else ""
+        )
+        return {
+            "screen_type": "confirm",
+            "title": "Shortcut Created",
+            "message": f"Steam shortcut created for {game_name}",
+            "buttons": ["OK", ""],
+            "selected": 0,
+        }
+
+    if step == "error":
+        return {
+            "screen_type": "confirm",
+            "title": "Steam Shortcut Error",
+            "message": shortcut.error_message or "An error occurred",
+            "buttons": ["OK", ""],
+            "selected": 0,
+        }
+
+    return {
+        "screen_type": "loading",
+        "title": "Steam Shortcut",
+        "message": step,
+        "progress": 0,
+    }
 
 
 def _build_settings_items(settings):
