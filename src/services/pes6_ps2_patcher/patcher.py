@@ -86,14 +86,14 @@ class PES6Patcher:
         self,
         league_data: LeagueData,
         rom_info: RomInfo = None,
-        slot_start: int = 7,
+        slot_start: int = 0,
         slot_end: int = 200,
     ) -> List[SlotMapping]:
-        """Map ESPN teams to ROM slots by matching team names.
+        """Map ESPN teams sequentially to ROM club slots.
 
-        Reads team names from the ISO's SLPM section and matches each ESPN
-        team to the best-matching ROM team. Only matched teams are patched,
-        ensuring player data goes to the correct roster slots.
+        Assigns each ESPN team to the next available club slot starting
+        from slot_start. The chosen league replaces whatever teams
+        were in those slots. No name matching — purely sequential.
         """
         mappings = []
 
@@ -101,104 +101,29 @@ class PES6Patcher:
             tr for tr in league_data.teams if tr.players and not tr.error
         ]
 
-        # Build name → ram_index map from roster map
         roster_map = RosterMap()
-        available_slots = roster_map.get_slot_range(slot_start, slot_end)
-        iso_team_names = {}
-        for ram_idx in available_slots:
-            name = roster_map.get_team_name(ram_idx)
-            if name:
-                iso_team_names[name] = ram_idx
 
-        # Name-based matching: only explicitly matched teams are patched
-        for team_roster in teams_with_players:
-            espn_name = team_roster.team.name
-            roster_idx = self._match_team_name(espn_name, iso_team_names)
+        for i, team_roster in enumerate(teams_with_players):
+            slot_idx = slot_start + i
+            if slot_idx >= slot_end:
+                break
 
-            if roster_idx is None:
-                continue
-
-            player_ids = self.roster_map.get_team_player_ids(roster_idx)
+            player_ids = roster_map.get_team_player_ids(slot_idx)
             if not player_ids:
                 continue
 
-            # Reverse-lookup the iso name from the roster map
-            iso_name = roster_map.get_team_name(roster_idx) or f"Club {roster_idx}"
+            iso_name = roster_map.get_team_name(slot_idx) or f"Club {slot_idx}"
             mappings.append(
                 SlotMapping(
                     espn_team=team_roster.team,
-                    ram_index=roster_idx,
-                    slpm_index=roster_idx,
+                    ram_index=slot_idx,
+                    slpm_index=slot_idx,
                     slot_name=iso_name,
                     player_ids=player_ids,
                 )
             )
 
         return mappings
-
-    def _match_team_name(
-        self, espn_name: str, iso_teams: Dict[str, int]
-    ) -> Optional[int]:
-        """Find the best matching ROM team for an ESPN team name.
-
-        Uses normalized comparison (strip accents, lowercase) with known
-        aliases for common mismatches between ESPN and EUR ROM names.
-        iso_teams maps team name → ram_index.
-        """
-        ALIASES = {
-            "atletico-madrid": ["atletico de madrid", "at. madrid"],
-            "wolverhampton-wanderers": ["wolverhampton", "wolves"],
-            "inter-milan": ["internazionale", "inter"],
-            "paris-saint-germain": ["paris sg"],
-            "borussia-dortmund": ["bor. dortmund"],
-            "bayern-munich": ["bayern munchen", "fc bayern"],
-            "rb-leipzig": ["rasenballsport leipzig"],
-            "tottenham-hotspur": ["tottenham", "spurs"],
-            "manchester-united": ["man united", "manchester utd"],
-            "manchester-city": ["man city", "manchester c"],
-            "newcastle-united": ["newcastle utd", "newcastle"],
-            "west-ham-united": ["west ham", "west ham utd"],
-            "athletic-club": ["athletic bilbao", "ath. bilbao"],
-            "deportivo-la-coruna": ["deportivo", "rc deportivo"],
-            "real-sociedad": ["r. sociedad"],
-            "real-betis": ["r. betis"],
-        }
-
-        def normalize(s):
-            nfkd = unicodedata.normalize("NFKD", s)
-            out = (
-                "".join(c for c in nfkd if not unicodedata.combining(c)).lower().strip()
-            )
-            return out.replace("-", " ")
-
-        norm_espn = normalize(espn_name)
-
-        # Direct match
-        for iso_name, ram_idx in iso_teams.items():
-            if normalize(iso_name) == norm_espn:
-                return ram_idx
-
-        # Alias match (normalize alias keys to handle hyphens)
-        for alias_key, variants in ALIASES.items():
-            if normalize(alias_key) == norm_espn:
-                for variant in variants:
-                    for iso_name, ram_idx in iso_teams.items():
-                        if normalize(iso_name) == normalize(variant):
-                            return ram_idx
-                break
-
-        # Word-level match: check if all words of one name appear in the other
-        espn_words = set(norm_espn.split())
-        for iso_name, ram_idx in iso_teams.items():
-            norm_iso = normalize(iso_name)
-            iso_words = set(norm_iso.split())
-            # ISO name's words all found in ESPN name, or vice versa
-            if iso_words and iso_words.issubset(espn_words):
-                return ram_idx
-            if espn_words and espn_words.issubset(iso_words):
-                return ram_idx
-
-        return None
 
     @staticmethod
     def _sanitize_name(name: str) -> str:
@@ -239,7 +164,13 @@ class PES6Patcher:
                     None,
                 )
                 if team_roster and team_roster.players:
-                    records = self.mapper.map_team(team_roster, mapping.player_ids)
+                    # Get slot positions from roster map for position-based matching
+                    slot_positions = self.roster_map.get_team_players(
+                        mapping.ram_index
+                    )
+                    records = self.mapper.map_team(
+                        team_roster, mapping.player_ids, slot_positions
+                    )
                     all_records.extend(records)
 
             if on_progress:
