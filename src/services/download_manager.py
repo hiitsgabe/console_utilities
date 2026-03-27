@@ -256,6 +256,9 @@ class DownloadManager:
                     item.status = "cancelled"
                 return
 
+            # Use the actual saved filename
+            filename = os.path.basename(file_path)
+
             # Process the downloaded file
             item.status = "extracting"
             item.progress = 0.0
@@ -312,6 +315,15 @@ class DownloadManager:
                 headers["Authorization"] = f"Bearer {auth_config['token']}"
 
         try:
+            # Resolve manifest URL to direct download URL if needed
+            if self._is_nps_manifest_url(url):
+                resolved = self._resolve_nps_manifest_url(url)
+                if not resolved:
+                    item.status = "failed"
+                    item.error = "Failed to resolve NPS manifest"
+                    return None
+                url = resolved
+
             request_headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 "Accept": "*/*",
@@ -779,6 +791,29 @@ class DownloadManager:
             os.rename(src, dst)
         except OSError:
             shutil.move(src, dst)
+
+    @staticmethod
+    def _is_nps_manifest_url(url: str) -> bool:
+        """Return True if url is a CDN JSON manifest (not a direct package file)."""
+        return "prod.dl.playstation.net" in url and url.endswith(".json")
+
+    @staticmethod
+    def _resolve_nps_manifest_url(url: str) -> Optional[str]:
+        """Resolve a CDN manifest URL to the direct package download URL."""
+        try:
+            resp = requests.get(
+                url,
+                timeout=(10, 30),
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            pieces = data.get("pieces", [])
+            if pieces:
+                return pieces[0].get("url")
+        except Exception as e:
+            log_error(f"Manifest resolution failed for {url}: {e}")
+        return None
 
     def _get_filename(self, game: Any) -> str:
         """Extract filename from game item."""
