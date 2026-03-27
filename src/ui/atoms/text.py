@@ -16,9 +16,12 @@ class Text:
     and alignment options.
     """
 
+    _TEXT_CACHE_MAX = 512
+
     def __init__(self, theme: Theme = default_theme):
         self.theme = theme
         self._font_cache: dict = {}
+        self._text_surface_cache: dict = {}
 
     def get_font(self, size: int) -> pygame.font.Font:
         """Get or create a font of the given size."""
@@ -26,6 +29,20 @@ class Text:
             font_path = getattr(self.theme, "font_path", None)
             self._font_cache[size] = pygame.font.Font(font_path, size)
         return self._font_cache[size]
+
+    def _get_text_surface(
+        self, text: str, size: int, color: Color, antialias: bool = True
+    ) -> pygame.Surface:
+        """Get a cached text surface, rendering only on cache miss."""
+        key = (text, size, color, antialias)
+        surface = self._text_surface_cache.get(key)
+        if surface is None:
+            if len(self._text_surface_cache) >= self._TEXT_CACHE_MAX:
+                self._text_surface_cache.clear()
+            font = self.get_font(size)
+            surface = font.render(text, antialias, color)
+            self._text_surface_cache[key] = surface
+        return surface
 
     def render(
         self,
@@ -65,7 +82,7 @@ class Text:
         if max_width:
             text = self._truncate(text, font, max_width)
 
-        surface = font.render(text, antialias, color)
+        surface = self._get_text_surface(text, size, color, antialias)
         rect = surface.get_rect()
 
         # Apply alignment
@@ -214,7 +231,7 @@ class Text:
                 continue
 
             color = rainbow_colors[i % len(rainbow_colors)]
-            char_surface = font.render(char, antialias, color)
+            char_surface = self._get_text_surface(char, size, color, antialias)
             char_rect = char_surface.get_rect(topleft=(current_x, y))
             screen.blit(char_surface, char_rect)
 
@@ -282,8 +299,8 @@ class Text:
         max_offset = text_width - max_width
         offset = max(0, min(scroll_offset, max_offset))
 
-        # Render full text to temporary surface
-        full_surface = font.render(text, antialias, color)
+        # Render full text to cached surface
+        full_surface = self._get_text_surface(text, size, color, antialias)
 
         # Create clipped view
         clip_w = min(max_width, text_width - offset)

@@ -849,6 +849,8 @@ class ConsoleUtilitiesApp:
                 return
             self.needs_mapping = False
 
+        _dirty = True  # First frame always draws
+
         while running:
             self.clock.tick(FPS)
 
@@ -857,7 +859,8 @@ class ConsoleUtilitiesApp:
 
             # Handle continuous navigation
             if not self.needs_mapping:
-                self.navigation.handle_continuous(self._on_navigate)
+                if self.navigation.handle_continuous(self._on_navigate):
+                    _dirty = True
 
             # Check for IA auth failures in download queue
             if not self.state.confirm_modal.show:
@@ -865,6 +868,7 @@ class ConsoleUtilitiesApp:
                     if item.error == "ia_auth_required":
                         item.error = "Login required"
                         self._show_ia_login_required_modal()
+                        _dirty = True
                         break
 
             # Manage Android soft keyboard show/hide
@@ -877,8 +881,9 @@ class ConsoleUtilitiesApp:
                     pygame.key.stop_text_input()
                 self._text_modal_open = text_modal_is_open
 
-            # Process events
+            # Process events — any input event dirties the frame
             for event in pygame.event.get():
+                _dirty = True
                 if event.type == pygame.QUIT:
                     running = False
 
@@ -982,15 +987,35 @@ class ConsoleUtilitiesApp:
                             )
 
             # Update image cache (process loaded images from background threads)
-            self.image_cache.update()
+            if self.image_cache.update():
+                _dirty = True
 
             # Poll auto-detect ROM downloads for completion
             self._poll_auto_detect_downloads()
+
+            # Mark dirty when downloads or async operations are active
+            if (
+                self.state.download_queue.active
+                or self.state.loading.show
+                or self.state.scraper_queue.active
+                or self.state.text_scroll_offset
+                or self.state.confirm_modal.loading
+                or getattr(self.state.active_patcher, "is_fetching", False)
+                or getattr(self.state.active_patcher, "is_patching", False)
+                or self.state.dedupe_wizard.step
+                in ("scanning", "processing")
+                or self.state.rename_wizard.step
+                in ("scanning", "processing")
+                or self.state.ghost_cleaner_wizard.step
+                in ("scanning", "cleaning")
+            ):
+                _dirty = True
 
             # Web companion: process incoming actions + push state
             if self.web_companion and self.web_companion._running:
                 self.web_companion.process_actions(self.state)
                 self.web_companion.push_state(self.state, self.settings, self.data)
+                _dirty = True
 
             # Deferred display restore: wait until surface is recreated by SDL
             if self._needs_display_restore and pygame.display.get_surface() is not None:
@@ -998,11 +1023,12 @@ class ConsoleUtilitiesApp:
                 self._is_backgrounded = False
                 self._restore_android_display()
 
-            # Draw (skip when backgrounded or display surface is gone)
+            # Draw (skip when backgrounded, display surface is gone, or nothing changed)
             _surface_ok = (
                 not self._is_backgrounded and pygame.display.get_surface() is not None
             )
-            if _surface_ok:
+            if _surface_ok and _dirty:
+                _dirty = False
                 try:
                     self._draw_background()
 

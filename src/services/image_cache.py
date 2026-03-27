@@ -329,13 +329,17 @@ class ImageCache:
 
         return "loading"
 
-    def update(self):
+    def update(self) -> bool:
         """
         Process loaded images from background threads.
         Should be called from main thread each frame.
+
+        Returns:
+            True if any new images were processed (screen needs redraw).
         """
-        self._process_queue(self._thumbnail_queue, self._thumbnail_cache)
-        self._process_queue(self._hires_queue, self._hires_cache)
+        a = self._process_queue(self._thumbnail_queue, self._thumbnail_cache)
+        b = self._process_queue(self._hires_queue, self._hires_cache)
+        return a or b
 
     def clear(self):
         """Clear all cached images and queues."""
@@ -553,11 +557,13 @@ class ImageCache:
 
         self._hires_queue.put((cache_key, None))
 
-    def _process_queue(self, queue: Queue, cache: Dict):
-        """Process items from queue into cache."""
+    def _process_queue(self, queue: Queue, cache: Dict) -> bool:
+        """Process items from queue into cache. Returns True if any items processed."""
+        processed = False
         while not queue.empty():
             try:
                 cache_key, image = queue.get_nowait()
+                processed = True
                 if image is not None:
                     cache[cache_key] = image
                     self._retry_counts.pop(cache_key, None)
@@ -572,6 +578,7 @@ class ImageCache:
                         cache[cache_key] = None
             except Empty:
                 break
+        return processed
 
     def _drain_queue(self, queue: Queue):
         """Drain all items from a queue."""
