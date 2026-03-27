@@ -243,9 +243,8 @@ class DownloadManager:
 
             # Ensure filename has extension
             formats = item.system_data.get("file_format", [])
-            if "download_url" in item.system_data and "." not in filename:
-                fmt = formats[0] if formats else ""
-                filename = filename + fmt
+            if "." not in filename and formats:
+                filename = filename + formats[0]
 
             # Download the file
             file_path = self._download_file(item, url, filename)
