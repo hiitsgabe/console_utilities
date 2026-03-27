@@ -99,6 +99,20 @@ def handle_action(state, action_data):
             patcher.color_picker.color_index = color_index
             _post_key(pygame.K_RETURN)
 
+    elif action == "download_selected":
+        # Trigger download of selected games (same as pressing Space on games screen)
+        if state.mode == "games" and state.selected_games:
+            _post_key(pygame.K_SPACE)
+
+    elif action == "download_all":
+        # Select the "Download All" item (last item beyond game list) and press Enter
+        if state.mode == "games":
+            game_list = (
+                state.search.filtered_list if state.search.mode else state.game_list
+            )
+            state.highlighted = len(game_list)
+            _post_key(pygame.K_RETURN)
+
     elif action == "confirm_button":
         index = action_data.get("index", 0)
         if state.confirm_modal.show:
@@ -170,6 +184,18 @@ def _handle_set_text(state, text):
         elif step == "api_key":
             state.scraper_login.api_key = text
             state.scraper_login.cursor_position = len(text)
+    elif state.scraper_wizard.show and state.scraper_wizard.step == "edit_name":
+        state.scraper_wizard.search_name = text
+        state.scraper_wizard.search_name_cursor = len(text)
+    elif state.scraper_wizard.show and state.scraper_wizard.system_picker_active:
+        state.scraper_wizard.system_picker_search = text
+        state.scraper_wizard.system_picker_highlighted = 0
+    elif state.steam_shortcut.show and state.steam_shortcut.step == "search":
+        state.steam_shortcut.search_query = text
+        state.steam_shortcut.cursor_position = len(text)
+    elif state.syncthing.custom_step == "name_input":
+        state.syncthing.custom_name_input = text
+        state.syncthing.custom_name_cursor = len(text)
     else:
         # Fallback: if we're on games, activate search modal
         # so the subsequent submit_text will trigger _apply_search_filter
@@ -229,6 +255,10 @@ def _handle_select_index(state, index):
         elif step == "options":
             state.ia_collection_wizard.options_highlighted = index
     elif state.scraper_wizard.show:
+        if state.scraper_wizard.system_picker_active:
+            state.scraper_wizard.system_picker_highlighted = index
+            _post_key(pygame.K_RETURN)
+            return
         step = state.scraper_wizard.step
         if step in ("rom_select", "folder_select"):
             state.scraper_wizard.folder_highlighted = index
