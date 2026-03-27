@@ -136,6 +136,9 @@ class WebCompanion:
         self._html_bytes = CLIENT_HTML.encode("utf-8")
         self._local_ip = _get_local_ip()
         self._settings = None
+        self._capture_buf = io.BytesIO()
+        self._frame_interval = 1.0 / 15
+        self._last_capture_time = 0.0
 
     @property
     def url(self):
@@ -175,11 +178,19 @@ class WebCompanion:
 
     def capture_frame(self, surface):
         """Capture the current pygame surface as JPEG bytes for MJPEG stream."""
-        buf = io.BytesIO()
+        now = time.time()
+        if now - self._last_capture_time < self._frame_interval:
+            return
+        self._last_capture_time = now
+
+        buf = self._capture_buf
+        buf.seek(0)
+        buf.truncate(0)
         try:
             pygame.image.save(surface, buf, "frame.jpg")
         except Exception:
-            buf = io.BytesIO()
+            buf.seek(0)
+            buf.truncate(0)
             pygame.image.save(surface, buf, "frame.png")
         with self._frame_lock:
             self._frame = buf.getvalue()

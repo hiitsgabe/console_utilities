@@ -186,6 +186,9 @@ class StreamServer:
         self._frame = None
         self._frame_lock = threading.Lock()
         self._frame_event = threading.Event()
+        self._frame_interval = 1.0 / TARGET_FPS
+        self._last_capture_time = 0.0
+        self._capture_buf = io.BytesIO()
         self._html_bytes = (
             CLIENT_HTML.replace("{width}", str(width))
             .replace("{height}", str(height))
@@ -201,12 +204,20 @@ class StreamServer:
         thread.start()
 
     def capture_frame(self, surface):
-        """Capture the current pygame surface as JPEG bytes."""
-        buf = io.BytesIO()
+        """Capture the current pygame surface as JPEG bytes (throttled, buffer-reused)."""
+        now = time.monotonic()
+        if now - self._last_capture_time < self._frame_interval:
+            return
+        self._last_capture_time = now
+
+        buf = self._capture_buf
+        buf.seek(0)
+        buf.truncate(0)
         try:
             pygame.image.save(surface, buf, "frame.jpg")
         except Exception:
-            buf = io.BytesIO()
+            buf.seek(0)
+            buf.truncate(0)
             pygame.image.save(surface, buf, "frame.png")
 
         with self._frame_lock:

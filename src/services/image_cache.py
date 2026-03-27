@@ -3,6 +3,7 @@ Image caching service for Console Utilities.
 Handles async image loading, caching, and queue management for thumbnails.
 """
 
+import collections
 import hashlib
 import json
 import os
@@ -183,12 +184,15 @@ class ImageCache:
     to safely pass them back to the main thread.
     """
 
+    MAX_THUMBNAILS = 200
+    MAX_HIRES = 20
+
     def __init__(self):
         """Initialize the image cache."""
-        self._thumbnail_cache: Dict[str, Any] = {}
+        self._thumbnail_cache: collections.OrderedDict = collections.OrderedDict()
         self._thumbnail_queue: Queue = Queue()
 
-        self._hires_cache: Dict[str, Any] = {}
+        self._hires_cache: collections.OrderedDict = collections.OrderedDict()
         self._hires_queue: Queue = Queue()
 
         self._retry_counts: Dict[str, int] = {}
@@ -227,6 +231,7 @@ class ImageCache:
         if cache_key in self._thumbnail_cache:
             cached = self._thumbnail_cache[cache_key]
             if cached != "loading":
+                self._thumbnail_cache.move_to_end(cache_key)
                 return cached
             return None
 
@@ -297,6 +302,7 @@ class ImageCache:
         if cache_key in self._hires_cache:
             cached = self._hires_cache[cache_key]
             if cached != "loading":
+                self._hires_cache.move_to_end(cache_key)
                 return cached
             return "loading"
 
@@ -337,8 +343,8 @@ class ImageCache:
         Returns:
             True if any new images were processed (screen needs redraw).
         """
-        a = self._process_queue(self._thumbnail_queue, self._thumbnail_cache)
-        b = self._process_queue(self._hires_queue, self._hires_cache)
+        a = self._process_queue(self._thumbnail_queue, self._thumbnail_cache, self.MAX_THUMBNAILS)
+        b = self._process_queue(self._hires_queue, self._hires_cache, self.MAX_HIRES)
         return a or b
 
     def clear(self):
@@ -557,8 +563,8 @@ class ImageCache:
 
         self._hires_queue.put((cache_key, None))
 
-    def _process_queue(self, queue: Queue, cache: Dict) -> bool:
-        """Process items from queue into cache. Returns True if any items processed."""
+    def _process_queue(self, queue: Queue, cache: collections.OrderedDict, max_size: int) -> bool:
+        """Process items from queue into cache, evicting LRU entries if over max_size. Returns True if any items processed."""
         processed = False
         while not queue.empty():
             try:
@@ -566,7 +572,11 @@ class ImageCache:
                 processed = True
                 if image is not None:
                     cache[cache_key] = image
+                    cache.move_to_end(cache_key)
                     self._retry_counts.pop(cache_key, None)
+                    # Evict oldest entries if over limit
+                    while len(cache) > max_size:
+                        cache.popitem(last=False)
                 else:
                     retries = self._retry_counts.get(cache_key, 0)
                     if retries < self._max_retries:

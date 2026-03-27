@@ -58,7 +58,7 @@ class Settings:
         False  # Use Python downloads/zip instead of Android-native
     )
     # Web Companion
-    web_companion_enabled: bool = False
+    web_companion_enabled: bool = True
     # Syncthing Save Sync
     syncthing_enabled: bool = False
     syncthing_role: str = ""  # "host" or "console"
