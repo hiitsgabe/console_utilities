@@ -255,6 +255,13 @@ html, body {
     overflow: hidden;
     text-overflow: ellipsis;
 }
+.list-item .item-value {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-left: auto;
+    flex-shrink: 0;
+    text-align: right;
+}
 .list-item .item-status {
     font-size: 12px;
     color: var(--text-dim);
@@ -1118,6 +1125,7 @@ const navBar = document.getElementById('navBar');
 const disconnectedOverlay = document.getElementById('disconnected');
 
 let currentState = null;
+let prevScreenType = null;
 let thumbVisible = true;
 let evtSource = null;
 let reconnectTimer = null;
@@ -1191,8 +1199,16 @@ function renderState(state) {
             const filesBtn = tabBar.querySelector('button[data-tab="files"]');
             if (filesBtn) filesBtn.click();
         }
+        prevScreenType = state.screen_type;
         return;
     }
+
+    // Auto-switch back to Companion tab when leaving file_explorer
+    if (prevScreenType === 'switch_tab' && activeTab !== 'companion') {
+        const compBtn = tabBar.querySelector('button[data-tab="companion"]');
+        if (compBtn) compBtn.click();
+    }
+    prevScreenType = state.screen_type;
 
     switch (state.screen_type) {
         case 'text_input': renderTextInput(state); break;
@@ -1277,10 +1293,12 @@ function renderList(state) {
         const curHasSearch = (state.search !== undefined && state.search !== null) ? '1' : '';
         const prevHasActions = content.dataset.hasGameActions || '';
         const curHasActions = state.game_actions ? '1' : '';
+        const prevSelBucket = content.dataset.selBucket || '0';
+        const curSelBucket = (state.selected_count > 0) ? '1' : '0';
         if (existingNonDividers.length === nonDividerCount &&
             existingItems.length === items.length &&
             prevWizard === curWizard && prevHasSearch === curHasSearch &&
-            prevHasActions === curHasActions) {
+            prevHasActions === curHasActions && prevSelBucket === curSelBucket) {
             // Patch each item in-place (no innerHTML rebuild)
             let needScroll = false;
             items.forEach((item, i) => {
@@ -1296,6 +1314,11 @@ function renderList(state) {
                 const isSelected = !!item.selected;
                 if (wasSelected !== isSelected) {
                     el.classList.toggle('selected', isSelected);
+                }
+                // Update value text if present
+                const valueEl = el.querySelector('.item-value');
+                if (valueEl && item.value) {
+                    valueEl.textContent = item.value;
                 }
                 // Update status text if present
                 const statusEl = el.querySelector('.item-status');
@@ -1334,10 +1357,11 @@ function renderList(state) {
         </div>`;
     }
 
-    // Game actions bar (download selected, search, download all)
+    // Game actions bar (download selected, search, details, download all)
     if (state.game_actions) {
         html += `<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center">`;
         html += `<button class="btn" style="flex:0 0 auto;padding:8px 12px;font-size:13px" onclick="sendAction({action:'search',text:''})">Search</button>`;
+        html += `<button class="btn" style="flex:0 0 auto;padding:8px 12px;font-size:13px" onclick="sendAction({action:'detail'})">Details</button>`;
         if (state.selected_count > 0) {
             html += `<span class="game-sel-count" style="font-size:13px;color:var(--text-dim)">${state.selected_count} selected</span>`;
             html += `<button class="btn primary" style="flex:0 0 auto;padding:8px 12px;font-size:13px" onclick="sendAction({action:'download_selected'})">Download</button>`;
@@ -1365,6 +1389,9 @@ function renderList(state) {
         }
 
         let extra = '';
+        if (item.value) {
+            extra += `<span class="item-value">${escHtml(item.value)}</span>`;
+        }
         if (item.status) {
             extra += `<span class="item-status">${escHtml(item.status)}</span>`;
         }
@@ -1415,6 +1442,7 @@ function renderList(state) {
     content.dataset.wizardAction = state.wizard_action || '';
     content.dataset.hasSearch = (state.search !== undefined && state.search !== null) ? '1' : '';
     content.dataset.hasGameActions = state.game_actions ? '1' : '';
+    content.dataset.selBucket = (state.selected_count > 0) ? '1' : '0';
 
     // Auto-scroll to highlighted
     const highlighted = content.querySelector('.list-item.highlighted');

@@ -9,6 +9,22 @@ import os
 from urllib.parse import urljoin, urlparse
 
 
+def _shorten_path(path, max_length=25):
+    """Shorten a file path for display."""
+    if not path:
+        return "Not Set"
+    if len(path) <= max_length:
+        return path
+    parts = path.replace("\\", "/").split("/")
+    result = ""
+    for part in reversed(parts):
+        if len(result) + len(part) + 1 <= max_length - 3:
+            result = "/" + part + result if result else part
+        else:
+            break
+    return "..." + result if result else "..." + path[-max_length + 3 :]
+
+
 def _get_source_label(system):
     """Derive a human-readable source label from the system URL."""
     url = system.get("url", "")
@@ -484,7 +500,7 @@ def serialize_web_state(state, settings=None, data=None):
 
     # Scraper wizard
     if state.scraper_wizard.show:
-        return _serialize_scraper_wizard(state.scraper_wizard)
+        return _serialize_scraper_wizard(state.scraper_wizard, settings)
 
     # Dedupe wizard
     if state.dedupe_wizard.show:
@@ -606,15 +622,91 @@ def serialize_web_state(state, settings=None, data=None):
 
     if state.mode == "settings":
         from ui.screens.settings_screen import SettingsScreen
+        from constants import APP_VERSION
 
         ss = SettingsScreen()
         setting_items, divider_indices = ss._get_settings_items(settings or {}, data)
+        s = settings or {}
         items = []
         for i, label in enumerate(setting_items):
-            item = {"name": label, "selected": False}
             if i in divider_indices:
-                item["is_divider"] = True
-            items.append(item)
+                items.append({"name": label, "is_divider": True})
+                continue
+            value = ""
+            if label == "View Mode":
+                value = "Grid" if s.get("view_type", "list") == "grid" else "List"
+            elif label == "Enable Box-art Display":
+                value = "ON" if s.get("enable_boxart", True) else "OFF"
+            elif label == "Filter Region":
+                region = s.get("filter_region", "none")
+                value = region.upper() if region != "none" else "OFF"
+            elif label == "Dedupe Game List":
+                value = "ON" if s.get("dedupe_game_list", False) else "OFF"
+            elif label == "Show Download All Button":
+                value = "ON" if s.get("show_download_all", False) else "OFF"
+            elif label == "Skip Installed Games":
+                value = "ON" if s.get("exclude_installed_on_download_all", True) else "OFF"
+            elif label == "ROMs Directory":
+                value = _shorten_path(s.get("roms_dir", ""))
+            elif label == "NSZ Keys":
+                value = "Set" if s.get("nsz_keys_path", "") else "Not Set"
+            elif label == "Remote Games Bkp File":
+                p = s.get("archive_json_path", "")
+                value = os.path.basename(p) if p else "Not Set"
+            elif label == "Internet Archive Login":
+                email = s.get("ia_email", "")
+                if email:
+                    value = email[:17] + "..." if len(email) > 20 else email
+                else:
+                    value = "Not logged in"
+            elif label == "Enable Sports Updater":
+                value = "ON" if s.get("sports_roster_enabled", False) else "OFF"
+            elif label == "Roster Soccer Data Source":
+                provider = s.get("sports_roster_provider", "espn")
+                provider_labels = {
+                    "espn": "ESPN (Free)",
+                    "api_football": "API-Football (Paid)",
+                }
+                value = provider_labels.get(provider, provider)
+            elif label == "API-Football Key":
+                key = s.get("api_football_key", "")
+                if key:
+                    value = "••••••" + key[-3:] if len(key) > 3 else "••••••"
+                else:
+                    value = "Not set"
+            elif label == "Roster Hockey Data Source":
+                nhl_provider = s.get("nhl94_provider", "espn")
+                nhl_labels = {
+                    "espn": "ESPN (Current Season)",
+                    "nhl": "NHL API (Historical)",
+                }
+                value = nhl_labels.get(nhl_provider, nhl_provider)
+            elif label == "Enable Scraper":
+                value = "ON" if s.get("scraper_enabled", False) else "OFF"
+            elif label == "Scraper Frontend":
+                frontend = s.get("scraper_frontend", "emulationstation_base")
+                frontend_labels = {
+                    "emulationstation_base": "ES Base",
+                    "esde_android": "ES-DE Android",
+                    "retroarch": "RetroArch",
+                    "pegasus": "Pegasus",
+                }
+                value = frontend_labels.get(frontend, frontend)
+            elif label == "Enable NSZ":
+                value = "ON" if s.get("nsz_enabled", False) else "OFF"
+            elif label == "Web Companion":
+                value = "ON" if s.get("web_companion_enabled", False) else "OFF"
+            elif label == "Enable Syncthing Helper":
+                value = "ON" if s.get("syncthing_enabled", False) else "OFF"
+            elif label == "Use Python Downloader":
+                value = "ON" if s.get("use_python_downloader", False) else "OFF"
+            elif label == "Redraw UI":
+                value = "Refresh"
+            elif label == "Storage Permission":
+                value = "Request"
+            elif label == "Check for Updates":
+                value = APP_VERSION
+            items.append({"name": label, "selected": False, "value": value})
         return {
             "screen_type": "list",
             "title": "Settings",
@@ -727,12 +819,55 @@ def serialize_web_state(state, settings=None, data=None):
 
         sm = ScraperMenuScreen()
         menu_items, divider_indices = sm._get_items(settings or {})
+        s = settings or {}
         items = []
         for i, label in enumerate(menu_items):
-            item = {"name": label, "selected": False}
             if i in divider_indices:
-                item["is_divider"] = True
-            items.append(item)
+                items.append({"name": label, "is_divider": True})
+                continue
+            value = ""
+            if label == "Scraper Provider":
+                provider = s.get("scraper_provider", "libretro")
+                labels = {
+                    "libretro": "Libretro Thumbnails",
+                    "screenscraper": "ScreenScraper",
+                    "thegamesdb": "TheGamesDB",
+                    "rawg": "RAWG",
+                    "igdb": "IGDB (Twitch)",
+                }
+                value = labels.get(provider, provider)
+            elif label == "Provider Fallback":
+                value = "Enabled" if s.get("scraper_fallback_enabled", True) else "Disabled"
+            elif label == "Parallel Downloads":
+                value = str(s.get("scraper_parallel_downloads", 1))
+            elif label == "Mixed Images":
+                value = "ON" if s.get("scraper_mixed_images", False) else "OFF"
+            elif label == "ScreenScraper Login":
+                username = s.get("screenscraper_username", "")
+                if username:
+                    value = username[:12] + "..." if len(username) > 15 else username
+                else:
+                    value = "Not logged in"
+            elif label == "TheGamesDB API Key":
+                value = "Set" if s.get("thegamesdb_api_key", "") else "Not Set"
+            elif label == "RAWG API Key":
+                value = "Set" if s.get("rawg_api_key", "") else "Not Set"
+            elif label == "IGDB Login":
+                client_id = s.get("igdb_client_id", "")
+                if client_id:
+                    value = client_id[:12] + "..." if len(client_id) > 15 else client_id
+                else:
+                    value = "Not configured"
+            elif label == "ES-DE Media Path":
+                path = s.get("esde_media_path", "")
+                value = _shorten_path(path) if path else "Not Set"
+            elif label == "ES-DE Gamelists Path":
+                path = s.get("esde_gamelists_path", "")
+                value = _shorten_path(path) if path else "Not Set"
+            elif label == "RetroArch Thumbnails":
+                path = s.get("retroarch_thumbnails_path", "")
+                value = _shorten_path(path) if path else "Not Set"
+            items.append({"name": label, "selected": False, "value": value})
         return {
             "screen_type": "list",
             "title": "Scraper",
@@ -1338,7 +1473,7 @@ def _serialize_ghost_cleaner(wizard):
     }
 
 
-def _serialize_scraper_wizard(wizard):
+def _serialize_scraper_wizard(wizard, settings=None):
     """Serialize scraper wizard state based on current step."""
     step = wizard.step
 
@@ -1469,7 +1604,7 @@ def _serialize_scraper_wizard(wizard):
         }
 
     if step == "batch_options":
-        items = _build_batch_options(wizard)
+        items = _build_batch_options(wizard, settings)
         return {
             "screen_type": "list",
             "title": "Batch Scraper Options",
@@ -1549,27 +1684,36 @@ def _serialize_scraper_wizard(wizard):
     }
 
 
-def _build_batch_options(wizard):
+def _build_batch_options(wizard, settings=None):
     """Build batch scraper options list."""
+    s = settings or {}
     items = []
     batch_system = getattr(wizard, "batch_system", "")
     system_display = batch_system if batch_system else "Auto"
-    items.append({"name": f"System: {system_display}", "selected": False})
+    items.append({"name": "System", "value": system_display, "selected": False})
     auto_select = getattr(wizard, "auto_select", True)
     items.append(
-        {"name": f"Auto-select: {'ON' if auto_select else 'OFF'}", "selected": False}
+        {"name": "Auto-select", "value": "ON" if auto_select else "OFF", "selected": False}
     )
-    default_images = getattr(wizard, "default_images", [])
-    image_types = ["box-2D", "boxart", "screenshot", "titlescreen", "fanart", "marquee"]
+    default_images = getattr(wizard, "batch_default_images", [])
+    mixed_images_enabled = (
+        s.get("scraper_mixed_images", False)
+        and s.get("scraper_provider", "libretro") == "screenscraper"
+    )
+    if mixed_images_enabled:
+        image_types = ["box-2D", "boxart", "mixrbv1", "mixrbv2", "screenshot", "fanart"]
+    else:
+        image_types = ["box-2D", "boxart", "screenshot", "wheel", "fanart"]
     for img_type in image_types:
         enabled = img_type in default_images
         items.append(
-            {"name": f"{img_type}: {'ON' if enabled else 'OFF'}", "selected": False}
+            {"name": img_type, "value": "ON" if enabled else "OFF", "selected": False}
         )
     download_video = getattr(wizard, "download_video", False)
     items.append(
         {
-            "name": f"Download Video: {'ON' if download_video else 'OFF'}",
+            "name": "Download Video",
+            "value": "ON" if download_video else "OFF",
             "selected": False,
         }
     )
