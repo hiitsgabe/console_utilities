@@ -842,6 +842,9 @@ class DownloadManager:
                 return urljoin(base_url, game["href"])
             else:
                 return urljoin(base_url, filename)
+        elif isinstance(game, dict) and "href" in game:
+            # NPS TSV and similar sources: game has a direct href (manifest or package URL)
+            return game["href"]
         return None
 
     def _get_roms_folder(self, system_data: Dict[str, Any]) -> str:
