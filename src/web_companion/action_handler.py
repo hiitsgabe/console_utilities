@@ -99,6 +99,10 @@ def handle_action(state, action_data):
             patcher.color_picker.color_index = color_index
             _post_key(pygame.K_RETURN)
 
+    elif action == "detail":
+        # Open game details modal (same as pressing D key)
+        _post_key(pygame.K_d)
+
     elif action == "download_selected":
         # Trigger download of selected games (same as pressing Space on games screen)
         if state.mode == "games" and state.selected_games:
