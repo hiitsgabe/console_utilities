@@ -246,6 +246,9 @@ def list_files(
             if ".zip" not in [f.lower() for f in formats]:
                 formats.append(".zip")
 
+        if system_data.get("source_type") == "nps_tsv":
+            return _list_files_nps_tsv(system_data, settings)
+
         # Check if this is the JSON API format
         if "list_url" in system_data:
             return _list_files_json_api(system_data, settings, formats)
@@ -355,6 +358,56 @@ def _get_request_headers_cookies(system_data: Dict[str, Any]) -> tuple:
             headers["Authorization"] = f"Bearer {auth_config['token']}"
 
     return headers, cookies
+
+
+def _list_files_nps_tsv(
+    system_data: Dict[str, Any], settings: Dict[str, Any]
+) -> List[Dict[str, Any]]:
+    """List files from a TSV source."""
+    list_url = system_data["list_url"]
+
+    cached = _load_cached_listing(list_url)
+    if cached is not None:
+        return cached
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+
+    try:
+        r = requests.get(list_url, timeout=(10, 60), headers=headers)
+        r.raise_for_status()
+    except Exception as e:
+        log_error(f"Failed to fetch NPS TSV from {list_url}", type(e).__name__, str(e))
+        return []
+
+    result = []
+    for line in r.text.splitlines()[1:]:  # skip header
+        parts = line.split("\t")
+        if len(parts) < 4:
+            continue
+        title_id = parts[0].strip()
+        region = parts[1].strip()
+        name = parts[2].strip()
+        manifest_url = parts[3].strip()
+        size = int(parts[5]) if len(parts) > 5 and parts[5].strip().isdigit() else 0
+
+        if not name or not manifest_url:
+            continue
+
+        result.append({
+            "filename": f"{name} [{region}]",
+            "href": manifest_url,
+            "size": size,
+            "title_id": title_id,
+            "region": region,
+            "_nps_manifest": True,
+        })
+
+    result.sort(key=lambda x: x["filename"])
+    if result:
+        _save_listing_cache(list_url, result)
+    return result
 
 
 def _list_files_json_api(
