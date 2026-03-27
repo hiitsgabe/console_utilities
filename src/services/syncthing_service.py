@@ -630,6 +630,7 @@ class SyncthingService:
             os.path.expanduser("~/.local/state/syncthing/config.xml"),
             os.path.expanduser("~/Library/Application Support/Syncthing/config.xml"),
             "/userdata/system/.config/syncthing/config.xml",
+            "/userdata/system/configs/syncthing/config.xml",
         ]
         # Android
         if BUILD_TARGET == "android":
