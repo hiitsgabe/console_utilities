@@ -43,7 +43,10 @@ RUN apt-get install libffi-dev
 # (extra_manifest_application_arguments only supports attributes, not child elements)
 COPY ./docker/patch_manifest.py /tmp/patch_manifest.py
 RUN git clone -b master --single-branch https://github.com/kivy/python-for-android.git /p4a && \
-    python3 /tmp/patch_manifest.py
+    python3 /tmp/patch_manifest.py && \
+    # pip 26.x ships with a broken vendored resolvelib (RequirementInformation
+    # ImportError), so constrain the upgrade in p4a's pymodules step to <26.
+    sed -i 's|pip install -U pip|pip install -U "pip<26"|g' /p4a/pythonforandroid/build.py
 
 ARG KEYSTORE_PASSWORD
 # p4a reads signing config from env vars, not buildozer.spec
