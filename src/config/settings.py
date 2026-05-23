@@ -57,6 +57,7 @@ class Settings:
     use_python_downloader: bool = (
         False  # Use Python downloads/zip instead of Android-native
     )
+    ui_scale: float = 1.0  # Multiplier on top of natural fit (0.5x .. 10x)
     # Web Companion
     web_companion_enabled: bool = True
     # Syncthing Save Sync
@@ -73,6 +74,8 @@ class Settings:
     esde_media_path: str = ""
     esde_gamelists_path: str = ""
     retroarch_thumbnails_path: str = ""
+    # Steam shortcut utility
+    steam_shortcut_folder: str = ""
 
     def __post_init__(self):
         """Set default paths if not specified."""

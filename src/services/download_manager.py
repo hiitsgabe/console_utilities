@@ -18,6 +18,8 @@ import requests
 from state import DownloadQueueItem, DownloadQueueState
 from utils.logging import log_error
 from utils.nsz import decompress_nsz_file
+from utils.progress import SpeedTracker
+from utils.parallel_extract import parallel_extract_zip
 from constants import SCRIPT_DIR
 
 # Minimum file size for parallel downloads (50 MB)
@@ -663,17 +665,26 @@ class DownloadManager:
                 # extra move step (major speedup on slow storage)
                 extract_dir = roms_folder if extract_contents else self.work_dir
 
-                with ZipFile(file_path, "r") as zip_ref:
-                    members = zip_ref.infolist()
-                    total = len(members)
-                    # Update progress every ~5% to keep overhead low
-                    update_interval = max(1, total // 20)
-                    for i, member in enumerate(members):
-                        if self._cancel_current:
-                            return False
-                        zip_ref.extract(member, extract_dir)
-                        if (i + 1) % update_interval == 0 or i == total - 1:
-                            item.progress = (i + 1) / total
+                item.downloaded = 0
+                item.total_size = 0
+                item.progress = 0.0
+                item.speed = 0.0
+                tracker = SpeedTracker()
+
+                def on_zip_progress(written: int, total: int):
+                    item.downloaded = written
+                    item.total_size = total
+                    item.progress = min(1.0, written / total) if total else 0.0
+                    item.speed = tracker.update(written)
+
+                ok = parallel_extract_zip(
+                    file_path,
+                    extract_dir,
+                    on_progress=on_zip_progress,
+                    should_cancel=lambda: self._cancel_current,
+                )
+                if not ok:
+                    return False
 
                 os.remove(file_path)
 
@@ -719,9 +730,18 @@ class DownloadManager:
             # Handle NSZ decompression
             elif filename.endswith(".nsz"):
                 item.status = "extracting"
+                item.downloaded = 0
+                item.total_size = 0
+                item.progress = 0.0
+                item.speed = 0.0
+                tracker = SpeedTracker()
 
-                def nsz_progress(text: str, percent: int):
-                    item.progress = percent / 100.0
+                def nsz_progress(step: str, processed: int, total: int):
+                    item.downloaded = processed
+                    item.total_size = total
+                    if total > 0:
+                        item.progress = min(1.0, processed / total)
+                    item.speed = tracker.update(processed)
 
                 keys_path = self.settings.get("nsz_keys_path", "")
                 success = decompress_nsz_file(

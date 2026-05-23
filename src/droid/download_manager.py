@@ -356,6 +356,11 @@ class AndroidDownloadManager:
                 elif new_status in ("extracting", "moving"):
                     item.status = new_status
                     item.progress = progress
+                    # Pass through byte counters and speed so the downloads
+                    # screen can render ETA during extraction.
+                    item.downloaded = status_data.get("downloaded", item.downloaded)
+                    item.total_size = status_data.get("total_size", item.total_size)
+                    item.speed = status_data.get("speed", 0.0)
                 elif new_status == "completed":
                     item.status = "completed"
                     item.progress = 1.0

@@ -188,10 +188,14 @@ def __decompressNcz(nspf, f, statusReportInfo, pleaseNoPrint):
 			uncompressedSize = UNCOMPRESSABLE_HEADER_SIZE-sections[0].offset
 			if uncompressedSize > 0:
 				i += uncompressedSize
+		# Larger chunks reduce per-iteration Python overhead, AES cipher
+		# recreations from crypto.seek(), and (importantly) the number of
+		# status callbacks fired. Original library used 0x10000 (64 KB).
+		CHUNK_SZ = 0x100000  # 1 MB
 		while i < end:
 			if useCrypto:
 				crypto.seek(i)
-			chunkSz = 0x10000 if end - i > 0x10000 else end - i
+			chunkSz = CHUNK_SZ if end - i > CHUNK_SZ else end - i
 			if useBlockCompression:
 				inputChunk = blockDecompressorReader.read(chunkSz)
 			else:

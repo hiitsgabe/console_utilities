@@ -97,6 +97,7 @@ class SettingsScreen:
     ANDROID_SECTION = [
         "--- ANDROID ---",
         "Use Python Downloader",
+        "UI Scale",
         "Redraw UI",
         "Storage Permission",
     ]
@@ -332,6 +333,12 @@ class SettingsScreen:
             elif item == "Use Python Downloader":
                 value = "ON" if settings.get("use_python_downloader", False) else "OFF"
                 items.append((item, value))
+            elif item == "UI Scale":
+                try:
+                    scale = float(settings.get("ui_scale", 1.0) or 1.0)
+                except (TypeError, ValueError):
+                    scale = 1.0
+                items.append((item, f"{scale:g}x"))
             elif item == "Redraw UI":
                 items.append((item, "Refresh"))
             elif item == "Storage Permission":
@@ -424,6 +431,7 @@ class SettingsScreen:
                 "Web Companion": "toggle_web_companion",
                 "Enable Syncthing Helper": "toggle_syncthing_enabled",
                 "Use Python Downloader": "toggle_python_downloader",
+                "UI Scale": "cycle_ui_scale",
                 "Redraw UI": "redraw_ui",
                 "Storage Permission": "request_storage_permission",
                 "Check for Updates": "check_for_updates",
