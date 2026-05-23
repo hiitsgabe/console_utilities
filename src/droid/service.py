@@ -38,6 +38,31 @@ from droid.notification import (
 
 from jnius import autoclass
 
+
+def _move_to_roms(src_path: str, dst_path: str) -> str:
+    """Move a file into the ROMs folder. Returns "" on success, error string otherwise.
+
+    PermissionError on Android (errno 1, EPERM) means the user hasn't granted
+    MANAGE_EXTERNAL_STORAGE. Surface a clear, actionable message instead of
+    letting the exception bubble up as a cryptic "[Errno 1] Operation not
+    permitted".
+    """
+    try:
+        if os.path.exists(dst_path):
+            if os.path.isdir(dst_path):
+                shutil.rmtree(dst_path)
+            else:
+                os.remove(dst_path)
+        shutil.move(src_path, dst_path)
+        return ""
+    except PermissionError:
+        return (
+            "Permission denied writing to ROMs folder. "
+            "Grant All-files access in Settings > Storage Permission."
+        )
+    except OSError as e:
+        return f"Move failed: {e}"
+
 PythonService = autoclass("org.kivy.android.PythonService")
 PowerManager = autoclass("android.os.PowerManager")
 Context = autoclass("android.content.Context")
@@ -170,7 +195,15 @@ def _process_file(
             return
         src_path = os.path.join(work_dir, f)
         dst_path = os.path.join(roms_folder, f)
-        shutil.move(src_path, dst_path)
+        err = _move_to_roms(src_path, dst_path)
+        if err:
+            write_status(
+                work_dir,
+                item_id,
+                {"status": "failed", "progress": 0.0, "error": err},
+            )
+            update_notification(service, err, 0, 100)
+            return
         progress = (i + 1) / max(len(files_to_move), 1)
         write_status(work_dir, item_id, {"status": "moving", "progress": progress})
         update_notification(service, f"Moving: {f}", int(progress * 100), 100)
@@ -275,12 +308,15 @@ def _extract_zip(
                 return
             src_path = os.path.join(work_dir, extracted_item)
             dst_path = os.path.join(roms_folder, extracted_item)
-            if os.path.exists(dst_path):
-                if os.path.isdir(dst_path):
-                    shutil.rmtree(dst_path)
-                else:
-                    os.remove(dst_path)
-            shutil.move(src_path, dst_path)
+            err = _move_to_roms(src_path, dst_path)
+            if err:
+                write_status(
+                    work_dir,
+                    item_id,
+                    {"status": "failed", "progress": 0.0, "error": err},
+                )
+                update_notification(service, err, 0, 100)
+                return
             progress = (i + 1) / max(len(items_to_move), 1)
             write_status(work_dir, item_id, {"status": "moving", "progress": progress})
     else:
@@ -297,7 +333,15 @@ def _extract_zip(
                 return
             src_path = os.path.join(work_dir, f)
             dst_path = os.path.join(roms_folder, f)
-            shutil.move(src_path, dst_path)
+            err = _move_to_roms(src_path, dst_path)
+            if err:
+                write_status(
+                    work_dir,
+                    item_id,
+                    {"status": "failed", "progress": 0.0, "error": err},
+                )
+                update_notification(service, err, 0, 100)
+                return
             progress = (i + 1) / max(len(files_to_move), 1)
             write_status(work_dir, item_id, {"status": "moving", "progress": progress})
 
@@ -358,10 +402,21 @@ def _decompress_nsz(service, item_id, file_path, work_dir, roms_folder, system_d
             if f.endswith(".nsp"):
                 src_path = os.path.join(work_dir, f)
                 dst_path = os.path.join(roms_folder, f)
-                shutil.move(src_path, dst_path)
+                err = _move_to_roms(src_path, dst_path)
+                if err:
+                    write_status(
+                        work_dir,
+                        item_id,
+                        {"status": "failed", "progress": 0.0, "error": err},
+                    )
+                    update_notification(service, err, 0, 100)
+                    return
 
         if os.path.exists(file_path):
-            os.remove(file_path)
+            try:
+                os.remove(file_path)
+            except OSError:
+                pass
 
         write_status(work_dir, item_id, {"status": "completed", "progress": 1.0})
         update_notification(service, "Decompression complete", 100, 100)

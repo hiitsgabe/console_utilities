@@ -798,6 +798,12 @@ class DownloadManager:
 
             return True
 
+        except PermissionError as e:
+            log_error(f"Permission denied processing {filename}: {e}")
+            item.error = (
+                "Permission denied writing ROMs. Grant All-files access."
+            )
+            return False
         except Exception as e:
             log_error(f"Error processing file {filename}: {e}")
             item.error = str(e)[:50]
