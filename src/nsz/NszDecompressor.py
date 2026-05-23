@@ -188,10 +188,17 @@ def __decompressNcz(nspf, f, statusReportInfo, pleaseNoPrint):
 			uncompressedSize = UNCOMPRESSABLE_HEADER_SIZE-sections[0].offset
 			if uncompressedSize > 0:
 				i += uncompressedSize
+		# Bumped from 64 KB to 4 MB. Android falls back to the CFFI zstandard
+		# backend (the native C extension fails to dlopen here — see
+		# recipes/zstandard/__init__.py). Each .read() call pays a
+		# Python→cffi→C overhead, so larger chunks mean ~64x fewer per-GB
+		# iterations and a big NSZ decompression speedup. Output bytes are
+		# byte-identical to the 64 KB path; only the loop trip count changes.
+		CHUNK_BYTES = 0x400000
 		while i < end:
 			if useCrypto:
 				crypto.seek(i)
-			chunkSz = 0x10000 if end - i > 0x10000 else end - i
+			chunkSz = CHUNK_BYTES if end - i > CHUNK_BYTES else end - i
 			if useBlockCompression:
 				inputChunk = blockDecompressorReader.read(chunkSz)
 			else:

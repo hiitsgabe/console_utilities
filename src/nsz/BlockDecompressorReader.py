@@ -20,6 +20,10 @@ class BlockDecompressorReader:
 			self.CompressedBlockOffsetList.append(self.CompressedBlockOffsetList[-1] + compressedBlockSize)
 
 		self.CompressedBlockSizeList = BlockHeader.compressedBlockSizeList
+		# Reuse one decompressor across all blocks. Each ZstdDecompressor()
+		# instantiation pays the cffi context-setup cost on Android — for
+		# files with thousands of blocks this added up.
+		self._decompressor = ZstdDecompressor()
 
 	def __decompressBlock(self, blockID):
 		if self.CurrentBlockId == blockID:
@@ -31,7 +35,7 @@ class BlockDecompressorReader:
 			decompressedBlockSize = self.BlockHeader.decompressedSize % self.BlockSize
 		self.nspf.seek(self.CompressedBlockOffsetList[blockID])
 		if self.CompressedBlockSizeList[blockID] < decompressedBlockSize:
-			self.CurrentBlock = ZstdDecompressor().decompress(self.nspf.read(self.CompressedBlockSizeList[blockID]))
+			self.CurrentBlock = self._decompressor.decompress(self.nspf.read(self.CompressedBlockSizeList[blockID]))
 		else:
 			self.CurrentBlock = self.nspf.read(decompressedBlockSize)
 		self.CurrentBlockId = blockID
