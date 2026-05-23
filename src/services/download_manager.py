@@ -19,6 +19,7 @@ from state import DownloadQueueItem, DownloadQueueState
 from utils.logging import log_error
 from utils.nsz import decompress_nsz_file
 from utils.progress import SpeedTracker
+from utils.parallel_extract import parallel_extract_zip
 from constants import SCRIPT_DIR
 
 # Minimum file size for parallel downloads (50 MB)
@@ -664,23 +665,26 @@ class DownloadManager:
                 # extra move step (major speedup on slow storage)
                 extract_dir = roms_folder if extract_contents else self.work_dir
 
-                with ZipFile(file_path, "r") as zip_ref:
-                    members = zip_ref.infolist()
-                    total_bytes = sum(m.file_size for m in members) or 1
-                    item.downloaded = 0
-                    item.total_size = total_bytes
-                    item.progress = 0.0
-                    item.speed = 0.0
-                    tracker = SpeedTracker()
-                    written = 0
-                    for member in members:
-                        if self._cancel_current:
-                            return False
-                        zip_ref.extract(member, extract_dir)
-                        written += member.file_size
-                        item.downloaded = written
-                        item.progress = written / total_bytes
-                        item.speed = tracker.update(written)
+                item.downloaded = 0
+                item.total_size = 0
+                item.progress = 0.0
+                item.speed = 0.0
+                tracker = SpeedTracker()
+
+                def on_zip_progress(written: int, total: int):
+                    item.downloaded = written
+                    item.total_size = total
+                    item.progress = min(1.0, written / total) if total else 0.0
+                    item.speed = tracker.update(written)
+
+                ok = parallel_extract_zip(
+                    file_path,
+                    extract_dir,
+                    on_progress=on_zip_progress,
+                    should_cancel=lambda: self._cancel_current,
+                )
+                if not ok:
+                    return False
 
                 os.remove(file_path)
 

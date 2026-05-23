@@ -184,54 +184,70 @@ def _process_file(
 def _extract_zip(
     service, item_id, file_path, filename, work_dir, roms_folder, system_data, formats
 ):
-    """Extract a ZIP file with byte-weighted progress and speed/ETA reporting."""
+    """Extract a ZIP in parallel with byte-weighted progress and speed/ETA."""
+    import threading
     from utils.progress import SpeedTracker
+    from utils.parallel_extract import parallel_extract_zip
 
     update_notification(service, f"Extracting: {filename}", 0, 100)
 
     extract_contents = system_data.get("extract_contents", True)
 
-    with ZipFile(file_path, "r") as zip_ref:
-        members = zip_ref.infolist()
-        total_bytes = sum(m.file_size for m in members) or 1
-        tracker = SpeedTracker()
-        written = 0
-        notif_step = max(total_bytes // 20, 1)
-        next_notif = notif_step
+    tracker = SpeedTracker()
+    cancel_event = threading.Event()
+    state_lock = threading.Lock()
+    last_notif_pct = [-1]
+
+    def cancel_check():
+        if cancel_event.is_set():
+            return True
+        if _check_cancel(work_dir, item_id):
+            cancel_event.set()
+            return True
+        return False
+
+    def on_progress(written, total):
+        with state_lock:
+            speed = tracker.update(written)
+        progress = (written / total) if total else 0.0
         write_status(
             work_dir,
             item_id,
             {
                 "status": "extracting",
-                "progress": 0.0,
-                "downloaded": 0,
-                "total_size": total_bytes,
-                "speed": 0.0,
+                "progress": progress,
+                "downloaded": written,
+                "total_size": total,
+                "speed": speed,
             },
         )
-        for member in members:
-            if _check_cancel(work_dir, item_id):
-                return
-            zip_ref.extract(member, work_dir)
-            written += member.file_size
-            speed = tracker.update(written)
-            progress = written / total_bytes
+        pct = int(progress * 100)
+        if pct != last_notif_pct[0]:
+            last_notif_pct[0] = pct
+            update_notification(
+                service, f"Extracting: {filename}", pct, 100
+            )
+
+    ok = parallel_extract_zip(
+        file_path,
+        work_dir,
+        on_progress=on_progress,
+        should_cancel=cancel_check,
+    )
+    if not ok:
+        if not cancel_event.is_set():
+            # Distinguish extraction error from user cancellation
             write_status(
                 work_dir,
                 item_id,
                 {
-                    "status": "extracting",
-                    "progress": progress,
-                    "downloaded": written,
-                    "total_size": total_bytes,
-                    "speed": speed,
+                    "status": "failed",
+                    "progress": 0.0,
+                    "error": "ZIP extraction failed",
                 },
             )
-            if written >= next_notif or written == total_bytes:
-                next_notif += notif_step
-                update_notification(
-                    service, f"Extracting: {filename}", int(progress * 100), 100
-                )
+        # If cancelled, _check_cancel already wrote the "cancelled" status.
+        return
 
     os.remove(file_path)
 
