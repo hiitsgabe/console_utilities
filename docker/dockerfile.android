@@ -46,7 +46,10 @@ RUN git clone -b master --single-branch https://github.com/kivy/python-for-andro
     python3 /tmp/patch_manifest.py && \
     # pip 26.x ships with a broken vendored resolvelib (RequirementInformation
     # ImportError), so constrain the upgrade in p4a's pymodules step to <26.
-    sed -i 's|pip install -U pip|pip install -U "pip<26"|g' /p4a/pythonforandroid/build.py
+    # Use single quotes inside the Python double-quoted bash string so the
+    # patched line stays syntactically valid Python.
+    sed -i "s|pip install -U pip|pip install -U 'pip<26'|g" /p4a/pythonforandroid/build.py && \
+    python3 -c "import ast; ast.parse(open('/p4a/pythonforandroid/build.py').read())"
 
 ARG KEYSTORE_PASSWORD
 # p4a reads signing config from env vars, not buildozer.spec
