@@ -128,24 +128,44 @@ def _process_download(service, task):
     # Clear the task file now that we've picked it up
     clear_download_task(work_dir)
 
-    # Build request headers
-    request_headers = _build_download_headers(url)
-    request_headers.update(auth_headers)
+    # Triage log: confirm what reached the service from the main app.
+    try:
+        from utils.logging import log_error as _log
 
-    # requests strips Authorization/Cookie on cross-host redirects, and some
-    # auth-protected servers reject HEAD requests outright (401). Use a single
-    # streaming GET — manually following redirects when auth is present — to
-    # both resolve the URL and read content-length/accept-ranges. Matches the
-    # desktop DownloadManager flow.
+        _log(
+            f"DownloadService start item={item_id} url={url} "
+            f"cookies={sorted(cookies.keys())} "
+            f"cookie_lens={ {k: len(v) for k, v in cookies.items()} } "
+            f"auth_headers={sorted(auth_headers.keys())}"
+        )
+    except Exception:
+        pass
+
+    # Build request headers.
     has_auth = bool(auth_headers) or bool(cookies)
+    if has_auth and "archive.org" not in url:
+        request_headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                " (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            ),
+            "Accept": "*/*",
+            "Accept-Encoding": "identity",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+    else:
+        request_headers = _build_download_headers(url)
+    request_headers.update(auth_headers)
 
     try:
         resolved_url = url
         response = None
 
         if has_auth:
+            from utils.logging import log_error as _log
+
             current_url = url
-            for _ in range(5):
+            for hop in range(5):
                 resp = requests.get(
                     current_url,
                     stream=True,
@@ -153,6 +173,13 @@ def _process_download(service, task):
                     headers=request_headers,
                     cookies=cookies,
                     allow_redirects=False,
+                )
+                # Triage log per hop
+                _log(
+                    f"DownloadService redirect[{hop}] item={item_id} "
+                    f"host={current_url.split('/')[2][:60]} "
+                    f"status={resp.status_code} "
+                    f"location={resp.headers.get('Location', '-')[:120]}"
                 )
                 if resp.status_code in (301, 302, 303, 307, 308):
                     current_url = resp.headers.get("Location", current_url)
@@ -227,14 +254,49 @@ def _process_download(service, task):
         _start_extraction_service(service, task, file_path)
 
     except Exception as e:
+        import traceback as _tb
+
+        from utils.logging import log_error as _log
+
         error_msg = str(e)[:100]
-        if (
-            hasattr(e, "response")
-            and e.response is not None
-            and e.response.status_code in (401, 403)
-            and "archive.org" in url
-        ):
-            error_msg = "ia_auth_required"
+        # Capture diagnostic details for triage. Lands in IPC status so the UI
+        # surfaces it AND in the standard error.log via log_error.
+        diag = {
+            "exc_type": type(e).__name__,
+            "url_orig": url,
+            "has_cookies": bool(cookies),
+            "cookie_names": sorted(cookies.keys()) if cookies else [],
+            "cookie_value_lens": (
+                {k: len(v) for k, v in cookies.items()} if cookies else {}
+            ),
+            "has_auth_headers": bool(auth_headers),
+            "header_keys": sorted(request_headers.keys()),
+        }
+        if hasattr(e, "response") and e.response is not None:
+            diag["http_status"] = e.response.status_code
+            diag["resp_url"] = getattr(e.response, "url", "?")
+            diag["resp_headers"] = dict(e.response.headers)
+            try:
+                diag["resp_body_snip"] = e.response.text[:400]
+            except Exception:
+                diag["resp_body_snip"] = "<unreadable>"
+            status = e.response.status_code
+            if status in (401, 403) and "archive.org" in url:
+                error_msg = "ia_auth_required"
+            elif status in (401, 403):
+                error_msg = (
+                    f"HTTP {status} at {getattr(e.response, 'url', url)[:80]}"
+                    f"  cookies={list(cookies.keys()) if cookies else 'none'}"
+                )
+
+        # Persist to error.log so we can retrieve it for triage.
+        _log(
+            f"DownloadService failure for item={item_id} url={url}\n"
+            f"  diag={diag}",
+            type(e).__name__,
+            _tb.format_exc(),
+        )
+
         write_status(
             work_dir,
             item_id,
@@ -242,6 +304,7 @@ def _process_download(service, task):
                 "status": "failed",
                 "progress": 0.0,
                 "error": error_msg,
+                "diag": diag,
             },
         )
 
