@@ -13,7 +13,6 @@ _ALL_ROOT_ENTRIES = [
     ("Backup Games", "systems_list"),
     ("Artbox Games Scraper", "scraper_menu"),
     ("Sports Game Updater", "sports_patcher"),
-    ("Syncthing Sync", "syncthing"),
     ("Utils", "utils"),
     ("File Explorer", "file_explorer"),
     ("Settings", "settings"),
@@ -41,9 +40,6 @@ def _build_root_menu(
                 continue
         if action == "scraper_menu":
             if not settings.get("scraper_enabled", False):
-                continue
-        if action == "syncthing":
-            if not settings.get("syncthing_enabled", False):
                 continue
         labels.append(label)
         actions.append(action)

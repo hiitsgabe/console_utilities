@@ -132,40 +132,53 @@ def _process_download(service, task):
     request_headers = _build_download_headers(url)
     request_headers.update(auth_headers)
 
-    # Resolve final URL (follow redirects preserving auth).
-    # requests strips Authorization/Cookie on cross-host redirects,
-    # so for ALL authenticated downloads we resolve manually first.
+    # requests strips Authorization/Cookie on cross-host redirects, and some
+    # auth-protected servers reject HEAD requests outright (401). Use a single
+    # streaming GET — manually following redirects when auth is present — to
+    # both resolve the URL and read content-length/accept-ranges. Matches the
+    # desktop DownloadManager flow.
     has_auth = bool(auth_headers) or bool(cookies)
 
     try:
         resolved_url = url
-        if has_auth:
-            resolved_url = _resolve_redirects(url, request_headers, cookies)
-            if resolved_url is None:
-                write_status(
-                    work_dir,
-                    item_id,
-                    {
-                        "status": "failed",
-                        "progress": 0.0,
-                        "error": "Auth redirect resolution failed",
-                    },
-                )
-                return
+        response = None
 
-        # Probe for range support and content length
-        resp = requests.head(
-            resolved_url,
-            headers=request_headers,
-            cookies=cookies,
-            timeout=(15, 30),
-            allow_redirects=True,
-        )
-        resp.raise_for_status()
-        total_size = int(resp.headers.get("content-length", 0))
-        accept_ranges = resp.headers.get("accept-ranges", "").lower()
-        # Use the final redirected URL for actual downloads
-        resolved_url = resp.url
+        if has_auth:
+            current_url = url
+            for _ in range(5):
+                resp = requests.get(
+                    current_url,
+                    stream=True,
+                    timeout=(15, 30),
+                    headers=request_headers,
+                    cookies=cookies,
+                    allow_redirects=False,
+                )
+                if resp.status_code in (301, 302, 303, 307, 308):
+                    current_url = resp.headers.get("Location", current_url)
+                    resp.close()
+                    continue
+                resp.raise_for_status()
+                response = resp
+                resolved_url = current_url
+                break
+            else:
+                raise requests.exceptions.TooManyRedirects("Too many redirects")
+        else:
+            response = requests.get(
+                url,
+                stream=True,
+                timeout=(15, 30),
+                headers=request_headers,
+                cookies=cookies,
+                allow_redirects=True,
+            )
+            response.raise_for_status()
+            resolved_url = response.url
+
+        total_size = int(response.headers.get("content-length", 0))
+        accept_ranges = response.headers.get("accept-ranges", "").lower()
+        response.close()
 
         write_status(
             work_dir,
@@ -552,46 +565,6 @@ def _start_extraction_service(service, task, file_path):
                 "progress": 1.0,
             },
         )
-
-
-def _resolve_redirects(url, headers, cookies, max_redirects=5):
-    """
-    Follow redirects manually, preserving auth headers.
-    Returns final URL or None.
-    """
-    import requests
-
-    current_url = url
-    verify = True
-    for _ in range(max_redirects):
-        try:
-            resp = requests.get(
-                current_url,
-                stream=True,
-                timeout=30,
-                headers=headers,
-                cookies=cookies,
-                allow_redirects=False,
-                verify=verify,
-            )
-            if resp.status_code in (301, 302, 303, 307, 308):
-                current_url = resp.headers.get("Location", current_url)
-                resp.close()
-                continue
-            else:
-                resp.close()
-                return current_url
-        except (
-            requests.exceptions.SSLError,
-            requests.exceptions.ConnectionError,
-        ):
-            if verify:
-                verify = False
-                continue
-            return None
-        except Exception:
-            return None
-    return None
 
 
 def _build_download_headers(url):

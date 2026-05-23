@@ -657,6 +657,10 @@ class DownloadManager:
             )
             if filename.endswith(".zip") and should_unzip:
                 item.status = "extracting"
+                # Reset so leftover download stats don't bleed in
+                item.downloaded = 0
+                item.total_size = 0
+                item.speed = 0.0
                 extract_contents = item.system_data.get("extract_contents", True)
 
                 # Extract directly to roms folder to avoid
@@ -666,14 +670,26 @@ class DownloadManager:
                 with ZipFile(file_path, "r") as zip_ref:
                     members = zip_ref.infolist()
                     total = len(members)
-                    # Update progress every ~5% to keep overhead low
-                    update_interval = max(1, total // 20)
+                    total_bytes = sum(m.file_size for m in members) or 1
+                    item.total_size = total_bytes
+                    processed_bytes = 0
+                    # Rolling speed samples (~10s window)
+                    samples = [(time.time(), 0)]
                     for i, member in enumerate(members):
                         if self._cancel_current:
                             return False
                         zip_ref.extract(member, extract_dir)
-                        if (i + 1) % update_interval == 0 or i == total - 1:
-                            item.progress = (i + 1) / total
+                        processed_bytes += member.file_size
+                        now = time.time()
+                        samples.append((now, processed_bytes))
+                        cutoff = now - 10.0
+                        while len(samples) > 1 and samples[0][0] < cutoff:
+                            samples.pop(0)
+                        dt = samples[-1][0] - samples[0][0]
+                        db = samples[-1][1] - samples[0][1]
+                        item.speed = (db / dt) if dt > 0 else 0.0
+                        item.downloaded = processed_bytes
+                        item.progress = processed_bytes / total_bytes
 
                 os.remove(file_path)
 
@@ -716,26 +732,32 @@ class DownloadManager:
                                 pass
                     return True
 
-            # Handle NSZ decompression
+            # Handle NSZ decompression (output directly to roms_folder)
             elif filename.endswith(".nsz"):
                 item.status = "extracting"
+                # Reset progress fields so leftover download stats don't bleed in
+                item.downloaded = 0
+                item.total_size = 0
+                item.speed = 0.0
 
-                def nsz_progress(text: str, percent: int):
+                def nsz_progress(
+                    text: str,
+                    percent: int,
+                    bytes_done: int = 0,
+                    total_bytes: int = 0,
+                    speed: float = 0.0,
+                ):
                     item.progress = percent / 100.0
+                    item.downloaded = bytes_done
+                    item.total_size = total_bytes
+                    item.speed = speed
 
                 keys_path = self.settings.get("nsz_keys_path", "")
                 success = decompress_nsz_file(
-                    file_path, self.work_dir, keys_path, nsz_progress
+                    file_path, roms_folder, keys_path, nsz_progress
                 )
 
                 if success:
-                    # Move NSP files
-                    for f in os.listdir(self.work_dir):
-                        if f.endswith(".nsp"):
-                            src_path = os.path.join(self.work_dir, f)
-                            dst_path = os.path.join(roms_folder, f)
-                            self._fast_move(src_path, dst_path)
-
                     if os.path.exists(file_path):
                         os.remove(file_path)
                     return True

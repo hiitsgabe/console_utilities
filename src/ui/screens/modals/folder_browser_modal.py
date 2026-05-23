@@ -12,6 +12,36 @@ from ui.molecules.action_button import ActionButton
 from ui.atoms.text import Text
 
 
+_FOLDER_SELECTION_TYPES = frozenset(
+    {
+        "work_dir",
+        "roms_dir",
+        "custom_folder",
+        "esde_media_path",
+        "esde_gamelists_path",
+        "retroarch_thumbnails",
+        "add_system_folder",
+        "ia_collection_folder",
+        "dedupe_folder",
+        "rename_folder",
+        "ghost_cleaner_folder",
+        "ia_download_folder",
+        "steam_shortcut",
+        "scraper_batch_folder",
+        "syncthing_base_path",
+        "custom_save_source",
+        "folder",
+    }
+)
+
+
+def is_folder_selection_type(selection_type: str) -> bool:
+    """Whether the selection shows Select/Cancel buttons (folder pick) vs file pick."""
+    return selection_type in _FOLDER_SELECTION_TYPES or selection_type.startswith(
+        ("syncthing_override_", "custom_save_map_")
+    )
+
+
 class FolderBrowserModal:
     """
     Folder browser modal.
@@ -84,25 +114,7 @@ class FolderBrowserModal:
         )
 
         # Determine if this is a folder selection (show buttons) or file selection (no buttons)
-        is_folder_selection = selection_type in (
-            "work_dir",
-            "roms_dir",
-            "custom_folder",
-            "esde_media_path",
-            "esde_gamelists_path",
-            "retroarch_thumbnails",
-            "add_system_folder",
-            "ia_collection_folder",
-            "dedupe_folder",
-            "rename_folder",
-            "ghost_cleaner_folder",
-            "ia_download_folder",
-            "steam_shortcut",
-            "scraper_batch_folder",
-            "syncthing_base_path",
-            "custom_save_source",
-            "folder",
-        ) or selection_type.startswith(("syncthing_override_", "custom_save_map_"))
+        is_folder_selection = is_folder_selection_type(selection_type)
 
         # List area (below path, above buttons if shown)
         button_height = 44

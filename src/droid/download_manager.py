@@ -356,6 +356,10 @@ class AndroidDownloadManager:
                 elif new_status in ("extracting", "moving"):
                     item.status = new_status
                     item.progress = progress
+                    # NSZ extraction reports bytes/speed too; default to 0 for ZIP/move
+                    item.downloaded = status_data.get("downloaded", 0)
+                    item.total_size = status_data.get("total_size", 0)
+                    item.speed = status_data.get("speed", 0.0)
                 elif new_status == "completed":
                     item.status = "completed"
                     item.progress = 1.0

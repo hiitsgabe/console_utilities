@@ -687,106 +687,163 @@ class ConsoleUtilitiesApp:
         self.state.loading.message = ""
         self.state.loading.progress = 0
 
-    def _extract_zip_file(self, zip_path: str):
-        """Extract a ZIP file to the same folder."""
-        import threading
-        from zipfile import ZipFile
+    def _run_archive_extract(self, archive_path: str, opener, label_verb: str):
+        """Run a generic archive extract in a thread with live progress/speed/ETA.
 
-        output_folder = os.path.dirname(zip_path)
-        zip_name = os.path.basename(zip_path)
+        opener(archive_path) → context manager yielding an object with
+        .infolist() returning members with .file_size attributes and
+        .extract(member, output_folder) for extraction. Works for ZipFile and
+        rarfile.RarFile.
+        """
+        import threading
+        import time
+
+        output_folder = os.path.dirname(archive_path)
+        archive_name = os.path.basename(archive_path)
 
         self.state.folder_browser.show = False
-        self._show_loading(f"Extracting {zip_name}...")
+        self._show_loading(f"{label_verb} {archive_name}...")
+
+        def fmt_size(n: float) -> str:
+            for unit in ("B", "KB", "MB", "GB"):
+                if n < 1024:
+                    return f"{n:.1f} {unit}"
+                n /= 1024
+            return f"{n:.1f} TB"
+
+        def fmt_eta(remaining: float, speed: float) -> str:
+            if speed <= 0 or remaining <= 0:
+                return ""
+            secs = int(remaining / speed)
+            if secs < 60:
+                return f"{secs}s"
+            if secs < 3600:
+                return f"{secs // 60}m {secs % 60}s"
+            return f"{secs // 3600}h {(secs % 3600) // 60}m"
+
+        def update_message(pct: int, processed: int, total: int, speed: float):
+            self.state.loading.progress = pct
+            parts = [f"{label_verb} {archive_name}... {pct}%"]
+            if total > 0:
+                parts.append(f"{fmt_size(processed)} / {fmt_size(total)}")
+            if speed > 0:
+                speed_str = f"{fmt_size(speed)}/s"
+                eta = fmt_eta(total - processed, speed)
+                parts.append(f"{speed_str} - {eta}" if eta else speed_str)
+            self.state.loading.message = " · ".join(parts)
 
         def extract():
             try:
-                with ZipFile(zip_path, "r") as zip_ref:
-                    total_files = len(zip_ref.namelist())
-                    for i, file_info in enumerate(zip_ref.infolist()):
-                        zip_ref.extract(file_info, output_folder)
-                        progress = int((i + 1) / total_files * 100)
-                        self.state.loading.progress = progress
-                        self.state.loading.message = (
-                            f"Extracting {zip_name}... {progress}%"
-                        )
-
-                self._hide_loading()
+                with opener(archive_path) as archive:
+                    members = archive.infolist()
+                    total_bytes = sum(
+                        getattr(m, "file_size", 0) for m in members
+                    ) or 1
+                    processed = 0
+                    samples = [(time.time(), 0)]
+                    for member in members:
+                        archive.extract(member, output_folder)
+                        processed += getattr(member, "file_size", 0)
+                        now = time.time()
+                        samples.append((now, processed))
+                        cutoff = now - 10.0
+                        while len(samples) > 1 and samples[0][0] < cutoff:
+                            samples.pop(0)
+                        dt = samples[-1][0] - samples[0][0]
+                        db = samples[-1][1] - samples[0][1]
+                        speed = (db / dt) if dt > 0 else 0.0
+                        pct = int(processed / total_bytes * 100)
+                        update_message(pct, processed, total_bytes, speed)
             except Exception as e:
                 from utils.logging import log_error
 
-                log_error(f"Failed to extract ZIP: {e}")
+                log_error(f"Failed to extract {archive_name}: {e}")
+            finally:
                 self._hide_loading()
 
-        thread = threading.Thread(target=extract, daemon=True)
-        thread.start()
+        threading.Thread(target=extract, daemon=True).start()
+
+    def _extract_zip_file(self, zip_path: str):
+        """Extract a ZIP file to the same folder."""
+        from zipfile import ZipFile
+
+        self._run_archive_extract(zip_path, ZipFile, "Extracting")
 
     def _extract_rar_file(self, rar_path: str):
         """Extract a RAR file to the same folder using rarfile."""
-        import threading
         import rarfile
 
-        output_folder = os.path.dirname(rar_path)
-        rar_name = os.path.basename(rar_path)
-
-        self.state.folder_browser.show = False
-        self._show_loading(f"Extracting {rar_name}...")
-
-        def extract():
-            try:
-                with rarfile.RarFile(rar_path, "r") as rf:
-                    members = rf.infolist()
-                    total = len(members)
-                    for i, member in enumerate(members):
-                        rf.extract(member, output_folder)
-                        progress = int((i + 1) / total * 100)
-                        self.state.loading.progress = progress
-                        self.state.loading.message = (
-                            f"Extracting {rar_name}... {progress}%"
-                        )
-                self._hide_loading()
-            except Exception as e:
-                from utils.logging import log_error
-
-                log_error(f"Failed to extract RAR: {e}")
-                self._hide_loading()
-
-        thread = threading.Thread(target=extract, daemon=True)
-        thread.start()
+        self._run_archive_extract(rar_path, rarfile.RarFile, "Extracting")
 
     def _extract_7z_file(self, sz_path: str):
         """Extract a 7z file to the same folder using rarfile."""
-        import threading
         import rarfile
 
-        output_folder = os.path.dirname(sz_path)
-        sz_name = os.path.basename(sz_path)
+        self._run_archive_extract(sz_path, rarfile.RarFile, "Extracting")
+
+    def _extract_nsz_file(self, nsz_path: str):
+        """Decompress an NSZ file to NSP in the same folder, with live progress."""
+        import threading
+
+        if not nsz_path.lower().endswith(".nsz"):
+            self._hide_loading()
+            return
+
+        output_folder = os.path.dirname(nsz_path)
+        nsz_name = os.path.basename(nsz_path)
 
         self.state.folder_browser.show = False
-        self._show_loading(f"Extracting {sz_name}...")
+        self._show_loading(f"Decompressing {nsz_name}...")
 
-        def extract():
+        keys_path = self.settings.get("nsz_keys_path", "")
+
+        def fmt_size(n: int) -> str:
+            for unit in ("B", "KB", "MB", "GB"):
+                if n < 1024:
+                    return f"{n:.1f} {unit}"
+                n /= 1024
+            return f"{n:.1f} TB"
+
+        def fmt_eta(remaining: int, speed: float) -> str:
+            if speed <= 0 or remaining <= 0:
+                return ""
+            secs = int(remaining / speed)
+            if secs < 60:
+                return f"{secs}s"
+            if secs < 3600:
+                return f"{secs // 60}m {secs % 60}s"
+            return f"{secs // 3600}h {(secs % 3600) // 60}m"
+
+        def nsz_progress(
+            text: str,
+            percent: int,
+            bytes_done: int = 0,
+            total_bytes: int = 0,
+            speed: float = 0.0,
+        ):
+            self.state.loading.progress = percent
+            parts = [f"Decompressing {nsz_name}... {percent}%"]
+            if total_bytes > 0:
+                parts.append(f"{fmt_size(bytes_done)} / {fmt_size(total_bytes)}")
+            if speed > 0:
+                speed_str = f"{fmt_size(int(speed))}/s"
+                eta = fmt_eta(total_bytes - bytes_done, speed)
+                parts.append(f"{speed_str} - {eta}" if eta else speed_str)
+            self.state.loading.message = " · ".join(parts)
+
+        def run():
+            from utils.nsz import decompress_nsz_file
+
             try:
-                with rarfile.RarFile(sz_path, "r") as rf:
-                    members = rf.infolist()
-                    total = len(members)
-                    for i, member in enumerate(members):
-                        rf.extract(member, output_folder)
-                        progress = int((i + 1) / total * 100)
-                        self.state.loading.progress = progress
-                        self.state.loading.message = (
-                            f"Extracting {sz_name}... {progress}%"
-                        )
-                self._hide_loading()
+                decompress_nsz_file(nsz_path, output_folder, keys_path, nsz_progress)
             except Exception as e:
                 from utils.logging import log_error
 
-                log_error(f"Failed to extract 7z: {e}")
+                log_error(f"Failed to decompress NSZ: {e}")
+            finally:
                 self._hide_loading()
 
-        thread = threading.Thread(target=extract, daemon=True)
-        thread.start()
-
-        thread = threading.Thread(target=extract, daemon=True)
+        thread = threading.Thread(target=run, daemon=True)
         thread.start()
 
     def _render_frame(self):
@@ -3525,8 +3582,6 @@ class ConsoleUtilitiesApp:
             elif action == "sports_patcher":
                 self.state.mode = "sports_patcher"
                 self.state.highlighted = 1
-            elif action == "syncthing":
-                self._enter_syncthing()
             elif action == "file_explorer":
                 self.state.enter_mode("file_explorer")
                 self.state.file_explorer.current_path = self.settings.get(
@@ -4419,6 +4474,8 @@ class ConsoleUtilitiesApp:
             self._show_rename_wizard()
         elif action == "ghost_cleaner":
             self._show_ghost_cleaner()
+        elif action == "syncthing":
+            self._enter_syncthing()
         elif action == "steam_shortcut":
             self._start_steam_shortcut()
 
@@ -4848,6 +4905,7 @@ class ConsoleUtilitiesApp:
         elif item_type in (
             "json_file",
             "keys_file",
+            "nsz_file",
             "zip_file",
             "rar_file",
             "7z_file",
@@ -4954,6 +5012,9 @@ class ConsoleUtilitiesApp:
             return
         elif selection_type == "extract_7z":
             self._extract_7z_file(path)
+            return
+        elif selection_type == "nsz_converter":
+            self._extract_nsz_file(path)
             return
         elif selection_type == "custom_folder":
             system = self._get_system_for_settings()
@@ -5679,6 +5740,8 @@ class ConsoleUtilitiesApp:
 
     def _navigate_folder_browser(self, direction: str):
         """Navigate folder browser modal with list and button support."""
+        from ui.screens.modals.folder_browser_modal import is_folder_selection_type
+
         fb = self.state.folder_browser
         max_items = len(fb.items) or 1
         selection_type = (
@@ -5686,22 +5749,7 @@ class ConsoleUtilitiesApp:
             if fb.selected_system_to_add
             else "folder"
         )
-        is_folder_selection = selection_type in (
-            "work_dir",
-            "roms_dir",
-            "custom_folder",
-            "esde_media_path",
-            "esde_gamelists_path",
-            "retroarch_thumbnails",
-            "add_system_folder",
-            "ia_collection_folder",
-            "dedupe_folder",
-            "rename_folder",
-            "ghost_cleaner_folder",
-            "ia_download_folder",
-            "scraper_batch_folder",
-            "folder",
-        )
+        is_folder_selection = is_folder_selection_type(selection_type)
 
         if fb.focus_area == "list":
             if direction == "up":
