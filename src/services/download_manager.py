@@ -744,17 +744,32 @@ class DownloadManager:
                     item.speed = tracker.update(processed)
 
                 keys_path = self.settings.get("nsz_keys_path", "")
+                # Decompress straight into roms_folder when possible — avoids
+                # a multi-GB cross-mount copy at the end (the slow path on
+                # Android scoped storage). Falls back to work_dir if the
+                # ROMs folder isn't writable.
+                os.makedirs(roms_folder, exist_ok=True)
+                nsz_output_dir = roms_folder
+                probe = os.path.join(roms_folder, ".write_probe")
+                try:
+                    with open(probe, "wb") as _f:
+                        _f.write(b"")
+                    os.remove(probe)
+                except (OSError, PermissionError):
+                    nsz_output_dir = self.work_dir
+
                 success = decompress_nsz_file(
-                    file_path, self.work_dir, keys_path, nsz_progress
+                    file_path, nsz_output_dir, keys_path, nsz_progress
                 )
 
                 if success:
-                    # Move NSP files
-                    for f in os.listdir(self.work_dir):
-                        if f.endswith(".nsp"):
-                            src_path = os.path.join(self.work_dir, f)
-                            dst_path = os.path.join(roms_folder, f)
-                            self._fast_move(src_path, dst_path)
+                    # If we wrote to roms_folder directly, no move is needed.
+                    if nsz_output_dir != roms_folder:
+                        for f in os.listdir(nsz_output_dir):
+                            if f.endswith(".nsp"):
+                                src_path = os.path.join(nsz_output_dir, f)
+                                dst_path = os.path.join(roms_folder, f)
+                                self._fast_move(src_path, dst_path)
 
                     if os.path.exists(file_path):
                         os.remove(file_path)
