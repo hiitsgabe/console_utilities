@@ -392,25 +392,41 @@ def _decompress_nsz(service, item_id, file_path, work_dir, roms_folder, system_d
             update_notification(service, f"Decompressing: {filename}", pct, 100)
 
     keys_path = system_data.get("nsz_keys_path", "")
-    success = decompress_nsz_file(file_path, work_dir, keys_path, nsz_progress)
+    # Decompress straight into roms_folder so the resulting multi-GB NSP
+    # never has to be copied across the app-private / shared-storage mount
+    # boundary on Android — that cross-mount copy was the slow / often-failing
+    # step. Falls back to work_dir if the direct write fails (no permission).
+    nsz_output_dir = roms_folder
+    try:
+        os.makedirs(roms_folder, exist_ok=True)
+        # Probe write access cheaply before committing the library to the path
+        with open(os.path.join(roms_folder, ".write_probe"), "wb") as _f:
+            _f.write(b"")
+        os.remove(os.path.join(roms_folder, ".write_probe"))
+    except (OSError, PermissionError):
+        nsz_output_dir = work_dir
+
+    success = decompress_nsz_file(file_path, nsz_output_dir, keys_path, nsz_progress)
 
     if success:
-        write_status(work_dir, item_id, {"status": "moving", "progress": 0.0})
-        update_notification(service, "Moving files...", 0, 100)
+        # If we wrote to roms_folder directly, no move is needed — common case.
+        if nsz_output_dir != roms_folder:
+            write_status(work_dir, item_id, {"status": "moving", "progress": 0.0})
+            update_notification(service, "Moving files...", 0, 100)
 
-        for f in os.listdir(work_dir):
-            if f.endswith(".nsp"):
-                src_path = os.path.join(work_dir, f)
-                dst_path = os.path.join(roms_folder, f)
-                err = _move_to_roms(src_path, dst_path)
-                if err:
-                    write_status(
-                        work_dir,
-                        item_id,
-                        {"status": "failed", "progress": 0.0, "error": err},
-                    )
-                    update_notification(service, err, 0, 100)
-                    return
+            for f in os.listdir(nsz_output_dir):
+                if f.endswith(".nsp"):
+                    src_path = os.path.join(nsz_output_dir, f)
+                    dst_path = os.path.join(roms_folder, f)
+                    err = _move_to_roms(src_path, dst_path)
+                    if err:
+                        write_status(
+                            work_dir,
+                            item_id,
+                            {"status": "failed", "progress": 0.0, "error": err},
+                        )
+                        update_notification(service, err, 0, 100)
+                        return
 
         if os.path.exists(file_path):
             try:
