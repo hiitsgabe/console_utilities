@@ -316,10 +316,20 @@ class DownloadsScreen:
                 item.progress,
                 fill_color=self.theme.warning,
             )
-            # Label below the progress bar
+            # Show speed + ETA when available (NSZ decompression); otherwise label
+            if item.speed > 0:
+                speed_text = self._format_speed(item.speed)
+                eta_text = self._format_eta(
+                    item.total_size, item.downloaded, item.speed
+                )
+                bottom_text = (
+                    f"{speed_text} - {eta_text}" if eta_text else speed_text
+                )
+            else:
+                bottom_text = label
             self.text.render(
                 screen,
-                label,
+                bottom_text,
                 (rect.centerx, rect.centery + 8),
                 color=(
                     self.theme.background
