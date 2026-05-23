@@ -5,10 +5,19 @@ Handles decompression of NSZ files to NSP format.
 
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Callable, Optional
 
 from .logging import log_error
+
+
+# Throttle interval for progress callbacks during decompression. The NSZ
+# library reports progress every 64 KB chunk; for a 5 GB file that's ~80k
+# callback invocations. On Android each one writes a JSON IPC file, which
+# easily doubles wall-clock extraction time. Firing at most ~5x/sec keeps
+# the UI responsive without bottlenecking the decompression loop.
+_PROGRESS_THROTTLE_SECONDS = 0.2
 
 # Try to import NSZ module
 try:
@@ -42,6 +51,9 @@ class _ProgressReport:
         self._slots = {}
         self._callback = callback
         self._slot_id = slot_id
+        self._last_emit = 0.0
+        self._last_processed = -1
+        self._last_total = -1
 
     def __setitem__(self, key, value):
         self._slots[key] = value
@@ -51,8 +63,23 @@ class _ProgressReport:
             processed, _verified, total, step = value
         except (ValueError, TypeError):
             return
+        processed = int(processed)
+        total = int(total)
+        now = time.monotonic()
+        # Always let through the very first sample and the final one so the
+        # UI shows 0% and 100% exactly. Throttle everything in between.
+        is_first = self._last_processed < 0
+        is_final = total > 0 and processed >= total
+        if not is_first and not is_final:
+            if now - self._last_emit < _PROGRESS_THROTTLE_SECONDS:
+                return
+            if processed == self._last_processed and total == self._last_total:
+                return
+        self._last_emit = now
+        self._last_processed = processed
+        self._last_total = total
         try:
-            self._callback(str(step), int(processed), int(total))
+            self._callback(str(step), processed, total)
         except Exception:
             pass
 
