@@ -4524,6 +4524,10 @@ class ConsoleUtilitiesApp:
                 f.write(app_id)
             self.state.steam_shortcut.output_folder = folder_path
             self.state.steam_shortcut.step = "complete"
+            # Remember this folder so the picker opens here next time
+            if self.settings.get("steam_shortcut_folder") != folder_path:
+                self.settings["steam_shortcut_folder"] = folder_path
+                save_settings(self.settings)
         except Exception as e:
             self.state.steam_shortcut.show = False
             self.state.folder_browser.show = False
@@ -4689,7 +4693,13 @@ class ConsoleUtilitiesApp:
                     elif os.path.isdir(os.path.dirname(custom)):
                         path = os.path.dirname(custom)
         elif selection_type == "steam_shortcut":
-            path = self.settings.get("roms_dir", SCRIPT_DIR)
+            saved = self.settings.get("steam_shortcut_folder", "")
+            if saved and os.path.isdir(saved):
+                path = saved
+            elif saved and os.path.isdir(os.path.dirname(saved)):
+                path = os.path.dirname(saved)
+            else:
+                path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "mvp_psp_patcher_rom":
             path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "syncthing_base_path":
@@ -5679,6 +5689,8 @@ class ConsoleUtilitiesApp:
 
     def _navigate_folder_browser(self, direction: str):
         """Navigate folder browser modal with list and button support."""
+        from ui.screens.modals.folder_browser_modal import is_folder_selection_type
+
         fb = self.state.folder_browser
         max_items = len(fb.items) or 1
         selection_type = (
@@ -5686,22 +5698,7 @@ class ConsoleUtilitiesApp:
             if fb.selected_system_to_add
             else "folder"
         )
-        is_folder_selection = selection_type in (
-            "work_dir",
-            "roms_dir",
-            "custom_folder",
-            "esde_media_path",
-            "esde_gamelists_path",
-            "retroarch_thumbnails",
-            "add_system_folder",
-            "ia_collection_folder",
-            "dedupe_folder",
-            "rename_folder",
-            "ghost_cleaner_folder",
-            "ia_download_folder",
-            "scraper_batch_folder",
-            "folder",
-        )
+        is_folder_selection = is_folder_selection_type(selection_type)
 
         if fb.focus_area == "list":
             if direction == "up":

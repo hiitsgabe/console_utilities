@@ -73,6 +73,8 @@ class Settings:
     esde_media_path: str = ""
     esde_gamelists_path: str = ""
     retroarch_thumbnails_path: str = ""
+    # Steam shortcut utility
+    steam_shortcut_folder: str = ""
 
     def __post_init__(self):
         """Set default paths if not specified."""
