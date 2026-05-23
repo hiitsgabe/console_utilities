@@ -184,24 +184,51 @@ def _process_file(
 def _extract_zip(
     service, item_id, file_path, filename, work_dir, roms_folder, system_data, formats
 ):
-    """Extract a ZIP file with progress reporting."""
+    """Extract a ZIP file with byte-weighted progress and speed/ETA reporting."""
+    from utils.progress import SpeedTracker
+
     update_notification(service, f"Extracting: {filename}", 0, 100)
-    write_status(work_dir, item_id, {"status": "extracting", "progress": 0.0})
 
     extract_contents = system_data.get("extract_contents", True)
 
     with ZipFile(file_path, "r") as zip_ref:
-        total_files = len(zip_ref.namelist())
-        for i, file_info in enumerate(zip_ref.infolist()):
+        members = zip_ref.infolist()
+        total_bytes = sum(m.file_size for m in members) or 1
+        tracker = SpeedTracker()
+        written = 0
+        notif_step = max(total_bytes // 20, 1)
+        next_notif = notif_step
+        write_status(
+            work_dir,
+            item_id,
+            {
+                "status": "extracting",
+                "progress": 0.0,
+                "downloaded": 0,
+                "total_size": total_bytes,
+                "speed": 0.0,
+            },
+        )
+        for member in members:
             if _check_cancel(work_dir, item_id):
                 return
-            zip_ref.extract(file_info, work_dir)
-            progress = (i + 1) / total_files
+            zip_ref.extract(member, work_dir)
+            written += member.file_size
+            speed = tracker.update(written)
+            progress = written / total_bytes
             write_status(
-                work_dir, item_id, {"status": "extracting", "progress": progress}
+                work_dir,
+                item_id,
+                {
+                    "status": "extracting",
+                    "progress": progress,
+                    "downloaded": written,
+                    "total_size": total_bytes,
+                    "speed": speed,
+                },
             )
-            # Update notification every ~10% to avoid excessive updates
-            if i % max(total_files // 10, 1) == 0:
+            if written >= next_notif or written == total_bytes:
+                next_notif += notif_step
                 update_notification(
                     service, f"Extracting: {filename}", int(progress * 100), 100
                 )
@@ -264,18 +291,45 @@ def _extract_zip(
 
 
 def _decompress_nsz(service, item_id, file_path, work_dir, roms_folder, system_data):
-    """Decompress an NSZ file with progress reporting."""
+    """Decompress an NSZ file with real-time progress, speed, and ETA."""
+    from utils.nsz import decompress_nsz_file
+    from utils.progress import SpeedTracker
+
     filename = os.path.basename(file_path)
     update_notification(service, f"Decompressing: {filename}", 0, 100)
-    write_status(work_dir, item_id, {"status": "extracting", "progress": 0.0})
+    write_status(
+        work_dir,
+        item_id,
+        {
+            "status": "extracting",
+            "progress": 0.0,
+            "downloaded": 0,
+            "total_size": 0,
+            "speed": 0.0,
+        },
+    )
 
-    from utils.nsz import decompress_nsz_file
+    tracker = SpeedTracker()
+    last_notif_pct = [-1]
 
-    def nsz_progress(text, percent):
+    def nsz_progress(step, processed, total):
+        speed = tracker.update(processed)
+        progress = (processed / total) if total > 0 else 0.0
         write_status(
-            work_dir, item_id, {"status": "extracting", "progress": percent / 100.0}
+            work_dir,
+            item_id,
+            {
+                "status": "extracting",
+                "progress": progress,
+                "downloaded": processed,
+                "total_size": total,
+                "speed": speed,
+            },
         )
-        update_notification(service, f"Decompressing: {filename}", percent, 100)
+        pct = int(progress * 100)
+        if pct != last_notif_pct[0]:
+            last_notif_pct[0] = pct
+            update_notification(service, f"Decompressing: {filename}", pct, 100)
 
     keys_path = system_data.get("nsz_keys_path", "")
     success = decompress_nsz_file(file_path, work_dir, keys_path, nsz_progress)
