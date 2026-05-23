@@ -720,6 +720,31 @@ class ConsoleUtilitiesApp:
         """Hide loading spinner."""
         self.state.loading.show = False
         self.state.loading.message = ""
+
+    def _show_error(self, message: str, title: str = "Error"):
+        """Display an error message in the confirm modal with a single OK button.
+
+        Used in cases where an action failed and we want to surface the
+        underlying cause without crashing the caller. Wraps long messages.
+        """
+        # Wrap long messages so they fit the modal width
+        lines = []
+        for raw_line in str(message).splitlines() or [str(message)]:
+            while len(raw_line) > 60:
+                # Try to break on a space near the wrap point
+                break_at = raw_line.rfind(" ", 0, 60)
+                if break_at <= 0:
+                    break_at = 60
+                lines.append(raw_line[:break_at])
+                raw_line = raw_line[break_at:].lstrip()
+            lines.append(raw_line)
+        self.state.confirm_modal.show = True
+        self.state.confirm_modal.title = title
+        self.state.confirm_modal.message_lines = lines or [""]
+        self.state.confirm_modal.ok_label = "OK"
+        self.state.confirm_modal.cancel_label = ""
+        self.state.confirm_modal.button_index = 0
+        self.state.confirm_modal.context = ""
         self.state.loading.progress = 0
 
     def _extract_zip_file(self, zip_path: str):
@@ -4265,13 +4290,30 @@ class ConsoleUtilitiesApp:
             )
 
     def _request_storage_permission(self):
-        """Request MANAGE_EXTERNAL_STORAGE permission on Android."""
+        """Request MANAGE_EXTERNAL_STORAGE permission on Android.
+
+        Available on Android 11+ (API 30). On older versions the
+        ``isExternalStorageManager`` method does not exist; show a hint
+        instead of crashing.
+        """
         try:
             from jnius import autoclass
 
             Environment = autoclass("android.os.Environment")
+            # API 30+ only — guard so older devices show a hint instead of
+            # raising JavaException through pyjnius.
+            if not hasattr(Environment, "isExternalStorageManager"):
+                self._show_error(
+                    "All-files access requires Android 11 or newer.",
+                    title="Storage Permission",
+                )
+                return
+
             if Environment.isExternalStorageManager():
-                self._show_error("Storage permission already granted.")
+                self._show_error(
+                    "Storage permission is already granted.",
+                    title="Storage Permission",
+                )
                 return
 
             PythonActivity = autoclass("org.kivy.android.PythonActivity")
@@ -4279,11 +4321,27 @@ class ConsoleUtilitiesApp:
             Settings = autoclass("android.provider.Settings")
             Uri = autoclass("android.net.Uri")
             activity = PythonActivity.mActivity
-            intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+            action = getattr(
+                Settings, "ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION", None
+            )
+            if action is None:
+                self._show_error(
+                    "All-files access settings are unavailable on this Android version.",
+                    title="Storage Permission",
+                )
+                return
+            intent = Intent(action)
             intent.setData(Uri.parse("package:" + activity.getPackageName()))
             activity.startActivity(intent)
         except Exception as e:
-            self._show_error(f"Failed to request permission: {e}")
+            try:
+                self._show_error(
+                    f"Failed to open permission settings: {e}",
+                    title="Storage Permission",
+                )
+            except Exception:
+                # Last resort — never crash from a settings tap
+                log_error(f"_request_storage_permission failed: {e}")
 
     def _check_for_updates(self):
         """Check GitHub releases for a newer version."""
