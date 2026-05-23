@@ -44,11 +44,13 @@ RUN apt-get install libffi-dev
 COPY ./docker/patch_manifest.py /tmp/patch_manifest.py
 RUN git clone -b master --single-branch https://github.com/kivy/python-for-android.git /p4a && \
     python3 /tmp/patch_manifest.py && \
-    # pip 26.x ships with a broken vendored resolvelib (RequirementInformation
-    # ImportError), so constrain the upgrade in p4a's pymodules step to <26.
-    # Use single quotes inside the Python double-quoted bash string so the
-    # patched line stays syntactically valid Python.
-    sed -i "s|pip install -U pip|pip install -U 'pip<26'|g" /p4a/pythonforandroid/build.py && \
+    # pip 25.x AND 26.x both ship a broken vendored resolvelib (new-layout
+    # resolvers/ subpackage referencing RequirementInformation that no longer
+    # exists in structs.py), so any `pip install -U pip` upgrade in p4a's
+    # pymodules step lands on a broken pip. The venv starts with the bundled
+    # pip 23.0.1 which works fine for our package installs — skip the upgrade.
+    # ast.parse guards against an accidental syntax-breaking sed.
+    sed -i "s|pip install -U pip|true # pip upgrade disabled, see Dockerfile|g" /p4a/pythonforandroid/build.py && \
     python3 -c "import ast; ast.parse(open('/p4a/pythonforandroid/build.py').read())"
 
 ARG KEYSTORE_PASSWORD
