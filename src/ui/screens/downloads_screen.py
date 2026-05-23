@@ -316,10 +316,22 @@ class DownloadsScreen:
                 item.progress,
                 fill_color=self.theme.warning,
             )
-            # Label below the progress bar
+            # Below the bar: label, optionally augmented with speed + ETA if
+            # the extraction phase is reporting byte progress.
+            if item.speed > 0 and item.total_size > 0:
+                speed_text = self._format_speed(item.speed)
+                eta_text = self._format_eta(
+                    item.total_size, item.downloaded, item.speed
+                )
+                if eta_text:
+                    sub_text = f"{label} {speed_text} - {eta_text}"
+                else:
+                    sub_text = f"{label} {speed_text}"
+            else:
+                sub_text = label
             self.text.render(
                 screen,
-                label,
+                sub_text,
                 (rect.centerx, rect.centery + 8),
                 color=(
                     self.theme.background

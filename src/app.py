@@ -736,10 +736,13 @@ class ConsoleUtilitiesApp:
         def extract():
             try:
                 with ZipFile(zip_path, "r") as zip_ref:
-                    total_files = len(zip_ref.namelist())
-                    for i, file_info in enumerate(zip_ref.infolist()):
-                        zip_ref.extract(file_info, output_folder)
-                        progress = int((i + 1) / total_files * 100)
+                    members = zip_ref.infolist()
+                    total_bytes = sum(m.file_size for m in members) or 1
+                    written = 0
+                    for member in members:
+                        zip_ref.extract(member, output_folder)
+                        written += member.file_size
+                        progress = int(written / total_bytes * 100)
                         self.state.loading.progress = progress
                         self.state.loading.message = (
                             f"Extracting {zip_name}... {progress}%"
@@ -770,10 +773,12 @@ class ConsoleUtilitiesApp:
             try:
                 with rarfile.RarFile(rar_path, "r") as rf:
                     members = rf.infolist()
-                    total = len(members)
-                    for i, member in enumerate(members):
+                    total_bytes = sum(getattr(m, "file_size", 0) for m in members) or 1
+                    written = 0
+                    for member in members:
                         rf.extract(member, output_folder)
-                        progress = int((i + 1) / total * 100)
+                        written += getattr(member, "file_size", 0)
+                        progress = int(written / total_bytes * 100)
                         self.state.loading.progress = progress
                         self.state.loading.message = (
                             f"Extracting {rar_name}... {progress}%"
@@ -803,10 +808,12 @@ class ConsoleUtilitiesApp:
             try:
                 with rarfile.RarFile(sz_path, "r") as rf:
                     members = rf.infolist()
-                    total = len(members)
-                    for i, member in enumerate(members):
+                    total_bytes = sum(getattr(m, "file_size", 0) for m in members) or 1
+                    written = 0
+                    for member in members:
                         rf.extract(member, output_folder)
-                        progress = int((i + 1) / total * 100)
+                        written += getattr(member, "file_size", 0)
+                        progress = int(written / total_bytes * 100)
                         self.state.loading.progress = progress
                         self.state.loading.message = (
                             f"Extracting {sz_name}... {progress}%"
