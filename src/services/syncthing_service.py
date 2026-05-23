@@ -46,6 +46,17 @@ SYNC_SYSTEMS = [
 
 SYNCTHING_API_URL = "http://localhost:8384"
 
+# Candidate (url, verify_tls) pairs tried by is_running() to find a reachable
+# Syncthing GUI. Catfriend1's Syncthing-Fork on Android defaults to HTTPS with
+# a self-signed cert; some environments also fail to resolve "localhost". The
+# first responsive candidate is remembered for the lifetime of the service.
+_API_CANDIDATES = [
+    ("http://localhost:8384", True),
+    ("http://127.0.0.1:8384", True),
+    ("https://localhost:8384", False),
+    ("https://127.0.0.1:8384", False),
+]
+
 
 class SyncthingService:
     """Client for Syncthing REST API."""
@@ -53,6 +64,7 @@ class SyncthingService:
     def __init__(self, api_key: str = "", api_url: str = SYNCTHING_API_URL):
         self.api_key = api_key
         self.api_url = api_url
+        self._verify = True
 
     def _headers(self) -> Dict[str, str]:
         return {
@@ -361,17 +373,30 @@ class SyncthingService:
         return devices
 
     def is_running(self) -> bool:
-        """Check if Syncthing is reachable."""
-        try:
-            r = requests.get(
-                f"{self.api_url}/rest/system/status",
-                headers=self._headers(),
-                timeout=3,
-            )
-            # 200 = OK, 403 = running but needs API key
-            return r.status_code in (200, 403)
-        except Exception:
-            return False
+        """Check if Syncthing is reachable; remembers the working URL+scheme."""
+        # Probe the currently-set URL first, then the rest of the candidates.
+        candidates = [(self.api_url, self._verify)] + [
+            c for c in _API_CANDIDATES if c[0] != self.api_url
+        ]
+        last_err = None
+        for url, verify in candidates:
+            try:
+                r = requests.get(
+                    f"{url}/rest/system/status",
+                    headers=self._headers(),
+                    timeout=3,
+                    verify=verify,
+                )
+                # 200 = OK, 403 = running but needs API key
+                if r.status_code in (200, 403):
+                    self.api_url = url
+                    self._verify = verify
+                    return True
+                last_err = f"{url} -> HTTP {r.status_code}"
+            except Exception as e:
+                last_err = f"{url} -> {type(e).__name__}: {e}"
+        log_error("Syncthing: is_running all candidates failed", str(last_err))
+        return False
 
     def get_device_id(self) -> str:
         """Get this device's Syncthing Device ID."""
@@ -380,6 +405,7 @@ class SyncthingService:
                 f"{self.api_url}/rest/system/status",
                 headers=self._headers(),
                 timeout=5,
+                verify=self._verify,
             )
             r.raise_for_status()
             return r.json().get("myID", "")
@@ -398,6 +424,7 @@ class SyncthingService:
                 f"{self.api_url}/rest/config",
                 headers=self._headers(),
                 timeout=5,
+                verify=self._verify,
             )
             r.raise_for_status()
             return r.json()
@@ -421,6 +448,7 @@ class SyncthingService:
                 headers=self._headers(),
                 json=device,
                 timeout=5,
+                verify=self._verify,
             )
             return r.status_code in (200, 201)
         except Exception as e:
@@ -460,6 +488,7 @@ class SyncthingService:
                 headers=self._headers(),
                 json=folder,
                 timeout=5,
+                verify=self._verify,
             )
             return r.status_code in (200, 201)
         except Exception as e:
@@ -476,6 +505,7 @@ class SyncthingService:
                 f"{self.api_url}/rest/cluster/pending/devices",
                 headers=self._headers(),
                 timeout=5,
+                verify=self._verify,
             )
             if r.status_code == 200:
                 return r.json()
@@ -491,6 +521,7 @@ class SyncthingService:
                 f"{self.api_url}/rest/cluster/pending/folders",
                 headers=self._headers(),
                 timeout=5,
+                verify=self._verify,
             )
             if r.status_code == 200:
                 return r.json()
@@ -575,6 +606,7 @@ class SyncthingService:
                 f"{self.api_url}/rest/config/folders/{folder_id}",
                 headers=self._headers(),
                 timeout=5,
+                verify=self._verify,
             )
             return r.status_code in (200, 204)
         except Exception as e:
@@ -593,6 +625,7 @@ class SyncthingService:
                 headers=self._headers(),
                 params={"folder": folder_id},
                 timeout=5,
+                verify=self._verify,
             )
             r.raise_for_status()
             return r.json()
@@ -611,6 +644,7 @@ class SyncthingService:
                 f"{self.api_url}/rest/system/connections",
                 headers=self._headers(),
                 timeout=5,
+                verify=self._verify,
             )
             r.raise_for_status()
             return r.json().get("connections", {})
