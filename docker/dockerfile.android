@@ -42,7 +42,14 @@ RUN apt-get install libffi-dev
 # Clone python-for-android and patch AndroidManifest template to include FileProvider
 # (extra_manifest_application_arguments only supports attributes, not child elements)
 COPY ./docker/patch_manifest.py /tmp/patch_manifest.py
-RUN git clone -b master --single-branch https://github.com/kivy/python-for-android.git /p4a && \
+# Pin p4a to a known-good commit that produced working NSZ on v1.6.5.
+# `master` HEAD has been moving and broke our zstandard CFFI fallback path
+# somewhere between mid-March 2026 and now. Pinning here is the surest way
+# to restore the previously-working build until we figure out *exactly*
+# what changed in upstream p4a.
+ARG P4A_COMMIT=a4a8b28144
+RUN git clone https://github.com/kivy/python-for-android.git /p4a && \
+    cd /p4a && git checkout $P4A_COMMIT && cd - && \
     python3 /tmp/patch_manifest.py && \
     # pip 25.x AND 26.x both ship a broken vendored resolvelib (new-layout
     # resolvers/ subpackage referencing RequirementInformation that no longer
