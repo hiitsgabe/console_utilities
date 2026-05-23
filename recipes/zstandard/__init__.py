@@ -25,7 +25,13 @@ from pythonforandroid.recipe import PyProjectRecipe
 
 
 class ZstandardRecipe(PyProjectRecipe):
-    version = "0.21.0"
+    # Bumped 0.21.0 → 0.23.0. 0.21.0's backend_c.so was failing to dlopen on
+    # Android with "undefined symbol: PyObject_GetBuffer" — every static
+    # analysis said the symbol IS exported by libpython3.10.so and identical
+    # extensions like _pickle load fine. 0.23.0 drops the CFFI backend
+    # requirement and has a cleaner build that may sidestep whatever Android
+    # linker quirk is biting 0.21.0.
+    version = "0.23.0"
     url = (
         "https://files.pythonhosted.org/packages/source/z/zstandard/"
         "zstandard-{version}.tar.gz"
