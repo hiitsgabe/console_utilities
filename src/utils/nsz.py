@@ -5,10 +5,19 @@ Handles decompression of NSZ files to NSP format.
 
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Callable, Optional
 
 from .logging import log_error
+
+
+# Throttle interval for progress callbacks during decompression. The NSZ
+# library reports progress every 64 KB chunk; for a 5 GB file that's ~80k
+# callback invocations. On Android each one writes a JSON IPC file, which
+# easily doubles wall-clock extraction time. Firing at most ~5x/sec keeps
+# the UI responsive without bottlenecking the decompression loop.
+_PROGRESS_THROTTLE_SECONDS = 0.2
 
 # Try to import NSZ module
 try:
@@ -28,11 +37,61 @@ def is_nsz_available() -> bool:
     return NSZ_AVAILABLE
 
 
+class _ProgressReport:
+    """List-like proxy for nsz's statusReport that fires a callback on updates.
+
+    The nsz library writes ``statusReport[id] = [processed, verified, total, step]``
+    after every decompressed chunk. We intercept those writes and translate
+    them into ``progress_callback(step, processed, total)`` calls so the UI can
+    show real-time progress, speed, and ETA instead of a hard-coded 30 → 80
+    waypoint.
+    """
+
+    def __init__(self, callback, slot_id=0):
+        self._slots = {}
+        self._callback = callback
+        self._slot_id = slot_id
+        self._last_emit = 0.0
+        self._last_processed = -1
+        self._last_total = -1
+
+    def __setitem__(self, key, value):
+        self._slots[key] = value
+        if key != self._slot_id or self._callback is None:
+            return
+        try:
+            processed, _verified, total, step = value
+        except (ValueError, TypeError):
+            return
+        processed = int(processed)
+        total = int(total)
+        now = time.monotonic()
+        # Always let through the very first sample and the final one so the
+        # UI shows 0% and 100% exactly. Throttle everything in between.
+        is_first = self._last_processed < 0
+        is_final = total > 0 and processed >= total
+        if not is_first and not is_final:
+            if now - self._last_emit < _PROGRESS_THROTTLE_SECONDS:
+                return
+            if processed == self._last_processed and total == self._last_total:
+                return
+        self._last_emit = now
+        self._last_processed = processed
+        self._last_total = total
+        try:
+            self._callback(str(step), processed, total)
+        except Exception:
+            pass
+
+    def __getitem__(self, key):
+        return self._slots[key]
+
+
 def decompress_nsz_file(
     nsz_file_path: str,
     output_dir: str,
     keys_path: str,
-    progress_callback: Optional[Callable[[str, int], None]] = None,
+    progress_callback: Optional[Callable[[str, int, int], None]] = None,
 ) -> bool:
     """
     Unified NSZ decompression method.
@@ -41,7 +100,8 @@ def decompress_nsz_file(
         nsz_file_path: Path to the NSZ file to decompress
         output_dir: Directory to extract NSP file(s) to
         keys_path: Path to Nintendo Switch keys file
-        progress_callback: Optional callback for progress updates (message, progress_percent)
+        progress_callback: Optional callback ``(step, bytes_processed, bytes_total)``
+            invoked continuously during decompression.
 
     Returns:
         True if decompression was successful, False otherwise
@@ -49,14 +109,6 @@ def decompress_nsz_file(
     filename = os.path.basename(nsz_file_path)
 
     log_error(f"NSZ Called for {filename}")
-    log_error("NSZ Starting Checks:")
-
-    def update_progress(message: str, progress: int):
-        if progress_callback:
-            progress_callback(message, progress)
-        else:
-            print(message)
-
     log_error(f"NSZ Key Path: {keys_path}")
 
     # Check if NSZ library is available
@@ -76,8 +128,6 @@ def decompress_nsz_file(
 
     if keys_path and local_nsz_decompress:
         try:
-            update_progress(f"Decompressing {filename} using NSZ library...", 30)
-
             # Check if NSZ file is valid before attempting decompression
             if not os.path.exists(nsz_file_path):
                 raise FileNotFoundError(f"NSZ file not found: {nsz_file_path}")
@@ -86,12 +136,19 @@ def decompress_nsz_file(
             if file_size == 0:
                 raise ValueError(f"NSZ file is empty: {nsz_file_path}")
 
+            if progress_callback:
+                progress_callback("Decompressing", 0, file_size)
+
             log_error(f"Attempting NSZ decompression of {filename} ({file_size} bytes)")
+            report = _ProgressReport(progress_callback)
             local_nsz_decompress(
-                Path(nsz_file_path), Path(output_dir), True, None, keys_path=keys_path
+                Path(nsz_file_path),
+                Path(output_dir),
+                True,
+                (report, 0),
+                keys_path=keys_path,
             )
             nsz_success = True
-            update_progress("NSZ library decompression successful", 80)
             log_error("NSZ decompression successful using nsz library")
 
         except Exception as e:
@@ -107,9 +164,15 @@ def decompress_nsz_file(
                 log_error("NSZ file appears to be corrupted or incomplete")
 
     if nsz_success:
-        update_progress(f"Decompressing {filename}... Complete", 100)
+        if progress_callback:
+            try:
+                final_size = os.path.getsize(nsz_file_path)
+            except OSError:
+                final_size = 1
+            progress_callback("Decompressing", final_size, final_size)
         return True
     else:
         log_error(f"NSZ decompression failed for {filename}: All methods failed")
-        update_progress(f"NSZ decompression failed for {filename}", 0)
+        if progress_callback:
+            progress_callback("Failed", 0, 1)
         return False

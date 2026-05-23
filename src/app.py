@@ -8,7 +8,7 @@ all components: state, settings, services, input, and UI.
 import pygame
 import os
 import sys
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 
 from constants import (
     BEZEL_INSET,
@@ -121,30 +121,24 @@ class ConsoleUtilitiesApp:
         pygame.init()
         pygame.display.set_caption("Console Utilities")
 
-        # Create display - auto-detect native resolution on console/Android
+        # Create the physical display surface; rendering targets an off-screen
+        # 800x600 framebuffer (self.screen) that is scale-blitted to the display
+        # via _present() so a user-configurable ui_scale can zoom the UI.
         if DEV_MODE:
-            self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+            self.display = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         elif BUILD_TARGET == "android":
             display_info = pygame.display.Info()
-            native_w, native_h = display_info.current_w, display_info.current_h
-            if native_h > native_w:
-                # Portrait: use fixed 800x600 scaled to fit
-                self.screen = pygame.display.set_mode(
-                    (SCREEN_WIDTH, SCREEN_HEIGHT),
-                    pygame.SCALED | pygame.FULLSCREEN,
-                )
-            else:
-                # Landscape: use native resolution
-                self.screen = pygame.display.set_mode(
-                    (native_w, native_h),
-                    pygame.SCALED | pygame.FULLSCREEN,
-                )
+            self.display = pygame.display.set_mode(
+                (display_info.current_w, display_info.current_h),
+                pygame.SCALED | pygame.FULLSCREEN,
+            )
         else:
             display_info = pygame.display.Info()
-            self.screen = pygame.display.set_mode(
+            self.display = pygame.display.set_mode(
                 (display_info.current_w, display_info.current_h),
                 pygame.FULLSCREEN,
             )
+        self.screen = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT)).convert()
         self.clock = pygame.time.Clock()
         font_path = os.path.join(SCRIPT_DIR, "assets", "fonts", "VT323-Regular.ttf")
         if not os.path.exists(font_path):
@@ -186,6 +180,12 @@ class ConsoleUtilitiesApp:
         self.settings = load_settings()
         update_json_file_path(self.settings)
         self.data = load_main_systems_data(self.settings)
+
+        # Compute present-scale geometry now that ui_scale is known
+        self._present_scale: float = 1.0
+        self._present_size: Tuple[int, int] = self.screen.get_size()
+        self._present_offset: Tuple[int, int] = (0, 0)
+        self._update_present_geometry()
 
         # Load controller mapping
         load_controller_mapping()
@@ -362,7 +362,7 @@ class ConsoleUtilitiesApp:
             if self.scanline_surface:
                 self.screen.blit(self.scanline_surface, (0, 0))
             self.screen.blit(self.bezel_surface, (0, 0))
-            pygame.display.flip()
+            self._present()
 
             # Handle events
             for event in pygame.event.get():
@@ -401,7 +401,8 @@ class ConsoleUtilitiesApp:
                             last_input_time = current_time
 
                 elif event.type == pygame.MOUSEBUTTONDOWN:
-                    if touch_detected and skip_btn_rect.collidepoint(event.pos):
+                    pos = self._translate_pos(event.pos)
+                    if touch_detected and skip_btn_rect.collidepoint(pos):
                         mapping = {"touchscreen_mode": True}
                         save_controller_mapping(mapping)
                         return True
@@ -562,18 +563,21 @@ class ConsoleUtilitiesApp:
         """Restore display after returning from an external activity (SAF picker etc)."""
         try:
             self._set_android_immersive_mode()
-            w, h = self.screen.get_size()
-            self.screen = pygame.display.set_mode(
-                (w, h), pygame.SCALED | pygame.FULLSCREEN
+            dw, dh = self.display.get_size()
+            self.display = pygame.display.set_mode(
+                (dw, dh), pygame.SCALED | pygame.FULLSCREEN
             )
+            self._update_present_geometry()
 
-            # Recreate overlay surfaces (GPU textures are lost on context restore)
+            # Recreate overlay surfaces (GPU textures are lost on context restore).
+            # Overlays sit on the 800x600 logical framebuffer and scale with it.
+            lw, lh = self.screen.get_size()
             self.scanline_surface = None
             if self.theme.crt_scanlines:
-                self.scanline_surface = pygame.Surface((w, h), pygame.SRCALPHA)
-                for y in range(0, h, 3):
+                self.scanline_surface = pygame.Surface((lw, lh), pygame.SRCALPHA)
+                for y in range(0, lh, 3):
                     pygame.draw.line(
-                        self.scanline_surface, (0, 0, 0, 40), (0, y), (w, y)
+                        self.scanline_surface, (0, 0, 0, 40), (0, y), (lw, y)
                     )
 
             self.bezel_surface = self._create_crt_bezel()
@@ -591,49 +595,43 @@ class ConsoleUtilitiesApp:
             log_error(f"[restore_display] Error, will retry: {e}")
 
     def _handle_android_orientation(self, new_w: int, new_h: int):
-        """Handle Android orientation change. Portrait keeps 800x600, landscape resizes."""
-        is_portrait = new_h > new_w
-        if is_portrait:
-            # Portrait: use fixed 800x600 with SCALED to fit
-            self.screen = pygame.display.set_mode(
-                (SCREEN_WIDTH, SCREEN_HEIGHT),
-                pygame.SCALED | pygame.FULLSCREEN,
-            )
-        else:
-            # Landscape: use native resolution
-            self.screen = pygame.display.set_mode(
-                (new_w, new_h), pygame.SCALED | pygame.FULLSCREEN
-            )
+        """Handle Android orientation change. Display tracks native size; framebuffer stays 800x600."""
+        self.display = pygame.display.set_mode(
+            (new_w, new_h), pygame.SCALED | pygame.FULLSCREEN
+        )
+        self._update_present_geometry()
 
-        # Recreate theme and overlays
+        # Recreate theme and overlays at logical framebuffer size
         self.theme = Theme()
+        lw, lh = self.screen.get_size()
         self.scanline_surface = None
         if self.theme.crt_scanlines:
-            sw, sh = self.screen.get_size()
-            self.scanline_surface = pygame.Surface((sw, sh), pygame.SRCALPHA)
-            for y in range(0, sh, 3):
-                pygame.draw.line(self.scanline_surface, (0, 0, 0, 40), (0, y), (sw, y))
+            self.scanline_surface = pygame.Surface((lw, lh), pygame.SRCALPHA)
+            for y in range(0, lh, 3):
+                pygame.draw.line(self.scanline_surface, (0, 0, 0, 40), (0, y), (lw, y))
         self.bezel_surface = self._create_crt_bezel()
         self.vignette_surface = self._create_vignette()
         self.image_cache.clear()
 
     def _handle_resize(self, new_w: int, new_h: int):
-        """Handle screen resize (Android orientation change)."""
-        self.screen = pygame.display.set_mode((new_w, new_h), pygame.RESIZABLE)
+        """Handle screen resize (desktop window resize)."""
+        self.display = pygame.display.set_mode((new_w, new_h), pygame.RESIZABLE)
+        self._update_present_geometry()
 
         # Recreate theme
         self.theme = Theme()
 
-        # Recreate scanline overlay
+        # Recreate overlays at logical framebuffer size
+        lw, lh = self.screen.get_size()
         self.scanline_surface = None
         if self.theme.crt_scanlines:
-            self.scanline_surface = pygame.Surface((new_w, new_h), pygame.SRCALPHA)
-            for y in range(0, new_h, 3):
+            self.scanline_surface = pygame.Surface((lw, lh), pygame.SRCALPHA)
+            for y in range(0, lh, 3):
                 pygame.draw.line(
                     self.scanline_surface,
                     (0, 0, 0, 40),
                     (0, y),
-                    (new_w, y),
+                    (lw, y),
                 )
 
         # Recreate bezel overlay
@@ -645,6 +643,43 @@ class ConsoleUtilitiesApp:
         # Recreate font for controller mapping screen
         font_path = self.theme.font_path
         self.font = pygame.font.Font(font_path, self.theme.font_size_md)
+
+    def _update_present_geometry(self):
+        """Recompute scale, target size, and offset used by _present()."""
+        dw, dh = self.display.get_size()
+        lw, lh = self.screen.get_size()
+        natural_scale = min(dw / lw, dh / lh)
+        try:
+            user_scale = float(self.settings.get("ui_scale", 1.0) or 1.0)
+        except (TypeError, ValueError):
+            user_scale = 1.0
+        user_scale = max(0.5, min(10.0, user_scale))
+        self._present_scale = natural_scale * user_scale
+        target_w = max(1, int(lw * self._present_scale))
+        target_h = max(1, int(lh * self._present_scale))
+        self._present_size = (target_w, target_h)
+        self._present_offset = ((dw - target_w) // 2, (dh - target_h) // 2)
+
+    def _present(self):
+        """Scale-blit the logical framebuffer to the display and flip."""
+        if self._present_size == self.screen.get_size() and self._present_offset == (
+            0,
+            0,
+        ):
+            self.display.blit(self.screen, (0, 0))
+        else:
+            scaled = pygame.transform.scale(self.screen, self._present_size)
+            self.display.fill((0, 0, 0))
+            self.display.blit(scaled, self._present_offset)
+        pygame.display.flip()
+
+    def _translate_pos(self, pos: Tuple[int, int]) -> Tuple[int, int]:
+        """Translate physical display coordinates to logical framebuffer coordinates."""
+        if self._present_scale <= 0:
+            return pos
+        x = (pos[0] - self._present_offset[0]) / self._present_scale
+        y = (pos[1] - self._present_offset[1]) / self._present_scale
+        return (int(x), int(y))
 
     def _get_thumbnail(
         self, game: Any, system_data: Optional[dict] = None
@@ -701,10 +736,13 @@ class ConsoleUtilitiesApp:
         def extract():
             try:
                 with ZipFile(zip_path, "r") as zip_ref:
-                    total_files = len(zip_ref.namelist())
-                    for i, file_info in enumerate(zip_ref.infolist()):
-                        zip_ref.extract(file_info, output_folder)
-                        progress = int((i + 1) / total_files * 100)
+                    members = zip_ref.infolist()
+                    total_bytes = sum(m.file_size for m in members) or 1
+                    written = 0
+                    for member in members:
+                        zip_ref.extract(member, output_folder)
+                        written += member.file_size
+                        progress = int(written / total_bytes * 100)
                         self.state.loading.progress = progress
                         self.state.loading.message = (
                             f"Extracting {zip_name}... {progress}%"
@@ -735,10 +773,12 @@ class ConsoleUtilitiesApp:
             try:
                 with rarfile.RarFile(rar_path, "r") as rf:
                     members = rf.infolist()
-                    total = len(members)
-                    for i, member in enumerate(members):
+                    total_bytes = sum(getattr(m, "file_size", 0) for m in members) or 1
+                    written = 0
+                    for member in members:
                         rf.extract(member, output_folder)
-                        progress = int((i + 1) / total * 100)
+                        written += getattr(member, "file_size", 0)
+                        progress = int(written / total_bytes * 100)
                         self.state.loading.progress = progress
                         self.state.loading.message = (
                             f"Extracting {rar_name}... {progress}%"
@@ -768,10 +808,12 @@ class ConsoleUtilitiesApp:
             try:
                 with rarfile.RarFile(sz_path, "r") as rf:
                     members = rf.infolist()
-                    total = len(members)
-                    for i, member in enumerate(members):
+                    total_bytes = sum(getattr(m, "file_size", 0) for m in members) or 1
+                    written = 0
+                    for member in members:
                         rf.extract(member, output_folder)
-                        progress = int((i + 1) / total * 100)
+                        written += getattr(member, "file_size", 0)
+                        progress = int(written / total_bytes * 100)
                         self.state.loading.progress = progress
                         self.state.loading.message = (
                             f"Extracting {sz_name}... {progress}%"
@@ -805,7 +847,7 @@ class ConsoleUtilitiesApp:
         if self.scanline_surface:
             self.screen.blit(self.scanline_surface, (0, 0))
         self.screen.blit(self.bezel_surface, (0, 0))
-        pygame.display.flip()
+        self._present()
         # Process events to prevent freezing
         pygame.event.pump()
 
@@ -916,17 +958,20 @@ class ConsoleUtilitiesApp:
 
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1:
+                        event.pos = self._translate_pos(event.pos)
                         self.state.input_mode = "touch"
                         self.touch.handle_mouse_down(event)
 
                 elif event.type == pygame.MOUSEBUTTONUP:
                     if event.button == 1:
+                        event.pos = self._translate_pos(event.pos)
                         self.touch.handle_mouse_up(event, on_click=self._handle_click)
 
                 elif event.type == pygame.MOUSEWHEEL:
                     self.touch.handle_mouse_wheel(event, on_scroll=self._handle_scroll)
 
                 elif event.type == pygame.MOUSEMOTION:
+                    event.pos = self._translate_pos(event.pos)
                     self.touch.handle_mouse_motion(event, on_scroll=self._handle_scroll)
 
                 elif event.type == pygame.VIDEORESIZE:
@@ -938,7 +983,7 @@ class ConsoleUtilitiesApp:
                             self._restore_android_display()
                         else:
                             # Only handle actual orientation changes, not keyboard/navbar resize
-                            cur_w, cur_h = self.screen.get_size()
+                            cur_w, cur_h = self.display.get_size()
                             was_portrait = cur_h > cur_w
                             is_portrait = event.h > event.w
                             if was_portrait != is_portrait:
@@ -1073,7 +1118,7 @@ class ConsoleUtilitiesApp:
                     if self.scanline_surface:
                         self.screen.blit(self.scanline_surface, (0, 0))
                     self.screen.blit(self.bezel_surface, (0, 0))
-                    pygame.display.flip()
+                    self._present()
 
                     # Web companion: capture frame for MJPEG thumbnail
                     if self.web_companion and self.web_companion._running:
@@ -4035,6 +4080,18 @@ class ConsoleUtilitiesApp:
             save_settings(self.settings)
             # Re-initialize download manager with the new setting
             self._init_download_manager()
+        elif action == "cycle_ui_scale":
+            presets = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 5.0, 10.0]
+            try:
+                current = float(self.settings.get("ui_scale", 1.0) or 1.0)
+            except (TypeError, ValueError):
+                current = 1.0
+            idx = min(
+                range(len(presets)), key=lambda i: abs(presets[i] - current)
+            )
+            self.settings["ui_scale"] = presets[(idx + 1) % len(presets)]
+            save_settings(self.settings)
+            self._update_present_geometry()
         elif action == "redraw_ui":
             self._restore_android_display()
         elif action == "request_storage_permission":
@@ -4524,6 +4581,10 @@ class ConsoleUtilitiesApp:
                 f.write(app_id)
             self.state.steam_shortcut.output_folder = folder_path
             self.state.steam_shortcut.step = "complete"
+            # Remember this folder so the picker opens here next time
+            if self.settings.get("steam_shortcut_folder") != folder_path:
+                self.settings["steam_shortcut_folder"] = folder_path
+                save_settings(self.settings)
         except Exception as e:
             self.state.steam_shortcut.show = False
             self.state.folder_browser.show = False
@@ -4689,7 +4750,13 @@ class ConsoleUtilitiesApp:
                     elif os.path.isdir(os.path.dirname(custom)):
                         path = os.path.dirname(custom)
         elif selection_type == "steam_shortcut":
-            path = self.settings.get("roms_dir", SCRIPT_DIR)
+            saved = self.settings.get("steam_shortcut_folder", "")
+            if saved and os.path.isdir(saved):
+                path = saved
+            elif saved and os.path.isdir(os.path.dirname(saved)):
+                path = os.path.dirname(saved)
+            else:
+                path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "mvp_psp_patcher_rom":
             path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "syncthing_base_path":
@@ -5679,6 +5746,8 @@ class ConsoleUtilitiesApp:
 
     def _navigate_folder_browser(self, direction: str):
         """Navigate folder browser modal with list and button support."""
+        from ui.screens.modals.folder_browser_modal import is_folder_selection_type
+
         fb = self.state.folder_browser
         max_items = len(fb.items) or 1
         selection_type = (
@@ -5686,22 +5755,7 @@ class ConsoleUtilitiesApp:
             if fb.selected_system_to_add
             else "folder"
         )
-        is_folder_selection = selection_type in (
-            "work_dir",
-            "roms_dir",
-            "custom_folder",
-            "esde_media_path",
-            "esde_gamelists_path",
-            "retroarch_thumbnails",
-            "add_system_folder",
-            "ia_collection_folder",
-            "dedupe_folder",
-            "rename_folder",
-            "ghost_cleaner_folder",
-            "ia_download_folder",
-            "scraper_batch_folder",
-            "folder",
-        )
+        is_folder_selection = is_folder_selection_type(selection_type)
 
         if fb.focus_area == "list":
             if direction == "up":
