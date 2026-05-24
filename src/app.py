@@ -5965,7 +5965,7 @@ class ConsoleUtilitiesApp:
                 self._submit_auth_token()
 
     def _submit_auth_token(self):
-        """Save auth token to the JSON file and proceed to load games."""
+        """Save auth token to settings and proceed to load games."""
         token = self.state.auth_token_input.input_text.strip()
         if not token:
             return
@@ -5975,54 +5975,16 @@ class ConsoleUtilitiesApp:
             self.state.auth_token_input.show = False
             return
 
-        # Update the token in the in-memory data
         self.data[system_index].setdefault("auth", {})["token"] = token
 
-        # Persist token back to the JSON file
-        self._save_auth_token_to_json(system_index, token)
+        system_name = self.data[system_index].get("name", "")
+        if system_name:
+            settings_map = self.settings.setdefault("system_settings", {})
+            settings_map.setdefault(system_name, {})["auth_token"] = token
+            save_settings(self.settings)
 
-        # Close modal and load games
         self.state.auth_token_input.show = False
         self._load_games_for_system(system_index)
-
-    def _save_auth_token_to_json(self, system_index: int, token: str):
-        """Save the auth token back to the source JSON file."""
-        import json
-        from services.data_loader import BUNDLED_JSON_FILE
-        from constants import ADDED_SYSTEMS_FILE
-
-        system_name = self.data[system_index].get("name", "")
-
-        # Try each JSON file that could contain this system
-        json_paths = []
-        archive_path = self.settings.get("archive_json_path", "")
-        if archive_path and os.path.exists(archive_path):
-            json_paths.append(archive_path)
-        if os.path.exists(BUNDLED_JSON_FILE):
-            json_paths.append(BUNDLED_JSON_FILE)
-        if os.path.exists(ADDED_SYSTEMS_FILE):
-            json_paths.append(ADDED_SYSTEMS_FILE)
-
-        for json_path in json_paths:
-            try:
-                with open(json_path, "r") as f:
-                    file_data = json.load(f)
-
-                found = False
-                for system in file_data:
-                    if system.get("name") == system_name and "auth" in system:
-                        system["auth"]["token"] = token
-                        found = True
-                        break
-
-                if found:
-                    with open(json_path, "w") as f:
-                        json.dump(file_data, f, indent=2)
-                    return
-            except Exception as e:
-                from utils.logging import log_error
-
-                log_error(f"Failed to save auth token to {json_path}: {e}")
 
     def _submit_search_keyboard_input(self):
         """Handle search submission from physical keyboard."""
