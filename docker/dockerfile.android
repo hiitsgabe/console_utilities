@@ -7,7 +7,12 @@ ENV TZ=UTC
 
 RUN apt-get update && apt-get install -y python3.9 python3-pip
 
-RUN pip3 install buildozer
+# Pin the entire Python build toolchain to versions current with v1.6.5
+# (Mar 2026). pip 25.x/26.x ship a broken vendored resolvelib, and modern
+# setuptools rejects the legacy build invocation the older p4a uses.
+RUN pip3 install --upgrade 'pip<25' 'setuptools<70' 'wheel<0.43' 'build<1.2'
+
+RUN pip3 install 'buildozer<1.6'
 
 RUN apt install -y git zip unzip openjdk-17-jdk python3-pip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev
 
@@ -42,16 +47,13 @@ RUN apt-get install libffi-dev
 # Clone python-for-android and patch AndroidManifest template to include FileProvider
 # (extra_manifest_application_arguments only supports attributes, not child elements)
 COPY ./docker/patch_manifest.py /tmp/patch_manifest.py
-RUN git clone -b master --single-branch https://github.com/kivy/python-for-android.git /p4a && \
-    python3 /tmp/patch_manifest.py && \
-    # pip 25.x AND 26.x both ship a broken vendored resolvelib (new-layout
-    # resolvers/ subpackage referencing RequirementInformation that no longer
-    # exists in structs.py), so any `pip install -U pip` upgrade in p4a's
-    # pymodules step lands on a broken pip. The venv starts with the bundled
-    # pip 23.0.1 which works fine for our package installs — skip the upgrade.
-    # ast.parse guards against an accidental syntax-breaking sed.
-    sed -i "s|pip install -U pip|true # pip upgrade disabled, see Dockerfile|g" /p4a/pythonforandroid/build.py && \
-    python3 -c "import ast; ast.parse(open('/p4a/pythonforandroid/build.py').read())"
+# Pin p4a to the master commit current to v1.6.5 / b3264e6 (Mar 27 2026).
+# Upstream master has drifted in ways that break our zstandard CFFI fallback
+# and ship-broken NSZ extraction. Pinning here removes that variable.
+ARG P4A_COMMIT=d15f056e69
+RUN git clone https://github.com/kivy/python-for-android.git /p4a && \
+    cd /p4a && git checkout $P4A_COMMIT && cd - && \
+    python3 /tmp/patch_manifest.py
 
 ARG KEYSTORE_PASSWORD
 # p4a reads signing config from env vars, not buildozer.spec

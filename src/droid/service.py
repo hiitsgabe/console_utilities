@@ -184,77 +184,36 @@ def _process_file(
 def _extract_zip(
     service, item_id, file_path, filename, work_dir, roms_folder, system_data, formats
 ):
-    """Extract a ZIP file with progress reporting + speed/ETA.
-
-    When extract_contents=True (default), extracts directly to roms_folder to
-    skip a copy step. extract_contents=False keeps folder structure by
-    staging in work_dir then moving folders into roms_folder.
-    """
-    import time
-
+    """Extract a ZIP file with progress reporting."""
     update_notification(service, f"Extracting: {filename}", 0, 100)
-    write_status(
-        work_dir,
-        item_id,
-        {
-            "status": "extracting",
-            "progress": 0.0,
-            "downloaded": 0,
-            "total_size": 0,
-            "speed": 0.0,
-        },
-    )
+    write_status(work_dir, item_id, {"status": "extracting", "progress": 0.0})
 
     extract_contents = system_data.get("extract_contents", True)
-    extract_dir = roms_folder if extract_contents else work_dir
 
     with ZipFile(file_path, "r") as zip_ref:
-        members = zip_ref.infolist()
-        total_files = len(members)
-        total_bytes = sum(m.file_size for m in members) or 1
-        processed_bytes = 0
-        samples = [(time.time(), 0)]
-        last_notif = -1
-        for i, file_info in enumerate(members):
+        total_files = len(zip_ref.namelist())
+        for i, file_info in enumerate(zip_ref.infolist()):
             if _check_cancel(work_dir, item_id):
                 return
-            zip_ref.extract(file_info, extract_dir)
-            processed_bytes += file_info.file_size
-            now = time.time()
-            samples.append((now, processed_bytes))
-            cutoff = now - 10.0
-            while len(samples) > 1 and samples[0][0] < cutoff:
-                samples.pop(0)
-            dt = samples[-1][0] - samples[0][0]
-            db = samples[-1][1] - samples[0][1]
-            speed = (db / dt) if dt > 0 else 0.0
-            progress = processed_bytes / total_bytes
+            zip_ref.extract(file_info, work_dir)
+            progress = (i + 1) / total_files
             write_status(
-                work_dir,
-                item_id,
-                {
-                    "status": "extracting",
-                    "progress": progress,
-                    "downloaded": processed_bytes,
-                    "total_size": total_bytes,
-                    "speed": speed,
-                },
+                work_dir, item_id, {"status": "extracting", "progress": progress}
             )
             # Update notification every ~10% to avoid excessive updates
-            pct = int(progress * 100)
-            if pct >= last_notif + 10 or i == total_files - 1:
+            if i % max(total_files // 10, 1) == 0:
                 update_notification(
-                    service, f"Extracting: {filename}", pct, 100
+                    service, f"Extracting: {filename}", int(progress * 100), 100
                 )
-                last_notif = pct
 
     os.remove(file_path)
 
-    if not extract_contents:
-        # Keep folder structure — move folders/files from work_dir into roms_folder
-        write_status(work_dir, item_id, {"status": "moving", "progress": 0.0})
-        update_notification(service, "Moving files...", 0, 100)
+    # Move extracted files
+    write_status(work_dir, item_id, {"status": "moving", "progress": 0.0})
+    update_notification(service, "Moving files...", 0, 100)
 
+    if not extract_contents:
+        # Keep folder structure
         extracted_items = [
             f
             for f in os.listdir(work_dir)
@@ -281,6 +240,23 @@ def _extract_zip(
             shutil.move(src_path, dst_path)
             progress = (i + 1) / max(len(items_to_move), 1)
             write_status(work_dir, item_id, {"status": "moving", "progress": progress})
+    else:
+        # Move matching files
+        files_to_move = [
+            f
+            for f in os.listdir(work_dir)
+            if f not in IPC_FILENAMES
+            and any(f.lower().endswith(ext.lower()) for ext in formats)
+            and os.path.isfile(os.path.join(work_dir, f))
+        ]
+        for i, f in enumerate(files_to_move):
+            if _check_cancel(work_dir, item_id):
+                return
+            src_path = os.path.join(work_dir, f)
+            dst_path = os.path.join(roms_folder, f)
+            shutil.move(src_path, dst_path)
+            progress = (i + 1) / max(len(files_to_move), 1)
+            write_status(work_dir, item_id, {"status": "moving", "progress": progress})
 
     _cleanup_work_dir(work_dir)
     write_status(work_dir, item_id, {"status": "completed", "progress": 1.0})
@@ -288,40 +264,21 @@ def _extract_zip(
 
 
 def _decompress_nsz(service, item_id, file_path, work_dir, roms_folder, system_data):
-    """Decompress an NSZ file with progress reporting (output directly to roms_folder)."""
+    """Decompress an NSZ file directly into the selected ROM folder (no move)."""
     filename = os.path.basename(file_path)
     update_notification(service, f"Decompressing: {filename}", 0, 100)
-    write_status(
-        work_dir,
-        item_id,
-        {
-            "status": "extracting",
-            "progress": 0.0,
-            "downloaded": 0,
-            "total_size": 0,
-            "speed": 0.0,
-        },
-    )
+    write_status(work_dir, item_id, {"status": "extracting", "progress": 0.0})
 
     from utils.nsz import decompress_nsz_file
 
-    def nsz_progress(
-        text, percent, bytes_done=0, total_bytes=0, speed=0.0
-    ):
+    def nsz_progress(text, percent):
         write_status(
-            work_dir,
-            item_id,
-            {
-                "status": "extracting",
-                "progress": percent / 100.0,
-                "downloaded": bytes_done,
-                "total_size": total_bytes,
-                "speed": speed,
-            },
+            work_dir, item_id, {"status": "extracting", "progress": percent / 100.0}
         )
         update_notification(service, f"Decompressing: {filename}", percent, 100)
 
     keys_path = system_data.get("nsz_keys_path", "")
+    os.makedirs(roms_folder, exist_ok=True)
     success = decompress_nsz_file(file_path, roms_folder, keys_path, nsz_progress)
 
     if success:
