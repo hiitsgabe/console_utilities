@@ -50,6 +50,15 @@ def run_service():
     Reads task info from PYTHON_SERVICE_ARGUMENT env var, performs extraction,
     and communicates progress via IPC.
     """
+    # Earliest breadcrumb — proves the ExtractionService python process ran
+    # at all, regardless of what happens later. Goes to both error.log and
+    # logcat (stdout is captured by Android's log buffer on p4a).
+    try:
+        from utils.logging import log_error as _log
+        _log(f"NSZ-SVC run_service entered pid={os.getpid()}")
+    except Exception as _e:
+        print(f"NSZ-SVC bootstrap log_error failed: {_e}", flush=True)
+
     service = PythonService.mService
 
     # Acquire wake lock to keep CPU active during extraction
@@ -290,11 +299,44 @@ def _decompress_nsz(
     service, item_id, file_path, work_dir, roms_folder, system_data, nsz_keys_path=""
 ):
     """Decompress an NSZ file directly into the selected ROM folder (no move)."""
+    from utils.logging import log_error as _log
+
     filename = os.path.basename(file_path)
     update_notification(service, f"Decompressing: {filename}", 0, 100)
     write_status(work_dir, item_id, {"status": "extracting", "progress": 0.0})
 
-    from utils.nsz import decompress_nsz_file
+    # Diagnostic breadcrumbs — the ExtractionService runs as a separate Python
+    # process; logs go to the same external app data dir but only if we get
+    # past the import and basic setup. Capture everything we need to triage
+    # large-file failures from one run.
+    try:
+        nsz_size = os.path.getsize(file_path) if os.path.exists(file_path) else -1
+        st = os.statvfs(roms_folder) if os.path.isdir(roms_folder) else None
+        free_bytes = st.f_bavail * st.f_frsize if st else -1
+        keys_exists = bool(nsz_keys_path) and os.path.isfile(nsz_keys_path)
+        _log(
+            f"NSZ-SVC start: file={filename} nsz_size={nsz_size} "
+            f"keys_set={bool(nsz_keys_path)} keys_exists={keys_exists} "
+            f"out={roms_folder} free_bytes={free_bytes}"
+        )
+    except Exception as _e:
+        _log(f"NSZ-SVC diag pre-check failed: {type(_e).__name__}: {_e}")
+
+    try:
+        from utils.nsz import decompress_nsz_file
+    except Exception as _e:
+        import traceback as _tb
+        _log(f"NSZ-SVC import failed: {type(_e).__name__}: {_e}\n{_tb.format_exc()}")
+        write_status(
+            work_dir,
+            item_id,
+            {
+                "status": "failed",
+                "progress": 0.0,
+                "error": f"NSZ library import failed: {_e}",
+            },
+        )
+        return
 
     def nsz_progress(text, percent):
         write_status(
@@ -303,7 +345,19 @@ def _decompress_nsz(
         update_notification(service, f"Decompressing: {filename}", percent, 100)
 
     os.makedirs(roms_folder, exist_ok=True)
-    success = decompress_nsz_file(file_path, roms_folder, nsz_keys_path, nsz_progress)
+
+    try:
+        success = decompress_nsz_file(
+            file_path, roms_folder, nsz_keys_path, nsz_progress
+        )
+        last_error = "" if success else "decompress_nsz_file returned False"
+    except Exception as _e:
+        import traceback as _tb
+        success = False
+        last_error = f"{type(_e).__name__}: {_e}"
+        _log(f"NSZ-SVC decompress raised: {last_error}\n{_tb.format_exc()}")
+
+    _log(f"NSZ-SVC done: success={success} reason={last_error or '-'}")
 
     if success:
         if os.path.exists(file_path):
@@ -318,7 +372,7 @@ def _decompress_nsz(
             {
                 "status": "failed",
                 "progress": 0.0,
-                "error": "NSZ decompression failed",
+                "error": last_error or "NSZ decompression failed",
             },
         )
 
