@@ -102,6 +102,9 @@ def load_main_systems_data(
         added_systems = load_added_systems()
         combined_data = main_data + added_systems
 
+        if settings:
+            _overlay_auth_tokens_from_settings(combined_data, settings)
+
         return combined_data
 
     except Exception as e:
@@ -109,6 +112,27 @@ def load_main_systems_data(
             "Failed to load main systems data", type(e).__name__, traceback.format_exc()
         )
         return []
+
+
+def _overlay_auth_tokens_from_settings(
+    systems: List[Dict[str, Any]], settings: Dict[str, Any]
+) -> None:
+    """Overlay user-saved auth tokens from settings onto in-memory systems data.
+
+    Tokens are stored in settings["system_settings"][name]["auth_token"] so they
+    survive app updates that replace bundled_data.json. The bundled file remains
+    the source of auth_message / cookie_name defaults.
+    """
+    system_settings = settings.get("system_settings") or {}
+    if not system_settings:
+        return
+    for system in systems:
+        if "auth" not in system:
+            continue
+        name = system.get("name", "")
+        saved = system_settings.get(name, {}).get("auth_token")
+        if saved:
+            system["auth"]["token"] = saved
 
 
 def load_added_systems() -> List[Dict[str, Any]]:
