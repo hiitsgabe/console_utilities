@@ -47,10 +47,11 @@ RUN apt-get install libffi-dev
 # Clone python-for-android and patch AndroidManifest template to include FileProvider
 # (extra_manifest_application_arguments only supports attributes, not child elements)
 COPY ./docker/patch_manifest.py /tmp/patch_manifest.py
-# Pin p4a to the master commit current to v1.6.5 / b3264e6 (Mar 27 2026).
-# Upstream master has drifted in ways that break our zstandard CFFI fallback
-# and ship-broken NSZ extraction. Pinning here removes that variable.
-ARG P4A_COMMIT=d15f056e69
+# Pin p4a to fbd525588c (Apr 11 2025) — the last p4a master commit before
+# the bootstraps/sdl2/templates/ → bootstraps/_sdl_common/templates/ move.
+# Matches v1.6.5's hardcoded patch_manifest.py sdl2/ path exactly. This is
+# the "old p4a that used to work" the user asked for.
+ARG P4A_COMMIT=fbd525588c
 RUN git clone https://github.com/kivy/python-for-android.git /p4a && \
     cd /p4a && git checkout $P4A_COMMIT && cd - && \
     python3 /tmp/patch_manifest.py
