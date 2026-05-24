@@ -38,8 +38,6 @@ class Pfs0Stream(BaseFile):
 
 	def write(self, value, size = None):
 		super(Pfs0Stream, self).write(value, len(value))
-		Print.progress('BufferCompression', {"processed": self.tell()})
-		sys.stdout.flush()
 		self.written = True
 		pos = self.tell()
 		if pos > self.actualSize:
@@ -89,7 +87,18 @@ class Pfs0Stream(BaseFile):
 		return self._stringTableSize
 
 	def updateHashHeader(self):
-		pass
+		# All files have been add()ed, so self.addpos == final output size.
+		# Pre-allocate it so the FS can pick contiguous blocks up front instead
+		# of growing piecemeal — helps the most on Android external storage,
+		# where every grow is a metadata/FUSE round trip.
+		try:
+			final_size = self.addpos
+			if self.f is not None and final_size > 0:
+				here = self.tell()
+				self.f.truncate(final_size)
+				self.seek(here)
+		except Exception:
+			pass
 
 	def getFirstFileOffset(self):
 		return self.files[0].offset

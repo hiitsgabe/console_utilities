@@ -77,9 +77,17 @@ def run_service():
         roms_folder = task["roms_folder"]
         system_data = task["system_data"]
         item_id = task["item_id"]
+        nsz_keys_path = task.get("nsz_keys_path", "")
 
         _process_file(
-            service, item_id, file_path, filename, work_dir, roms_folder, system_data
+            service,
+            item_id,
+            file_path,
+            filename,
+            work_dir,
+            roms_folder,
+            system_data,
+            nsz_keys_path,
         )
 
     except Exception as e:
@@ -107,7 +115,14 @@ def run_service():
 
 
 def _process_file(
-    service, item_id, file_path, filename, work_dir, roms_folder, system_data
+    service,
+    item_id,
+    file_path,
+    filename,
+    work_dir,
+    roms_folder,
+    system_data,
+    nsz_keys_path="",
 ):
     """
     Process a downloaded file: extract ZIP, decompress NSZ, or move files.
@@ -143,7 +158,15 @@ def _process_file(
 
     # Handle NSZ decompression
     if filename.endswith(".nsz"):
-        _decompress_nsz(service, item_id, file_path, work_dir, roms_folder, system_data)
+        _decompress_nsz(
+            service,
+            item_id,
+            file_path,
+            work_dir,
+            roms_folder,
+            system_data,
+            nsz_keys_path,
+        )
         return
 
     # Simple file move
@@ -263,7 +286,9 @@ def _extract_zip(
     update_notification(service, "Extraction complete", 100, 100)
 
 
-def _decompress_nsz(service, item_id, file_path, work_dir, roms_folder, system_data):
+def _decompress_nsz(
+    service, item_id, file_path, work_dir, roms_folder, system_data, nsz_keys_path=""
+):
     """Decompress an NSZ file directly into the selected ROM folder (no move)."""
     filename = os.path.basename(file_path)
     update_notification(service, f"Decompressing: {filename}", 0, 100)
@@ -277,9 +302,8 @@ def _decompress_nsz(service, item_id, file_path, work_dir, roms_folder, system_d
         )
         update_notification(service, f"Decompressing: {filename}", percent, 100)
 
-    keys_path = system_data.get("nsz_keys_path", "")
     os.makedirs(roms_folder, exist_ok=True)
-    success = decompress_nsz_file(file_path, roms_folder, keys_path, nsz_progress)
+    success = decompress_nsz_file(file_path, roms_folder, nsz_keys_path, nsz_progress)
 
     if success:
         if os.path.exists(file_path):

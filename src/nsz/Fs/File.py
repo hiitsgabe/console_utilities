@@ -207,7 +207,10 @@ class BaseFile:
 				self.close()
 
 			if isinstance(path, str):
-				self.f = open(path, mode)
+				# 4 MB buffer matches the NCZ decompression chunk size. Default
+				# Python buffering is 8 KB, which forces ~500 internal copy/flush
+				# cycles per 4 MB write — noticeable on Android external storage.
+				self.f = open(path, mode, buffering=4*1024*1024)
 				self._path = path
 
 				self.f.seek(0,2)

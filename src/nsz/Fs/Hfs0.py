@@ -37,8 +37,6 @@ class Hfs0Stream(BaseFile):
 
 	def write(self, value, size = None):
 		super(Hfs0Stream, self).write(value, len(value))
-		Print.progress('BufferCompression', {"processed": self.tell()})
-		sys.stdout.flush()
 		self.written = True
 		pos = self.tell()
 		if pos > self.actualSize:
