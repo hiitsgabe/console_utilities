@@ -87,16 +87,19 @@ class Pfs0Stream(BaseFile):
 		return self._stringTableSize
 
 	def updateHashHeader(self):
-		# All files have been add()ed, so self.addpos == final output size.
-		# Pre-allocate it so the FS can pick contiguous blocks up front instead
-		# of growing piecemeal — helps the most on Android external storage,
-		# where every grow is a metadata/FUSE round trip.
+		# Pre-allocate the final output size so the FS can pick contiguous
+		# blocks up front. Skip for very large outputs — on Android exFAT/FUSE
+		# a multi-GiB truncate has been observed to fail extraction silently,
+		# and the win from pre-allocation matters most for many-small-file
+		# cases anyway.
+		final_size = self.addpos
+		PREALLOC_LIMIT = 2 * 1024 * 1024 * 1024  # 2 GiB
+		if self.f is None or final_size <= 0 or final_size > PREALLOC_LIMIT:
+			return
 		try:
-			final_size = self.addpos
-			if self.f is not None and final_size > 0:
-				here = self.tell()
-				self.f.truncate(final_size)
-				self.seek(here)
+			here = self.tell()
+			self.f.truncate(final_size)
+			self.seek(here)
 		except Exception:
 			pass
 
