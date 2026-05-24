@@ -243,8 +243,9 @@ class DownloadManager:
 
             # Ensure filename has extension
             formats = item.system_data.get("file_format", [])
-            if "." not in filename and formats:
-                filename = filename + formats[0]
+            if "download_url" in item.system_data and "." not in filename:
+                fmt = formats[0] if formats else ""
+                filename = filename + fmt
 
             # Download the file
             file_path = self._download_file(item, url, filename)
@@ -254,9 +255,6 @@ class DownloadManager:
                 if item.status != "failed":
                     item.status = "cancelled"
                 return
-
-            # Use the actual saved filename
-            filename = os.path.basename(file_path)
 
             # Process the downloaded file
             item.status = "extracting"
@@ -314,15 +312,6 @@ class DownloadManager:
                 headers["Authorization"] = f"Bearer {auth_config['token']}"
 
         try:
-            # Resolve manifest URL to direct download URL if needed
-            if self._is_nps_manifest_url(url):
-                resolved = self._resolve_nps_manifest_url(url)
-                if not resolved:
-                    item.status = "failed"
-                    item.error = "Failed to resolve NPS manifest"
-                    return None
-                url = resolved
-
             request_headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 "Accept": "*/*",
@@ -657,10 +646,6 @@ class DownloadManager:
             )
             if filename.endswith(".zip") and should_unzip:
                 item.status = "extracting"
-                # Reset so leftover download stats don't bleed in
-                item.downloaded = 0
-                item.total_size = 0
-                item.speed = 0.0
                 extract_contents = item.system_data.get("extract_contents", True)
 
                 # Extract directly to roms folder to avoid
@@ -670,26 +655,14 @@ class DownloadManager:
                 with ZipFile(file_path, "r") as zip_ref:
                     members = zip_ref.infolist()
                     total = len(members)
-                    total_bytes = sum(m.file_size for m in members) or 1
-                    item.total_size = total_bytes
-                    processed_bytes = 0
-                    # Rolling speed samples (~10s window)
-                    samples = [(time.time(), 0)]
+                    # Update progress every ~5% to keep overhead low
+                    update_interval = max(1, total // 20)
                     for i, member in enumerate(members):
                         if self._cancel_current:
                             return False
                         zip_ref.extract(member, extract_dir)
-                        processed_bytes += member.file_size
-                        now = time.time()
-                        samples.append((now, processed_bytes))
-                        cutoff = now - 10.0
-                        while len(samples) > 1 and samples[0][0] < cutoff:
-                            samples.pop(0)
-                        dt = samples[-1][0] - samples[0][0]
-                        db = samples[-1][1] - samples[0][1]
-                        item.speed = (db / dt) if dt > 0 else 0.0
-                        item.downloaded = processed_bytes
-                        item.progress = processed_bytes / total_bytes
+                        if (i + 1) % update_interval == 0 or i == total - 1:
+                            item.progress = (i + 1) / total
 
                 os.remove(file_path)
 
@@ -735,24 +708,12 @@ class DownloadManager:
             # Handle NSZ decompression (output directly to roms_folder)
             elif filename.endswith(".nsz"):
                 item.status = "extracting"
-                # Reset progress fields so leftover download stats don't bleed in
-                item.downloaded = 0
-                item.total_size = 0
-                item.speed = 0.0
 
-                def nsz_progress(
-                    text: str,
-                    percent: int,
-                    bytes_done: int = 0,
-                    total_bytes: int = 0,
-                    speed: float = 0.0,
-                ):
+                def nsz_progress(text: str, percent: int):
                     item.progress = percent / 100.0
-                    item.downloaded = bytes_done
-                    item.total_size = total_bytes
-                    item.speed = speed
 
                 keys_path = self.settings.get("nsz_keys_path", "")
+                os.makedirs(roms_folder, exist_ok=True)
                 success = decompress_nsz_file(
                     file_path, roms_folder, keys_path, nsz_progress
                 )
@@ -813,29 +774,6 @@ class DownloadManager:
         except OSError:
             shutil.move(src, dst)
 
-    @staticmethod
-    def _is_nps_manifest_url(url: str) -> bool:
-        """Return True if url is a CDN JSON manifest (not a direct package file)."""
-        return "prod.dl.playstation.net" in url and url.endswith(".json")
-
-    @staticmethod
-    def _resolve_nps_manifest_url(url: str) -> Optional[str]:
-        """Resolve a CDN manifest URL to the direct package download URL."""
-        try:
-            resp = requests.get(
-                url,
-                timeout=(10, 30),
-                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            pieces = data.get("pieces", [])
-            if pieces:
-                return pieces[0].get("url")
-        except Exception as e:
-            log_error(f"Manifest resolution failed for {url}: {e}")
-        return None
-
     def _get_filename(self, game: Any) -> str:
         """Extract filename from game item."""
         if isinstance(game, dict):
@@ -863,9 +801,6 @@ class DownloadManager:
                 return urljoin(base_url, game["href"])
             else:
                 return urljoin(base_url, filename)
-        elif isinstance(game, dict) and "href" in game:
-            # NPS TSV and similar sources: game has a direct href (manifest or package URL)
-            return game["href"]
         return None
 
     def _get_roms_folder(self, system_data: Dict[str, Any]) -> str:
