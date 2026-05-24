@@ -612,6 +612,7 @@ def _start_extraction_service(service, task, file_path):
         "roms_folder": task["roms_folder"],
         "system_data": task["system_data"],
         "item_id": task["item_id"],
+        "nsz_keys_path": task.get("nsz_keys_path", ""),
     }
 
     try:

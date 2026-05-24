@@ -76,7 +76,7 @@ def decompress_nsz_file(
 
     if keys_path and local_nsz_decompress:
         try:
-            update_progress(f"Decompressing {filename} using NSZ library...", 30)
+            update_progress(f"Decompressing {filename}...", 0)
 
             # Check if NSZ file is valid before attempting decompression
             if not os.path.exists(nsz_file_path):
@@ -87,11 +87,31 @@ def decompress_nsz_file(
                 raise ValueError(f"NSZ file is empty: {nsz_file_path}")
 
             log_error(f"Attempting NSZ decompression of {filename} ({file_size} bytes)")
+
+            # Translate library's (done_bytes, total_bytes) into our (message, percent).
+            # Throttle by integer-percent change so we don't flood IPC writes.
+            last_pct = [-1]
+
+            def _on_progress(done, total):
+                if total <= 0:
+                    return
+                pct = int(done * 100 / total)
+                if pct > 99:
+                    pct = 99  # reserve 100 for completion path below
+                if pct == last_pct[0]:
+                    return
+                last_pct[0] = pct
+                update_progress(f"Decompressing {filename}... {pct}%", pct)
+
             local_nsz_decompress(
-                Path(nsz_file_path), Path(output_dir), True, None, keys_path=keys_path
+                Path(nsz_file_path),
+                Path(output_dir),
+                True,
+                None,
+                keys_path=keys_path,
+                progress_callback=_on_progress,
             )
             nsz_success = True
-            update_progress("NSZ library decompression successful", 80)
             log_error("NSZ decompression successful using nsz library")
 
         except Exception as e:

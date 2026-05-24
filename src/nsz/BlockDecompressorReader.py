@@ -20,6 +20,10 @@ class BlockDecompressorReader:
 			self.CompressedBlockOffsetList.append(self.CompressedBlockOffsetList[-1] + compressedBlockSize)
 
 		self.CompressedBlockSizeList = BlockHeader.compressedBlockSizeList
+		# One decompressor for the whole file. ZstdDecompressor().decompress() is
+		# stateless across calls — constructing one per block was thousands of
+		# allocations on NCZBLOCK files.
+		self.decompressor = ZstdDecompressor()
 
 	def __decompressBlock(self, blockID):
 		if self.CurrentBlockId == blockID:
@@ -31,7 +35,7 @@ class BlockDecompressorReader:
 			decompressedBlockSize = self.BlockHeader.decompressedSize % self.BlockSize
 		self.nspf.seek(self.CompressedBlockOffsetList[blockID])
 		if self.CompressedBlockSizeList[blockID] < decompressedBlockSize:
-			self.CurrentBlock = ZstdDecompressor().decompress(self.nspf.read(self.CompressedBlockSizeList[blockID]))
+			self.CurrentBlock = self.decompressor.decompress(self.nspf.read(self.CompressedBlockSizeList[blockID]))
 		else:
 			self.CurrentBlock = self.nspf.read(decompressedBlockSize)
 		self.CurrentBlockId = blockID

@@ -71,8 +71,8 @@ def compress(filePath, outputDir, args, work, amountOfTastkQueued):
 		work.put([filePath, compressionLevel, args.keep, args.fix_padding, args.long, outputDir, threadsToUseForSolidCompression, args.verify, args.quick_verify])
 		amountOfTastkQueued.increment()
 
-def decompress(filePath, outputDir, fixPadding, statusReportInfo = None, keys_path = None):
-	NszDecompress(filePath, outputDir, fixPadding, statusReportInfo, keys_path=keys_path)
+def decompress(filePath, outputDir, fixPadding, statusReportInfo = None, keys_path = None, progress_callback = None):
+	NszDecompress(filePath, outputDir, fixPadding, statusReportInfo, keys_path=keys_path, progress_callback=progress_callback)
 
 def verify(filePath, fixPadding, raiseVerificationException, raisePfs0Exception, originalFilePath = None, statusReportInfo = None, pleaseNoPrint = None):
 	NszVerify(filePath, fixPadding, raiseVerificationException, raisePfs0Exception, originalFilePath, statusReportInfo, pleaseNoPrint)

@@ -286,6 +286,7 @@ class AndroidDownloadManager:
             "system_name": item.system_name,
             "auth_headers": auth_headers,
             "cookies": cookies,
+            "nsz_keys_path": self.settings.get("nsz_keys_path", ""),
         }
 
         # Write task and start service

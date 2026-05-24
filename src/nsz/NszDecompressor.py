@@ -11,15 +11,31 @@ import os
 class VerificationException(Exception):
 	pass
 
-def decompress(filePath, outputDir, fixPadding, statusReportInfo, pleaseNoPrint = None, keys_path = None):
+
+def _make_chunk_reporter(total, progress_callback):
+	"""Wrap a (done, total) callback into a per-chunk reporter that accumulates bytes.
+
+	Returns a function taking an int (bytes processed in this chunk). Returns
+	None when there's nothing to report, so callers can short-circuit cheaply.
+	"""
+	if progress_callback is None or total <= 0:
+		return None
+	state = {"done": 0}
+	def reporter(n):
+		state["done"] += n
+		progress_callback(state["done"], total)
+	return reporter
+
+
+def decompress(filePath, outputDir, fixPadding, statusReportInfo, pleaseNoPrint = None, keys_path = None, progress_callback = None):
 	if keys_path:
 		from nsz.nut import Keys
 		Keys.load(keys_path)
-	
+
 	if isNspNsz(filePath):
-		__decompressNsz(filePath, outputDir, fixPadding, True, False, False, statusReportInfo, None, pleaseNoPrint)
+		__decompressNsz(filePath, outputDir, fixPadding, True, False, False, statusReportInfo, None, pleaseNoPrint, progress_callback)
 	elif isXciXcz(filePath):
-		__decompressXcz(filePath, outputDir, fixPadding, True, False, False, statusReportInfo, None, pleaseNoPrint)
+		__decompressXcz(filePath, outputDir, fixPadding, True, False, False, statusReportInfo, None, pleaseNoPrint, progress_callback)
 	elif isCompressedGameFile(filePath):
 		filePathNca = changeExtension(filePath, '.nca')
 		outPath = filePathNca if outputDir == None else str(Path(outputDir).joinpath(Path(filePathNca).name))
@@ -27,8 +43,9 @@ def decompress(filePath, outputDir, fixPadding, statusReportInfo, pleaseNoPrint 
 		try:
 			inFile = factory(filePath)
 			inFile.open(str(filePath), 'rb')
+			chunk_reporter = _make_chunk_reporter(__getDecompressedNczSize(inFile), progress_callback)
 			with open(outPath, 'wb') as outFile:
-				written, hexHash = __decompressNcz(inFile, outFile, statusReportInfo, pleaseNoPrint)
+				written, hexHash = __decompressNcz(inFile, outFile, statusReportInfo, pleaseNoPrint, chunk_reporter)
 				fileNameHash = Path(filePath).stem.lower()
 				if hexHash[:32] == fileNameHash:
 					Print.info('[VERIFIED]   {0}'.format(filePathNca), pleaseNoPrint)
@@ -52,17 +69,21 @@ def verify(filePath, fixPadding, raiseVerificationException, raisePfs0Exception,
 		__decompressXcz(filePath, None, fixPadding, False, raiseVerificationException, raisePfs0Exception, originalFilePath, statusReportInfo, pleaseNoPrint)
 
 
-def __decompressContainer(readContainer, writeContainer, fileHashes, write, raiseVerificationException, raisePfs0Exception, statusReportInfo, pleaseNoPrint):
-	CHUNK_SZ = 0x100000
+def __decompressContainer(readContainer, writeContainer, fileHashes, write, raiseVerificationException, raisePfs0Exception, statusReportInfo, pleaseNoPrint, progress_callback=None):
+	CHUNK_SZ = 0x400000
+	total_bytes = 0
 	if write:
 		for nspf in readContainer:
 			if not nspf._path.endswith('.ncz'):
 				writeContainer.add(nspf._path, nspf.size, pleaseNoPrint)
+				total_bytes += nspf.size
 			else:
 				newFileName = Path(nspf._path).stem + '.nca'
 				nca_size = __getDecompressedNczSize(nspf)
 				writeContainer.add(newFileName, nca_size, pleaseNoPrint)
+				total_bytes += nca_size
 		writeContainer.updateHashHeader()
+	chunk_reporter = _make_chunk_reporter(total_bytes, progress_callback)
 	for nspf in readContainer:
 		Print.info('[EXISTS]     {0}'.format(nspf._path), pleaseNoPrint)
 		if not nspf._path.endswith('.ncz'):
@@ -74,6 +95,8 @@ def __decompressContainer(readContainer, writeContainer, fileHashes, write, rais
 				hash.update(inputChunk)
 				if write:
 					writeContainer.get(nspf._path).write(inputChunk)
+				if chunk_reporter:
+					chunk_reporter(len(inputChunk))
 			if verifyFile:
 				hashHexdigest = hash.hexdigest()
 				if hasattr(nspf.f, 'ticketless'):
@@ -92,9 +115,9 @@ def __decompressContainer(readContainer, writeContainer, fileHashes, write, rais
 			continue
 		newFileName = Path(nspf._path).stem + '.nca'
 		if write:
-			written, hexHash = __decompressNcz(nspf, writeContainer.get(newFileName), statusReportInfo, pleaseNoPrint)
+			written, hexHash = __decompressNcz(nspf, writeContainer.get(newFileName), statusReportInfo, pleaseNoPrint, chunk_reporter)
 		else:
-			written, hexHash = __decompressNcz(nspf, None, statusReportInfo, pleaseNoPrint)
+			written, hexHash = __decompressNcz(nspf, None, statusReportInfo, pleaseNoPrint, chunk_reporter)
 		if hasattr(nspf.f, 'ticketless'):
 			# This ticket conditional was added to prevent the following exception from occurring when processing a ticketless dump file:
 			# nut exception: Verification detected hash mismatch
@@ -128,7 +151,7 @@ def __getDecompressedNczSize(nspf):
 	return nca_size
 
 
-def __decompressNcz(nspf, f, statusReportInfo, pleaseNoPrint):
+def __decompressNcz(nspf, f, statusReportInfo, pleaseNoPrint, chunk_reporter=None):
 	UNCOMPRESSABLE_HEADER_SIZE = 0x4000
 	blockID = 0
 	nspf.seek(0)
@@ -174,9 +197,17 @@ def __decompressNcz(nspf, f, statusReportInfo, pleaseNoPrint):
 	else:
 		# Progress bar disabled
 		pass
+	if chunk_reporter is not None:
+		chunk_reporter(len(header))
 	hash.update(header)
 
 	firstSection = True
+	# Inner-loop chunk: 4 MB. Larger chunks dramatically cut per-iteration
+	# overhead (zstandard CFFI call, hash.update, file write, status update).
+	# Output bytes are unchanged — only the loop trip count differs. On Android,
+	# where zstandard falls back to its CFFI backend, this is the difference
+	# between hours and minutes for a GB-class NCA.
+	CHUNK_BYTES = 0x400000
 	for s in sections:
 		i = s.offset
 		useCrypto = s.cryptoType in (3, 4)
@@ -188,10 +219,13 @@ def __decompressNcz(nspf, f, statusReportInfo, pleaseNoPrint):
 			uncompressedSize = UNCOMPRESSABLE_HEADER_SIZE-sections[0].offset
 			if uncompressedSize > 0:
 				i += uncompressedSize
+		# CTR counter auto-advances inside encrypt(). Seek once at the section
+		# start (the constructor seeks to 0; we may have skipped uncompressedSize
+		# bytes) instead of rebuilding the AES cipher every chunk.
+		if useCrypto:
+			crypto.seek(i)
 		while i < end:
-			if useCrypto:
-				crypto.seek(i)
-			chunkSz = 0x10000 if end - i > 0x10000 else end - i
+			chunkSz = CHUNK_BYTES if end - i > CHUNK_BYTES else end - i
 			if useBlockCompression:
 				inputChunk = blockDecompressorReader.read(chunkSz)
 			else:
@@ -212,6 +246,8 @@ def __decompressNcz(nspf, f, statusReportInfo, pleaseNoPrint):
 				decompressedBytesOld = decompressedBytes
 				# Progress bar disabled
 				pass
+			if chunk_reporter is not None:
+				chunk_reporter(lenInputChunk)
 
 	if statusReportInfo == None:
 		# Progress bar disabled
@@ -227,7 +263,7 @@ def __decompressNcz(nspf, f, statusReportInfo, pleaseNoPrint):
 	return (0, hexHash)
 
 
-def __decompressNsz(filePath, outputDir, fixPadding, write, raiseVerificationException, raisePfs0Exception, originalFilePath, statusReportInfo, pleaseNoPrint):
+def __decompressNsz(filePath, outputDir, fixPadding, write, raiseVerificationException, raisePfs0Exception, originalFilePath, statusReportInfo, pleaseNoPrint, progress_callback=None):
 	container = factory(filePath)
 	container.open(str(filePath), 'rb')
 	fileHashes = FileExistingChecks.ExtractHashes(container)
@@ -238,10 +274,10 @@ def __decompressNsz(filePath, outputDir, fixPadding, write, raiseVerificationExc
 			outPath = filePathNsp if outputDir == None else str(Path(outputDir).joinpath(Path(filePathNsp).name))
 			Print.info('Decompressing %s -> %s' % (filePath, outPath), pleaseNoPrint)
 			with Pfs0.Pfs0Stream(container.getPaddedHeaderSize() if fixPadding else container.getFirstFileOffset(), None if fixPadding else container.getStringTableSize(), outPath) as nsp:
-				__decompressContainer(container, nsp, fileHashes, True, raiseVerificationException, raisePfs0Exception, statusReportInfo, pleaseNoPrint)
+				__decompressContainer(container, nsp, fileHashes, True, raiseVerificationException, raisePfs0Exception, statusReportInfo, pleaseNoPrint, progress_callback)
 		else:
 			with Pfs0.Pfs0VerifyStream(container.getPaddedHeaderSize() if fixPadding else container.getFirstFileOffset(), None if fixPadding else container.getStringTableSize()) as nsp:
-				__decompressContainer(container, nsp, fileHashes, True, raiseVerificationException, raisePfs0Exception, statusReportInfo, pleaseNoPrint)
+				__decompressContainer(container, nsp, fileHashes, True, raiseVerificationException, raisePfs0Exception, statusReportInfo, pleaseNoPrint, progress_callback)
 				Print.info("[NSP SHA256] " + nsp.getHash())
 				if originalFilePath != None:
 					originalContainer = factory(originalFilePath)
@@ -282,7 +318,7 @@ def __decompressNsz(filePath, outputDir, fixPadding, write, raiseVerificationExc
 		container.close()
 
 
-def __decompressXcz(filePath, outputDir, fixPadding, write, raiseVerificationException, raisePfs0Exception, originalFilePath, statusReportInfo, pleaseNoPrint):
+def __decompressXcz(filePath, outputDir, fixPadding, write, raiseVerificationException, raisePfs0Exception, originalFilePath, statusReportInfo, pleaseNoPrint, progress_callback=None):
 	container = factory(filePath)
 	container.open(str(filePath), 'rb')
 
@@ -295,11 +331,11 @@ def __decompressXcz(filePath, outputDir, fixPadding, write, raiseVerificationExc
 				fileHashes = FileExistingChecks.ExtractHashes(partitionIn)
 				hfsPartitionIn = xci.hfs0.add(partitionIn._path, 0x200, pleaseNoPrint)
 				with Hfs0.Hfs0Stream(hfsPartitionIn, xci.f.tell()) as partitionOut:
-					__decompressContainer(partitionIn, partitionOut, fileHashes, write, raiseVerificationException, raisePfs0Exception, statusReportInfo, pleaseNoPrint)
+					__decompressContainer(partitionIn, partitionOut, fileHashes, write, raiseVerificationException, raisePfs0Exception, statusReportInfo, pleaseNoPrint, progress_callback)
 				xci.hfs0.resize(partitionIn._path, partitionOut.actualSize)
 	else:
 		for partitionIn in container.hfs0:
 			fileHashes = FileExistingChecks.ExtractHashes(partitionIn)
-			__decompressContainer(partitionIn, None, fileHashes, write, raiseVerificationException, raisePfs0Exception, statusReportInfo, pleaseNoPrint)
+			__decompressContainer(partitionIn, None, fileHashes, write, raiseVerificationException, raisePfs0Exception, statusReportInfo, pleaseNoPrint, progress_callback)
 
 	container.close()
