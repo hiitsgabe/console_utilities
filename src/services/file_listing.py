@@ -80,15 +80,15 @@ def _dedupe_game_list(files: List[Any]) -> List[Any]:
 
     # Pick best from each group - O(n) since we iterate groups once
     def _priority(f):
-        name = _get_filename(f)
+        name = _get_filename(f).lower()
         # Lower score = higher priority
-        if "(USA)" in name:
+        if "(usa)" in name:
             region = 0
-        elif "(World)" in name:
+        elif "(world)" in name:
             region = 1
-        elif "(USA, Europe)" in name or "(Europe, USA)" in name:
+        elif "(usa, europe)" in name or "(europe, usa)" in name:
             region = 2
-        elif "(Europe)" in name:
+        elif "(europe)" in name:
             region = 3
         else:
             region = 4
