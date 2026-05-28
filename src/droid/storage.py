@@ -1,6 +1,7 @@
 """Android external storage utilities."""
 
 import os
+import sys
 
 
 def get_external_data_dir(fallback: str) -> str:
@@ -17,6 +18,16 @@ def get_external_data_dir(fallback: str) -> str:
         ext_dir = context.getExternalFilesDir(None)
         if ext_dir:
             return ext_dir.getAbsolutePath()
-    except Exception:
-        pass
-    return fallback
+        print(
+            "get_external_data_dir: external dir is null, using fallback",
+            file=sys.stderr,
+            flush=True,
+        )
+        return fallback
+    except Exception as e:
+        print(
+            f"get_external_data_dir: JNI failed ({e}), using fallback",
+            file=sys.stderr,
+            flush=True,
+        )
+        return fallback
