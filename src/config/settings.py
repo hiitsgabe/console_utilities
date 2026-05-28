@@ -46,6 +46,7 @@ class Settings:
     )
     scraper_provider: str = "libretro"  # libretro, screenscraper, thegamesdb
     scraper_fallback_enabled: bool = True
+    auto_scrape_after_download: bool = False
     scraper_preferred_system: str = ""  # deprecated, now per-batch in wizard
     screenscraper_username: str = ""
     screenscraper_password: str = ""  # base64 encoded
