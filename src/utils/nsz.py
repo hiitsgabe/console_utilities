@@ -28,6 +28,65 @@ def is_nsz_available() -> bool:
     return NSZ_AVAILABLE
 
 
+def _detect_fs_type(path: str) -> Optional[str]:
+    """Detect the filesystem type backing ``path`` by parsing /proc/mounts.
+
+    Returns the lowercase fstype of the longest mountpoint that is a prefix of
+    the absolute path, or None on any failure (file unreadable / non-Linux).
+    """
+    try:
+        abspath = os.path.abspath(path)
+        best_mount = ""
+        best_fstype = None
+        with open("/proc/mounts", "r") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) < 3:
+                    continue
+                mountpoint, fstype = parts[1], parts[2]
+                if abspath == mountpoint or abspath.startswith(
+                    mountpoint.rstrip("/") + "/"
+                ) or mountpoint == "/":
+                    if len(mountpoint) >= len(best_mount):
+                        best_mount = mountpoint
+                        best_fstype = fstype
+        return best_fstype.lower() if best_fstype is not None else None
+    except Exception:
+        return None
+
+
+def check_output_capacity(output_dir: str, required_bytes: int):
+    """Pre-flight check that ``output_dir`` can hold ``required_bytes``.
+
+    Returns (ok, reason). ``reason`` is None when ok. Fails open (returns True)
+    when free space cannot be determined.
+    """
+    try:
+        st = os.statvfs(output_dir)
+        free = st.f_frsize * st.f_bavail
+    except OSError:
+        return (True, None)  # fail-open: can't tell, don't block
+
+    fs = _detect_fs_type(output_dir)
+    if fs in {"vfat", "msdos", "fat", "fat32"} and required_bytes >= 4 * 1024 ** 3 - 1:
+        return (
+            False,
+            "Target drive is FAT32, which cannot store a single file of 4 GB "
+            "or larger. Reformat the drive as exFAT and try again.",
+        )
+
+    if required_bytes > free:
+        need_gb = required_bytes / (1024 ** 3)
+        have_gb = free / (1024 ** 3)
+        return (
+            False,
+            f"Not enough free space: need ~{need_gb:.1f} GB but only "
+            f"{have_gb:.1f} GB available.",
+        )
+
+    return (True, None)
+
+
 def decompress_nsz_file(
     nsz_file_path: str,
     output_dir: str,
@@ -87,6 +146,17 @@ def decompress_nsz_file(
                 raise ValueError(f"NSZ file is empty: {nsz_file_path}")
 
             log_error(f"Attempting NSZ decompression of {filename} ({file_size} bytes)")
+
+            # Pre-flight capacity check: decompressed NSP roughly doubles the
+            # NSZ size. Block before extraction when the target can't hold it
+            # (FAT32 4 GB limit or insufficient free space) so we fail loudly
+            # rather than silently truncating a multi-GiB extraction.
+            est_output = file_size * 2
+            ok, reason = check_output_capacity(output_dir, est_output)
+            if not ok:
+                log_error(f"Capacity check failed for {filename}: {reason}")
+                update_progress(reason, 0)
+                return False
 
             # Translate library's (done_bytes, total_bytes) into our (message, percent).
             # Throttle by integer-percent change so we don't flood IPC writes.
