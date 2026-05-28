@@ -5,6 +5,7 @@ Provides logging with timestamps, file output, and stdout mirroring.
 
 import os
 import sys
+import tempfile
 from datetime import datetime
 from typing import Optional
 
@@ -17,6 +18,25 @@ _log_file: str = os.path.join(TEMP_LOG_DIR, "error.log")
 def get_log_file() -> str:
     """Get the current log file path."""
     return _log_file
+
+
+def _write_fallback(text: str) -> None:
+    """Best-effort write of a log entry to a fallback location.
+
+    Tries the system temp dir first, then the current directory. Never raises;
+    surfaces failures to stderr and stops after the first success.
+    """
+    candidates = [
+        os.path.join(tempfile.gettempdir(), "console_utilities_error.log"),
+        os.path.join(".", "error.log"),
+    ]
+    for path in candidates:
+        try:
+            with open(path, "a") as f:
+                f.write(text)
+            return
+        except OSError as e:
+            print(f"Failed to write fallback log to {path}: {e}", file=sys.stderr, flush=True)
 
 
 def log_error(
@@ -53,8 +73,9 @@ def log_error(
     try:
         with open(_log_file, "a") as f:
             f.write(file_message)
-    except Exception:
-        pass
+    except OSError as e:
+        print(f"Failed to write log to {_log_file}: {e}", file=sys.stderr, flush=True)
+        _write_fallback(file_message)
 
 
 def init_log_file() -> bool:
@@ -82,4 +103,5 @@ def init_log_file() -> bool:
 
     except Exception as e:
         print(f"Failed to initialize log file: {e}")
+        print(f"Failed to initialize log file: {e}", file=sys.stderr, flush=True)
         return False
