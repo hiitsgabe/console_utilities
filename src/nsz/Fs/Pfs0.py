@@ -29,6 +29,21 @@ class Pfs0Stream(BaseFile):
 		self.f.seek(self.headerSize)
 		self.addpos = self.headerSize
 		self.written = False
+		self._bytesSinceSync = 0
+		self._FSYNC_INTERVAL = 256 * 1024 * 1024
+
+	def _sync(self):
+		if self.f is None:
+			return
+		try:
+			self.f.flush()
+			os.fsync(self.f.fileno())
+		except (OSError, ValueError) as e:
+			try:
+				from utils.logging import log_error
+				log_error(f"Pfs0Stream fsync failed: {e}")
+			except Exception:
+				pass
 
 	def __enter__(self):
 		return self
@@ -42,6 +57,10 @@ class Pfs0Stream(BaseFile):
 		pos = self.tell()
 		if pos > self.actualSize:
 			self.actualSize = pos
+		self._bytesSinceSync += len(value)
+		if self._bytesSinceSync >= self._FSYNC_INTERVAL:
+			self._sync()
+			self._bytesSinceSync = 0
 
 	def add(self, name, size, pleaseNoPrint = None):
 		if self.written:
@@ -70,6 +89,7 @@ class Pfs0Stream(BaseFile):
 		if self.isOpen():
 			self.seek(0)
 			self.write(self.getHeader())
+			self._sync()
 			super(Pfs0Stream, self).close()
 
 	#0xff => 0x1, 0x100 => 0x20, 0x1ff => 0x1, 0x120 => 0x20
