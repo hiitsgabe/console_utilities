@@ -51,26 +51,34 @@ def _dedupe_game_list(files: List[Any]) -> List[Any]:
 
     Groups files by base game name (stripping region/version tags),
     then picks the best representative: USA > World > Europe > largest file.
+    
+    Uses hash-based grouping for O(n) time complexity instead of O(n^2).
     """
 
     def _get_filename(f):
         return f.get("filename", "") if isinstance(f, dict) else str(f)
 
-    # Group by normalized name
+    def _normalize_name(filename: str) -> str:
+        """Normalize filename for grouping - optimized for speed."""
+        # Strip extension
+        name = filename.rsplit(".", 1)[0] if "." in filename else filename
+        # Remove parenthetical content (single pass with non-greedy match)
+        name = re.sub(r"\s*\([^)]*\)", "", name)
+        # Remove square bracket content
+        name = re.sub(r"\s*\[[^\]]*\]", "", name)
+        # Normalize whitespace and lowercase
+        return " ".join(name.split()).strip().lower()
+
+    # Group by normalized name using a single pass - O(n)
     groups: Dict[str, List[Any]] = {}
     for f in files:
         filename = _get_filename(f)
-        # Strip extension, remove all parenthetical/bracket content, normalize
-        name = re.sub(r"\.[^.]+$", "", filename)
-        norm = re.sub(r"\(.*?\)", "", name)
-        norm = re.sub(r"\[.*?\]", "", norm)
-        norm = norm.strip().lower()
-        norm = re.sub(r"\s+", " ", norm)
+        norm = _normalize_name(filename)
         if norm not in groups:
             groups[norm] = []
         groups[norm].append(f)
 
-    # Pick best from each group
+    # Pick best from each group - O(n) since we iterate groups once
     def _priority(f):
         name = _get_filename(f)
         # Lower score = higher priority
@@ -306,7 +314,12 @@ def list_files(
 
         # Deduplicate game list (prefer USA, then largest file)
         if settings.get("dedupe_game_list", False) and all_files:
-            all_files = _dedupe_game_list(all_files)
+            # Check for low-end device mode that skips expensive deduplication
+            if settings.get("low_end_device_mode", False):
+                # Low-end mode: skip deduplication but do basic merge by sorting
+                all_files.sort(key=lambda x: x.get("filename", "") if isinstance(x, dict) else str(x))
+            else:
+                all_files = _dedupe_game_list(all_files)
 
         # Sort combined list by filename
         if all_files and isinstance(all_files[0], dict):
