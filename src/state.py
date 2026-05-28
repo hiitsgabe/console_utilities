@@ -1071,6 +1071,12 @@ class AppState:
         self.settings_scroll_offset: int = 0
         self.credits_scroll_offset: int = 0
 
+        # ---- System Information screen ---- #
+        self.system_info_static: Optional[dict] = None
+        self.system_info_dynamic: Optional[dict] = None
+        self.system_info_scroll_offset: int = 0
+        self.system_info_last_poll: int = 0  # ms from pygame.time.get_ticks()
+
         # ---- Mode-specific highlights ---- #
         self.add_systems_highlighted: int = 0
         self.systems_settings_highlighted: int = 0
