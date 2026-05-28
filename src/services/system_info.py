@@ -123,7 +123,7 @@ def gather_static() -> dict:
         "os_version": os_data.get("version") or _safe(platform.release),
         "hostname": _safe(socket.gethostname),
         "cpu_model": _parse_cpu_model(_read_file("/proc/cpuinfo"))
-        or (_safe(platform.processor) or None),
+        or _safe(platform.processor),
     }
 
 
