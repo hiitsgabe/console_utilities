@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import re
+import time
 import traceback
 from io import BytesIO
 from queue import Queue, Empty
@@ -20,6 +21,40 @@ import requests
 
 from utils.logging import log_error
 from constants import THUMBNAIL_SIZE, HIRES_IMAGE_SIZE, SYSTEMS_CACHE_DIR
+
+
+_PERMANENT_STATUSES = frozenset({400, 401, 403, 404, 410})
+
+
+def _make_image_session():
+    s = requests.Session()
+    adapter = requests.adapters.HTTPAdapter(pool_connections=4, pool_maxsize=4)
+    s.mount("https://", adapter)
+    s.mount("http://", adapter)
+    return s
+
+
+_image_session = _make_image_session()
+
+
+def _fetch_image_bytes(session, url, *, connect=5, read=15, attempts=3):
+    """Fetch raw image bytes with retry/backoff. Returns bytes on 2xx,
+    None on permanent status (400/401/403/404/410) or exhausted retries.
+    Retries on Timeout/ConnectionError/5xx."""
+    for attempt in range(attempts):
+        try:
+            resp = session.get(url, timeout=(connect, read))
+            if resp.status_code in _PERMANENT_STATUSES:
+                return None
+            resp.raise_for_status()
+            return resp.content
+        except requests.exceptions.HTTPError:
+            pass  # 5xx (4xx permanent already returned above) -> retry
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
+            pass
+        if attempt < attempts - 1:
+            time.sleep(0.5 * (4 ** attempt))  # 0.5s, 2.0s
+    return None
 
 
 def _clean_name_for_matching(name: str) -> str:
@@ -472,15 +507,14 @@ class ImageCache:
         matched_url = self._resolve_thumbnail_url(base_url, base_name)
         if matched_url:
             try:
-                response = requests.get(matched_url, timeout=5)
-                response.raise_for_status()
+                content = _fetch_image_bytes(_image_session, matched_url)
+                if content is not None:
+                    image_data = BytesIO(content)
+                    image = pygame.image.load(image_data).convert_alpha()
+                    scaled_image = pygame.transform.smoothscale(image, target_size)
 
-                image_data = BytesIO(response.content)
-                image = pygame.image.load(image_data).convert_alpha()
-                scaled_image = pygame.transform.smoothscale(image, target_size)
-
-                queue.put((cache_key, scaled_image))
-                return
+                    queue.put((cache_key, scaled_image))
+                    return
             except Exception:
                 pass
 
@@ -488,15 +522,14 @@ class ImageCache:
         for fmt in formats:
             try:
                 image_url = urljoin(base_url, quote(f"{base_name}{fmt}", safe=""))
-                response = requests.get(image_url, timeout=5)
-                response.raise_for_status()
+                content = _fetch_image_bytes(_image_session, image_url)
+                if content is not None:
+                    image_data = BytesIO(content)
+                    image = pygame.image.load(image_data).convert_alpha()
+                    scaled_image = pygame.transform.smoothscale(image, target_size)
 
-                image_data = BytesIO(response.content)
-                image = pygame.image.load(image_data).convert_alpha()
-                scaled_image = pygame.transform.smoothscale(image, target_size)
-
-                queue.put((cache_key, scaled_image))
-                return
+                    queue.put((cache_key, scaled_image))
+                    return
 
             except Exception:
                 continue
@@ -517,27 +550,26 @@ class ImageCache:
         matched_url = self._resolve_thumbnail_url(base_url, base_name)
         if matched_url:
             try:
-                response = requests.get(matched_url, timeout=10)
-                response.raise_for_status()
+                content = _fetch_image_bytes(_image_session, matched_url)
+                if content is not None:
+                    image_data = BytesIO(content)
+                    image = pygame.image.load(image_data)
 
-                image_data = BytesIO(response.content)
-                image = pygame.image.load(image_data)
+                    original_size = image.get_size()
+                    max_dimension = max(original_size)
 
-                original_size = image.get_size()
-                max_dimension = max(original_size)
+                    if max_dimension > 800:
+                        scale_factor = 800 / max_dimension
+                        new_width = int(original_size[0] * scale_factor)
+                        new_height = int(original_size[1] * scale_factor)
+                        scaled_image = pygame.transform.smoothscale(
+                            image, (new_width, new_height)
+                        )
+                    else:
+                        scaled_image = image
 
-                if max_dimension > 800:
-                    scale_factor = 800 / max_dimension
-                    new_width = int(original_size[0] * scale_factor)
-                    new_height = int(original_size[1] * scale_factor)
-                    scaled_image = pygame.transform.smoothscale(
-                        image, (new_width, new_height)
-                    )
-                else:
-                    scaled_image = image
-
-                self._hires_queue.put((cache_key, scaled_image))
-                return
+                    self._hires_queue.put((cache_key, scaled_image))
+                    return
             except Exception:
                 pass
 
@@ -548,28 +580,27 @@ class ImageCache:
                     base_url if base_url.endswith("/") else base_url + "/",
                     quote(f"{base_name}{fmt}", safe=""),
                 )
-                response = requests.get(url, timeout=10)
-                response.raise_for_status()
+                content = _fetch_image_bytes(_image_session, url)
+                if content is not None:
+                    image_data = BytesIO(content)
+                    image = pygame.image.load(image_data)
 
-                image_data = BytesIO(response.content)
-                image = pygame.image.load(image_data)
+                    # Only scale down if extremely large
+                    original_size = image.get_size()
+                    max_dimension = max(original_size)
 
-                # Only scale down if extremely large
-                original_size = image.get_size()
-                max_dimension = max(original_size)
+                    if max_dimension > 800:
+                        scale_factor = 800 / max_dimension
+                        new_width = int(original_size[0] * scale_factor)
+                        new_height = int(original_size[1] * scale_factor)
+                        scaled_image = pygame.transform.smoothscale(
+                            image, (new_width, new_height)
+                        )
+                    else:
+                        scaled_image = image
 
-                if max_dimension > 800:
-                    scale_factor = 800 / max_dimension
-                    new_width = int(original_size[0] * scale_factor)
-                    new_height = int(original_size[1] * scale_factor)
-                    scaled_image = pygame.transform.smoothscale(
-                        image, (new_width, new_height)
-                    )
-                else:
-                    scaled_image = image
-
-                self._hires_queue.put((cache_key, scaled_image))
-                return
+                    self._hires_queue.put((cache_key, scaled_image))
+                    return
 
             except Exception:
                 continue
