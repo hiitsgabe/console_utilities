@@ -16,8 +16,7 @@ A PyGame-based console utilities application for managing and downloading game b
 1. **Download**: Extract `macos.zip` from the release
 2. **Extract**: Unzip the archive to reveal `Console Utilities.app`
 3. **Install**: Drag `Console Utilities.app` to your Applications folder
-4. **First Launch**: Right-click the app and select "Open" (required for unsigned apps)
-5. **Security Prompt**: Click "Open" when prompted about the unidentified developer
+4. **First Launch**: macOS will block the unsigned app with a Gatekeeper warning — see [Gatekeeper / "Apple could not verify" warning](#gatekeeper--apple-could-not-verify-warning) below to allow it
 
 ### From Source
 
@@ -95,24 +94,47 @@ Logs are generated in the following locations:
 - After setting working directory: Inside your configured working directory
 - Check `py_downloads/error.log` for detailed error information
 
+### Gatekeeper / "Apple could not verify" warning
+
+Console Utilities is not signed with an Apple Developer ID or notarized, so macOS
+Gatekeeper blocks it on first launch. Depending on your macOS version you'll see
+either **"cannot be opened because the developer cannot be verified"** or, on
+macOS Sequoia (15) and later, **"Apple could not verify 'Console Utilities' is
+free of malware that may harm your Mac or compromise your privacy."**
+
+This is expected for an unsigned app — it is not actually malware. Use one of the
+workarounds below.
+
+**Option A — Open Anyway (recommended)**
+1. Double-click the app once and dismiss the warning.
+2. Open **System Settings → Privacy & Security**.
+3. Scroll to the **Security** section — you'll see a message about *Console Utilities*.
+4. Click **Open Anyway**, then confirm.
+
+> On macOS Sequoia and later, right-click → Open no longer bypasses this prompt;
+> you must use the **Open Anyway** button in Privacy & Security.
+
+**Option B — Remove the quarantine flag (Terminal)**
+
+If the app was downloaded/transferred, macOS tags it with a quarantine attribute.
+Strip it to launch normally:
+```bash
+xattr -dr com.apple.quarantine "/Applications/Console Utilities.app"
+```
+Or clear all extended attributes:
+```bash
+xattr -cr "/Applications/Console Utilities.app"
+```
+
 ### Common Issues
 
-**"Cannot be opened because the developer cannot be verified"**
-- Right-click the app and select "Open" instead of double-clicking
-- Or: Go to System Preferences > Security & Privacy > General and click "Open Anyway"
-
-**Application won't start**: Ensure you have permission to run applications from unidentified developers
+**Application won't start**: Ensure you have permission to run applications from unidentified developers (see the Gatekeeper section above)
 
 **No games showing**: Verify your archive JSON is properly formatted and the file path is correct
 
 **Download failures**: Check storage space, network connectivity, and firewall settings
 
 **Performance issues**: Close other applications, check Activity Monitor for resource usage
-
-**Gatekeeper blocking**: Run the following command to allow the app:
-```bash
-xattr -cr "/Applications/Console Utilities.app"
-```
 
 ## Permissions
 
