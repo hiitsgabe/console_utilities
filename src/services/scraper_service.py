@@ -166,22 +166,14 @@ class ScraperService:
         if not fallback:
             return [(primary, self.provider)]
 
-        # Build ordered list: primary first, then rest
-        ordered = [primary]
-        for p in self.PROVIDER_CHAIN:
-            if p not in ordered:
-                ordered.append(p)
+        # Multi-provider fallback: delegate to the pure orchestration
+        # helper. Produces the same list as before (primary first, chain
+        # minus dups, is_configured() filter, exceptions swallowed).
+        from .scraper_orchestration import ordered_configured_providers
 
-        providers = []
-        for name in ordered:
-            try:
-                p = get_provider(name, self.settings)
-                if p.is_configured():
-                    providers.append((name, p))
-            except (ValueError, Exception):
-                continue
-
-        return providers
+        return ordered_configured_providers(
+            primary, True, self.PROVIDER_CHAIN, self.settings, get_provider
+        )
 
     def extract_game_name(self, rom_path: str) -> str:
         """
