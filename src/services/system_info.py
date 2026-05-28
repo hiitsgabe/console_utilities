@@ -11,7 +11,7 @@ import os
 import platform
 import shutil
 import socket
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 
@@ -24,17 +24,6 @@ class DiskInfo:
     free: int
 
 
-@dataclass
-class SystemInfo:
-    os_name: Optional[str] = None
-    os_version: Optional[str] = None
-    hostname: Optional[str] = None
-    cpu_model: Optional[str] = None
-    ram_total: Optional[int] = None
-    ram_used: Optional[int] = None
-    disks: List[DiskInfo] = field(default_factory=list)
-
-
 def format_bytes(n: Optional[int]) -> str:
     """Human-readable size. None -> '--'."""
     if n is None:
@@ -44,7 +33,6 @@ def format_bytes(n: Optional[int]) -> str:
         if value < 1024 or unit == "TB":
             return f"{value:.1f} {unit}"
         value /= 1024
-    return f"{value:.1f} TB"
 
 
 def _read_file(path: str) -> str:
@@ -129,22 +117,13 @@ def _mount_point(path: str) -> str:
 
 def gather_static() -> dict:
     """Static fields: OS name/version, hostname, CPU model. Gathered once."""
-    info = SystemInfo()
-
     os_data = _parse_os_release(_read_file("/etc/os-release"))
-    info.os_name = os_data.get("name") or _safe(platform.system)
-    info.os_version = os_data.get("version") or _safe(platform.release)
-
-    info.hostname = _safe(socket.gethostname)
-    info.cpu_model = _parse_cpu_model(_read_file("/proc/cpuinfo")) or (
-        _safe(platform.processor) or None
-    )
-
     return {
-        "os_name": info.os_name,
-        "os_version": info.os_version,
-        "hostname": info.hostname,
-        "cpu_model": info.cpu_model,
+        "os_name": os_data.get("name") or _safe(platform.system),
+        "os_version": os_data.get("version") or _safe(platform.release),
+        "hostname": _safe(socket.gethostname),
+        "cpu_model": _parse_cpu_model(_read_file("/proc/cpuinfo"))
+        or (_safe(platform.processor) or None),
     }
 
 
