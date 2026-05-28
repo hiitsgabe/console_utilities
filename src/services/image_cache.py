@@ -415,25 +415,47 @@ class ImageCache:
         game_name: str,
         target_size: Tuple[int, int],
         queue: Queue,
+        max_retries: int = 3,
+        timeout: int = 30,
     ):
-        """Load image in background thread."""
-        try:
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
+        """Load image in background thread with retry logic.
+        
+        Args:
+            url: Image URL to load
+            cache_key: Cache key for this image
+            game_name: Game name for logging
+            target_size: Target size to scale image to
+            queue: Queue to put result in
+            max_retries: Maximum number of retry attempts (default 3)
+            timeout: Request timeout in seconds (default 30, higher for banner images)
+        """
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                response = requests.get(url, timeout=timeout)
+                response.raise_for_status()
 
-            image_data = BytesIO(response.content)
-            image = pygame.image.load(image_data).convert_alpha()
-            scaled_image = pygame.transform.smoothscale(image, target_size)
+                image_data = BytesIO(response.content)
+                image = pygame.image.load(image_data).convert_alpha()
+                scaled_image = pygame.transform.smoothscale(image, target_size)
 
-            queue.put((cache_key, scaled_image))
+                queue.put((cache_key, scaled_image))
+                return
 
-        except Exception as e:
-            log_error(
-                f"Failed to load image from {url}",
-                type(e).__name__,
-                traceback.format_exc(),
-            )
-            queue.put((cache_key, None))
+            except Exception as e:
+                last_error = e
+                if attempt < max_retries - 1:
+                    # Wait before retry (exponential backoff)
+                    import time
+                    time.sleep(0.5 * (2 ** attempt))
+                continue
+
+        log_error(
+            f"Failed to load image from {url} after {max_retries} attempts",
+            type(last_error).__name__ if last_error else "Unknown",
+            traceback.format_exc() if last_error else "",
+        )
+        queue.put((cache_key, None))
 
     def _load_image_with_fallback(
         self,

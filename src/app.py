@@ -2794,6 +2794,10 @@ class ConsoleUtilitiesApp:
                 if self.state.ui_rects.folder_cancel_button.collidepoint(x, y):
                     self.state.folder_browser.show = False
                     self.state.folder_browser.focus_area = "list"
+                    # Reset path and items to prevent blank screen on next open
+                    self.state.folder_browser.current_path = self.settings.get("work_dir", "")
+                    self.state.folder_browser.items = []
+                    self.state.folder_browser.highlighted = 0
                     return
             # Check folder browser items (account for scroll offset)
             for i, rect in enumerate(self.state.ui_rects.menu_items):
@@ -3255,6 +3259,10 @@ class ConsoleUtilitiesApp:
             )
             self.state.folder_browser.show = False
             self.state.folder_browser.focus_area = "list"
+            # Reset path and items to prevent blank screen on next open
+            self.state.folder_browser.current_path = self.settings.get("work_dir", "")
+            self.state.folder_browser.items = []
+            self.state.folder_browser.highlighted = 0
             if selection_type == "ia_collection_folder":
                 # Go back to name step in IA collection wizard
                 self.state.ia_collection_wizard.step = "name"
