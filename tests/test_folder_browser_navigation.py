@@ -144,3 +144,47 @@ def test_render_and_navigation_agree_on_folder_selection():
         assert is_folder_selection_type(st), f"{st} should be a folder selection"
     for st in FILE_SELECTION_TYPES:
         assert not is_folder_selection_type(st), f"{st} should be a file selection"
+
+
+def _fb_stub(button_index=1):
+    fb = FolderBrowserState()
+    fb.show = True
+    fb.items = [{"name": "x", "type": "folder"}]
+    fb.current_path = "/x"
+    fb.highlighted = 5
+    fb.scroll_offset = 10
+    fb.focus_area = "buttons"
+    fb.button_index = button_index
+    return SimpleNamespace(
+        state=SimpleNamespace(folder_browser=fb), settings={"work_dir": "/work"}
+    )
+
+
+def test_reset_folder_browser_state_clears_fields():
+    """GAB-17: resetting the folder browser clears all transient nav state."""
+    from app import ConsoleUtilitiesApp
+
+    stub = _fb_stub()
+    ConsoleUtilitiesApp._reset_folder_browser_state(stub)
+
+    fb = stub.state.folder_browser
+    assert fb.show is False
+    assert fb.focus_area == "list"
+    assert fb.current_path == "/work"
+    assert fb.items == []
+    assert fb.highlighted == 0
+    assert fb.scroll_offset == 0
+    assert fb.button_index == 0
+
+
+def test_button_cancel_resets_state():
+    """GAB-17: choosing Cancel must reset the browser, not just hide it."""
+    from app import ConsoleUtilitiesApp
+
+    s = _fb_stub(button_index=1)
+    ConsoleUtilitiesApp._handle_folder_browser_button_selection(s)
+
+    fb = s.state.folder_browser
+    assert fb.items == []
+    assert fb.current_path == "/work"
+    assert fb.show is False
