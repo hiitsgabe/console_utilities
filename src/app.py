@@ -71,6 +71,7 @@ from input.navigation import NavigationHandler
 from input.controller import ControllerHandler
 from input.touch import TouchHandler
 from ui.theme import Theme
+from ui.keyboard_state import ia_wizard_needs_keyboard
 from ui.screens.screen_manager import ScreenManager
 from utils.logging import log_error, init_log_file
 
@@ -6450,6 +6451,13 @@ class ConsoleUtilitiesApp:
             or (
                 self.state.scraper_wizard.show
                 and self.state.scraper_wizard.step == "edit_name"
+            )
+            or ia_wizard_needs_keyboard(
+                self.state.ia_download_wizard.show,
+                self.state.ia_download_wizard.step,
+                self.state.ia_collection_wizard.show,
+                self.state.ia_collection_wizard.step,
+                self.state.ia_collection_wizard.adding_custom_format,
             )
         )
 
