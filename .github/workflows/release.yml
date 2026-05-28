@@ -375,6 +375,14 @@ jobs:
             2. Extract and run `./install_req.sh` to install dependencies
             3. Run: `python3 console_utils.pygame`
 
+            ### Batocera / Knulli / Rocknix Installation
+            1. Download `pygame.zip` and extract it — you'll get a `console_utils` folder
+            2. Copy the **entire folder** into the `pygame` folder on your roms drive
+               (e.g. `/userdata/roms/pygame/` on Batocera, or the `pygame` network share)
+            3. In EmulationStation, **Update Gamelists** (or restart ES) to rescan games
+            4. Open the **Pygame / Ports** system — *Console Utilities* will appear there
+            5. Launch it like any other game
+
             ### macOS Installation
             1. Download `macos.zip`
             2. Extract and drag `Console Utilities.app` to Applications
