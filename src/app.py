@@ -5875,6 +5875,8 @@ class ConsoleUtilitiesApp:
                     self.state.syncthing.custom_name_input = name
                     # Open folder browser to pick source folder
                     self._open_folder_browser("custom_save_source")
+            elif self.state.url_input.context == "direct_download":
+                self._submit_direct_download_url()
             else:
                 self.state.url_input.show = False
 
@@ -6003,7 +6005,50 @@ class ConsoleUtilitiesApp:
 
     def _submit_url_input(self):
         """Handle URL input submission from keyboard/Android."""
+        if self.state.url_input.context == "direct_download":
+            self._submit_direct_download_url()
+        else:
+            self.state.url_input.show = False
+
+    def _submit_direct_download_url(self):
+        """Validate and queue a direct http(s) download URL."""
+        from services.url_download import (
+            derive_download_filename,
+            is_valid_download_url,
+        )
+
+        url = self.state.url_input.input_text.strip()
+        if not is_valid_download_url(url):
+            self.state.url_input.error_message = "Enter a valid http(s) URL"
+            return
+
+        filename = derive_download_filename(url)
+
+        game = {
+            "name": filename,
+            "filename": filename,
+            "href": url,
+            "size": 0,
+        }
+        system_data = {
+            "name": "Direct Download",
+            "url": "",
+            "download_url": True,
+            "file_format": (
+                ["." + filename.rsplit(".", 1)[-1]] if "." in filename else [""]
+            ),
+            "roms_folder": "",
+            "should_unzip": False,
+        }
+
+        self.download_manager.add_to_queue([game], system_data, "Direct Download")
+
         self.state.url_input.show = False
+        self.state.url_input.error_message = ""
+        self.state.mode = "downloads"
+        self.state.download_queue.highlighted = max(
+            0, len(self.state.download_queue.items) - 1
+        )
 
     def _handle_text_modal_ok_click(self):
         """Handle OK button click on text input modals."""
