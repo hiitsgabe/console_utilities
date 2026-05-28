@@ -138,7 +138,9 @@ class SystemInfoScreen:
         )
         return y + self.theme.font_size_sm + self.theme.padding_xs
 
-    def _bar(self, screen: pygame.Surface, frac: float, x: int, y: int, width: int) -> int:
+    def _bar(
+        self, screen: pygame.Surface, frac: float, x: int, y: int, width: int
+    ) -> int:
         bar_rect = pygame.Rect(x, y, width, BAR_HEIGHT)
         self.progress.render(
             screen, bar_rect, frac,
