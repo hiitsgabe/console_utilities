@@ -6123,15 +6123,25 @@ class ConsoleUtilitiesApp:
             self.state.game_details.current_game = None
             self._start_download()
 
+    def _reset_folder_browser_state(self):
+        """Reset folder browser to a clean state (prevents blank screen on reopen)."""
+        fb = self.state.folder_browser
+        fb.show = False
+        fb.focus_area = "list"
+        fb.current_path = self.settings.get("work_dir", "")
+        fb.items = []
+        fb.highlighted = 0
+        fb.scroll_offset = 0
+        fb.button_index = 0
+
     def _handle_folder_browser_button_selection(self):
         """Handle folder browser button selection (Select/Cancel)."""
         if self.state.folder_browser.button_index == 0:
             # Select button - confirm current folder
             self._handle_folder_browser_confirm()
         else:
-            # Cancel button - close modal
-            self.state.folder_browser.show = False
-            self.state.folder_browser.focus_area = "list"
+            # Cancel button - close modal and reset state (GAB-17)
+            ConsoleUtilitiesApp._reset_folder_browser_state(self)
 
     def _handle_search_action(self):
         """Handle search key press."""
