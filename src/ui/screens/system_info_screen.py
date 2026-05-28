@@ -14,6 +14,8 @@ from constants import BEZEL_INSET
 from services.system_info import format_bytes
 
 SCROLL_STEP = 20
+KEY_COLUMN_WIDTH = 160  # px gutter before the value column in key/value rows
+BAR_HEIGHT = 12  # px height of usage progress bars
 
 
 class SystemInfoScreen:
@@ -115,33 +117,35 @@ class SystemInfoScreen:
 
         return back_button_rect, max_scroll
 
-    def _section_title(self, screen, label, x, y):
+    def _section_title(self, screen: pygame.Surface, label: str, x: int, y: int) -> int:
         self.text.render(
             screen, label, (x, y), color=self.theme.secondary,
             size=self.theme.font_size_md,
         )
         return y + self.theme.font_size_md + self.theme.padding_sm
 
-    def _kv_row(self, screen, key, value, x, y, width):
+    def _kv_row(
+        self, screen: pygame.Surface, key: str, value, x: int, y: int, width: int
+    ) -> int:
         self.text.render(
             screen, f"{key}:", (x, y), color=self.theme.text_secondary,
             size=self.theme.font_size_sm,
         )
         self.text.render(
-            screen, str(value) if value else "--", (x + 160, y),
+            screen, str(value) if value else "--", (x + KEY_COLUMN_WIDTH, y),
             color=self.theme.text_primary, size=self.theme.font_size_sm,
-            max_width=width - 160,
+            max_width=width - KEY_COLUMN_WIDTH,
         )
         return y + self.theme.font_size_sm + self.theme.padding_xs
 
-    def _bar(self, screen, frac, x, y, width):
-        bar_rect = pygame.Rect(x, y, width, 12)
+    def _bar(self, screen: pygame.Surface, frac: float, x: int, y: int, width: int) -> int:
+        bar_rect = pygame.Rect(x, y, width, BAR_HEIGHT)
         self.progress.render(
             screen, bar_rect, frac,
             track_color=self.theme.surface,
             fill_color=self.theme.primary,
         )
-        return y + 12 + self.theme.padding_sm
+        return y + BAR_HEIGHT + self.theme.padding_sm
 
 
 # Default instance
