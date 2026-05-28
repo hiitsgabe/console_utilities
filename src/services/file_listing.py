@@ -249,6 +249,10 @@ def list_files(
         if system_data.get("source_type") == "nps_tsv":
             return _list_files_nps_tsv(system_data, settings)
 
+        # Check if this is a Minerva API source
+        if system_data.get("source_type") == "minerva_api":
+            return _list_files_minerva_api(system_data, settings, formats)
+
         # Check if this is the JSON API format
         if "list_url" in system_data:
             return _list_files_json_api(system_data, settings, formats)
@@ -450,6 +454,125 @@ def _list_files_json_api(
             return filtered_files
 
     return []
+
+
+def _list_files_minerva_api(
+    system_data: Dict[str, Any], settings: Dict[str, Any], formats: List[str]
+) -> List[Dict[str, Any]]:
+    """
+    List files from Minerva API source.
+
+    Minerva API is a JSON-based API for game ROM data that supports:
+    - API key authentication
+    - Flexible response parsing (specify array path and item ID key)
+    - File filtering by format
+    - Optional download URL construction from file ID
+
+    Args:
+        system_data: System configuration
+        settings: Application settings
+        formats: Allowed file formats
+
+    Returns:
+        List of file dictionaries with filename, href, and size
+    """
+    list_url = system_data.get("list_url")
+    if not list_url:
+        log_error("Minerva API: No list_url configured", "MinervaAPIError", "")
+        return []
+
+    cached = _load_cached_listing(list_url)
+    if cached is not None:
+        return cached
+
+    # Build headers
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json",
+    }
+    cookies = {}
+
+    # Check for Minerva API key authentication
+    if "auth" in system_data:
+        auth_config = system_data["auth"]
+        if auth_config.get("type") == "minerva_api_key":
+            api_key = auth_config.get("api_key") or auth_config.get("token", "")
+            if api_key:
+                headers["X-Minerva-API-Key"] = api_key
+        elif "token" in auth_config:
+            # Bearer token fallback
+            headers["Authorization"] = f"Bearer {auth_config['token']}"
+
+    try:
+        r = requests.get(list_url, timeout=(10, 30), headers=headers, cookies=cookies)
+    except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
+        r = requests.get(
+            list_url, timeout=(10, 30), headers=headers, cookies=cookies, verify=False
+        )
+    response = r.json()
+
+    # Parse response based on configured paths
+    array_path = system_data.get("list_json_file_location", "files")
+    file_id = system_data.get("list_item_id", "name")
+    size_key = system_data.get("list_item_size", "size")
+    href_template = system_data.get("download_url", "")
+
+    # Navigate to the files array (supports dot notation like "data.games")
+    files = response
+    for key in array_path.split("."):
+        if isinstance(files, dict):
+            files = files.get(key, [])
+        else:
+            files = []
+            break
+
+    if not isinstance(files, list):
+        log_error("Minerva API: Invalid response format", "MinervaAPIError", "")
+        return []
+
+    result = []
+    for f in files:
+        if not isinstance(f, dict):
+            continue
+
+        filename = f.get(file_id, "")
+        if not filename:
+            continue
+
+        # Filter by format
+        ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+        if formats and ext not in [fmt.lower() for fmt in formats]:
+            continue
+
+        # Get file size
+        size = 0
+        if size_key in f:
+            try:
+                size = int(f[size_key])
+            except (ValueError, TypeError):
+                size = 0
+
+        # Build download URL
+        href = ""
+        if href_template:
+            # Replace <id> placeholder with file ID
+            file_id_value = f.get("id", filename)
+            href = href_template.replace("<id>", str(file_id_value))
+        elif "href" in f:
+            href = f["href"]
+        elif "url" in f:
+            href = f["url"]
+
+        result.append({
+            "filename": filename,
+            "href": href,
+            "size": size,
+        })
+
+    result.sort(key=lambda x: x.get("filename", ""))
+    if result:
+        _save_listing_cache(list_url, result)
+    return result
 
 
 def _list_files_html(
