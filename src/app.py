@@ -5867,6 +5867,21 @@ class ConsoleUtilitiesApp:
                     self.state.syncthing.custom_name_input = name
                     # Open folder browser to pick source folder
                     self._open_folder_browser("custom_save_source")
+            elif self.state.url_input.context == "direct_download":
+                url = self.state.url_input.input_text.strip()
+                self.state.url_input.show = False
+                if url:
+                    # Add URL as a direct download job
+                    from services.download_manager import DownloadQueueItem
+
+                    item = DownloadQueueItem(
+                        game={"url": url, "name": url.split("/")[-1] or "download"},
+                        system_data={},
+                        system_name="Direct URL",
+                        status="waiting",
+                    )
+                    self.download_manager.queue.items.append(item)
+                    self.state.mode = "downloads"
             else:
                 self.state.url_input.show = False
 
@@ -6434,6 +6449,8 @@ class ConsoleUtilitiesApp:
             or self.state.folder_name_input.show
             or self.state.url_input.show
             or self.state.ia_login.show
+            or self.state.ia_download_wizard.show
+            or self.state.ia_collection_wizard.show
             or self.state.scraper_login.show
             or (
                 self.state.auth_token_input.show
