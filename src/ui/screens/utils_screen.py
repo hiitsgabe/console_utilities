@@ -17,6 +17,12 @@ class UtilsScreen:
     and NSZ conversion.
     """
 
+    # System section items
+    SYSTEM_SECTION_ITEMS = [
+        "--- SYSTEM ---",  # Divider
+        "System Information",
+    ]
+
     # Download section items
     DOWNLOAD_SECTION_ITEMS = [
         "--- DOWNLOAD ---",  # Divider
@@ -79,6 +85,10 @@ class UtilsScreen:
         """
         items = []
         divider_indices = set()
+
+        # Add system section (first)
+        divider_indices.add(len(items))
+        items.extend(self.SYSTEM_SECTION_ITEMS)
 
         # Add download section
         divider_indices.add(len(items))
@@ -158,6 +168,7 @@ class UtilsScreen:
         if index < len(items):
             item = items[index]
             actions = {
+                "System Information": "system_info",
                 "Download from URL": "download_url",
                 "Download from Internet Archive": "ia_download",
                 "Add Internet Archive Collection": "ia_add_collection",
