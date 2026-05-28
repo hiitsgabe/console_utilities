@@ -37,3 +37,5 @@ platforms
 system-images
 .superpowers
 docs/superpowers
+# Local dev virtualenv (squad pipeline)
+.venv/

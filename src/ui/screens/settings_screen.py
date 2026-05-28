@@ -72,6 +72,7 @@ class SettingsScreen:
         "--- ARTBOX GAMES SCRAPER ---",
         "Enable Scraper",
         "Scraper Frontend",
+        "Auto-Scrape After Download",
     ]
 
     # NSZ section
@@ -179,6 +180,7 @@ class SettingsScreen:
         items.append(self.SCRAPER_SECTION[1])
         if scraper_enabled:
             items.append(self.SCRAPER_SECTION[2])  # Scraper Frontend
+            items.append(self.SCRAPER_SECTION[3])  # Auto-Scrape After Download
 
         # Add NSZ section
         nsz_enabled = settings.get("nsz_enabled", False)
@@ -320,6 +322,13 @@ class SettingsScreen:
                     "pegasus": "Pegasus",
                 }
                 items.append((item, frontend_labels.get(frontend, frontend)))
+            elif item == "Auto-Scrape After Download":
+                value = (
+                    "ON"
+                    if settings.get("auto_scrape_after_download", False)
+                    else "OFF"
+                )
+                items.append((item, value))
             elif item == "Enable NSZ":
                 value = "ON" if settings.get("nsz_enabled", False) else "OFF"
                 items.append((item, value))
@@ -420,6 +429,7 @@ class SettingsScreen:
                 "Roster Hockey Data Source": "toggle_nhl94_provider",
                 "Enable Scraper": "toggle_scraper_enabled",
                 "Scraper Frontend": "toggle_scraper_frontend",
+                "Auto-Scrape After Download": "toggle_auto_scrape_after_download",
                 "Enable NSZ": "toggle_nsz_enabled",
                 "Web Companion": "toggle_web_companion",
                 "Enable Syncthing Helper": "toggle_syncthing_enabled",
