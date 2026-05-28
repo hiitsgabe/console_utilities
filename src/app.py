@@ -8089,14 +8089,16 @@ class ConsoleUtilitiesApp:
         def search():
             success, results, error = service.search_game(game_name, rom_path=rom_path)
 
-            if not success:
+            from services.scraper_outcome import classify_search_outcome
+
+            outcome = classify_search_outcome(success, results, error)
+            if outcome == "error":
                 wizard.step = "error"
                 wizard.error_message = error or "Search failed"
                 return
-
-            if not results:
+            if outcome == "no_match":
                 wizard.step = "error"
-                wizard.error_message = f"No results for: {game_name}"
+                wizard.error_message = f"No game found for: {game_name}"
                 return
 
             # Convert results to dict format for display
