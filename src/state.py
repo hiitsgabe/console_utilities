@@ -111,6 +111,7 @@ class UrlInputState:
     cursor_position: int = 0
     context: str = "archive_json"  # "archive_json" or "direct_download"
     shift_active: bool = False
+    error_message: str = ""
 
 
 @dataclass
