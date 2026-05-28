@@ -1,0 +1,111 @@
+[
+  {
+    "name": "Myrient Sony PlayStation (PSX)",
+    "url": "https://myrient.erista.me/files/No-Intro/Sony%20-%20PlayStation/",
+    "regex": "<tr><td class=\"link\"><a href=\"(?P<href>[^\"]+)\" title=\"(?P<title>[^\"]+)\">(?P<text>[^<]+)</a></td><td class=\"size\">(?P<size>[^<]+)</td><td class=\"date\">[^<]*</td></tr>",
+    "file_format": [".zip", ".cue", ".bin", ".iso"],
+    "roms_folder": "psx",
+    "boxarts": "https://thumbnails.libretro.com/Sony%20-%20PlayStation/Named_Boxarts/",
+    "should_unzip": false,
+    "source": "myrient",
+    "description": "Sony PlayStation ROMs from Myrient (No-Intro set)"
+  },
+  {
+    "name": "Myrient Super Nintendo (SNES)",
+    "url": "https://myrient.erista.me/files/No-Intro/Nintendo%20-%20Super%20Nintendo%20Entertainment%20System/",
+    "regex": "<tr><td class=\"link\"><a href=\"(?P<href>[^\"]+)\" title=\"(?P<title>[^\"]+)\">(?P<text>[^<]+)</a></td><td class=\"size\">(?P<size>[^<]+)</td><td class=\"date\">[^<]*</td></tr>",
+    "file_format": [".sfc", ".smc", ".zip"],
+    "roms_folder": "snes",
+    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Super%20Nintendo%20Entertainment%20System/Named_Boxarts/",
+    "should_unzip": true,
+    "extract_contents": true,
+    "source": "myrient",
+    "description": "Super Nintendo ROMs from Myrient (No-Intro set)"
+  },
+  {
+    "name": "Myrient Nintendo 64 (N64)",
+    "url": "https://myrient.erista.me/files/No-Intro/Nintendo%20-%20Nintendo%2064/",
+    "regex": "<tr><td class=\"link\"><a href=\"(?P<href>[^\"]+)\" title=\"(?P<title>[^\"]+)\">(?P<text>[^<]+)</a></td><td class=\"size\">(?P<size>[^<]+)</td><td class=\"date\">[^<]*</td></tr>",
+    "file_format": [".zip", ".n64", ".v64"],
+    "roms_folder": "n64",
+    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%2064/Named_Boxarts/",
+    "should_unzip": true,
+    "extract_contents": true,
+    "source": "myrient",
+    "description": "Nintendo 64 ROMs from Myrient (No-Intro set)"
+  },
+  {
+    "name": "Myrient Game Boy Advance (GBA)",
+    "url": "https://myrient.erista.me/files/No-Intro/Nintendo%20-%20Game%20Boy%20Advance/",
+    "regex": "<tr><td class=\"link\"><a href=\"(?P<href>[^\"]+)\" title=\"(?P<title>[^\"]+)\">(?P<text>[^<]+)</a></td><td class=\"size\">(?P<size>[^<]+)</td><td class=\"date\">[^<]*</td></tr>",
+    "file_format": [".zip", ".gba"],
+    "roms_folder": "gba",
+    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Game%20Boy%20Advance/Named_Boxarts/",
+    "should_unzip": true,
+    "extract_contents": true,
+    "source": "myrient",
+    "description": "Game Boy Advance ROMs from Myrient (No-Intro set)"
+  },
+  {
+    "name": "Myrient Sega Genesis",
+    "url": "https://myrient.erista.me/files/No-Intro/Sega%20-%20Mega%20Drive%20-%20Genesis/",
+    "regex": "<tr><td class=\"link\"><a href=\"(?P<href>[^\"]+)\" title=\"(?P<title>[^\"]+)\">(?P<text>[^<]+)</a></td><td class=\"size\">(?P<size>[^<]+)</td><td class=\"date\">[^<]*</td></tr>",
+    "file_format": [".zip", ".bin", ".md", ".gen"],
+    "roms_folder": "genesis",
+    "boxarts": "https://thumbnails.libretro.com/Sega%20-%20Mega%20Drive%20-%20Genesis/Named_Boxarts/",
+    "should_unzip": true,
+    "extract_contents": true,
+    "source": "myrient",
+    "description": "Sega Genesis/Mega Drive ROMs from Myrient (No-Intro set)"
+  },
+  {
+    "name": "Myrient GameCube",
+    "url": "https://myrient.erista.me/files/No-Intro/Nintendo%20-%20GameCube/",
+    "regex": "<tr><td class=\"link\"><a href=\"(?P<href>[^\"]+)\" title=\"(?P<title>[^\"]+)\">(?P<text>[^<]+)</a></td><td class=\"size\">(?P<size>[^<]+)</td><td class=\"date\">[^<]*</td></tr>",
+    "file_format": [".zip", ".iso", ".gcm"],
+    "roms_folder": "gc",
+    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20GameCube/Named_Boxarts/",
+    "should_unzip": true,
+    "extract_contents": true,
+    "source": "myrient",
+    "description": "Nintendo GameCube ROMs from Myrient (No-Intro set)"
+  },
+  {
+    "name": "Myrient Nintendo DS",
+    "url": "https://myrient.erista.me/files/No-Intro/Nintendo%20-%20Nintendo%20DS/",
+    "regex": "<tr><td class=\"link\"><a href=\"(?P<href>[^\"]+)\" title=\"(?P<title>[^\"]+)\">(?P<text>[^<]+)</a></td><td class=\"size\">(?P<size>[^<]+)</td><td class=\"date\">[^<]*</td></tr>",
+    "file_format": [".zip", ".nds"],
+    "roms_folder": "nds",
+    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20DS/Named_Boxarts/",
+    "should_unzip": true,
+    "extract_contents": true,
+    "source": "myrient",
+    "description": "Nintendo DS ROMs from Myrient (No-Intro set)"
+  },
+  {
+    "name": "Myrient PSP",
+    "url": "https://myrient.erista.me/files/No-Intro/Sony%20-%20PlayStation%20Portable/",
+    "regex": "<tr><td class=\"link\"><a href=\"(?P<href>[^\"]+)\" title=\"(?P<title>[^\"]+)\">(?P<text>[^<]+)</a></td><td class=\"size\">(?P<size>[^<]+)</td><td class=\"date\">[^<]*</td></tr>",
+    "file_format": [".zip", ".iso", ".cso"],
+    "roms_folder": "psp",
+    "boxarts": "https://thumbnails.libretro.com/Sony%20-%20PlayStation%20Portable/Named_Boxarts/",
+    "should_unzip": false,
+    "source": "myrient",
+    "description": "Sony PSP ROMs from Myrient (No-Intro set)"
+  },
+  {
+    "name": "Minerva API - Game Metadata",
+    "list_url": "https://api.minerva-project.org/games",
+    "list_json_file_location": "games",
+    "list_item_id": "filename",
+    "file_format": [".zip", ".7z", ".rar"],
+    "roms_folder": "minerva",
+    "source_type": "minerva_api",
+    "source": "minerva",
+    "description": "Minerva API - Game metadata and ROM data via JSON API with API key authentication",
+    "auth": {
+      "type": "minerva_api_key",
+      "api_key": ""
+    }
+  }
+]
