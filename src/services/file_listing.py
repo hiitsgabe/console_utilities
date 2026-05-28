@@ -14,6 +14,7 @@ import requests
 from utils.logging import log_error
 from utils.formatting import decode_filename
 from constants import SYSTEMS_CACHE_DIR
+from services.json_api_listing import parse_json_api_listing
 
 
 def _get_listing_cache_path(url: str) -> str:
@@ -362,6 +363,13 @@ def _get_request_headers_cookies(system_data: Dict[str, Any]) -> tuple:
             secret_key = auth_config.get("secret_key") or None
             if access_key and secret_key:
                 headers["authorization"] = f"LOW {access_key}:{secret_key}"
+        elif (
+            auth_config.get("type") == "header"
+            and auth_config.get("header_name")
+            and auth_config.get("token")
+        ):
+            # Custom header authentication (arbitrary header name + token)
+            headers[auth_config["header_name"]] = auth_config["token"]
         elif auth_config.get("cookies", False) and "token" in auth_config:
             # Use cookie-based authentication
             cookie_name = auth_config.get("cookie_name", "auth_token")
@@ -451,18 +459,14 @@ def _list_files_json_api(
         )
     response = r.json()
 
-    if isinstance(response, dict) and "files" in response:
-        files = response[array_path]
-        if isinstance(files, list):
-            filtered_files = [
-                f[file_id]
-                for f in files
-                if any(f[file_id].lower().endswith(ext.lower()) for ext in formats)
-            ]
-
-            return filtered_files
-
-    return []
+    return parse_json_api_listing(
+        response,
+        items_path=array_path,
+        id_field=file_id,
+        size_field=system_data.get("list_size_field"),
+        download_url_template=system_data.get("download_url_template"),
+        file_format=formats,
+    )
 
 
 def _list_files_html(
