@@ -52,6 +52,7 @@ from .pes6_ps2_patcher_screen import PES6PS2PatcherScreen
 from .syncthing_screen import SyncthingScreen
 from .downloads_screen import DownloadsScreen
 from .file_explorer_screen import FileExplorerScreen
+from .system_info_screen import SystemInfoScreen
 from .scraper_downloads_screen import ScraperDownloadsScreen
 from ui.molecules.status_footer import StatusFooter, StatusFooterItem
 
@@ -92,6 +93,7 @@ class ScreenManager:
         self.pes6_ps2_patcher_screen = PES6PS2PatcherScreen(theme)
         self.syncthing_screen = SyncthingScreen(theme)
         self.file_explorer_screen = FileExplorerScreen(theme)
+        self.system_info_screen = SystemInfoScreen(theme)
 
         # Initialize modals
         self.search_modal = SearchModal(theme)
@@ -923,6 +925,21 @@ class ScreenManager:
             )
             rects["back"] = back_rect
             rects["credits_max_scroll"] = max_scroll
+
+        elif state.mode == "system_info":
+            info = {}
+            if state.system_info_static:
+                info.update(state.system_info_static)
+            if state.system_info_dynamic:
+                info.update(state.system_info_dynamic)
+            back_rect, max_scroll = self.system_info_screen.render(
+                screen,
+                info,
+                scroll_offset=state.system_info_scroll_offset,
+                input_mode=state.input_mode,
+            )
+            rects["back"] = back_rect
+            rects["system_info_max_scroll"] = max_scroll
 
         elif state.mode == "add_systems":
             back_rect, item_rects, scroll_offset = self.add_systems_screen.render(
