@@ -1047,6 +1047,19 @@ class ConsoleUtilitiesApp:
             if self.image_cache.update():
                 _dirty = True
 
+            # System Information: re-poll RAM/disk usage every 2s while open
+            if self.state.mode == "system_info":
+                now = pygame.time.get_ticks()
+                if now - self.state.system_info_last_poll > 2000:
+                    from services.system_info import gather_dynamic
+
+                    self.state.system_info_dynamic = gather_dynamic(
+                        self.settings.get("roms_dir", ""),
+                        self.settings.get("work_dir", ""),
+                    )
+                    self.state.system_info_last_poll = now
+                    _dirty = True
+
             # Poll auto-detect ROM downloads for completion
             self._poll_auto_detect_downloads()
 
@@ -1423,6 +1436,21 @@ class ConsoleUtilitiesApp:
             elif direction == "up":
                 self.state.credits_scroll_offset = max(
                     self.state.credits_scroll_offset - SCROLL_STEP,
+                    0,
+                )
+
+        elif self.state.mode == "system_info":
+            from ui.screens.system_info_screen import SCROLL_STEP
+
+            max_scroll = self.state.ui_rects.rects.get("system_info_max_scroll", 0)
+            if direction == "down":
+                self.state.system_info_scroll_offset = min(
+                    self.state.system_info_scroll_offset + SCROLL_STEP,
+                    max_scroll,
+                )
+            elif direction == "up":
+                self.state.system_info_scroll_offset = max(
+                    self.state.system_info_scroll_offset - SCROLL_STEP,
                     0,
                 )
 
@@ -3452,7 +3480,13 @@ class ConsoleUtilitiesApp:
         elif self.state.mode == "file_explorer":
             self._handle_file_explorer_back()
 
-        elif self.state.mode in ("settings", "utils", "credits", "scraper_menu"):
+        elif self.state.mode in (
+            "settings",
+            "utils",
+            "credits",
+            "scraper_menu",
+            "system_info",
+        ):
             self.state.mode = "systems"
             self.state.highlighted = 0
 
@@ -4461,6 +4495,8 @@ class ConsoleUtilitiesApp:
         if action == "divider":
             # Skip divider items
             return
+        elif action == "system_info":
+            self._enter_system_info()
         elif action == "download_url":
             self.state.url_input.show = True
             self.state.url_input.context = "direct_download"
@@ -4486,6 +4522,19 @@ class ConsoleUtilitiesApp:
             self._enter_syncthing()
         elif action == "steam_shortcut":
             self._start_steam_shortcut()
+
+    def _enter_system_info(self):
+        """Gather system info and switch to the System Information screen."""
+        from services.system_info import gather_static, gather_dynamic
+
+        roms_dir = self.settings.get("roms_dir", "")
+        work_dir = self.settings.get("work_dir", "")
+        self.state.system_info_static = gather_static()
+        self.state.system_info_dynamic = gather_dynamic(roms_dir, work_dir)
+        self.state.system_info_scroll_offset = 0
+        self.state.system_info_last_poll = pygame.time.get_ticks()
+        self.state.mode = "system_info"
+        self.state.highlighted = 0
 
     def _start_steam_shortcut(self):
         """Start the Steam shortcut creator flow."""
