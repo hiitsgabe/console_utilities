@@ -66,6 +66,7 @@ from services.image_cache import ImageCache
 from services.download_manager import DownloadManager as _DesktopDownloadManager
 from services.scraper_manager import ScraperManager
 from services.syncthing_service import SyncthingService
+from services.auto_scrape import should_auto_scrape, new_completions
 from services import file_explorer_service
 from input.navigation import NavigationHandler
 from input.controller import ControllerHandler
@@ -212,6 +213,9 @@ class ConsoleUtilitiesApp:
 
         # Initialize scraper manager
         self.scraper_manager = ScraperManager(self.settings, self.state.scraper_queue)
+
+        # Tracks last-seen download status per queue item (auto-scrape trigger)
+        self._dl_status_seen = {}
 
         # Initialize Syncthing service (lazily when needed)
         self.syncthing_service = None
@@ -927,6 +931,24 @@ class ConsoleUtilitiesApp:
                         self._show_ia_login_required_modal()
                         _dirty = True
                         break
+
+            # Auto-scrape newly completed downloads (opt-in, default OFF)
+            items = self.state.download_queue.items
+            completed_ids = new_completions(
+                self._dl_status_seen,
+                items,
+                id,
+                lambda it: getattr(it, "status", ""),
+            )
+            if completed_ids and should_auto_scrape(self.settings):
+                by_id = {id(it): it for it in items}
+                for cid in completed_ids:
+                    it = by_id.get(cid)
+                    if it is not None:
+                        self._trigger_auto_scrape(it)
+            self._dl_status_seen = {
+                id(it): getattr(it, "status", "") for it in items
+            }
 
             # Manage Android soft keyboard show/hide
             if BUILD_TARGET == "android":
@@ -4044,6 +4066,11 @@ class ConsoleUtilitiesApp:
             current = self.settings.get("scraper_frontend", "emulationstation_base")
             idx = frontends.index(current) if current in frontends else 0
             self.settings["scraper_frontend"] = frontends[(idx + 1) % len(frontends)]
+            save_settings(self.settings)
+        elif action == "toggle_auto_scrape_after_download":
+            self.settings["auto_scrape_after_download"] = not self.settings.get(
+                "auto_scrape_after_download", False
+            )
             save_settings(self.settings)
         elif action == "ia_login":
             self._show_ia_login()
@@ -8220,6 +8247,29 @@ class ConsoleUtilitiesApp:
         self._close_scraper_wizard()
         self.state.mode = "scraper_downloads"
         self.state.scraper_queue.highlighted = 0
+
+    def _trigger_auto_scrape(self, item):
+        """Auto-scrape a single completed download item (best-effort, opt-in)."""
+        try:
+            filename = self.download_manager._get_filename(item.game)
+            folder = self.download_manager._get_roms_folder(item.system_data)
+            rom_path = os.path.join(folder, filename)
+            roms = [{"name": filename, "path": rom_path}]
+            system = (
+                item.system_data.get("name", "")
+                if isinstance(item.system_data, dict)
+                else ""
+            )
+            self.scraper_manager.start_batch(
+                folder_path=folder,
+                roms=roms,
+                default_images=[],
+                auto_select=True,
+                download_video=False,
+                system=system,
+            )
+        except Exception as e:
+            log_error(f"Auto-scrape trigger failed: {e}")
 
     # Comprehensive Batocera system list: (display_name, batocera_folder_id)
     # folder_id maps to ScreenScraper systemeid via SYSTEM_ID_MAP
