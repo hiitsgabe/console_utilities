@@ -8,6 +8,7 @@ from typing import Tuple, List, Optional, Dict, Any, Set
 from ui.theme import Theme, default_theme
 from ui.organisms.modal_frame import ModalFrame
 from ui.organisms.char_keyboard import CharKeyboard
+from ui.molecules.action_button import ActionButton
 from ui.atoms.text import Text
 from utils.button_hints import get_combined_hints
 
@@ -30,7 +31,11 @@ class IACollectionModal:
         self.theme = theme
         self.modal_frame = ModalFrame(theme)
         self.char_keyboard = CharKeyboard(theme)
+        self.action_button = ActionButton(theme)
         self.text = Text(theme)
+        self.ok_rect = None
+        self.cancel_rect = None
+        self.backspace_rect = None
 
     def render(
         self,
@@ -61,9 +66,10 @@ class IACollectionModal:
         Returns:
             Tuple of (modal_rect, content_rect, close_rect, char_rects, item_rects)
         """
-        # Android uses native soft keyboard — render like keyboard mode
-        if input_mode == "android":
-            input_mode = "keyboard"
+        # Reset button rects so stale touch targets don't leak across frames
+        self.ok_rect = None
+        self.cancel_rect = None
+        self.backspace_rect = None
 
         if step == "url":
             rects = self._render_url_step(
@@ -133,6 +139,15 @@ class IACollectionModal:
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """Render collection ID input step."""
         title = "Add Internet Archive Collection"
+
+        if input_mode == "android":
+            return self._render_android_mode_text_input(
+                screen,
+                title,
+                "Enter Item ID:",
+                collection_id,
+                "e.g., myrient_sony_psx",
+            )
 
         if input_mode == "keyboard":
             return self._render_keyboard_input(
@@ -223,6 +238,15 @@ class IACollectionModal:
         """Render collection name input step."""
         title = "Add Internet Archive Collection"
 
+        if input_mode == "android":
+            return self._render_android_mode_text_input(
+                screen,
+                title,
+                "Collection display name:",
+                name,
+                "e.g., My Collection",
+            )
+
         if input_mode == "keyboard":
             return self._render_keyboard_input(
                 screen,
@@ -280,6 +304,15 @@ class IACollectionModal:
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """Render folder name input step."""
         title = "Add Internet Archive Collection"
+
+        if input_mode == "android":
+            return self._render_android_mode_text_input(
+                screen,
+                title,
+                "ROM folder name:",
+                folder,
+                "e.g., my_collection",
+            )
 
         if input_mode == "keyboard":
             return self._render_keyboard_input(
@@ -421,6 +454,141 @@ class IACollectionModal:
 
         return modal_rect, content_rect, None, []
 
+    def _render_android_mode_text_input(
+        self,
+        screen: pygame.Surface,
+        title: str,
+        label: str,
+        value: str,
+        placeholder: str,
+    ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
+        """Render text input for Android (top-aligned, OK/Cancel buttons).
+
+        Anchors the modal near the top so the native soft keyboard does not
+        cover it. Stores ok_rect / cancel_rect / backspace_rect for touch.
+        """
+        sw, sh = screen.get_size()
+        width = min(int(sw * 0.9), 600)
+        height = 230
+
+        modal_rect, content_rect, close_rect = self.modal_frame.render_top_aligned(
+            screen, width, height, title=title, show_close=False
+        )
+
+        padding = self.theme.padding_sm
+
+        # Label above the field
+        self.text.render(
+            screen,
+            label,
+            (content_rect.left + padding, content_rect.top + padding),
+            color=self.theme.text_secondary,
+            size=self.theme.font_size_sm,
+        )
+
+        y = content_rect.top + padding + 25
+
+        # Draw input field with backspace button (larger for touch)
+        field_height = 48
+        bksp_width = 48
+        field_rect = pygame.Rect(
+            content_rect.left + padding,
+            y,
+            content_rect.width - padding * 3 - bksp_width,
+            field_height,
+        )
+
+        pygame.draw.rect(
+            screen,
+            self.theme.surface_hover,
+            field_rect,
+            border_radius=self.theme.radius_sm,
+        )
+
+        # Backspace button
+        bksp_rect = pygame.Rect(
+            field_rect.right + padding,
+            y,
+            bksp_width,
+            field_height,
+        )
+        pygame.draw.rect(
+            screen,
+            self.theme.surface_hover,
+            bksp_rect,
+            border_radius=self.theme.radius_sm,
+        )
+        self.text.render(
+            screen,
+            "<x]",
+            (bksp_rect.centerx, bksp_rect.centery - self.theme.font_size_md // 2),
+            color=self.theme.text_primary,
+            size=self.theme.font_size_md,
+            align="center",
+        )
+        self.backspace_rect = bksp_rect
+
+        # Draw text
+        display_text = value if value else placeholder
+        text_color = self.theme.text_primary if value else self.theme.text_disabled
+        self.text.render(
+            screen,
+            display_text,
+            (
+                field_rect.left + padding,
+                field_rect.centery - self.theme.font_size_md // 2,
+            ),
+            color=text_color,
+            size=self.theme.font_size_md,
+            max_width=field_rect.width - padding * 2,
+        )
+
+        # Draw cursor
+        if value:
+            cursor_x = (
+                field_rect.left
+                + padding
+                + self.text.measure(value, self.theme.font_size_md)[0]
+                + 2
+            )
+        else:
+            cursor_x = field_rect.left + padding
+
+        pygame.draw.line(
+            screen,
+            self.theme.primary,
+            (cursor_x, field_rect.top + 8),
+            (cursor_x, field_rect.bottom - 8),
+            2,
+        )
+
+        # Draw OK and Cancel buttons
+        y = field_rect.bottom + padding * 3
+        button_width = 120
+        button_height = 44
+        button_spacing = self.theme.padding_lg
+
+        ok_rect = pygame.Rect(
+            content_rect.centerx - button_width - button_spacing // 2,
+            y,
+            button_width,
+            button_height,
+        )
+        cancel_rect = pygame.Rect(
+            content_rect.centerx + button_spacing // 2,
+            y,
+            button_width,
+            button_height,
+        )
+
+        self.action_button.render(screen, ok_rect, "OK", hover=True)
+        self.action_button.render_secondary(screen, cancel_rect, "Cancel", hover=False)
+
+        self.ok_rect = ok_rect
+        self.cancel_rect = cancel_rect
+
+        return modal_rect, content_rect, None, []
+
     def _render_formats_step(
         self,
         screen: pygame.Surface,
@@ -556,6 +724,18 @@ class IACollectionModal:
         pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple], List[pygame.Rect]
     ]:
         """Render custom format input."""
+        if input_mode == "android":
+            return (
+                *self._render_android_mode_text_input(
+                    screen,
+                    "Add Custom Format",
+                    "Enter file extension:",
+                    custom_format,
+                    "e.g., .7z",
+                ),
+                [],
+            )
+
         if input_mode == "keyboard":
             rects = self._render_keyboard_input(
                 screen,
