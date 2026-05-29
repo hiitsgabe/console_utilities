@@ -391,6 +391,11 @@ class ScreenManager:
             rects["close"] = close_rect
             rects["char_rects"] = char_rects
             rects["item_rects"] = item_rects
+            if getattr(self.ia_download_modal, "ok_rect", None):
+                rects["text_ok"] = self.ia_download_modal.ok_rect
+                rects["text_cancel"] = self.ia_download_modal.cancel_rect
+            if getattr(self.ia_download_modal, "backspace_rect", None):
+                rects["text_backspace"] = self.ia_download_modal.backspace_rect
             return rects
 
         if state.ia_collection_wizard.show:
@@ -420,6 +425,11 @@ class ScreenManager:
             rects["close"] = close_rect
             rects["char_rects"] = char_rects
             rects["item_rects"] = item_rects
+            if getattr(self.ia_collection_modal, "ok_rect", None):
+                rects["text_ok"] = self.ia_collection_modal.ok_rect
+                rects["text_cancel"] = self.ia_collection_modal.cancel_rect
+            if getattr(self.ia_collection_modal, "backspace_rect", None):
+                rects["text_backspace"] = self.ia_collection_modal.backspace_rect
             return rects
 
         if state.scraper_login.show:

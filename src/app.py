@@ -6178,6 +6178,10 @@ class ConsoleUtilitiesApp:
             self._submit_folder_name()
         elif self.state.ia_login.show:
             self._handle_ia_login_ok()
+        elif self.state.ia_download_wizard.show:
+            self._handle_ia_download_wizard_ok()
+        elif self.state.ia_collection_wizard.show:
+            self._handle_ia_collection_wizard_ok()
 
     def _handle_text_modal_cancel_click(self):
         """Handle Cancel button click on text input modals."""
@@ -6200,6 +6204,40 @@ class ConsoleUtilitiesApp:
             self.state.ia_login.password = ""
             self.state.ia_login.cursor_position = 0
             self.state.ia_login.error_message = ""
+
+    def _handle_ia_download_wizard_ok(self):
+        """Handle OK button tap on Android IA download wizard text steps."""
+        if self.state.ia_download_wizard.step == "url":
+            if self.state.ia_download_wizard.url:
+                self._validate_ia_download_item()
+
+    def _handle_ia_collection_wizard_ok(self):
+        """Handle OK button tap on Android IA collection wizard text steps."""
+        wizard = self.state.ia_collection_wizard
+        step = wizard.step
+
+        if step == "url":
+            if wizard.url:
+                self._validate_ia_collection_item()
+        elif step == "name":
+            if wizard.collection_name:
+                self._open_ia_collection_folder_browser()
+        elif step == "folder":
+            if wizard.folder_name:
+                wizard.step = "formats"
+            elif not self.state.folder_browser.show:
+                self._open_ia_collection_folder_browser()
+        elif step == "formats" and wizard.adding_custom_format:
+            if wizard.custom_format_input:
+                fmt = wizard.custom_format_input
+                if not fmt.startswith("."):
+                    fmt = "." + fmt
+                if fmt not in wizard.available_formats:
+                    wizard.available_formats.append(fmt)
+                    wizard.selected_formats.add(len(wizard.available_formats) - 1)
+            wizard.adding_custom_format = False
+            wizard.custom_format_input = ""
+            wizard.cursor_position = 0
 
     def _handle_text_modal_backspace(self):
         """Handle backspace button tap on Android text input modals."""
@@ -6241,6 +6279,26 @@ class ConsoleUtilitiesApp:
                 self.state.folder_name_input.input_text = (
                     self.state.folder_name_input.input_text[:-1]
                 )
+        elif self.state.ia_download_wizard.show:
+            if (
+                self.state.ia_download_wizard.step == "url"
+                and self.state.ia_download_wizard.url
+            ):
+                self.state.ia_download_wizard.url = (
+                    self.state.ia_download_wizard.url[:-1]
+                )
+        elif self.state.ia_collection_wizard.show:
+            wizard = self.state.ia_collection_wizard
+            step = wizard.step
+            if step == "formats" and wizard.adding_custom_format:
+                if wizard.custom_format_input:
+                    wizard.custom_format_input = wizard.custom_format_input[:-1]
+            elif step == "url" and wizard.url:
+                wizard.url = wizard.url[:-1]
+            elif step == "name" and wizard.collection_name:
+                wizard.collection_name = wizard.collection_name[:-1]
+            elif step == "folder" and wizard.folder_name:
+                wizard.folder_name = wizard.folder_name[:-1]
 
     def _apply_search_filter(self):
         """Apply search filter and close search modal."""
