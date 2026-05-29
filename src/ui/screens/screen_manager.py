@@ -20,6 +20,7 @@ from .modals.folder_browser_modal import FolderBrowserModal
 from .modals.game_details_modal import GameDetailsModal
 from .modals.loading_modal import LoadingModal
 from .modals.error_modal import ErrorModal
+from .modals.nsz_log_modal import NszLogModal
 from .modals.url_input_modal import UrlInputModal
 from .modals.folder_name_modal import FolderNameModal
 from .modals.confirm_modal import ConfirmModal
@@ -101,6 +102,7 @@ class ScreenManager:
         self.game_details_modal = GameDetailsModal(theme)
         self.loading_modal = LoadingModal(theme)
         self.error_modal = ErrorModal(theme)
+        self.nsz_log_modal = NszLogModal(theme)
         self.url_input_modal = UrlInputModal(theme)
         self.folder_name_modal = FolderNameModal(theme)
         self.confirm_modal = ConfirmModal(theme)
@@ -174,6 +176,18 @@ class ScreenManager:
             rects["confirm_ok"] = ok_rect
             rects["confirm_cancel"] = cancel_rect
             rects["close"] = close_rect
+            return rects
+
+        if state.nsz_log_modal.show:
+            modal_rect, save_rect, close_rect = self.nsz_log_modal.render(
+                screen,
+                state.nsz_log_modal.lines,
+                state.nsz_log_modal.scroll_offset,
+                state.nsz_log_modal.button_index,
+            )
+            rects["modal"] = modal_rect
+            rects["nsz_log_save"] = save_rect
+            rects["nsz_log_close"] = close_rect
             return rects
 
         if state.auth_token_input.show:
