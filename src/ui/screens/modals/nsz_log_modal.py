@@ -50,16 +50,16 @@ class NszLogModal:
             screen: Surface to render to
             lines: Log lines to display (oldest first)
             scroll_offset: Index of the first visible line
-            button_index: Focused button (0 = Save, 1 = Close)
+            button_index: Focused button (0 = Refresh, 1 = Close)
 
         Returns:
-            Tuple of (modal_rect, save_button_rect, close_button_rect)
+            Tuple of (modal_rect, refresh_button_rect, close_button_rect)
         """
         # Focused button gets the primary style; the other stays secondary.
-        save_style = "primary" if button_index == 0 else "secondary"
+        refresh_style = "primary" if button_index == 0 else "secondary"
         close_style = "primary" if button_index == 1 else "secondary"
         buttons = [
-            ("Save to error.log", save_style),
+            ("Refresh", refresh_style),
             ("Close", close_style),
         ]
 
@@ -68,7 +68,7 @@ class NszLogModal:
                 screen,
                 self.WIDTH,
                 self.HEIGHT,
-                title="NSZ Decompression Log",
+                title="NSZ / Extraction Log (error.log)",
                 show_close=False,
                 buttons=buttons,
             )
@@ -109,8 +109,8 @@ class NszLogModal:
             if offset < max_offset:
                 self._scroll_arrow(screen, content_rect, "down")
 
-        save_rect, close_button_rect = button_rects[0], button_rects[1]
-        return modal_rect, save_rect, close_button_rect
+        refresh_rect, close_button_rect = button_rects[0], button_rects[1]
+        return modal_rect, refresh_rect, close_button_rect
 
     def _scroll_arrow(
         self, screen: pygame.Surface, content_rect: pygame.Rect, direction: str
