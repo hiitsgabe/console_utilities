@@ -313,19 +313,23 @@ def list_files(
                 ]
 
         # Deduplicate game list (prefer USA, then largest file)
+        already_sorted = False
         if settings.get("dedupe_game_list", False) and all_files:
             # Check for low-end device mode that skips expensive deduplication
             if settings.get("low_end_device_mode", False):
-                # Low-end mode: skip deduplication but do basic merge by sorting
+                # Low-end mode: skip deduplication but do basic merge by sorting.
+                # Mark as sorted so the unconditional pass below is skipped.
                 all_files.sort(key=lambda x: x.get("filename", "") if isinstance(x, dict) else str(x))
+                already_sorted = True
             else:
                 all_files = _dedupe_game_list(all_files)
 
-        # Sort combined list by filename
-        if all_files and isinstance(all_files[0], dict):
-            all_files.sort(key=lambda x: x.get("filename", ""))
-        else:
-            all_files.sort()
+        # Sort combined list by filename (skip when already sorted above)
+        if not already_sorted:
+            if all_files and isinstance(all_files[0], dict):
+                all_files.sort(key=lambda x: x.get("filename", ""))
+            else:
+                all_files.sort()
 
         return all_files
 
