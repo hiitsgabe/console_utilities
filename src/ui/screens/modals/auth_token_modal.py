@@ -42,6 +42,7 @@ class AuthTokenModal:
         cursor_position: int = 0,
         input_mode: str = "keyboard",
         shift_active: bool = False,
+        scroll_offset: int = 0,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """
         Render the auth token modal.
@@ -58,7 +59,12 @@ class AuthTokenModal:
             return self._render_message_step(screen, auth_message, input_mode)
         else:
             return self._render_input_step(
-                screen, input_text, cursor_position, input_mode, shift_active
+                screen,
+                input_text,
+                cursor_position,
+                input_mode,
+                shift_active,
+                scroll_offset=scroll_offset,
             )
 
     def _render_message_step(
@@ -119,12 +125,15 @@ class AuthTokenModal:
         cursor_position: int,
         input_mode: str,
         shift_active: bool,
+        scroll_offset: int = 0,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """Render the token input step."""
         if input_mode == "keyboard":
             return self._render_keyboard_mode(screen, input_text)
         if input_mode == "android":
-            return self._render_android_mode(screen, input_text)
+            return self._render_android_mode(
+                screen, input_text, scroll_offset=scroll_offset
+            )
         return self._render_onscreen_keyboard_mode(
             screen, input_text, cursor_position, input_mode, shift_active
         )
@@ -206,7 +215,7 @@ class AuthTokenModal:
         return modal_rect, content_rect, None, []
 
     def _render_android_mode(
-        self, screen: pygame.Surface, input_text: str
+        self, screen: pygame.Surface, input_text: str, scroll_offset: int = 0
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """Render for Android."""
         sw, sh = screen.get_size()
@@ -253,19 +262,31 @@ class AuthTokenModal:
         )
         self.backspace_rect = bksp_rect
 
-        display_text = input_text if input_text else "Paste or type token..."
-        text_color = self.theme.text_primary if input_text else self.theme.text_disabled
-        self.text.render(
-            screen,
-            display_text,
-            (
-                field_rect.left + padding,
-                field_rect.centery - self.theme.font_size_md // 2,
-            ),
-            color=text_color,
-            size=self.theme.font_size_md,
-            max_width=field_rect.width - padding * 2,
-        )
+        if input_text:
+            self.text.render_scrolled(
+                screen,
+                input_text,
+                (
+                    field_rect.left + padding,
+                    field_rect.centery - self.theme.font_size_md // 2,
+                ),
+                max_width=field_rect.width - padding * 2,
+                scroll_offset=scroll_offset,
+                color=self.theme.text_primary,
+                size=self.theme.font_size_md,
+            )
+        else:
+            self.text.render(
+                screen,
+                "Paste or type token...",
+                (
+                    field_rect.left + padding,
+                    field_rect.centery - self.theme.font_size_md // 2,
+                ),
+                color=self.theme.text_disabled,
+                size=self.theme.font_size_md,
+                max_width=field_rect.width - padding * 2,
+            )
 
         # Cursor
         if input_text:
@@ -273,8 +294,10 @@ class AuthTokenModal:
                 field_rect.left
                 + padding
                 + self.text.measure(input_text, self.theme.font_size_md)[0]
+                - scroll_offset
                 + 2
             )
+            cursor_x = min(cursor_x, field_rect.right - 2)
         else:
             cursor_x = field_rect.left + padding
         pygame.draw.line(

@@ -106,6 +106,7 @@ class ScraperWizardModal:
         search_name_shift: bool = False,
         button_focused: bool = False,
         nav_bar_index: int = -1,
+        scroll_offset: int = 0,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[pygame.Rect]]:
         """
         Render the scraper wizard modal.
@@ -139,6 +140,7 @@ class ScraperWizardModal:
                 search_name_cursor,
                 input_mode,
                 search_name_shift,
+                scroll_offset=scroll_offset,
             )
         elif step == "searching":
             return self._render_searching(screen, selected_rom_name)
@@ -207,6 +209,7 @@ class ScraperWizardModal:
         cursor: int,
         input_mode: str,
         shift_active: bool = False,
+        scroll_offset: int = 0,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[pygame.Rect]]:
         """Render editable game name step with on-screen keyboard."""
         # Reset button rects
@@ -218,7 +221,9 @@ class ScraperWizardModal:
 
         # Android mode: text field with OK/Cancel buttons
         if input_mode == "android":
-            return self._render_edit_name_android(screen, search_name)
+            return self._render_edit_name_android(
+                screen, search_name, scroll_offset=scroll_offset
+            )
 
         # Gamepad/touch: on-screen CharKeyboard
         width = min(600, screen.get_width() - 40)
@@ -331,7 +336,7 @@ class ScraperWizardModal:
         return modal_rect, content_rect, None, []
 
     def _render_edit_name_android(
-        self, screen: pygame.Surface, search_name: str
+        self, screen: pygame.Surface, search_name: str, scroll_offset: int = 0
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[pygame.Rect]]:
         """Render edit name for Android (with OK/Cancel buttons)."""
         sw, sh = screen.get_size()
@@ -377,29 +382,41 @@ class ScraperWizardModal:
         )
         self.backspace_rect = bksp_rect
 
-        display_text = search_name if search_name else "Type to search..."
-        text_color = (
-            self.theme.text_primary if search_name else self.theme.text_disabled
-        )
-        self.text.render(
-            screen,
-            display_text,
-            (
-                field_rect.left + padding,
-                field_rect.centery - self.theme.font_size_md // 2,
-            ),
-            color=text_color,
-            size=self.theme.font_size_md,
-            max_width=field_rect.width - padding * 2,
-        )
+        if search_name:
+            self.text.render_scrolled(
+                screen,
+                search_name,
+                (
+                    field_rect.left + padding,
+                    field_rect.centery - self.theme.font_size_md // 2,
+                ),
+                max_width=field_rect.width - padding * 2,
+                scroll_offset=scroll_offset,
+                color=self.theme.text_primary,
+                size=self.theme.font_size_md,
+            )
+        else:
+            self.text.render(
+                screen,
+                "Type to search...",
+                (
+                    field_rect.left + padding,
+                    field_rect.centery - self.theme.font_size_md // 2,
+                ),
+                color=self.theme.text_disabled,
+                size=self.theme.font_size_md,
+                max_width=field_rect.width - padding * 2,
+            )
 
         if search_name:
             cursor_x = (
                 field_rect.left
                 + padding
                 + self.text.measure(search_name, self.theme.font_size_md)[0]
+                - scroll_offset
                 + 2
             )
+            cursor_x = min(cursor_x, field_rect.right - 2)
         else:
             cursor_x = field_rect.left + padding
         pygame.draw.line(

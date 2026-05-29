@@ -45,6 +45,7 @@ class IALoginModal:
         error_message: str = "",
         input_mode: str = "keyboard",
         shift_active: bool = False,
+        scroll_offset: int = 0,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """
         Render the IA login modal.
@@ -69,11 +70,21 @@ class IALoginModal:
 
         if step == "email":
             return self._render_email_step(
-                screen, email, cursor_position, input_mode, shift_active
+                screen,
+                email,
+                cursor_position,
+                input_mode,
+                shift_active,
+                scroll_offset=scroll_offset,
             )
         elif step == "password":
             return self._render_password_step(
-                screen, password, cursor_position, input_mode, shift_active
+                screen,
+                password,
+                cursor_position,
+                input_mode,
+                shift_active,
+                scroll_offset=scroll_offset,
             )
         elif step == "testing":
             return self._render_testing_step(screen)
@@ -83,7 +94,12 @@ class IALoginModal:
             return self._render_error_step(screen, error_message, input_mode)
         else:
             return self._render_email_step(
-                screen, email, cursor_position, input_mode, shift_active
+                screen,
+                email,
+                cursor_position,
+                input_mode,
+                shift_active,
+                scroll_offset=scroll_offset,
             )
 
     def _render_email_step(
@@ -93,13 +109,20 @@ class IALoginModal:
         cursor_position: int,
         input_mode: str,
         shift_active: bool = False,
+        scroll_offset: int = 0,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """Render email input step."""
         title = "Internet Archive Login"
 
         if input_mode == "android":
             return self._render_android_input(
-                screen, title, "Email:", email, "email@example.com", "Next"
+                screen,
+                title,
+                "Email:",
+                email,
+                "email@example.com",
+                "Next",
+                scroll_offset=scroll_offset,
             )
 
         if input_mode == "keyboard":
@@ -159,6 +182,7 @@ class IALoginModal:
         cursor_position: int,
         input_mode: str,
         shift_active: bool = False,
+        scroll_offset: int = 0,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """Render password input step."""
         title = "Internet Archive Login"
@@ -166,7 +190,13 @@ class IALoginModal:
 
         if input_mode == "android":
             return self._render_android_input(
-                screen, title, "Password:", masked, "Enter password", "Login"
+                screen,
+                title,
+                "Password:",
+                masked,
+                "Enter password",
+                "Login",
+                scroll_offset=scroll_offset,
             )
 
         if input_mode == "keyboard":
@@ -349,6 +379,7 @@ class IALoginModal:
         value: str,
         placeholder: str,
         ok_label: str,
+        scroll_offset: int = 0,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """Render Android input with OK/Cancel buttons (native soft keyboard)."""
         sw, sh = screen.get_size()
@@ -413,19 +444,31 @@ class IALoginModal:
         self.backspace_rect = bksp_rect
 
         # Draw text
-        display_text = value if value else placeholder
-        text_color = self.theme.text_primary if value else self.theme.text_disabled
-        self.text.render(
-            screen,
-            display_text,
-            (
-                field_rect.left + padding,
-                field_rect.centery - self.theme.font_size_md // 2,
-            ),
-            color=text_color,
-            size=self.theme.font_size_md,
-            max_width=field_rect.width - padding * 2,
-        )
+        if value:
+            self.text.render_scrolled(
+                screen,
+                value,
+                (
+                    field_rect.left + padding,
+                    field_rect.centery - self.theme.font_size_md // 2,
+                ),
+                max_width=field_rect.width - padding * 2,
+                scroll_offset=scroll_offset,
+                color=self.theme.text_primary,
+                size=self.theme.font_size_md,
+            )
+        else:
+            self.text.render(
+                screen,
+                placeholder,
+                (
+                    field_rect.left + padding,
+                    field_rect.centery - self.theme.font_size_md // 2,
+                ),
+                color=self.theme.text_disabled,
+                size=self.theme.font_size_md,
+                max_width=field_rect.width - padding * 2,
+            )
 
         # Draw cursor
         if value:
@@ -433,8 +476,10 @@ class IALoginModal:
                 field_rect.left
                 + padding
                 + self.text.measure(value, self.theme.font_size_md)[0]
+                - scroll_offset
                 + 2
             )
+            cursor_x = min(cursor_x, field_rect.right - 2)
         else:
             cursor_x = field_rect.left + padding
 
