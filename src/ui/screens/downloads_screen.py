@@ -428,6 +428,8 @@ class DownloadsScreen:
                 hints.append(get_button_hint("select", "Remove", input_mode))
                 if item.status == "failed":
                     hints.append(get_button_hint("detail", "See logs", input_mode))
+                    if self._is_nsz_item(item):
+                        hints.append(get_button_hint("start", "Retry", input_mode))
             elif item.status in ("downloading", "extracting", "moving"):
                 hints.append(get_button_hint("select", "Cancel", input_mode))
 
@@ -469,6 +471,15 @@ class DownloadsScreen:
             ]
 
         pygame.draw.polygon(screen, self.theme.text_secondary, points)
+
+    def _is_nsz_item(self, item: DownloadQueueItem) -> bool:
+        """Whether a queue item is an .nsz download (retry-able decompression)."""
+        game = item.game
+        if isinstance(game, dict):
+            name = game.get("name") or game.get("filename") or ""
+        else:
+            name = str(game)
+        return str(name).lower().endswith(".nsz")
 
     def _get_game_name(self, game: Any) -> str:
         """Extract display name from game."""
