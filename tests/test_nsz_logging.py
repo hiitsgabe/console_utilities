@@ -1,21 +1,17 @@
-"""TDD (red) tests for GAB-58: NSZ debug logging to a dedicated nsz.log.
+"""Tests for GAB-58: NSZ debug logging routed into the main error.log.
 
-NSZ decompression on Android fails silently. The fix adds a parallel,
-permission-hardened ``log_nsz`` logger writing to a dedicated ``nsz.log``
-(sibling of ``error.log`` in TEMP_LOG_DIR) and rewires the desktop NSZ
-decompression path to emit comprehensive diagnostics.
+The dedicated nsz.log proved unreliable/invisible on Android, so NSZ
+diagnostics now go straight into ``error.log`` (the file that is created at
+startup and reliably persists / is retrievable), tagged with ``[NSZ]``.
 
-Pinned NOT-YET-IMPLEMENTED behavior:
-    - utils.logging.log_nsz / utils.logging._nsz_log_file write to nsz.log,
-      NOT error.log.
+Pinned behavior:
+    - utils.logging.log_nsz writes to ``_log_file`` (error.log), tagged [NSZ];
+      it does NOT write a separate nsz.log.
     - decompress_nsz_file routes ALL of its log calls through log_nsz, emits a
       pre-call integer ``file_size=`` diagnostic, distinguishes the two silent
       failure modes (``keys_path not set`` vs ``nsz library unavailable``), and
       records a multi-line traceback (with the exception class name) on raise.
     - log_nsz reuses the hardened _write_fallback path on a primary OSError.
-
-These access new symbols via the module objects so missing pieces surface as
-AttributeError ("not implemented yet"), not ImportError at collection time.
 """
 
 import os
@@ -35,10 +31,10 @@ from utils import logging as L  # noqa: E402
 from utils.nsz import decompress_nsz_file  # noqa: E402
 
 
-def test_writes_to_dedicated_nsz_log_with_filename(tmp_path, monkeypatch):
-    """A successful decompress must write the basename to nsz.log."""
-    nsz_log = tmp_path / "nsz.log"
-    monkeypatch.setattr(L, "_nsz_log_file", str(nsz_log), raising=False)
+def test_writes_to_error_log_tagged_with_filename(tmp_path, monkeypatch):
+    """A decompress must write the basename to error.log, tagged [NSZ]."""
+    err_log = tmp_path / "error.log"
+    monkeypatch.setattr(L, "_log_file", str(err_log), raising=False)
 
     monkeypatch.setattr(
         nsz_mod, "check_output_capacity", lambda d, n: (True, None), raising=False
@@ -54,15 +50,28 @@ def test_writes_to_dedicated_nsz_log_with_filename(tmp_path, monkeypatch):
 
     decompress_nsz_file(str(nsz_file), str(out_dir), "/fake/keys.txt")
 
-    assert nsz_log.exists(), "dedicated nsz.log was not created"
-    assert "game.nsz" in nsz_log.read_text()
+    assert err_log.exists(), "error.log was not written"
+    text = err_log.read_text()
+    assert "game.nsz" in text
+    assert "[NSZ]" in text
+
+
+def test_no_separate_nsz_log_file_is_created(tmp_path, monkeypatch):
+    """NSZ logging must not create a separate nsz.log sibling file."""
+    err_log = tmp_path / "error.log"
+    monkeypatch.setattr(L, "_log_file", str(err_log), raising=False)
+
+    L.log_nsz("hello")
+
+    assert not (tmp_path / "nsz.log").exists()
+    assert "hello" in err_log.read_text()
 
 
 def test_multiline_traceback_on_raise(tmp_path, monkeypatch):
     """An exception during decompression yields a multi-line entry with the
-    exception class name and a Traceback block."""
-    nsz_log = tmp_path / "nsz.log"
-    monkeypatch.setattr(L, "_nsz_log_file", str(nsz_log), raising=False)
+    exception class name and a Traceback block, in error.log."""
+    err_log = tmp_path / "error.log"
+    monkeypatch.setattr(L, "_log_file", str(err_log), raising=False)
 
     monkeypatch.setattr(
         nsz_mod, "check_output_capacity", lambda d, n: (True, None), raising=False
@@ -80,7 +89,7 @@ def test_multiline_traceback_on_raise(tmp_path, monkeypatch):
 
     decompress_nsz_file(str(nsz_file), str(out_dir), "/fake/keys.txt")
 
-    text = nsz_log.read_text()
+    text = err_log.read_text()
     assert "RuntimeError" in text
     assert "boom" in text
     assert "Traceback:" in text
@@ -89,8 +98,8 @@ def test_multiline_traceback_on_raise(tmp_path, monkeypatch):
 
 def test_keys_path_not_set_distinct_token(tmp_path, monkeypatch):
     """keys_path="" logs 'keys_path not set' and NOT 'nsz library unavailable'."""
-    nsz_log = tmp_path / "nsz.log"
-    monkeypatch.setattr(L, "_nsz_log_file", str(nsz_log), raising=False)
+    err_log = tmp_path / "error.log"
+    monkeypatch.setattr(L, "_log_file", str(err_log), raising=False)
 
     nsz_file = tmp_path / "game.nsz"
     nsz_file.write_bytes(b"\x00" * 1024)
@@ -100,7 +109,7 @@ def test_keys_path_not_set_distinct_token(tmp_path, monkeypatch):
     result = decompress_nsz_file(str(nsz_file), str(out_dir), "")
 
     assert result is False
-    text = nsz_log.read_text()
+    text = err_log.read_text()
     assert "keys_path not set" in text
     assert "nsz library unavailable" not in text
 
@@ -108,8 +117,8 @@ def test_keys_path_not_set_distinct_token(tmp_path, monkeypatch):
 def test_library_unavailable_distinct_token(tmp_path, monkeypatch):
     """When the nsz library genuinely cannot load (even after the re-import
     branch), the path logs 'nsz library unavailable'."""
-    nsz_log = tmp_path / "nsz.log"
-    monkeypatch.setattr(L, "_nsz_log_file", str(nsz_log), raising=False)
+    err_log = tmp_path / "error.log"
+    monkeypatch.setattr(L, "_log_file", str(err_log), raising=False)
 
     monkeypatch.setattr(nsz_mod, "_nsz_decompress", None, raising=False)
 
@@ -135,13 +144,13 @@ def test_library_unavailable_distinct_token(tmp_path, monkeypatch):
     result = decompress_nsz_file(str(nsz_file), str(out_dir), "/fake/keys.txt")
 
     assert result is False
-    assert "nsz library unavailable" in nsz_log.read_text()
+    assert "nsz library unavailable" in err_log.read_text()
 
 
 def test_integer_file_size_logged_before_library_call(tmp_path, monkeypatch):
     """An integer 'file_size=' diagnostic is logged before invoking the lib."""
-    nsz_log = tmp_path / "nsz.log"
-    monkeypatch.setattr(L, "_nsz_log_file", str(nsz_log), raising=False)
+    err_log = tmp_path / "error.log"
+    monkeypatch.setattr(L, "_log_file", str(err_log), raising=False)
 
     monkeypatch.setattr(
         nsz_mod, "check_output_capacity", lambda d, n: (True, None), raising=False
@@ -159,7 +168,7 @@ def test_integer_file_size_logged_before_library_call(tmp_path, monkeypatch):
 
     import re
 
-    text = nsz_log.read_text()
+    text = err_log.read_text()
     assert re.search(r"file_size=\d+", text), "no integer file_size= diagnostic logged"
 
 
@@ -168,8 +177,8 @@ def test_fallback_on_primary_oserror(tmp_path, monkeypatch):
     import builtins
 
     real_open = builtins.open
-    primary = str(tmp_path / "primary" / "nsz.log")
-    monkeypatch.setattr(L, "_nsz_log_file", primary, raising=False)
+    primary = str(tmp_path / "primary" / "error.log")
+    monkeypatch.setattr(L, "_log_file", primary, raising=False)
 
     def fake_open(path, *args, **kwargs):
         if str(path) == primary:

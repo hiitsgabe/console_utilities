@@ -186,8 +186,7 @@ class NszLogModalState:
     show: bool = False
     lines: List[str] = field(default_factory=list)
     scroll_offset: int = 0
-    button_index: int = 0  # 0 = Save to error.log, 1 = Close
-    saved: bool = False  # True once the log has been saved to error.log
+    button_index: int = 0  # 0 = Refresh, 1 = Close
 
 
 @dataclass
@@ -1048,7 +1047,7 @@ class UIRects:
     folder_cancel_button: Optional[pygame.Rect] = None
     confirm_ok_button: Optional[pygame.Rect] = None
     confirm_cancel_button: Optional[pygame.Rect] = None
-    nsz_log_save_button: Optional[pygame.Rect] = None
+    nsz_log_refresh_button: Optional[pygame.Rect] = None
     nsz_log_close_button: Optional[pygame.Rect] = None
     modal_char_rects: List[Any] = field(default_factory=list)
     modal_back_button: Optional[pygame.Rect] = None

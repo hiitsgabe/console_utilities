@@ -1,9 +1,9 @@
-"""Tests for the NSZ in-app log viewer data layer (GAB-58 follow-up).
+"""Tests for the NSZ log viewer data layer (GAB-58).
 
-The dedicated nsz.log file is unreachable on Android, so log_nsz() must also
-capture entries to an in-memory ring buffer that an in-app modal can display,
-with a fallback to reading nsz.log from disk, plus a "force save to error.log"
-action so the diagnostics land in the one log the user can actually retrieve.
+NSZ diagnostics are written into the main error.log (tagged [NSZ]) so they
+persist across the app being killed/restarted mid-extraction on Android. The
+viewer reads error.log (source of truth), falling back to an in-memory buffer
+only when the file is unavailable.
 """
 
 import importlib.util
@@ -12,7 +12,6 @@ import sys
 
 import pytest
 
-# Keep nsz/ParseArguments import-time argv parsing from choking on pytest args.
 sys.argv = sys.argv[:1]
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
@@ -31,25 +30,35 @@ def _load_module(name, relpath):
     return mod
 
 
-# Load utils/logging.py under a non-stdlib name so we never shadow `logging`.
 L = _load_module("cu_logging", "utils/logging.py")
 
 
 @pytest.fixture(autouse=True)
 def isolate_logs(tmp_path):
-    """Redirect both log files to tmp and start with an empty buffer."""
-    L._nsz_log_file = str(tmp_path / "nsz.log")
     L._log_file = str(tmp_path / "error.log")
     L.clear_nsz_log_buffer()
     yield
 
 
-def test_log_nsz_captures_entry_to_buffer():
+def test_log_nsz_writes_to_error_log_tagged():
     L.log_nsz("decompress started", error_type="INFO")
+    with open(L._log_file) as f:
+        text = f.read()
+    assert "decompress started" in text
+    assert "[NSZ]" in text
+    assert "INFO" in text
+
+
+def test_log_nsz_does_not_create_separate_nsz_log(tmp_path):
+    L.log_nsz("something")
+    assert not (tmp_path / "nsz.log").exists()
+
+
+def test_log_nsz_captures_entry_to_buffer():
+    L.log_nsz("buffer-alpha")
     buf = L.get_nsz_log_buffer()
     assert len(buf) == 1
-    assert "decompress started" in buf[0]
-    assert "INFO" in buf[0]
+    assert "buffer-alpha" in buf[0]
 
 
 def test_buffer_is_capped_dropping_oldest():
@@ -59,8 +68,8 @@ def test_buffer_is_capped_dropping_oldest():
     buf = L.get_nsz_log_buffer()
     joined = "\n".join(buf)
     assert len(buf) == cap
-    assert "entry-0" not in joined  # oldest dropped
-    assert f"entry-{cap + 24}" in joined  # newest kept
+    assert "entry-0" not in joined
+    assert f"entry-{cap + 24}" in joined
 
 
 def test_clear_buffer_empties_it():
@@ -69,38 +78,34 @@ def test_clear_buffer_empties_it():
     assert L.get_nsz_log_buffer() == []
 
 
-def test_read_lines_prefers_in_memory_buffer():
-    L.log_nsz("buffer-alpha")
+def test_read_lines_reads_error_log():
+    L.log_nsz("persisted-line")
+    L.clear_nsz_log_buffer()  # force reading from the file, not the buffer
     lines = L.read_nsz_log_lines()
-    assert any("buffer-alpha" in line for line in lines)
+    assert any("persisted-line" in line for line in lines)
 
 
-def test_read_lines_falls_back_to_file_when_buffer_empty(tmp_path):
+def test_read_lines_returns_recent_tail():
+    total = L.NSZ_VIEW_MAX_LINES + 50
+    for i in range(total):
+        L.log_nsz(f"line-{i}")
     L.clear_nsz_log_buffer()
-    with open(L._nsz_log_file, "w") as f:
-        f.write("file-line-1\nfile-line-2\n")
     lines = L.read_nsz_log_lines()
-    assert "file-line-1" in lines
-    assert "file-line-2" in lines
+    assert len(lines) <= L.NSZ_VIEW_MAX_LINES
+    joined = "\n".join(lines)
+    assert f"line-{total - 1}" in joined  # newest kept
+    assert "line-0" not in joined  # oldest dropped from the tail
 
 
-def test_read_lines_empty_when_no_buffer_and_no_file():
+def test_read_lines_falls_back_to_buffer_when_file_unreadable():
+    L.log_nsz("in-buffer-only")
+    # Point the file at an unreadable path so the primary read fails.
+    L._log_file = str(os.path.join(os.path.dirname(L._log_file), "nope", "error.log"))
+    lines = L.read_nsz_log_lines()
+    assert any("in-buffer-only" in line for line in lines)
+
+
+def test_read_lines_empty_when_no_file_and_no_buffer():
     L.clear_nsz_log_buffer()
-    L._nsz_log_file = str(os.path.join(os.path.dirname(L._nsz_log_file), "missing.log"))
+    L._log_file = str(os.path.join(os.path.dirname(L._log_file), "nope", "error.log"))
     assert L.read_nsz_log_lines() == []
-
-
-def test_save_to_error_log_appends_buffer_content():
-    L.log_nsz("save-me-token")
-    ok = L.save_nsz_log_to_error_log()
-    assert ok is True
-    with open(L._log_file) as f:
-        content = f.read()
-    assert "save-me-token" in content
-    assert "NSZ LOG" in content  # a header marks the appended section
-
-
-def test_save_returns_false_when_nothing_to_save():
-    L.clear_nsz_log_buffer()
-    L._nsz_log_file = str(os.path.join(os.path.dirname(L._nsz_log_file), "missing.log"))
-    assert L.save_nsz_log_to_error_log() is False
