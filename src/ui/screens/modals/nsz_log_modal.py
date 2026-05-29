@@ -26,10 +26,17 @@ class NszLogModal:
         self.modal_template = ModalTemplate(theme)
         self.text = Text(theme)
 
+    # Vertical space taken by the title bar above the log content.
+    TITLE_ALLOWANCE = 50
+
     def _visible_lines(self) -> int:
-        """Number of log lines that fit in the content area."""
-        # HEIGHT minus a little headroom for the title gap, divided by line height.
-        usable = self.HEIGHT - self.theme.padding_md * 2
+        """Number of log lines that fit in the content area.
+
+        Conservative (accounts for the title bar) so the newest line at the
+        bottom of the scroll is fully visible rather than clipped behind the
+        button row.
+        """
+        usable = self.HEIGHT - self.TITLE_ALLOWANCE - self.theme.padding_md * 2
         return max(1, usable // self.LINE_HEIGHT)
 
     def max_scroll_offset(self, lines: List[str]) -> int:
@@ -108,6 +115,19 @@ class NszLogModal:
                 self._scroll_arrow(screen, content_rect, "up")
             if offset < max_offset:
                 self._scroll_arrow(screen, content_rect, "down")
+
+        # Draw an unmistakable focus outline around the selected button so
+        # left/right navigation is clearly visible (the primary/secondary
+        # styles alone read as too similar on-device).
+        focused = button_rects[button_index] if button_rects else None
+        if focused is not None:
+            pygame.draw.rect(
+                screen,
+                self.theme.text_primary,
+                focused.inflate(6, 6),
+                width=2,
+                border_radius=self.theme.radius_sm,
+            )
 
         refresh_rect, close_button_rect = button_rects[0], button_rects[1]
         return modal_rect, refresh_rect, close_button_rect
