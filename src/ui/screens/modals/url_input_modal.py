@@ -39,6 +39,7 @@ class UrlInputModal:
         context: str = "archive_json",
         input_mode: str = "keyboard",
         shift_active: bool = False,
+        scroll_offset: int = 0,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """
         Render the URL input modal.
@@ -74,7 +75,9 @@ class UrlInputModal:
 
         # Android mode: larger modal with OK/Cancel buttons, native soft keyboard
         if input_mode == "android":
-            return self._render_android_mode(screen, input_text, title)
+            return self._render_android_mode(
+                screen, input_text, title, scroll_offset=scroll_offset
+            )
 
         # Gamepad and touch modes use on-screen keyboard
         return self._render_onscreen_keyboard_mode(
@@ -163,7 +166,11 @@ class UrlInputModal:
         return modal_rect, content_rect, None, []
 
     def _render_android_mode(
-        self, screen: pygame.Surface, input_text: str, title: str
+        self,
+        screen: pygame.Surface,
+        input_text: str,
+        title: str,
+        scroll_offset: int = 0,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """Render modal for Android (larger, with OK/Cancel buttons)."""
         sw, sh = screen.get_size()
@@ -218,19 +225,31 @@ class UrlInputModal:
         self.backspace_rect = bksp_rect
 
         # Draw text
-        display_text = input_text if input_text else "Type URL..."
-        text_color = self.theme.text_primary if input_text else self.theme.text_disabled
-        self.text.render(
-            screen,
-            display_text,
-            (
-                field_rect.left + padding,
-                field_rect.centery - self.theme.font_size_md // 2,
-            ),
-            color=text_color,
-            size=self.theme.font_size_md,
-            max_width=field_rect.width - padding * 2,
-        )
+        if input_text:
+            self.text.render_scrolled(
+                screen,
+                input_text,
+                (
+                    field_rect.left + padding,
+                    field_rect.centery - self.theme.font_size_md // 2,
+                ),
+                max_width=field_rect.width - padding * 2,
+                scroll_offset=scroll_offset,
+                color=self.theme.text_primary,
+                size=self.theme.font_size_md,
+            )
+        else:
+            self.text.render(
+                screen,
+                "Type URL...",
+                (
+                    field_rect.left + padding,
+                    field_rect.centery - self.theme.font_size_md // 2,
+                ),
+                color=self.theme.text_disabled,
+                size=self.theme.font_size_md,
+                max_width=field_rect.width - padding * 2,
+            )
 
         # Draw cursor
         if input_text:
@@ -238,8 +257,10 @@ class UrlInputModal:
                 field_rect.left
                 + padding
                 + self.text.measure(input_text, self.theme.font_size_md)[0]
+                - scroll_offset
                 + 2
             )
+            cursor_x = min(cursor_x, field_rect.right - 2)
         else:
             cursor_x = field_rect.left + padding
 
