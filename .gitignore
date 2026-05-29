@@ -2,6 +2,7 @@ py_downloads/
 roms/
 config.json
 error.log
+nsz.log
 added_systems.json
 controller_mapping.json
 
