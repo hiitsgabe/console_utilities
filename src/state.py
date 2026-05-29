@@ -180,6 +180,17 @@ class ConfirmModalState:
 
 
 @dataclass
+class NszLogModalState:
+    """State for the NSZ decompression log viewer modal."""
+
+    show: bool = False
+    lines: List[str] = field(default_factory=list)
+    scroll_offset: int = 0
+    button_index: int = 0  # 0 = Save to error.log, 1 = Close
+    saved: bool = False  # True once the log has been saved to error.log
+
+
+@dataclass
 class IALoginState:
     """State for Internet Archive login modal."""
 
@@ -1037,6 +1048,8 @@ class UIRects:
     folder_cancel_button: Optional[pygame.Rect] = None
     confirm_ok_button: Optional[pygame.Rect] = None
     confirm_cancel_button: Optional[pygame.Rect] = None
+    nsz_log_save_button: Optional[pygame.Rect] = None
+    nsz_log_close_button: Optional[pygame.Rect] = None
     modal_char_rects: List[Any] = field(default_factory=list)
     modal_back_button: Optional[pygame.Rect] = None
     scroll_offset: int = 0  # Current scroll offset for item index calculation
@@ -1102,6 +1115,7 @@ class AppState:
         self.game_details = GameDetailsState()
         self.loading = LoadingState()
         self.confirm_modal = ConfirmModalState()
+        self.nsz_log_modal = NszLogModalState()
         self.show_search_input: bool = False
         self.show_controller_mapping: bool = False
 
@@ -1252,6 +1266,7 @@ class AppState:
         self.folder_name_input.show = False
         self.url_input.show = False
         self.game_details.show = False
+        self.nsz_log_modal.show = False
         self.show_search_input = False
         self.char_selector.active = False
         self.ia_login.show = False

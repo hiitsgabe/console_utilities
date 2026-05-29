@@ -1165,6 +1165,10 @@ class ConsoleUtilitiesApp:
                     self.state.ui_rects.confirm_cancel_button = rects.get(
                         "confirm_cancel"
                     )
+                    self.state.ui_rects.nsz_log_save_button = rects.get("nsz_log_save")
+                    self.state.ui_rects.nsz_log_close_button = rects.get(
+                        "nsz_log_close"
+                    )
                     self.state.ui_rects.rects = rects
 
                     if self.scanline_surface:
@@ -1302,6 +1306,21 @@ class ConsoleUtilitiesApp:
                 self.state.confirm_modal.button_index = (
                     1 - self.state.confirm_modal.button_index
                 )
+            return
+
+        if self.state.nsz_log_modal.show:
+            modal = self.state.nsz_log_modal
+            if direction in ("left", "right"):
+                modal.button_index = 1 - modal.button_index
+            elif direction in ("up", "down"):
+                max_offset = self.screen_manager.nsz_log_modal.max_scroll_offset(
+                    modal.lines
+                )
+                step = 1
+                if direction == "down":
+                    modal.scroll_offset = min(modal.scroll_offset + step, max_offset)
+                else:
+                    modal.scroll_offset = max(modal.scroll_offset - step, 0)
             return
 
         # Internet Archive modals navigation
@@ -2856,6 +2875,18 @@ class ConsoleUtilitiesApp:
                     return
             return
 
+        # Check NSZ log modal buttons
+        if self.state.nsz_log_modal.show:
+            if self.state.ui_rects.nsz_log_save_button:
+                if self.state.ui_rects.nsz_log_save_button.collidepoint(x, y):
+                    self._save_nsz_log_to_error_log()
+                    return
+            if self.state.ui_rects.nsz_log_close_button:
+                if self.state.ui_rects.nsz_log_close_button.collidepoint(x, y):
+                    self.state.nsz_log_modal.show = False
+                    return
+            return
+
         # Check steam shortcut modal clicks
         if (
             self.state.steam_shortcut.show
@@ -3339,6 +3370,8 @@ class ConsoleUtilitiesApp:
                 self.state.auth_token_input.show = False
         elif self.state.confirm_modal.show:
             self._handle_confirm_modal_cancel()
+        elif self.state.nsz_log_modal.show:
+            self.state.nsz_log_modal.show = False
         elif self.state.url_input.show:
             self.state.url_input.show = False
         elif self.state.folder_name_input.show:
@@ -3556,6 +3589,10 @@ class ConsoleUtilitiesApp:
                 self._handle_confirm_modal_ok()
             else:
                 self._handle_confirm_modal_cancel()
+            return
+
+        if self.state.nsz_log_modal.show:
+            self._handle_nsz_log_modal_select()
             return
 
         if self.state.auth_token_input.show:
@@ -3858,6 +3895,34 @@ class ConsoleUtilitiesApp:
                 self.download_manager.remove_from_queue(queue.highlighted)
             elif item.status in ("downloading", "extracting", "moving"):
                 self.download_manager.cancel_current()
+
+    def _open_nsz_log_modal(self):
+        """Open the NSZ decompression log viewer.
+
+        Populates the modal from the in-memory NSZ buffer (with an nsz.log file
+        fallback) so the diagnostics are visible in-app even when the log file
+        is unreachable on the device.
+        """
+        from utils.logging import read_nsz_log_lines
+
+        self.state.nsz_log_modal.lines = read_nsz_log_lines()
+        self.state.nsz_log_modal.scroll_offset = 0
+        self.state.nsz_log_modal.button_index = 0
+        self.state.nsz_log_modal.saved = False
+        self.state.nsz_log_modal.show = True
+
+    def _handle_nsz_log_modal_select(self):
+        """Activate the focused NSZ log modal button (Save or Close)."""
+        if self.state.nsz_log_modal.button_index == 0:
+            self._save_nsz_log_to_error_log()
+        else:
+            self.state.nsz_log_modal.show = False
+
+    def _save_nsz_log_to_error_log(self):
+        """Force-save the NSZ diagnostics into the retrievable error.log."""
+        from utils.logging import save_nsz_log_to_error_log
+
+        self.state.nsz_log_modal.saved = save_nsz_log_to_error_log()
 
     def _show_download_all_confirm(self):
         """Show confirmation modal for downloading all games."""
@@ -6461,6 +6526,13 @@ class ConsoleUtilitiesApp:
         elif self.state.mode == "file_explorer":
             self._open_file_explorer_context_menu()
 
+        elif self.state.mode == "downloads":
+            # See the NSZ decompression log for a failed download.
+            queue = self.state.download_queue
+            if queue.items and 0 <= queue.highlighted < len(queue.items):
+                if queue.items[queue.highlighted].status == "failed":
+                    self._open_nsz_log_modal()
+
     def _handle_start_action(self):
         """Handle start key press - download selected games or go home."""
         # If in games mode with selected games, start download
@@ -6690,6 +6762,7 @@ class ConsoleUtilitiesApp:
         return (
             self.state.show_search_input
             or self.state.game_details.show
+            or self.state.nsz_log_modal.show
             or self.state.folder_browser.show
             or self.state.url_input.show
             or self.state.folder_name_input.show
