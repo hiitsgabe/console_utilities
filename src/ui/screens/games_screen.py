@@ -87,10 +87,13 @@ class GamesScreen:
         # Reserve footer space for status bar when games are selected
         footer_height = 40 if selected_games else 0
 
-        # Add "Download All" as an extra item if enabled
-        display_items = list(games)
+        # Add "Download All" as an extra item if enabled.
+        # Avoid copying the entire list on every frame when the sentinel is not needed.
         if show_download_all and games:
+            display_items = list(games)
             display_items.append({"_download_all": True, "name": "Download All Games"})
+        else:
+            display_items = games
 
         # Adjust highlighted to not exceed display items
         display_highlighted = min(highlighted, len(display_items) - 1)
