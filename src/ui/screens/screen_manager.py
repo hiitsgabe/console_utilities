@@ -179,14 +179,14 @@ class ScreenManager:
             return rects
 
         if state.nsz_log_modal.show:
-            modal_rect, save_rect, close_rect = self.nsz_log_modal.render(
+            modal_rect, refresh_rect, close_rect = self.nsz_log_modal.render(
                 screen,
                 state.nsz_log_modal.lines,
                 state.nsz_log_modal.scroll_offset,
                 state.nsz_log_modal.button_index,
             )
             rects["modal"] = modal_rect
-            rects["nsz_log_save"] = save_rect
+            rects["nsz_log_refresh"] = refresh_rect
             rects["nsz_log_close"] = close_rect
             return rects
 
