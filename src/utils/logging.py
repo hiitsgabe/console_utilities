@@ -14,11 +14,18 @@ from constants import TEMP_LOG_DIR
 
 # Module-level log file path
 _log_file: str = os.path.join(TEMP_LOG_DIR, "error.log")
-_nsz_log_file: str = os.path.join(TEMP_LOG_DIR, "nsz.log")
 
-# In-memory NSZ diagnostics buffer. The nsz.log file is often unreachable on
-# Android (sandboxed app storage), so every log_nsz() entry is also captured
-# here for the in-app log viewer. Capped so a long session can't grow unbounded.
+# NSZ diagnostics are written into the main error.log, tagged so they are easy
+# to spot among other entries. A separate nsz.log proved unreliable/invisible
+# on Android, and error.log is the file that reliably persists and is
+# retrievable there.
+NSZ_LOG_TAG: str = "[NSZ]"
+
+# Number of trailing error.log lines the in-app viewer shows.
+NSZ_VIEW_MAX_LINES: int = 500
+
+# In-memory NSZ diagnostics buffer, used as a fallback source for the in-app
+# viewer when error.log cannot be read. Capped so a long session stays bounded.
 NSZ_LOG_BUFFER_MAX: int = 1000
 _nsz_log_buffer: "deque[str]" = deque(maxlen=NSZ_LOG_BUFFER_MAX)
 
@@ -26,11 +33,6 @@ _nsz_log_buffer: "deque[str]" = deque(maxlen=NSZ_LOG_BUFFER_MAX)
 def get_log_file() -> str:
     """Get the current log file path."""
     return _log_file
-
-
-def get_nsz_log_file() -> str:
-    """Get the current NSZ log file path."""
-    return _nsz_log_file
 
 
 def _write_fallback(text: str) -> None:
@@ -97,46 +99,34 @@ def log_nsz(
     traceback_str: Optional[str] = None,
 ) -> None:
     """
-    Log an NSZ diagnostic message to the dedicated NSZ log file and stdout.
+    Log an NSZ diagnostic message into the main ``error.log`` and stdout.
 
-    Mirrors ``log_error`` but targets ``_nsz_log_file`` so NSZ decompression
-    diagnostics land in their own ``nsz.log`` (sibling of ``error.log``) and
-    never pollute the general error log. On a primary-write OSError it routes
-    the entry through the hardened ``_write_fallback`` path.
+    NSZ diagnostics go straight into ``error.log`` (tagged ``[NSZ]``) rather than
+    a separate file: error.log is created at startup and reliably persists / is
+    retrievable on Android, so entries survive even when a large-file extraction
+    crashes or the app is restarted mid-decompression. Each entry is also kept in
+    a small in-memory buffer as a fallback source for the in-app viewer when the
+    file cannot be read.
 
     Args:
         error_msg: The message to log
         error_type: Optional error type/class name
         traceback_str: Optional traceback string
     """
+    tagged = f"{NSZ_LOG_TAG} {error_msg}"
+
+    # Capture to the in-memory buffer (display-friendly, no separator rule).
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_message = f"[{timestamp}] {error_msg}"
-
+    entry = f"[{timestamp}] {tagged}"
     if error_type:
-        log_message += f" | {error_type}"
-
-    # Always print to stdout (captured by web companion's _LogCapture)
-    print(log_message, flush=True)
-
-    # Capture to the in-memory buffer for the in-app viewer (display-friendly,
-    # no separator rule). Survives even when the file write below fails.
-    entry = log_message
+        entry += f" | {error_type}"
     if traceback_str:
         entry += f"\nTraceback:\n{traceback_str}"
     _nsz_log_buffer.append(entry)
 
-    # Build full file entry with traceback
-    file_message = log_message + "\n"
-    if traceback_str:
-        file_message += f"Traceback:\n{traceback_str}\n"
-    file_message += "-" * 80 + "\n"
-
-    try:
-        with open(_nsz_log_file, "a") as f:
-            f.write(file_message)
-    except OSError as e:
-        print(f"Failed to write log to {_nsz_log_file}: {e}", file=sys.stderr, flush=True)
-        _write_fallback(file_message)
+    # Persist through the shared error.log writer (stdout mirror + hardened
+    # fallback on OSError are handled there).
+    log_error(tagged, error_type, traceback_str)
 
 
 def get_nsz_log_buffer() -> List[str]:
@@ -150,57 +140,29 @@ def clear_nsz_log_buffer() -> None:
 
 
 def read_nsz_log_lines() -> List[str]:
-    """Return NSZ diagnostics as display lines for the in-app viewer.
+    """Return recent log lines for the in-app viewer.
 
-    Prefers the in-memory buffer (always available, even on Android where the
-    file path is unreachable). Falls back to reading ``nsz.log`` from disk when
-    the buffer is empty. Returns an empty list when neither source has content.
+    Reads the tail of ``error.log`` (the source of truth, which persists across
+    restarts/crashes) so the user sees NSZ diagnostics *and* the surrounding
+    download/processing errors for a failed item. Falls back to the in-memory
+    buffer only when the file cannot be read. Returns ``[]`` when neither source
+    has content.
     """
-    if _nsz_log_buffer:
-        lines: List[str] = []
-        for entry in _nsz_log_buffer:
-            lines.extend(entry.splitlines())
-        return lines
-
     try:
-        with open(_nsz_log_file, "r") as f:
-            return f.read().splitlines()
+        with open(_log_file, "r") as f:
+            lines = f.read().splitlines()
+        if lines:
+            return lines[-NSZ_VIEW_MAX_LINES:]
     except OSError:
-        return []
+        pass
 
+    if _nsz_log_buffer:
+        out: List[str] = []
+        for entry in _nsz_log_buffer:
+            out.extend(entry.splitlines())
+        return out
 
-def save_nsz_log_to_error_log() -> bool:
-    """Append the current NSZ diagnostics into the main ``error.log``.
-
-    The error log is the one location users can reliably retrieve, so this lets
-    them force the NSZ diagnostics there for sharing. Returns True when content
-    was written, False when there was nothing to save or the write failed.
-    """
-    lines = read_nsz_log_lines()
-    if not lines:
-        return False
-
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    block = (
-        f"\n===== NSZ LOG (saved {timestamp}) =====\n"
-        + "\n".join(lines)
-        + "\n"
-        + "=" * 80
-        + "\n"
-    )
-    try:
-        with open(_log_file, "a") as f:
-            f.write(block)
-        print(f"NSZ log saved to {_log_file}", flush=True)
-        return True
-    except OSError as e:
-        print(
-            f"Failed to save NSZ log to {_log_file}: {e}",
-            file=sys.stderr,
-            flush=True,
-        )
-        _write_fallback(block)
-        return False
+    return []
 
 
 def init_log_file() -> bool:
