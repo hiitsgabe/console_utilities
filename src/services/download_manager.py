@@ -811,6 +811,78 @@ class DownloadManager:
                 return urljoin(base_url, filename)
         return None
 
+    def retry_nsz_decompression(self, item: DownloadQueueItem):
+        """Re-run NSZ decompression for a failed item via the python path.
+
+        Runs the desktop ``decompress_nsz_file`` flow (the same one the python
+        downloader uses) in a background thread, independent of any Android
+        native download/extraction handler. Diagnostics go to error.log via
+        log_nsz so the attempt is visible in the in-app log viewer. Returns the
+        worker thread so callers can join it in tests.
+        """
+        import threading
+
+        t = threading.Thread(
+            target=self._retry_decompress_worker, args=(item,), daemon=True
+        )
+        t.start()
+        return t
+
+    def _retry_decompress_worker(self, item: DownloadQueueItem) -> bool:
+        """Synchronous retry of NSZ decompression on the already-downloaded file."""
+        filename = self._get_filename(item.game)
+        file_path = os.path.join(self.work_dir, filename)
+
+        if not os.path.exists(file_path):
+            log_nsz(f"Retry skipped: downloaded file missing at {file_path}")
+            item.status = "failed"
+            item.error = "File missing; re-download to retry"
+            return False
+
+        roms_folder = self._get_roms_folder(item.system_data)
+        keys_path = self.settings.get("nsz_keys_path", "")
+        os.makedirs(roms_folder, exist_ok=True)
+
+        item.status = "extracting"
+        item.error = ""
+        item.progress = 0.0
+        log_nsz(
+            f"Retry NSZ decompression (python path): file={filename} "
+            f"out={roms_folder} keys_set={bool(keys_path)}"
+        )
+
+        def _progress(_text: str, percent: int):
+            item.progress = percent / 100.0
+
+        try:
+            success = decompress_nsz_file(file_path, roms_folder, keys_path, _progress)
+        except Exception as e:
+            import traceback
+
+            log_nsz(
+                f"Retry NSZ decompression crashed for {filename}: {e}",
+                traceback_str=traceback.format_exc(),
+            )
+            item.status = "failed"
+            item.error = str(e)[:50]
+            return False
+
+        if success:
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except OSError:
+                    pass
+            item.status = "completed"
+            item.progress = 1.0
+            log_nsz(f"Retry NSZ decompression succeeded for {filename}")
+            return True
+
+        item.status = "failed"
+        item.error = "NSZ decompression failed"
+        log_nsz(f"Retry NSZ decompression failed for {filename}")
+        return False
+
     def _get_roms_folder(self, system_data: Dict[str, Any]) -> str:
         """Get the target ROMs folder for a system."""
         system_name = system_data.get("name", "")

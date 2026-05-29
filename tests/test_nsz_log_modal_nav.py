@@ -85,3 +85,60 @@ def test_select_refresh_button_keeps_modal_open():
 
     a._select_item()
     assert a.state.nsz_log_modal.show is True  # refresh must not close
+
+
+def _make_app_with(*method_names):
+    fake = SimpleNamespace()
+    fake.state = AppState()
+    for name in method_names:
+        setattr(fake, name, getattr(App, name).__get__(fake))
+    return fake
+
+
+def test_start_on_failed_nsz_download_triggers_retry():
+    from state import DownloadQueueItem
+
+    fake = _make_app_with("_handle_start_action")
+    fake.state.mode = "downloads"
+    fake.state.download_queue.items = [
+        DownloadQueueItem(
+            game={"name": "g.nsz"}, system_data={}, system_name="S", status="failed"
+        )
+    ]
+    fake.state.download_queue.highlighted = 0
+
+    called = {"n": 0}
+    fake._retry_failed_download = lambda: called.__setitem__("n", called["n"] + 1)
+
+    fake._handle_start_action()
+    assert called["n"] == 1
+
+
+def test_retry_failed_download_calls_manager_for_nsz_only():
+    from state import DownloadQueueItem
+
+    fake = _make_app_with("_retry_failed_download")
+    fake.state.mode = "downloads"
+
+    recorder = {"items": []}
+    mgr = SimpleNamespace(
+        retry_nsz_decompression=lambda item: recorder["items"].append(item)
+    )
+    fake._retry_manager = lambda: mgr
+
+    # Non-.nsz failed item: ignored.
+    non_nsz = DownloadQueueItem(
+        game={"name": "g.zip"}, system_data={}, system_name="S", status="failed"
+    )
+    fake.state.download_queue.items = [non_nsz]
+    fake.state.download_queue.highlighted = 0
+    fake._retry_failed_download()
+    assert recorder["items"] == []
+
+    # Failed .nsz item: retried.
+    nsz = DownloadQueueItem(
+        game={"name": "g.nsz"}, system_data={}, system_name="S", status="failed"
+    )
+    fake.state.download_queue.items = [nsz]
+    fake._retry_failed_download()
+    assert recorder["items"] == [nsz]

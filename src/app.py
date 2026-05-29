@@ -3934,6 +3934,38 @@ class ConsoleUtilitiesApp:
             modal.lines
         )
 
+    def _retry_manager(self):
+        """A desktop/python DownloadManager used to retry NSZ decompression.
+
+        Reuses the active manager when it is already the desktop one; otherwise
+        (Android native) lazily builds a desktop manager so the retry runs the
+        python decompression path, not the Android handler.
+        """
+        if isinstance(self.download_manager, _DesktopDownloadManager):
+            return self.download_manager
+        if getattr(self, "_retry_dl_manager", None) is None:
+            self._retry_dl_manager = _DesktopDownloadManager(
+                self.settings, self.state.download_queue
+            )
+        return self._retry_dl_manager
+
+    def _retry_failed_download(self):
+        """Retry NSZ decompression for the highlighted failed .nsz download."""
+        queue = self.state.download_queue
+        if not (queue.items and 0 <= queue.highlighted < len(queue.items)):
+            return
+        item = queue.items[queue.highlighted]
+        if item.status != "failed":
+            return
+        game = item.game
+        if isinstance(game, dict):
+            name = game.get("name") or game.get("filename") or ""
+        else:
+            name = str(game)
+        if not str(name).lower().endswith(".nsz"):
+            return
+        self._retry_manager().retry_nsz_decompression(item)
+
     def _show_download_all_confirm(self):
         """Show confirmation modal for downloading all games."""
         game_list = (
@@ -6549,6 +6581,18 @@ class ConsoleUtilitiesApp:
         if self.state.mode == "games" and self.state.selected_games:
             self._start_download()
             return
+
+        # Downloads screen: Start retries NSZ decompression on a failed item
+        # (via the python path). Other items fall through to default handling.
+        if self.state.mode == "downloads":
+            queue = self.state.download_queue
+            if (
+                queue.items
+                and 0 <= queue.highlighted < len(queue.items)
+                and queue.items[queue.highlighted].status == "failed"
+            ):
+                self._retry_failed_download()
+                return
 
         # Handle IA download wizard - start button triggers download
         if self.state.ia_download_wizard.show:
