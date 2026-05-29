@@ -16,7 +16,7 @@ from zipfile import ZipFile
 import requests
 
 from state import DownloadQueueItem, DownloadQueueState
-from utils.logging import log_error
+from utils.logging import log_error, log_nsz
 from utils.nsz import decompress_nsz_file
 from constants import SCRIPT_DIR
 
@@ -714,8 +714,16 @@ class DownloadManager:
 
                 keys_path = self.settings.get("nsz_keys_path", "")
                 os.makedirs(roms_folder, exist_ok=True)
+                log_nsz(
+                    f"NSZ call (download_manager): file={filename} path={file_path} "
+                    f"size={os.path.getsize(file_path) if os.path.exists(file_path) else -1} "
+                    f"keys_set={bool(keys_path)}"
+                )
                 success = decompress_nsz_file(
                     file_path, roms_folder, keys_path, nsz_progress
+                )
+                log_nsz(
+                    f"NSZ call result (download_manager): file={filename} success={success}"
                 )
 
                 if success:

@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from typing import Callable, Optional
 
-from .logging import log_error
+from .logging import log_nsz
 
 # Try to import NSZ module
 try:
@@ -107,8 +107,12 @@ def decompress_nsz_file(
     """
     filename = os.path.basename(nsz_file_path)
 
-    log_error(f"NSZ Called for {filename}")
-    log_error("NSZ Starting Checks:")
+    log_nsz(f"NSZ start: file={filename} path={nsz_file_path}")
+    log_nsz(f"NSZ keys_path={keys_path!r}")
+    if os.path.exists(nsz_file_path):
+        log_nsz(f"NSZ file_size={os.path.getsize(nsz_file_path)}")
+    else:
+        log_nsz("NSZ file_size=unknown (path does not exist)")
 
     def update_progress(message: str, progress: int):
         if progress_callback:
@@ -116,24 +120,26 @@ def decompress_nsz_file(
         else:
             print(message)
 
-    log_error(f"NSZ Key Path: {keys_path}")
-
     # Check if NSZ library is available
     local_nsz_decompress = _nsz_decompress
-    log_error(f"NSZ exists? : {local_nsz_decompress is not None}")
+    log_nsz(f"NSZ exists? : {local_nsz_decompress is not None}")
 
     if local_nsz_decompress is None:
         try:
             from nsz import decompress as local_nsz_decompress
 
-            log_error("IMPORTED NSZ AGAIN")
+            log_nsz("IMPORTED NSZ AGAIN")
         except (ImportError, AttributeError) as e:
-            log_error(f"NSZ IMPORT ERROR: {str(e)}")
+            log_nsz(f"NSZ IMPORT ERROR: {str(e)}")
             local_nsz_decompress = None
 
     nsz_success = False
 
-    if keys_path and local_nsz_decompress:
+    if not keys_path:
+        log_nsz("NSZ skipped: keys_path not set")
+    elif local_nsz_decompress is None:
+        log_nsz("NSZ skipped: nsz library unavailable")
+    else:
         try:
             update_progress(f"Decompressing {filename}...", 0)
 
@@ -145,7 +151,7 @@ def decompress_nsz_file(
             if file_size == 0:
                 raise ValueError(f"NSZ file is empty: {nsz_file_path}")
 
-            log_error(f"Attempting NSZ decompression of {filename} ({file_size} bytes)")
+            log_nsz(f"Attempting NSZ decompression of {filename} ({file_size} bytes)")
 
             # Pre-flight capacity check: decompressed NSP roughly doubles the
             # NSZ size. Block before extraction when the target can't hold it
@@ -154,7 +160,7 @@ def decompress_nsz_file(
             est_output = file_size * 2
             ok, reason = check_output_capacity(output_dir, est_output)
             if not ok:
-                log_error(f"Capacity check failed for {filename}: {reason}")
+                log_nsz(f"Capacity check failed for {filename}: {reason}")
                 update_progress(reason, 0)
                 return False
 
@@ -182,24 +188,30 @@ def decompress_nsz_file(
                 progress_callback=_on_progress,
             )
             nsz_success = True
-            log_error("NSZ decompression successful using nsz library")
+            log_nsz("NSZ decompression successful using nsz library")
 
         except Exception as e:
+            import traceback
+
             error_msg = f"NSZ library decompression failed: {e}"
             print(error_msg)
-            log_error(f"NSZ library method failed for {filename}: {str(e)}")
-            log_error(f"NSZ file path: {nsz_file_path}")
-            log_error(f"Output directory: {output_dir}")
-            log_error(f"Keys path: {keys_path}")
+            log_nsz(
+                f"NSZ library method failed for {filename}: {e}",
+                traceback_str=traceback.format_exc(),
+            )
+            log_nsz(f"NSZ file path: {nsz_file_path}")
+            log_nsz(f"Output directory: {output_dir}")
+            log_nsz(f"Keys path: {keys_path}")
 
             # Check if it's a corrupted file issue
             if "read returned empty" in str(e):
-                log_error("NSZ file appears to be corrupted or incomplete")
+                log_nsz("NSZ file appears to be corrupted or incomplete")
 
     if nsz_success:
+        log_nsz(f"NSZ completion: success file={filename}")
         update_progress(f"Decompressing {filename}... Complete", 100)
         return True
     else:
-        log_error(f"NSZ decompression failed for {filename}: All methods failed")
+        log_nsz(f"NSZ failure: file={filename} all methods failed")
         update_progress(f"NSZ decompression failed for {filename}", 0)
         return False
