@@ -957,8 +957,12 @@ class ConsoleUtilitiesApp:
                 text_modal_is_open = self._is_text_modal_open()
                 if text_modal_is_open and not text_modal_was_open:
                     pygame.key.start_text_input()
+                    # Start each android text field at the beginning so a
+                    # leftover offset from a prior field never clips the new one.
+                    self.state.text_scroll_offset = 0
                 elif not text_modal_is_open and text_modal_was_open:
                     pygame.key.stop_text_input()
+                    self.state.text_scroll_offset = 0
                 self._text_modal_open = text_modal_is_open
 
             # Process events — any input event dirties the frame
@@ -1184,9 +1188,50 @@ class ConsoleUtilitiesApp:
         """Handle navigation from held direction."""
         self._move_highlight(direction)
 
+    def _android_text_modal_active(self) -> bool:
+        """True when an Android text-input modal field is on screen.
+
+        On Android these modals (auth token, search, folder name, URL input,
+        IA login email/password, scraper-wizard edit-name) use the native soft
+        keyboard, so left/right should scroll the field text via
+        ``text_scroll_offset`` rather than move an on-screen char-grid cursor.
+        """
+        s = self.state
+        if s.auth_token_input.show and s.auth_token_input.step == "input":
+            return True
+        if s.show_search_input:
+            return True
+        if s.folder_name_input.show:
+            return True
+        if s.url_input.show:
+            return True
+        if s.ia_login.show and s.ia_login.step in ("email", "password"):
+            return True
+        if s.scraper_wizard.show and s.scraper_wizard.step == "edit_name":
+            return True
+        return False
+
     def _move_highlight(self, direction: str):
         """Move highlight in the given direction."""
         # Check modals first (they take priority over modes)
+
+        # On Android the text input modals use the native soft keyboard (no
+        # on-screen char grid), so left/right scroll the field text horizontally
+        # instead of moving a meaningless grid cursor. Mirrors game_details.
+        if (
+            BUILD_TARGET == "android"
+            and direction in ("left", "right")
+            and self._android_text_modal_active()
+        ):
+            scroll_step = 20
+            if direction == "right":
+                self.state.text_scroll_offset += scroll_step
+            else:
+                self.state.text_scroll_offset = max(
+                    0, self.state.text_scroll_offset - scroll_step
+                )
+            return
+
         if self.state.auth_token_input.show:
             if self.state.auth_token_input.step == "input":
                 self._navigate_keyboard_modal(

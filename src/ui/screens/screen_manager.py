@@ -186,6 +186,7 @@ class ScreenManager:
                     state.auth_token_input.cursor_position,
                     input_mode=modal_input_mode,
                     shift_active=state.auth_token_input.shift_active,
+                    scroll_offset=state.text_scroll_offset,
                 )
             )
             rects["modal"] = modal_rect
@@ -207,6 +208,7 @@ class ScreenManager:
                 state.search.cursor_position,
                 input_mode=modal_input_mode,
                 shift_active=state.search.shift_active,
+                scroll_offset=state.text_scroll_offset,
             )
             rects["modal"] = modal_rect
             rects["close"] = close_rect
@@ -226,6 +228,7 @@ class ScreenManager:
                     state.folder_name_input.cursor_position,
                     input_mode=modal_input_mode,
                     shift_active=state.folder_name_input.shift_active,
+                    scroll_offset=state.text_scroll_offset,
                 )
             )
             rects["modal"] = modal_rect
@@ -327,6 +330,7 @@ class ScreenManager:
                     state.url_input.context,
                     input_mode=modal_input_mode,
                     shift_active=state.url_input.shift_active,
+                    scroll_offset=state.text_scroll_offset,
                 )
             )
             rects["modal"] = modal_rect
@@ -351,6 +355,7 @@ class ScreenManager:
                     state.ia_login.error_message,
                     input_mode=modal_input_mode,
                     shift_active=state.ia_login.shift_active,
+                    scroll_offset=state.text_scroll_offset,
                 )
             )
             rects["modal"] = modal_rect
@@ -476,6 +481,7 @@ class ScreenManager:
                     search_name_shift=state.scraper_wizard.search_name_shift,
                     button_focused=state.scraper_wizard.button_focused,
                     nav_bar_index=state.scraper_wizard.nav_bar_index,
+                    scroll_offset=state.text_scroll_offset,
                 )
             )
             rects["modal"] = modal_rect

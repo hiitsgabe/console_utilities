@@ -39,6 +39,7 @@ class SearchModal:
         cursor_position: int,
         input_mode: str = "keyboard",
         shift_active: bool = False,
+        scroll_offset: int = 0,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """
         Render the search modal.
@@ -63,7 +64,9 @@ class SearchModal:
 
         # Android mode: larger modal with OK/Cancel buttons, native soft keyboard
         if input_mode == "android":
-            return self._render_android_mode(screen, search_text)
+            return self._render_android_mode(
+                screen, search_text, scroll_offset=scroll_offset
+            )
 
         # Gamepad and touch modes use on-screen keyboard
         return self._render_onscreen_keyboard_mode(
@@ -153,7 +156,7 @@ class SearchModal:
         return modal_rect, content_rect, None, []
 
     def _render_android_mode(
-        self, screen: pygame.Surface, search_text: str
+        self, screen: pygame.Surface, search_text: str, scroll_offset: int = 0
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
         """Render modal for Android (larger, with OK/Cancel buttons)."""
         sw, sh = screen.get_size()
@@ -208,21 +211,31 @@ class SearchModal:
         self.backspace_rect = bksp_rect
 
         # Draw text
-        display_text = search_text if search_text else "Type to search..."
-        text_color = (
-            self.theme.text_primary if search_text else self.theme.text_disabled
-        )
-        self.text.render(
-            screen,
-            display_text,
-            (
-                field_rect.left + padding,
-                field_rect.centery - self.theme.font_size_md // 2,
-            ),
-            color=text_color,
-            size=self.theme.font_size_md,
-            max_width=field_rect.width - padding * 2,
-        )
+        if search_text:
+            self.text.render_scrolled(
+                screen,
+                search_text,
+                (
+                    field_rect.left + padding,
+                    field_rect.centery - self.theme.font_size_md // 2,
+                ),
+                max_width=field_rect.width - padding * 2,
+                scroll_offset=scroll_offset,
+                color=self.theme.text_primary,
+                size=self.theme.font_size_md,
+            )
+        else:
+            self.text.render(
+                screen,
+                "Type to search...",
+                (
+                    field_rect.left + padding,
+                    field_rect.centery - self.theme.font_size_md // 2,
+                ),
+                color=self.theme.text_disabled,
+                size=self.theme.font_size_md,
+                max_width=field_rect.width - padding * 2,
+            )
 
         # Draw cursor
         if search_text:
@@ -230,8 +243,10 @@ class SearchModal:
                 field_rect.left
                 + padding
                 + self.text.measure(search_text, self.theme.font_size_md)[0]
+                - scroll_offset
                 + 2
             )
+            cursor_x = min(cursor_x, field_rect.right - 2)
         else:
             cursor_x = field_rect.left + padding
 
