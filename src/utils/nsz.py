@@ -28,6 +28,27 @@ def is_nsz_available() -> bool:
     return NSZ_AVAILABLE
 
 
+# Characters forbidden in FAT/exFAT filenames. Handheld ROM SD cards are almost
+# always exFAT, and creating a file whose name contains one of these fails with
+# EPERM on the FUSE mount -- that is why a title like "Cities: Skylines" (colon)
+# silently fails to extract while a legal-named title on the SAME folder works.
+_EXFAT_ILLEGAL = set('<>:"/\\|?*')
+
+
+def sanitize_for_fat(name: str) -> str:
+    """Return ``name`` with FAT/exFAT-illegal characters made safe.
+
+    Illegal and control chars become spaces; runs of whitespace collapse; a
+    trailing dot/space (also illegal on FAT) is stripped. The file extension is
+    preserved because '.' is legal. Never returns empty.
+    """
+    cleaned = "".join(
+        " " if (c in _EXFAT_ILLEGAL or ord(c) < 0x20) else c for c in name
+    )
+    cleaned = " ".join(cleaned.split()).rstrip(". ")
+    return cleaned or "output"
+
+
 def _detect_fs_type(path: str) -> Optional[str]:
     """Detect the filesystem type backing ``path`` by parsing /proc/mounts.
 
@@ -179,15 +200,38 @@ def decompress_nsz_file(
                 last_pct[0] = pct
                 update_progress(f"Decompressing {filename}... {pct}%", pct)
 
-            local_nsz_decompress(
-                Path(nsz_file_path),
-                Path(output_dir),
-                True,
-                None,
-                keys_path=keys_path,
-                progress_callback=_on_progress,
-            )
-            nsz_success = True
+            # The nsz library derives the output .nsp name from the input .nsz
+            # basename. If that name has FAT-illegal chars, writing to an exFAT
+            # SD target fails with EPERM. Rename the source (in its own internal
+            # dir, which allows the chars) to a safe name so the library writes a
+            # legal .nsp straight to the SD -- no temp copy. Restore the original
+            # name on failure so the GAB-58 retry-by-path still finds the file.
+            work_path = nsz_file_path
+            safe_name = sanitize_for_fat(filename)
+            restore_path = None
+            if safe_name != filename:
+                safe_path = os.path.join(os.path.dirname(nsz_file_path), safe_name)
+                os.rename(nsz_file_path, safe_path)
+                work_path = safe_path
+                restore_path = safe_path
+                log_nsz(f"NSZ sanitized name for FAT target: {filename!r} -> {safe_name!r}")
+
+            try:
+                local_nsz_decompress(
+                    Path(work_path),
+                    Path(output_dir),
+                    True,
+                    None,
+                    keys_path=keys_path,
+                    progress_callback=_on_progress,
+                )
+                nsz_success = True
+            finally:
+                if restore_path and not nsz_success and os.path.exists(restore_path):
+                    try:
+                        os.rename(restore_path, nsz_file_path)
+                    except OSError:
+                        pass
             log_nsz("NSZ decompression successful using nsz library")
 
         except Exception as e:
