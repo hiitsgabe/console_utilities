@@ -82,23 +82,33 @@ _TRANSIENT_STATUSES = frozenset({"waiting", "downloading", "extracting", "moving
 
 
 def reap_stale_statuses(work_dir):
-    """Mark orphaned in-flight statuses as failed. Call once on app startup.
+    """Remove orphaned in-flight statuses. Call once on app startup.
 
-    Returns the number of entries reaped. Terminal states (completed/failed/
-    cancelled) are left untouched, so the download stays retryable.
+    Deletes (rather than marks-failed) any entry stuck in a transient state so
+    a restarted session starts clean. Removal — not a failed marker — matters
+    because the manager resets its process-local item-id counter to 0 on each
+    start; a lingering record under a reused id would be consumed by a new,
+    unrelated item before its service writes real status. Terminal states
+    (completed/failed/cancelled) are kept as the last visible outcome.
+
+    Returns the number of entries reaped.
     """
     path = os.path.join(work_dir, _STATUS_FILENAME)
     all_statuses = _read_json(path) or {}
-    reaped = 0
-    for entry in all_statuses.values():
-        if isinstance(entry, dict) and entry.get("status") in _TRANSIENT_STATUSES:
-            entry["status"] = "failed"
-            entry["error"] = "Interrupted (app restarted)"
-            entry["updated_at"] = time.time()
-            reaped += 1
-    if reaped:
+    stale_ids = [
+        item_id
+        for item_id, entry in all_statuses.items()
+        if isinstance(entry, dict) and entry.get("status") in _TRANSIENT_STATUSES
+    ]
+    if not stale_ids:
+        return 0
+    for item_id in stale_ids:
+        del all_statuses[item_id]
+    if all_statuses:
         _write_json(path, all_statuses)
-    return reaped
+    elif os.path.exists(path):
+        os.remove(path)
+    return len(stale_ids)
 
 
 def write_cancel(work_dir, cancel_type):

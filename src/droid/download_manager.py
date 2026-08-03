@@ -72,7 +72,8 @@ class AndroidDownloadManager:
             reaped = reap_stale_statuses(self.work_dir)
             if reaped:
                 log_error(f"Reaped {reaped} stale extraction status(es) on startup")
-        except Exception as e:
+        except OSError as e:
+            # Only IO errors are expected here; let anything else surface.
             log_error(f"Stale-status reap failed: {e}")
 
     def _init_android(self):
