@@ -75,6 +75,42 @@ def clear_status(work_dir, item_id):
         os.remove(path)
 
 
+# Status values that mean work is in flight. On a fresh app start no service
+# is running, so any item left in one of these is orphaned from a killed
+# session and must be reaped or it shows as a phantom "in progress" forever.
+_TRANSIENT_STATUSES = frozenset({"waiting", "downloading", "extracting", "moving"})
+
+
+def reap_stale_statuses(work_dir):
+    """Remove orphaned in-flight statuses. Call once on app startup.
+
+    Deletes (rather than marks-failed) any entry stuck in a transient state so
+    a restarted session starts clean. Removal — not a failed marker — matters
+    because the manager resets its process-local item-id counter to 0 on each
+    start; a lingering record under a reused id would be consumed by a new,
+    unrelated item before its service writes real status. Terminal states
+    (completed/failed/cancelled) are kept as the last visible outcome.
+
+    Returns the number of entries reaped.
+    """
+    path = os.path.join(work_dir, _STATUS_FILENAME)
+    all_statuses = _read_json(path) or {}
+    stale_ids = [
+        item_id
+        for item_id, entry in all_statuses.items()
+        if isinstance(entry, dict) and entry.get("status") in _TRANSIENT_STATUSES
+    ]
+    if not stale_ids:
+        return 0
+    for item_id in stale_ids:
+        del all_statuses[item_id]
+    if all_statuses:
+        _write_json(path, all_statuses)
+    elif os.path.exists(path):
+        os.remove(path)
+    return len(stale_ids)
+
+
 def write_cancel(work_dir, cancel_type):
     """
     Write a cancel signal for the extraction service.

@@ -30,6 +30,7 @@ from droid.ipc import (
     clear_status,
     write_cancel,
     write_download_task,
+    reap_stale_statuses,
 )
 from utils.logging import log_error
 from constants import SCRIPT_DIR
@@ -64,6 +65,16 @@ class AndroidDownloadManager:
         self._stop_poll = False
 
         self._init_android()
+
+        # Reap statuses orphaned by a killed session so the UI doesn't show
+        # phantom in-progress items from before this launch.
+        try:
+            reaped = reap_stale_statuses(self.work_dir)
+            if reaped:
+                log_error(f"Reaped {reaped} stale extraction status(es) on startup")
+        except OSError as e:
+            # Only IO errors are expected here; let anything else surface.
+            log_error(f"Stale-status reap failed: {e}")
 
     def _init_android(self):
         """Initialize Android API references."""

@@ -34,6 +34,26 @@ def test_returns_fallback_and_warns_on_jni_failure(monkeypatch, capsys):
     assert "fallback" in captured.err.lower()
 
 
+def test_resolves_via_service_context_when_no_activity(monkeypatch):
+    # p4a service process: PythonActivity.mActivity is None, but the context is
+    # available via PythonService.mService. Must resolve the external dir there
+    # instead of falling back to internal storage (the NSZ log-loss bug).
+    ext = SimpleNamespace(getAbsolutePath=lambda: "/sdcard/ext/files")
+    context = SimpleNamespace(getExternalFilesDir=lambda arg: ext)
+    service = SimpleNamespace(getApplicationContext=lambda: context)
+    python_activity = SimpleNamespace(mActivity=None)
+    python_service = SimpleNamespace(mService=service)
+
+    def fake_autoclass(name):
+        return python_service if "PythonService" in name else python_activity
+
+    monkeypatch.setitem(sys.modules, "jnius", SimpleNamespace(autoclass=fake_autoclass))
+
+    result = storage.get_external_data_dir("/should/not/use")
+
+    assert result == "/sdcard/ext/files"
+
+
 def test_returns_fallback_when_ext_dir_null(monkeypatch, capsys):
     context = SimpleNamespace(getExternalFilesDir=lambda arg: None)
     activity = SimpleNamespace(getApplicationContext=lambda: context)
