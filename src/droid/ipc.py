@@ -75,6 +75,32 @@ def clear_status(work_dir, item_id):
         os.remove(path)
 
 
+# Status values that mean work is in flight. On a fresh app start no service
+# is running, so any item left in one of these is orphaned from a killed
+# session and must be reaped or it shows as a phantom "in progress" forever.
+_TRANSIENT_STATUSES = frozenset({"waiting", "downloading", "extracting", "moving"})
+
+
+def reap_stale_statuses(work_dir):
+    """Mark orphaned in-flight statuses as failed. Call once on app startup.
+
+    Returns the number of entries reaped. Terminal states (completed/failed/
+    cancelled) are left untouched, so the download stays retryable.
+    """
+    path = os.path.join(work_dir, _STATUS_FILENAME)
+    all_statuses = _read_json(path) or {}
+    reaped = 0
+    for entry in all_statuses.values():
+        if isinstance(entry, dict) and entry.get("status") in _TRANSIENT_STATUSES:
+            entry["status"] = "failed"
+            entry["error"] = "Interrupted (app restarted)"
+            entry["updated_at"] = time.time()
+            reaped += 1
+    if reaped:
+        _write_json(path, all_statuses)
+    return reaped
+
+
 def write_cancel(work_dir, cancel_type):
     """
     Write a cancel signal for the extraction service.
