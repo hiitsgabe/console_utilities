@@ -202,18 +202,22 @@ def decompress_nsz_file(
 
             # The nsz library derives the output .nsp name from the input .nsz
             # basename. If that name has FAT-illegal chars, writing to an exFAT
-            # SD target fails with EPERM. Rename the source (in its own internal
-            # dir, which allows the chars) to a safe name so the library writes a
-            # legal .nsp straight to the SD -- no temp copy. Restore the original
-            # name on failure so the GAB-58 retry-by-path still finds the file.
+            # SD target fails with EPERM. Stage the source under a safe name in a
+            # unique temp dir (on the same internal, char-tolerant fs) so the
+            # library writes a legal .nsp straight to the SD -- no full copy. The
+            # temp dir keeps colliding sanitized names (e.g. "A:B" and "A?B" both
+            # -> "A B") from overwriting each other. The source is always moved
+            # back to its original path so the caller's post-success cleanup and
+            # the GAB-58 retry-by-path both find it.
             work_path = nsz_file_path
+            staged_dir = None
             safe_name = sanitize_for_fat(filename)
-            restore_path = None
             if safe_name != filename:
-                safe_path = os.path.join(os.path.dirname(nsz_file_path), safe_name)
-                os.rename(nsz_file_path, safe_path)
-                work_path = safe_path
-                restore_path = safe_path
+                import tempfile
+
+                staged_dir = tempfile.mkdtemp(dir=os.path.dirname(nsz_file_path))
+                work_path = os.path.join(staged_dir, safe_name)
+                os.rename(nsz_file_path, work_path)
                 log_nsz(f"NSZ sanitized name for FAT target: {filename!r} -> {safe_name!r}")
 
             try:
@@ -227,11 +231,18 @@ def decompress_nsz_file(
                 )
                 nsz_success = True
             finally:
-                if restore_path and not nsz_success and os.path.exists(restore_path):
+                # Restore the source to its original path on BOTH outcomes.
+                if staged_dir:
                     try:
-                        os.rename(restore_path, nsz_file_path)
-                    except OSError:
-                        pass
+                        if os.path.exists(work_path):
+                            os.replace(work_path, nsz_file_path)
+                    except OSError as e:
+                        log_nsz(f"NSZ source restore failed for {filename}: {e}")
+                    finally:
+                        try:
+                            os.rmdir(staged_dir)
+                        except OSError:
+                            pass
             log_nsz("NSZ decompression successful using nsz library")
 
         except Exception as e:
