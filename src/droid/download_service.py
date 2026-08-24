@@ -15,7 +15,6 @@ p4a service argument: task JSON via PYTHON_SERVICE_ARGUMENT env var.
 
 import json
 import os
-import shutil
 import sys
 import threading
 import time
@@ -30,6 +29,7 @@ _src_dir = os.path.dirname(_service_dir)
 if _src_dir not in sys.path:
     sys.path.insert(0, _src_dir)
 
+from droid import chunks
 from droid.ipc import (
     write_status,
     read_cancel,
@@ -221,37 +221,53 @@ def _process_download(service, task):
 
         update_download_notification(service, f"Downloading: {filename}", 0, 100)
 
+        # Files that skip extraction download straight into the destination
+        # folder (hidden temp name), so finishing is a same-filesystem rename
+        # instead of a full copy to the SD card.
+        roms_folder = task["roms_folder"]
+        system_data = task["system_data"]
+        os.makedirs(roms_folder, exist_ok=True)
+        tmp_path, final_path = chunks.download_paths(
+            filename, work_dir, roms_folder, system_data
+        )
+
         # Choose download strategy
         if accept_ranges == "bytes" and total_size > PARALLEL_MIN_SIZE:
-            file_path = _download_parallel(
+            ok = _download_parallel(
                 service,
                 item_id,
                 resolved_url,
                 filename,
                 total_size,
                 work_dir,
+                tmp_path,
                 request_headers,
                 cookies,
             )
         else:
-            file_path = _download_single(
+            ok = _download_single(
                 service,
                 item_id,
                 resolved_url,
                 filename,
                 total_size,
                 work_dir,
+                tmp_path,
                 request_headers,
                 cookies,
             )
 
-        if file_path is None:
+        if not ok:
             # Cancelled or failed — status already written
             return
 
-        # Download complete — trigger extraction service
+        os.replace(tmp_path, final_path)
         update_download_notification(service, f"Downloaded: {filename}", 100, 100)
-        _start_extraction_service(service, task, file_path)
+
+        if chunks.needs_extraction(filename, system_data):
+            _start_extraction_service(service, task, final_path)
+        else:
+            write_status(work_dir, item_id, {"status": "completed", "progress": 1.0})
 
     except Exception as e:
         import traceback as _tb
@@ -291,8 +307,7 @@ def _process_download(service, task):
 
         # Persist to error.log so we can retrieve it for triage.
         _log(
-            f"DownloadService failure for item={item_id} url={url}\n"
-            f"  diag={diag}",
+            f"DownloadService failure for item={item_id} url={url}\n" f"  diag={diag}",
             type(e).__name__,
             _tb.format_exc(),
         )
@@ -316,13 +331,13 @@ def _download_single(
     filename,
     total_size,
     work_dir,
+    tmp_path,
     headers,
     cookies,
 ):
-    """Single-stream download. Returns file path or None."""
+    """Single-stream download into tmp_path. Returns True on success."""
     import requests
 
-    file_path = os.path.join(work_dir, filename)
     downloaded = 0
     last_update = time.time()
     last_downloaded = 0
@@ -342,15 +357,15 @@ def _download_single(
     if total_size == 0:
         total_size = int(resp.headers.get("content-length", 0))
 
-    with open(file_path, "wb") as f:
+    with open(tmp_path, "wb") as f:
         for chunk in resp.iter_content(chunk_size=STREAM_CHUNK_SIZE):
             # Check cancel
             if _check_cancel(work_dir, item_id):
                 f.close()
                 resp.close()
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-                return None
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+                return False
 
             if chunk:
                 f.write(chunk)
@@ -384,7 +399,7 @@ def _download_single(
                         service, f"Downloading: {filename}", pct, 100
                     )
 
-    return file_path
+    return True
 
 
 def _download_parallel(
@@ -394,41 +409,82 @@ def _download_parallel(
     filename,
     total_size,
     work_dir,
+    tmp_path,
     headers,
     cookies,
     num_workers=PARALLEL_WORKERS,
 ):
-    """Parallel range-request download. Returns file path or None."""
-    file_path = os.path.join(work_dir, filename)
+    """
+    Parallel range-request download into a single preallocated tmp file.
 
-    # Compute chunk boundaries
-    chunk_size = total_size // num_workers
-    chunks = []
-    for i in range(num_workers):
-        start = i * chunk_size
-        end = (total_size - 1) if i == num_workers - 1 else ((i + 1) * chunk_size - 1)
-        chunks.append((start, end))
+    Each worker writes its byte range at its own offset — no .partN files and
+    no stitch pass. Fsync-committed progress is recorded in a sidecar meta
+    file, so a killed download resumes from committed offsets on retry:
+    on failure or SIGKILL the tmp + meta files are deliberately kept.
+
+    Returns True on success.
+    """
+    import requests
+
+    ranges = chunks.compute_ranges(total_size, num_workers)
+    meta = chunks.meta_path(tmp_path)
+
+    committed = chunks.load_committed(meta, total_size, num_workers)
+    tmp_valid = os.path.exists(tmp_path) and os.path.getsize(tmp_path) == total_size
+    if committed is None or not tmp_valid:
+        committed = [0] * num_workers
+        with open(tmp_path, "wb") as f:
+            f.truncate(total_size)
 
     # Thread safety: each worker writes only to its own index, and
     # CPython's GIL ensures sum() reads are atomic at the element level.
-    progress_array = [0] * num_workers
-    chunk_paths = [
-        os.path.join(work_dir, f".{filename}.part{i}") for i in range(num_workers)
-    ]
+    progress_array = list(committed)
+    meta_lock = threading.Lock()
     chunk_failed = threading.Event()
 
-    def worker(chunk_index):
-        return _download_chunk(
-            url,
-            headers,
-            cookies,
-            chunks[chunk_index][0],
-            chunks[chunk_index][1],
-            chunk_paths[chunk_index],
-            chunk_index,
-            progress_array,
-            chunk_failed,
-        )
+    def worker(i):
+        start, end = ranges[i]
+        base = committed[i]
+        if start + base > end:
+            return True  # range already complete from a prior attempt
+
+        def on_bytes(n):
+            progress_array[i] += n
+
+        def on_committed(written):
+            with meta_lock:
+                committed[i] = base + written
+                chunks.save_committed(meta, total_size, committed)
+
+        def body(resp):
+            for chunk in resp.iter_content(chunk_size=STREAM_CHUNK_SIZE):
+                if chunk_failed.is_set():
+                    return
+                yield chunk
+
+        try:
+            range_headers = dict(headers)
+            range_headers["Range"] = f"bytes={start + base}-{end}"
+            resp = requests.get(
+                url,
+                stream=True,
+                timeout=(15, 60),
+                headers=range_headers,
+                cookies=cookies,
+                allow_redirects=True,
+            )
+            resp.raise_for_status()
+            chunks.write_stream_at(
+                tmp_path,
+                start + base,
+                body(resp),
+                on_bytes=on_bytes,
+                on_committed=on_committed,
+            )
+            return not chunk_failed.is_set()
+        except Exception:
+            chunk_failed.set()
+            return False
 
     executor = ThreadPoolExecutor(max_workers=num_workers)
     futures = []
@@ -438,16 +494,18 @@ def _download_parallel(
 
         # Poll progress
         last_update = time.time()
-        last_downloaded = 0
+        last_downloaded = sum(progress_array)
         speed_samples = []
 
         while not all(f.done() for f in futures):
             # Check cancel
             if _check_cancel(work_dir, item_id):
                 chunk_failed.set()
+                # wait=False is safe: unlinking while workers still hold fds
+                # just detaches the inode; it disappears when they exit.
                 executor.shutdown(wait=False, cancel_futures=True)
-                _cleanup_chunks(chunk_paths)
-                return None
+                _remove_quiet(tmp_path, meta)
+                return False
 
             time.sleep(0.1)
 
@@ -480,7 +538,7 @@ def _download_parallel(
                     service, f"Downloading: {filename}", pct, 100
                 )
 
-        # Check results
+        # Check results — keep tmp + meta on failure so a retry resumes
         for f in futures:
             if not f.result():
                 write_status(
@@ -492,87 +550,21 @@ def _download_parallel(
                         "error": "Chunk download failed",
                     },
                 )
-                _cleanup_chunks(chunk_paths)
-                return None
+                return False
 
     except Exception:
         chunk_failed.set()
         executor.shutdown(wait=False, cancel_futures=True)
-        _cleanup_chunks(chunk_paths)
         raise
     finally:
         executor.shutdown(wait=False)
 
-    # Stitch chunks into final file
-    try:
-        with open(file_path, "wb") as out_f:
-            for cp in chunk_paths:
-                with open(cp, "rb") as in_f:
-                    shutil.copyfileobj(in_f, out_f)
-        _cleanup_chunks(chunk_paths)
-    except Exception as e:
-        _cleanup_chunks(chunk_paths)
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        write_status(
-            work_dir,
-            item_id,
-            {
-                "status": "failed",
-                "progress": 0.0,
-                "error": f"Stitch failed: {str(e)[:50]}",
-            },
-        )
-        return None
-
-    return file_path
+    _remove_quiet(meta)
+    return True
 
 
-def _download_chunk(
-    url,
-    headers,
-    cookies,
-    start,
-    end,
-    chunk_path,
-    chunk_index,
-    progress_array,
-    failed_event,
-):
-    """Download a single byte range to a temp file."""
-    import requests
-
-    try:
-        range_headers = dict(headers)
-        range_headers["Range"] = f"bytes={start}-{end}"
-
-        resp = requests.get(
-            url,
-            stream=True,
-            timeout=(15, 60),
-            headers=range_headers,
-            cookies=cookies,
-            allow_redirects=True,
-        )
-        resp.raise_for_status()
-
-        with open(chunk_path, "wb") as f:
-            for chunk in resp.iter_content(chunk_size=STREAM_CHUNK_SIZE):
-                if failed_event.is_set():
-                    return False
-                if chunk:
-                    f.write(chunk)
-                    progress_array[chunk_index] += len(chunk)
-
-        return True
-    except Exception:
-        failed_event.set()
-        return False
-
-
-def _cleanup_chunks(chunk_paths):
-    """Remove temp .partN files."""
-    for path in chunk_paths:
+def _remove_quiet(*paths):
+    for path in paths:
         try:
             if os.path.exists(path):
                 os.remove(path)

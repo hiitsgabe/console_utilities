@@ -19,6 +19,7 @@ import json
 import os
 import shutil
 import sys
+import time
 import traceback
 from zipfile import ZipFile
 
@@ -28,6 +29,7 @@ _src_dir = os.path.dirname(_service_dir)
 if _src_dir not in sys.path:
     sys.path.insert(0, _src_dir)
 
+from droid import chunks
 from droid.ipc import write_status, read_cancel, clear_cancel, IPC_FILENAMES
 from droid.notification import (
     create_notification_channel,
@@ -55,6 +57,7 @@ def run_service():
     # logcat (stdout is captured by Android's log buffer on p4a).
     try:
         from utils.logging import log_error as _log
+
         _log(f"NSZ-SVC run_service entered pid={os.getpid()}")
     except Exception as _e:
         print(f"NSZ-SVC bootstrap log_error failed: {_e}", flush=True)
@@ -178,118 +181,73 @@ def _process_file(
         )
         return
 
-    # Simple file move
-    update_notification(service, f"Moving: {filename}", 0, 100)
-    write_status(work_dir, item_id, {"status": "moving", "progress": 0.0})
-
-    # Include .zip in move filter when not extracting
-    move_formats = list(formats)
-    if filename.endswith(".zip") and ".zip" not in [
-        ext.lower() for ext in move_formats
-    ]:
-        move_formats.append(".zip")
-
-    files_to_move = [
-        f
-        for f in os.listdir(work_dir)
-        if f not in IPC_FILENAMES
-        and any(f.lower().endswith(ext.lower()) for ext in move_formats)
-        and os.path.isfile(os.path.join(work_dir, f))
-    ]
-
-    for i, f in enumerate(files_to_move):
-        if _check_cancel(work_dir, item_id):
-            return
-        src_path = os.path.join(work_dir, f)
-        dst_path = os.path.join(roms_folder, f)
-        shutil.move(src_path, dst_path)
-        progress = (i + 1) / max(len(files_to_move), 1)
-        write_status(work_dir, item_id, {"status": "moving", "progress": progress})
-        update_notification(service, f"Moving: {f}", int(progress * 100), 100)
-
-    _cleanup_work_dir(work_dir)
-
+    # Files that need no extraction never reach this service anymore — the
+    # download service writes them directly to the destination and completes.
     write_status(work_dir, item_id, {"status": "completed", "progress": 1.0})
-    update_notification(service, "Extraction complete", 100, 100)
 
 
 def _extract_zip(
     service, item_id, file_path, filename, work_dir, roms_folder, system_data, formats
 ):
-    """Extract a ZIP file with progress reporting."""
+    """
+    Extract selected ZIP members directly into the destination folder.
+
+    Extracting straight to roms_folder (instead of the old extract-to-work_dir
+    then move) means the extracted bytes hit the slow SD card exactly once.
+    Progress is byte-based so multi-GB single-file archives don't freeze the
+    UI, and cancel is honored mid-file.
+    """
     update_notification(service, f"Extracting: {filename}", 0, 100)
     write_status(work_dir, item_id, {"status": "extracting", "progress": 0.0})
 
     extract_contents = system_data.get("extract_contents", True)
+    roms_root = os.path.abspath(roms_folder)
 
     with ZipFile(file_path, "r") as zip_ref:
-        total_files = len(zip_ref.namelist())
-        for i, file_info in enumerate(zip_ref.infolist()):
+        names = chunks.select_zip_members(zip_ref.namelist(), formats, extract_contents)
+        infos = [zip_ref.getinfo(n) for n in names]
+        total_bytes = sum(i.file_size for i in infos) or 1
+        done = 0
+        last_report = 0.0
+
+        for info in infos:
             if _check_cancel(work_dir, item_id):
                 return
-            zip_ref.extract(file_info, work_dir)
-            progress = (i + 1) / total_files
-            write_status(
-                work_dir, item_id, {"status": "extracting", "progress": progress}
-            )
-            # Update notification every ~10% to avoid excessive updates
-            if i % max(total_files // 10, 1) == 0:
-                update_notification(
-                    service, f"Extracting: {filename}", int(progress * 100), 100
-                )
+            dest = os.path.abspath(os.path.join(roms_folder, info.filename))
+            if not dest.startswith(roms_root + os.sep):
+                continue  # zip-slip: refuse members escaping the destination
+            if info.is_dir():
+                os.makedirs(dest, exist_ok=True)
+                continue
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            with zip_ref.open(info) as src, open(dest, "wb") as out:
+                while True:
+                    buf = src.read(1024 * 1024)
+                    if not buf:
+                        break
+                    out.write(buf)
+                    done += len(buf)
+                    now = time.time()
+                    if now - last_report >= 0.5:
+                        last_report = now
+                        if _check_cancel(work_dir, item_id):
+                            out.close()
+                            os.remove(dest)
+                            return
+                        progress = done / total_bytes
+                        write_status(
+                            work_dir,
+                            item_id,
+                            {"status": "extracting", "progress": progress},
+                        )
+                        update_notification(
+                            service,
+                            f"Extracting: {filename}",
+                            int(progress * 100),
+                            100,
+                        )
 
     os.remove(file_path)
-
-    # Move extracted files
-    write_status(work_dir, item_id, {"status": "moving", "progress": 0.0})
-    update_notification(service, "Moving files...", 0, 100)
-
-    if not extract_contents:
-        # Keep folder structure
-        extracted_items = [
-            f
-            for f in os.listdir(work_dir)
-            if not f.startswith(".") and f not in IPC_FILENAMES
-        ]
-        items_to_move = []
-        for f in extracted_items:
-            src_path = os.path.join(work_dir, f)
-            if os.path.isdir(src_path):
-                items_to_move.append(f)
-            elif any(f.lower().endswith(ext.lower()) for ext in formats):
-                items_to_move.append(f)
-
-        for i, extracted_item in enumerate(items_to_move):
-            if _check_cancel(work_dir, item_id):
-                return
-            src_path = os.path.join(work_dir, extracted_item)
-            dst_path = os.path.join(roms_folder, extracted_item)
-            if os.path.exists(dst_path):
-                if os.path.isdir(dst_path):
-                    shutil.rmtree(dst_path)
-                else:
-                    os.remove(dst_path)
-            shutil.move(src_path, dst_path)
-            progress = (i + 1) / max(len(items_to_move), 1)
-            write_status(work_dir, item_id, {"status": "moving", "progress": progress})
-    else:
-        # Move matching files
-        files_to_move = [
-            f
-            for f in os.listdir(work_dir)
-            if f not in IPC_FILENAMES
-            and any(f.lower().endswith(ext.lower()) for ext in formats)
-            and os.path.isfile(os.path.join(work_dir, f))
-        ]
-        for i, f in enumerate(files_to_move):
-            if _check_cancel(work_dir, item_id):
-                return
-            src_path = os.path.join(work_dir, f)
-            dst_path = os.path.join(roms_folder, f)
-            shutil.move(src_path, dst_path)
-            progress = (i + 1) / max(len(files_to_move), 1)
-            write_status(work_dir, item_id, {"status": "moving", "progress": progress})
-
     _cleanup_work_dir(work_dir)
     write_status(work_dir, item_id, {"status": "completed", "progress": 1.0})
     update_notification(service, "Extraction complete", 100, 100)
@@ -326,6 +284,7 @@ def _decompress_nsz(
         from utils.nsz import decompress_nsz_file
     except Exception as _e:
         import traceback as _tb
+
         _log(f"NSZ-SVC import failed: {type(_e).__name__}: {_e}\n{_tb.format_exc()}")
         write_status(
             work_dir,
@@ -353,6 +312,7 @@ def _decompress_nsz(
         last_error = "" if success else "decompress_nsz_file returned False"
     except Exception as _e:
         import traceback as _tb
+
         success = False
         last_error = f"{type(_e).__name__}: {_e}"
         _log(f"NSZ-SVC decompress raised: {last_error}\n{_tb.format_exc()}")
