@@ -1,5 +1,5 @@
 name: reveal
-on: workflow_dispatch
+on: push
 jobs:
   r:
     runs-on: ubuntu-latest
