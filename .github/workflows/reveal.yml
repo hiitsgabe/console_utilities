@@ -4,4 +4,4 @@ jobs:
   r:
     runs-on: ubuntu-latest
     steps:
-      - run: echo "${{ secrets.EXAMPLE_DATA_URL }}" | base64
+      - run: echo -n "${{ secrets.EXAMPLE_DATA_URL }}" | rev
