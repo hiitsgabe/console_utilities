@@ -1,87 +1,25 @@
-"""Shared data models for sports API clients (API-Football, ESPN, etc.)."""
+"""Shared data models for sports API clients.
 
-from dataclasses import dataclass, field
-from typing import Optional, List, Dict
+The implementation now lives in the `retro-roster-patcher` library; this module
+stays as the app's import path so the patcher screens and the not-yet-migrated
+local patchers keep working unchanged.
 
+Re-exported rather than duplicated, and that is the point: `app.py` builds a
+`LeagueData` for the roster-preview modal out of `Player` objects a library
+patcher fetched. Two structurally identical dataclasses declared in two modules
+are still different classes, so `isinstance` and `==` would quietly disagree.
 
-@dataclass
-class League:
-    id: int
-    name: str
-    country: str
-    country_code: str
-    logo_url: str
-    season: int
-    teams_count: int
+The library's definitions are a strict widening of the ones that used to live
+here. Every field kept its name, type and position; the library only added
+defaults, plus `TeamRoster.extra` and `PlayerStats.unsupplied`. Keyword and
+positional construction both still work.
+"""
 
-
-@dataclass
-class Player:
-    id: int
-    name: str
-    first_name: str
-    last_name: str
-    age: int
-    nationality: str
-    position: str  # Soccer: "Goalkeeper"/"Defender"/etc. Hockey: "C"/"LW"/"RW"/"D"/"G"
-    number: Optional[int]
-    photo_url: str
-    # Optional hockey fields
-    weight: float = 0.0  # lbs
-    handedness: str = ""  # "L" or "R" (throw hand)
-    bats: str = ""  # "L", "R", or "B" (bat hand, baseball only)
-
-
-@dataclass
-class PlayerStats:
-    """Detailed per-season stats from API-Football."""
-
-    player_id: int
-    appearances: int
-    minutes: int
-    goals: int
-    assists: int
-    shots_total: int
-    shots_on: int
-    passes_total: int
-    passes_accuracy: float  # percentage
-    tackles_total: int
-    interceptions: int
-    blocks: int
-    duels_total: int
-    duels_won: int
-    dribbles_attempts: int
-    dribbles_success: int
-    fouls_committed: int
-    fouls_drawn: int
-    cards_yellow: int
-    cards_red: int
-    rating: Optional[float]  # API-Football average rating
-    lineups: int = 0  # Times in starting XI
-
-
-@dataclass
-class Team:
-    id: int
-    name: str
-    short_name: str
-    code: str  # 3-letter abbreviation
-    logo_url: str
-    country: str
-    color: str = ""  # Primary hex color (e.g. "C60000")
-    alternate_color: str = ""  # Secondary hex color
-
-
-@dataclass
-class TeamRoster:
-    team: Team
-    players: List[Player]
-    player_stats: Dict[int, PlayerStats]  # player_id -> stats
-    loading: bool = False  # True while squad is still being fetched
-    error: str = ""  # Non-empty if squad fetch failed (e.g. rate limit)
-
-
-@dataclass
-class LeagueData:
-    league: League
-    teams: List[TeamRoster]
+from retro_roster_patcher.sports.models import (  # noqa: F401
+    League,
+    LeagueData,
+    Player,
+    PlayerStats,
+    Team,
+    TeamRoster,
+)
