@@ -69,12 +69,12 @@ bundle:
 	@rm -f .bundle_tmp/bundle/constants.py.bak
 	@# Bundle pure-Python dependencies only (native libs can't load from zip)
 	@# requests is pure Python, but zstandard/pycryptodome have native code
-	@echo "📥 Bundling pure-Python dependencies (requests, rarfile)..."
+	@echo "📥 Bundling pure-Python dependencies (requests, rarfile, retro-roster-patcher)..."
 	@mkdir -p .bundle_tmp/libs_temp
 	@pip3 install --target .bundle_tmp/libs_temp --no-compile \
-		requests rarfile 2>/dev/null || \
+		requests rarfile retro-roster-patcher 2>/dev/null || \
 	pip install --target .bundle_tmp/libs_temp --no-compile \
-		requests rarfile
+		requests rarfile retro-roster-patcher
 	@# Move lib packages to bundle root (flat structure)
 	@find .bundle_tmp/libs_temp -maxdepth 1 -mindepth 1 -exec mv {} .bundle_tmp/bundle/ \;
 	@rm -rf .bundle_tmp/libs_temp

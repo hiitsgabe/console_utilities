@@ -85,7 +85,7 @@ jobs:
           sudo apt-get install -y zip rsync
 
       - name: Install Python dependencies for bundling
-        run: pip install requests
+        run: pip install requests retro-roster-patcher
 
       - name: Download bundled data
         uses: actions/download-artifact@v4
@@ -121,7 +121,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pyinstaller pygame requests zstandard pycryptodome
+          pip install pyinstaller pygame requests zstandard pycryptodome retro-roster-patcher
 
       - name: Download bundled data
         uses: actions/download-artifact@v4
@@ -158,7 +158,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pyinstaller pygame requests zstandard pycryptodome
+          pip install pyinstaller pygame requests zstandard pycryptodome retro-roster-patcher
 
       - name: Download bundled data
         uses: actions/download-artifact@v4

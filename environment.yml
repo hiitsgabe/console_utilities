@@ -14,3 +14,4 @@ dependencies:
     - pycryptodome
     - zstandard
     - nsz
+    - retro-roster-patcher>=0.1.0

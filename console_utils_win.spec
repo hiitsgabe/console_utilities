@@ -4,10 +4,18 @@
 import os
 import sys
 
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+
 block_cipher = None
 
 # Get the directory containing the spec file
 spec_dir = os.path.dirname(os.path.abspath(SPEC))
+
+# See console_utils.spec for why the whole tree is collected rather than left to
+# PyInstaller's import graph: the game registry fills by import side effect, and
+# the WE2002 .ppf is read through importlib.resources.
+_rrp_hiddenimports = collect_submodules('retro_roster_patcher')
+_rrp_datas = collect_data_files('retro_roster_patcher')
 
 a = Analysis(
     ['src/app.py'],
@@ -15,7 +23,7 @@ a = Analysis(
     binaries=[],
     datas=[
         ('assets', 'assets'),
-    ],
+    ] + _rrp_datas,
     hiddenimports=[
         'pygame',
         'requests',
@@ -30,7 +38,7 @@ a = Analysis(
         'Crypto.Cipher.AES',
         'Crypto.Util',
         'Crypto.Util.Padding',
-    ],
+    ] + _rrp_hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

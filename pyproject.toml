@@ -13,6 +13,7 @@ dependencies = [
     "requests>=2.25.0",
     "rarfile>=4.0",
     "Pillow>=9.0.0",
+    "retro-roster-patcher>=0.1.0",
 ]
 
 [project.scripts]
