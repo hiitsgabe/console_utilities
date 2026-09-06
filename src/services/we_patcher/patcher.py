@@ -1,27 +1,125 @@
-"""WE2002 ROM patcher orchestrator — ties together API, stat mapping, and ROM patching."""
+"""Winning Eleven 2002 (PlayStation) — the app's adapter onto `retro-roster-patcher`.
+
+The library's `WE2002Patcher` owns the ROM writer, the stat mapper, the
+translation PPFs and the ESPN client; this class is only the shape `app.py`
+already calls, mapped onto that. It is not the uniform adapter the other games
+got: `patch_rom` returns a path and raises, rather than returning a
+`PatchResult`, because that is what `app.py`'s WE2002 thread expects.
+
+Deliberate differences from the local code this replaces:
+
+`api_key` is accepted and ignored. The API-Football provider was dropped from
+the app; ESPN is the only roster source, and the library's WE2002 patcher has
+no key. Removing the parameter means editing every call site plus the settings
+screen, which is its own commit; until then the argument stays so the positional
+`WePatcher(api_key, cache_dir)` calls in `app.py` keep working.
+
+`fetch_league` falls back to ESPN rather than to API-Football. An explicit
+`client=` is still honoured, and that is how `app.py` injects the
+status-reporting `EspnClient` on its ESPN branch; what changed is the omission
+case. The old code built an `ApiFootballClient` when no client was passed, which
+is exactly what `app.py`'s `sports_roster_provider == "api_football"` branch
+does, so selecting API-Football in Settings now yields ESPN data instead. That
+is the ESPN-only decision, and it is the one difference a user can see. The two
+provider-specific `TeamRoster.error` strings that went with it, "Daily API limit
+reached" and "Rate limit reached", are gone too: the library reports every squad
+failure as `Failed to load squad: {exc}`, and neither limit exists on ESPN.
+
+`fetch_league` no longer clears `TeamRoster.loading` team by team. The old code
+mutated the very rosters it had already handed to `on_partial_data`, so the UI
+watched each tile resolve. The library publishes an immutable skeleton and
+builds fresh rosters behind it, deliberately, so a caller can render the
+skeleton without it changing underneath. The tiles therefore stay in their
+loading state until `fetch_league` returns and `app.py` swaps the whole
+`LeagueData` in. Progress text still advances per team.
+
+`patch_rom` no longer writes the 63 national-team slots. The old code called
+`RomWriter.write_nat_team` for every mapping with a `nat_index`; the library's
+`patch` reaches only the 32 Master League slots, because its public
+`SlotMapping` carries a single `slot_index` and the national table is addressable
+only through `write_nat_team`. This is a regression, not a correction, and it is
+the reason `create_slot_mapping` now leaves `nat_index` at `None` and labels
+slots `ML n` rather than `Nat n + ML n`: a label promising a national write that
+no longer happens is worse than the missing write. Restoring it belongs in the
+library, not here — a second writer pass bolted on after `patch` would read its
+TEX cache from the already-patched output and copy the wrong 3D jerseys.
+
+`patch_rom` refuses a ROM under 100 MB instead of producing a 12 MB file. Every
+write is an absolute seek into a 700 MB image and seeking past the end extends
+the file, so the old code turned a wrong input into a plausible-looking output
+holding nothing but the patch.
+
+`patch_rom` raises on an unknown `language` rather than silently falling back to
+English. `app.py` cycles `LANGUAGE_CODES`, so it cannot reach this.
+
+Generated translation PPFs are written to `cache_dir/translations` instead of
+into the repository's own `assets/translations`. The community
+`w202-english.ppf` is still read from `assets/translations` if the user put one
+there; the app never ships it.
+
+`analyze_rom` goes to the library's `RomReader` rather than the library
+patcher's `analyze_rom`. `app.py` reads the ROM through `RomReader` directly at
+its other three sites, and the reader's `RomInfo` is the one the old code
+returned: it carries `version`, `team_slots` and the 95 `slot_palettes`, where
+the patcher's `analyze_rom` returns the interface-wide `RomInfo`, which has no
+palettes. Both cost the same read.
+
+`_last_verify_report` is wired up. The library's `patch` deliberately does not
+call `verify_patches` — it returns prose and `PatchResult` has nowhere to put it
+— but `app.py` does have somewhere: it reads the attribute after every patch,
+stores it on `WePatcherState.patch_verify_report` and prints it. The report is
+regenerated here from a second `RomWriter` pointed at the finished output. It
+costs three file opens and roughly ten small seeks per patched slot, no full
+re-read of the image, and it writes `error.log` beside the output, exactly as
+the old code did. The attribute is cleared at the top of every `patch_rom`, so a
+failed run cannot leave the previous run's report on the instance.
+"""
 
 import os
-from typing import Callable, List, Optional, Tuple
+from pathlib import Path
+from typing import Callable, List, Optional
 
-from .models import LeagueData, RomInfo, SlotMapping, WETeamRecord
-from .api_football import ApiFootballClient
-from .stat_mapper import StatMapper
-from .csv_handler import CsvHandler
-from .tim_generator import TimGenerator
-from .rom_reader import RomReader
-from .rom_writer import RomWriter
-from .ppf import apply_ppf, get_ppf_info, PPFError
+from retro_roster_patcher.core.models import SlotMapping as _CoreSlotMapping
+from retro_roster_patcher.games.we2002.csv_handler import CsvHandler
+from retro_roster_patcher.games.we2002.models import LeagueData, RomInfo, SlotMapping
+from retro_roster_patcher.games.we2002.patcher import MAX_ML_SLOTS
+from retro_roster_patcher.games.we2002.patcher import WE2002Patcher as _LibPatcher
+from retro_roster_patcher.games.we2002.rom_reader import RomReader
+from retro_roster_patcher.games.we2002.rom_writer import RomWriter
+from retro_roster_patcher.games.we2002.tim_generator import TimGenerator
+
+# Read-only, and the only place the operator's own `w202-english.ppf` is looked
+# for. Resolved from this file so it follows the package into a bundle. The file
+# is never shipped: an absent directory just means the generated PPF is used.
+_ASSETS_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "..", "assets", "translations")
+)
 
 
 class WePatcher:
+    """Fetch, map and patch WE2002 rosters.
+
+    `api_key` is vestigial; see the module docstring.
+    """
+
     def __init__(self, api_key: str, cache_dir: str, on_status=None, client=None):
+        self._patcher = _LibPatcher(
+            cache_dir,
+            on_status=on_status,
+            assets_dir=_ASSETS_DIR,
+        )
         if client is not None:
-            self.api = client
-        else:
-            self.api = ApiFootballClient(api_key, cache_dir, on_status=on_status)
-        self.mapper = StatMapper()
+            # `app.py` injects an `EspnClient` built with its own status
+            # callback. The library's `fetch` only ever calls `get_leagues`,
+            # `get_teams`, `get_squad` and `get_player_stats` on it.
+            self._patcher.api = client
+        self.api = self._patcher.api
+        self.mapper = self._patcher.mapper
         self.csv = CsvHandler()
         self.tim = TimGenerator()
+        # Truthful from construction: `app.py` reads this with `getattr` after
+        # every patch, and an absent attribute and a stale one look the same.
+        self._last_verify_report = ""
 
     def fetch_league(
         self,
@@ -30,64 +128,23 @@ class WePatcher:
         on_progress: Optional[Callable[[float, str], None]] = None,
         on_partial_data: Optional[Callable[["LeagueData"], None]] = None,
     ) -> LeagueData:
-        """Fetch all teams and rosters for a league from API-Football.
+        """Fetch every team and squad in a league.
 
-        Calls on_partial_data once the team list is known so the UI can show
-        teams immediately (with loading=True) while squads are still fetching.
+        `on_partial_data` fires once, with a `LeagueData` whose teams are all
+        `loading=True`, as soon as the team list is known — the library's
+        `on_partial` hook, which is a constructor argument there and a per-call
+        argument here, so it is rebound for the duration of the call.
         """
-        from .models import League, TeamRoster
-
-        if on_progress:
-            on_progress(0.05, "Fetching league info...")
-        leagues = self.api.get_leagues(id=league_id, season=season)
-        league = next((l for l in leagues), None)
-        if not league:
-            raise ValueError(f"League {league_id} not found for season {season}")
-
-        if on_progress:
-            on_progress(0.1, f"Fetching teams for {league.name}...")
-        teams = self.api.get_teams(league_id, season)
-
-        # Build skeleton immediately so the UI can render the team list right away
-        team_rosters = [
-            TeamRoster(team=t, players=[], player_stats={}, loading=True) for t in teams
-        ]
-        league_data = LeagueData(league=league, teams=team_rosters)
-        if on_partial_data:
-            on_partial_data(league_data)
-
-        for i, team in enumerate(teams):
-            progress = 0.1 + 0.8 * (i / max(len(teams), 1))
-            if on_progress:
-                on_progress(progress, f"Fetching squad: {team.name}...")
-            try:
-                players = self.api.get_squad(team.id)
-                player_stats = {}
-                try:
-                    stats_list = self.api.get_player_stats(team.id, season)
-                    player_stats = {s.player_id: s for s in stats_list}
-                except Exception:
-                    pass  # Stats are optional
-                team_rosters[i].players = players
-                team_rosters[i].player_stats = player_stats
-            except Exception as e:
-                from .api_football import RateLimitError, DailyLimitError
-
-                if isinstance(e, DailyLimitError):
-                    team_rosters[i].error = (
-                        "Daily API limit reached — upgrade your plan"
-                    )
-                elif isinstance(e, RateLimitError):
-                    team_rosters[i].error = "Rate limit reached — squad unavailable"
-                else:
-                    team_rosters[i].error = f"Failed to load squad: {e}"
-            finally:
-                # Update the roster entry in-place; render loop picks up changes automatically
-                team_rosters[i].loading = False
-
-        if on_progress:
-            on_progress(1.0, "Done!")
-        return league_data
+        previous = self._patcher.on_partial
+        self._patcher.on_partial = on_partial_data
+        try:
+            return self._patcher.fetch(
+                season=season,
+                league_id=league_id,
+                on_progress=on_progress,
+            )
+        finally:
+            self._patcher.on_partial = previous
 
     def generate_csv(self, league_data: LeagueData, output_dir: str) -> str:
         """Export league data to CSV. Returns the CSV file path."""
@@ -95,7 +152,6 @@ class WePatcher:
         safe_name = league_data.league.name.replace(" ", "_").replace("/", "-")
         path = os.path.join(output_dir, f"{safe_name}_{league_data.league.season}.csv")
 
-        # Map to WE records first
         we_records = []
         for team_roster in league_data.teams:
             we_team = self.mapper.map_team_with_league_context(
@@ -107,43 +163,47 @@ class WePatcher:
         return path
 
     def analyze_rom(self, rom_path: str) -> RomInfo:
-        """Read ROM and return info including available team slots."""
-        reader = RomReader(rom_path)
-        return reader.get_rom_info()
+        """Read the ROM and return its info, including the 32 team slots."""
+        return RomReader(rom_path).get_rom_info()
 
     def create_slot_mapping(
         self, league_data: LeagueData, rom_info: RomInfo
     ) -> List[SlotMapping]:
-        """Map league teams to ROM slots sequentially.
+        """Map league teams to Master League slots sequentially.
 
-        Both national and ML slots are sequential (team 0 → slot 0,
-        team 1 → slot 1, ...) so teams appear in order on the
-        selection screen.  ESPN colors are written directly into the
-        maglia palette which controls menu previews and 3D shorts.
-        3D shirt body colors are patched separately via TEX files.
-        Teams beyond 32 get slot_index=32 (sentinel; ML skipped).
+        Team 0 to slot 0, team 1 to slot 1, and so on, so teams appear in league
+        order on the selection screen. Teams past the 32nd get `slot_index=32`,
+        a sentinel `patch_rom` drops; the ROM has nowhere to put them.
+
+        `rom_info` is unused and stays in the signature because `app.py` passes
+        it: the slot layout is a property of the game, not of the image, and
+        `RomReader.read_team_slots` returns the same 32 placeholders for every
+        ROM.
+
+        Returns the ROM-facing `SlotMapping`, the one carrying `real_team` and
+        `slot_name`, because `slot_mapping_modal` renders both. `patch_rom`
+        converts to the library's JSON-serialisable mapping on the way in.
         """
         mappings = []
         for i, tr in enumerate(league_data.teams):
-            nat_slot = i if i < 63 else None
-            ml_slot = i if i < 32 else None
-            slot_index = ml_slot if ml_slot is not None else 32
-
-            if ml_slot is not None and nat_slot is not None:
-                label = f"Nat {nat_slot} + ML {ml_slot}"
-            elif nat_slot is not None:
-                label = f"Nat {nat_slot}"
-            else:
-                label = f"Team {i}"
-
-            mappings.append(
-                SlotMapping(
-                    real_team=tr.team,
-                    slot_index=slot_index,
-                    slot_name=label,
-                    nat_index=nat_slot,
+            if i < MAX_ML_SLOTS:
+                mappings.append(
+                    SlotMapping(
+                        real_team=tr.team,
+                        slot_index=i,
+                        slot_name=f"ML {i}",
+                        nat_index=None,
+                    )
                 )
-            )
+            else:
+                mappings.append(
+                    SlotMapping(
+                        real_team=tr.team,
+                        slot_index=MAX_ML_SLOTS,
+                        slot_name=f"Team {i}",
+                        nat_index=None,
+                    )
+                )
         return mappings
 
     def patch_rom(
@@ -155,129 +215,74 @@ class WePatcher:
         on_progress: Optional[Callable[[float, str], None]] = None,
         language: str = "en",
     ) -> str:
-        """Apply all patches and write output ROM. Returns output_path.
+        """Apply the translation and every roster patch. Returns `output_path`.
 
-        Automatically applies a translation PPF (for the chosen language)
-        before writing roster/team patches.  The PPF translates kanji team
-        names; the ROM writer then overwrites ML slots with actual API
-        team names.
+        Raises `RetroRosterError` — `RomError`, `MappingError` or
+        `CapabilityError` — on failure; `app.py` catches it and shows the text.
+
+        The translation PPF goes on first, then the ROM writer overwrites the 32
+        Master League slots with the fetched team names, so the translation only
+        survives where the roster patch does not reach.
         """
-        from .translations.we2002 import LANGUAGES, ensure_ppf as ensure_translation_ppf
+        # Never let a previous run's report survive a failure below.
+        self._last_verify_report = ""
 
-        lang_name = LANGUAGES.get(language, "English")
-        writer = RomWriter(rom_path, output_path)
-
-        # Apply translation PPF first
-        if on_progress:
-            on_progress(0.02, f"Applying {lang_name} translation...")
-        try:
-            assets_dir = os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", "assets"
-            )
-            translations_dir = os.path.abspath(os.path.join(assets_dir, "translations"))
-            # For English, try the community full-translation PPF first
-            if language == "en":
-                ppf_path = os.path.join(translations_dir, "w202-english.ppf")
-                if os.path.exists(ppf_path):
-                    desc = apply_ppf(output_path, ppf_path, skip_validation=True)
-                    if on_progress:
-                        on_progress(0.05, f"{lang_name} translation applied")
-                else:
-                    fallback_ppf = ensure_translation_ppf(translations_dir, language)
-                    desc = apply_ppf(output_path, fallback_ppf)
-                    if on_progress:
-                        on_progress(0.05, f"{lang_name} team names applied")
-            else:
-                fallback_ppf = ensure_translation_ppf(translations_dir, language)
-                desc = apply_ppf(output_path, fallback_ppf)
-                if on_progress:
-                    on_progress(0.05, f"{lang_name} translation applied")
-        except Exception as e:
-            if on_progress:
-                on_progress(0.05, f"{lang_name} translation failed: {e}")
-
-        total = len(slot_mapping)
-
-        # Build team lookup
-        team_by_id = {tr.team.id: tr for tr in league_data.teams}
-
-        for i, mapping in enumerate(slot_mapping):
-            progress = i / max(total, 1)
-            team_roster = team_by_id.get(mapping.real_team.id)
-            if not team_roster:
-                continue
-
-            if on_progress:
-                on_progress(progress, f"Patching {mapping.real_team.name}...")
-
-            we_team = self.mapper.map_team_with_league_context(
-                team_roster, league_data.teams
-            )
-
-            # Kit colors from ESPN API (shirt primary, shorts secondary)
-            team_obj = mapping.real_team
-            if team_obj.color:
-                h = team_obj.color.lstrip("#")
-                if len(h) == 6:
-                    we_team.kit_home = (
-                        int(h[0:2], 16),
-                        int(h[2:4], 16),
-                        int(h[4:6], 16),
-                    )
-            if team_obj.alternate_color:
-                h = team_obj.alternate_color.lstrip("#")
-                if len(h) == 6:
-                    we_team.kit_away = (
-                        int(h[0:2], 16),
-                        int(h[2:4], 16),
-                        int(h[4:6], 16),
-                    )
-            we_team.kit_third = we_team.kit_home  # accent = shirt color
-
-            # ML slot writes (0-31) — single file open per team
-            if mapping.slot_index < 32:
-                writer.write_team(
-                    mapping.slot_index,
-                    we_team,
-                    players=we_team.players,
-                    include_flag=True,
-                )
-
-            # National slot writes (0-62) — single file open per team
-            if mapping.nat_index is not None:
-                writer.write_nat_team(
-                    mapping.nat_index,
-                    we_team,
-                    players=we_team.players,
-                    include_flag=True,
-                )
-
-        # Apply all 3D jersey TEX patches in one ROM read/write
-        if on_progress:
-            on_progress(0.85, "Patching 3D jerseys...")
-        writer.flush_tex_patches()
-
-        if on_progress:
-            on_progress(0.90, "Verifying patches...")
-
-        # Collect the WE team records for verification (ML slots only)
-        we_teams_map = {}
+        known = {roster.team.id for roster in league_data.teams}
+        # Kept in step: `entries` is what the library maps, `usable` the
+        # matching ROM-facing mappings that the verification report describes.
+        entries, usable = [], []
         for mapping in slot_mapping:
-            if mapping.slot_index >= 32:
+            # The old code skipped both of these silently rather than failing a
+            # whole patch over one unplaceable team, and `create_slot_mapping`
+            # produces the sentinel deliberately. `map_rosters` would raise.
+            if not 0 <= mapping.slot_index < MAX_ML_SLOTS:
                 continue
-            team_roster = team_by_id.get(mapping.real_team.id)
-            if team_roster:
-                we_team = self.mapper.map_team_with_league_context(
-                    team_roster, league_data.teams
+            if mapping.real_team.id not in known:
+                continue
+            entries.append(
+                _CoreSlotMapping(
+                    slot_index=mapping.slot_index,
+                    team_id=mapping.real_team.id,
+                    team_name=mapping.real_team.name,
                 )
-                we_teams_map[mapping.slot_index] = we_team
+            )
+            usable.append(mapping)
 
-        report = writer.verify_patches(rom_path, slot_mapping, we_teams_map)
-        self._last_verify_report = report
+        rosters = self._patcher.map_rosters(league_data, entries)
+        result = self._patcher.patch(
+            rom_path=Path(rom_path),
+            output_path=Path(output_path),
+            rosters=rosters,
+            on_progress=on_progress,
+            language=language,
+        )
 
         if on_progress:
-            on_progress(0.95, "Finalizing...")
-        writer.finalize()
+            on_progress(0.95, "Verifying patches...")
+        self._last_verify_report = self._verify(
+            rom_path, result.output_path, usable, rosters.teams
+        )
         if on_progress:
-            on_progress(1.0, f"Done! Saved to {output_path}")
-        return output_path
+            on_progress(1.0, f"Done! Saved to {result.output_path}")
+        return result.output_path
+
+    @staticmethod
+    def _verify(rom_path: str, output_path: str, slot_mapping, we_teams) -> str:
+        """Re-derive the human-readable verification report for a finished patch.
+
+        `verify_patches` is an instance method on the writer, and the library's
+        `patch` builds and drops its own, so a writer has to be rebuilt over the
+        finished output. Constructing it with `output_path` as both arguments is
+        what keeps `RomWriter.__init__` from copying anything over the file that
+        was just written.
+
+        That constructor sets `_in_place`, whose only other use is to skip the
+        original-versus-patched diff — the most useful phase of the report, and
+        skipping it here would be an artefact of how this writer was built
+        rather than something the caller asked for. Clearing it restores the
+        method's own `original == output` test, which still skips the diff for a
+        genuine in-place re-patch, which is exactly the old behaviour.
+        """
+        writer = RomWriter(output_path, output_path)
+        writer._in_place = False
+        return writer.verify_patches(rom_path, slot_mapping, we_teams)
