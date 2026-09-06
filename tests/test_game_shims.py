@@ -66,6 +66,7 @@ GAMES = [
     Game("services.nhl94_genesis_patcher.patcher", "NHL94GenesisPatcher"),
     Game("services.nbalive95_patcher.patcher", "NBALive95Patcher", provider=False),
     Game("services.kgj_mlb_patcher.patcher", "KGJMLBPatcher", provider=False),
+    Game("services.mvp_psp_patcher.patcher", "MVPPSPPatcher", provider=False),
 ]
 
 

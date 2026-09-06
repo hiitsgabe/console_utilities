@@ -1,68 +1,107 @@
-"""MVP Baseball PSP Patcher - Main orchestrator.
+"""MVP Baseball PSP patcher — the app's adapter onto `retro-roster-patcher`.
 
-Coordinates fetching MLB roster data from ESPN, mapping stats,
-and patching MVP Baseball PSP (ULUS-10012) ISO.
+Fetching, mapping and patching all live in the library now, in
+`retro_roster_patcher.games.mvp_psp`. This module keeps the shape `app.py`
+calls, which the library deliberately does not have:
+
+- `fetch_rosters` returns `{team code: [Player]}` and leaves the per-team leader
+  stats on `self.team_stats`. The library returns one `LeagueData` carrying
+  both.
+- `patch_rom` returns a `PatchResult` with `success` and `error`. The library
+  raises instead.
+
+`_league_data` is the load-bearing part, and the reason is not obvious from the
+call sites. `app.py` builds a *second* patcher for the patch phase — the fetch
+thread constructs one and reads `patcher.team_stats` off it, the patch thread
+constructs another and re-injects `patcher.team_stats = mvp.team_stats` — so no
+state survives on the instance between the two. The `LeagueData` the library's
+`map_rosters` needs has to be rebuilt from the roster dict plus that stats dict
+at patch time.
+
+That reconstruction is lossy by design: `map_rosters` reads only `Team.code`
+(to find the ROM slot), `players`, and `extra["leaders"]`, so every other `Team`
+and `League` field is filler here. It is safe only because the UI never mutates
+`mvp.rosters` — it reads `len()` and truthiness, and the roster-preview modal
+builds its own separate `LeagueData` rather than round-tripping this one. A
+roster editor would have to write back into what `_league_data` reads, or its
+edits would be dropped here in silence.
+
+There is no `provider` argument and there must not be one. MVP Baseball is
+ESPN-only: ESPN is the only source of MLB rosters in the library, and the
+library's patcher is registered `providers=("espn",)`. The keyword exists on the
+library class and is left unset so the library picks its own default.
+
+`analyze_rom` goes to the library's reader rather than to the library patcher's
+`analyze_rom`, and the reason here is *not* the reason it is in the two NHL
+shims. Those bypass a deep validation that decompresses megabytes of RefPack the
+shallow path would never touch. That saving does not exist for this game:
+`MVPPSPRomReader.get_info` decompresses and parses all nineteen sections on
+either path, because that is where the team slots come from, so `deep=True`
+costs one extra lookup in the already-parsed `team` table. Measured on this
+machine against a fabricated 387 KB `database.big` (195 KB decompressed):
+shallow 0.033 s, deep 0.030 s, the library's `analyze_rom` 0.031 s — three
+numbers inside each other's noise. Do not repeat the NHL shims' timing argument
+here; it is not true of this game.
+
+The reasons that do apply are behavioural, and both are about not smuggling a
+change into a migration:
+
+- `is_valid` would get narrower. The library's `analyze_rom` decides on
+  `validate_deep`, which additionally requires the disc's `team` table to hold
+  at least one of the thirty known MVP team hashes. `patch` does not require
+  that — it checks the `database.big` extent and the shallow header — so a disc
+  failing the heuristic would be refused by the UI, which gates the patch button
+  on `rom_valid`, while the patch itself would have worked. The old code decided
+  on the three-byte `validate`, and so does this.
+- The return type and the failure mode would change. This method is annotated
+  `MVPRomInfo` and the library's `analyze_rom` returns the core `RomInfo`; it
+  also takes a `Path` and raises `RomError` for a file it cannot read, where the
+  old code returned `MVPRomInfo(size=0)`. `app.py` reads only `.is_valid` and
+  wraps every call site in `except Exception`, so none of that reaches a user —
+  which is an argument for not paying for it, not an argument that it is fine.
+
+What the shallow path gives up is that `team`-table heuristic: a file that is
+some other EA PSP disc, with a RefPack stream at offset 0 and another at offset
+324, is called valid here and fails later inside `patch` with the writer's
+message instead of at ROM-selection time. That is what the old code did.
+
+Four behaviour differences from the old local code, all deliberate:
+
+`team_stats` now exists from construction. The old class only created it inside
+`fetch_rosters`, so reading it first raised `AttributeError`; `app.py` works
+around that with `getattr(patcher, "team_stats", {})`. Initialising it is a
+widening — the workaround still returns the same `{}`.
+
+`fetch_rosters` raises `ApiError` when the provider answers with no teams, or
+with no team that maps to a ROM slot, where the old code returned an empty dict
+and the screen went quiet.
+
+The squad request now carries the season. The old code called
+`get_baseball_squad(team.id)` with no season, and the ESPN client puts the
+season in its *cache key* but not in the squad URL, so the first season a user
+ever fetched was served back for every later one. The library passes it, so
+rosters for a non-current season change — for the better.
+
+A patch that cannot be stored now fails instead of silently succeeding. MVP's
+sections sit at fixed offsets with no length word, so a rebuilt table that
+compresses larger than its allocation cannot be written at all. The old writer
+did `continue`: it kept the original section, dropped every edit to that table,
+and still returned `success=True`. The library raises `SectionTooLargeError`,
+which is a `RetroRosterError`, so it arrives here as `success=False` with a
+message naming the table and the shortfall.
 """
 
-from typing import Dict, List, Optional, Callable
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable, Dict, List, Optional
 
-from services.sports_api.models import Player
-from services.mvp_psp_patcher.models import (
-    MVPTeamRecord,
-    MVPPlayerRecord,
-    MVPRomInfo,
-    TEAM_COUNT,
-    MVP_TEAM_ORDER,
-    TEAM_HASHES,
-    MVP_ABBREV_TO_INDEX,
-    ATTRIB_FIRST_NAME,
-    ATTRIB_LAST_NAME,
-    ATTRIB_JERSEY,
-    ATTRIB_BATS,
-    ATTRIB_THROWS,
-    ATTRIB_PRIMARY_POS,
-    ATTRIB_SECONDARY_POS,
-    ATTRIB_HEIGHT,
-    ATTRIB_WEIGHT,
-    ATTRIB_SPEED,
-    ATTRIB_FIELDING,
-    ATTRIB_RANGE,
-    ATTRIB_THROW_STRENGTH,
-    ATTRIB_THROW_ACCURACY,
-    ATTRIB_DURABILITY,
-    ATTRIB_PLATE_DISCIPLINE,
-    ATTRIB_BUNTING,
-    ATTRIB_BASERUNNING,
-    ATTRIB_STEALING_AGGRESSIVE,
-    ATTRIB_STARPOWER,
-    LR_CONTACT,
-    LR_POWER,
-    PA_STAMINA,
-    PA_PICKOFF,
-    PA_PITCH1_MOVEMENT,
-    PA_PITCH1_CONTROL,
-    PA_PITCH1_VELOCITY,
-    PA_PITCH2_TYPE,
-    PA_PITCH2_MOVEMENT,
-    PA_PITCH2_CONTROL,
-    PA_PITCH2_VELOCITY,
-    POS_STRING_TO_NUM,
-    ROSTER_TEAMID,
-    ROSTER_PLAYERID,
-    ROSTER_RH_AL_POS,
-    ROSTER_RH_AL_ORDER,
-    ROSTER_RH_NL_POS,
-    ROSTER_RH_NL_ORDER,
-    ROSTER_LH_AL_POS,
-    ROSTER_LH_AL_ORDER,
-    ROSTER_LH_NL_POS,
-    ROSTER_LH_NL_ORDER,
-    POSITIONS,
+from retro_roster_patcher.core.errors import RetroRosterError
+from retro_roster_patcher.games.mvp_psp.models import MVPRomInfo
+from retro_roster_patcher.games.mvp_psp.patcher import (
+    MVPPSPPatcher as _LibPatcher,
 )
-from services.mvp_psp_patcher.stat_mapper import MVPPSPStatMapper
-from services.mvp_psp_patcher.rom_reader import MVPPSPRomReader
-from services.mvp_psp_patcher.rom_writer import MVPPSPRomWriter
+from retro_roster_patcher.games.mvp_psp.rom_reader import MVPPSPRomReader
+from retro_roster_patcher.sports.models import League, LeagueData, Player, Team, TeamRoster
 
 
 @dataclass
@@ -77,7 +116,12 @@ class PatchResult:
 
 
 class MVPPSPPatcher:
-    """Main orchestrator for MVP Baseball PSP roster patching."""
+    """Main orchestrator for MVP Baseball PSP roster patching.
+
+    One provider, unlike the NHL patchers: ESPN is the only source of MLB
+    rosters in the library, so there is nothing for a user to choose and no
+    `provider` argument.
+    """
 
     def __init__(
         self,
@@ -86,14 +130,15 @@ class MVPPSPPatcher:
     ):
         self.cache_dir = cache_dir
         self.on_status = on_status
-        self.mapper = MVPPSPStatMapper()
-
-        from services.sports_api.espn_client import EspnClient
-
-        self.api = EspnClient(cache_dir, on_status)
+        self.team_stats: Dict[str, dict] = {}
+        self._patcher = _LibPatcher(cache_dir, on_status=on_status)
 
     def analyze_rom(self, iso_path: str) -> MVPRomInfo:
-        """Validate ISO and read team slots."""
+        """Validate ISO and read team slots.
+
+        The shallow three-byte check, through the library's reader rather than
+        its patcher's `analyze_rom`. See the module docstring for why.
+        """
         reader = MVPPSPRomReader(iso_path)
         if not reader.load():
             return MVPRomInfo(path=iso_path, size=0)
@@ -104,119 +149,29 @@ class MVPPSPPatcher:
         on_progress: Optional[Callable[[float, str], None]] = None,
         season: int = 2025,
     ) -> Dict[str, List[Player]]:
-        """Fetch all MLB team rosters + stats."""
-        rosters: Dict[str, List[Player]] = {}
-        self.team_stats: Dict[str, dict] = {}
+        """Fetch all MLB team rosters + stats.
 
-        if self.on_status:
-            self.on_status("Fetching MLB teams...")
-        mlb_teams = self.api.get_mlb_teams()
+        Returns dict mapping team abbreviation to player list.
+        Also populates self.team_stats for use during patching.
 
-        if not mlb_teams:
-            if self.on_status:
-                self.on_status("No MLB teams found")
-            return rosters
-
-        # Filter to teams with MVP ROM slots
-        mapped = [t for t in mlb_teams if self.mapper.get_team_slot(t.code) is not None]
-        total = len(mapped)
-
-        for i, team in enumerate(mapped):
-            if on_progress:
-                on_progress(i / total, f"Fetching {team.name}...")
-
-            players = self.api.get_baseball_squad(team.id)
-            stats = self.api.get_baseball_team_leaders(team.id, season)
-
-            if players:
-                rosters[team.code] = players
-            if stats:
-                self.team_stats[team.code] = stats
-
-        if on_progress:
-            on_progress(1.0, "Complete")
-
-        return rosters
-
-    def map_rosters(
-        self,
-        rosters: Dict[str, List[Player]],
-    ) -> List[MVPTeamRecord]:
-        """Map fetched rosters to MVP team records.
-
-        Returns list of 30 MVPTeamRecord (one per ROM slot).
+        A provider that answers with no teams, or with no team holding a ROM
+        slot, now raises `ApiError` rather than returning an empty dict;
+        `app.py` catches it and shows the message, where before the screen just
+        went quiet.
         """
-        teams: List[MVPTeamRecord] = []
-        team_stats = getattr(self, "team_stats", {})
-        abbrevs = list(TEAM_HASHES.keys())
+        data = self._patcher.fetch(season=season, on_progress=on_progress)
 
-        for i in range(TEAM_COUNT):
-            abbrev = abbrevs[i] if i < len(abbrevs) else ""
-            teams.append(
-                MVPTeamRecord(
-                    index=i,
-                    name=MVP_TEAM_ORDER[i],
-                    abbrev=abbrev,
-                    hash_id=TEAM_HASHES.get(abbrev, ""),
-                    players=[],
-                )
-            )
-
-        for team_code, players in rosters.items():
-            slot = self.mapper.get_team_slot(team_code)
-            if slot is None or slot >= TEAM_COUNT:
-                continue
-
-            mvp_abbrev = self.mapper.get_mvp_abbrev(team_code)
-            if not mvp_abbrev:
-                continue
-
-            stats = team_stats.get(team_code, {})
-
-            # Select 25 players ordered for ROM slots
-            selected = self.mapper.select_roster(players, stats)
-
-            mvp_players = []
-            for idx, player in enumerate(selected):
-                pid = str(player.id)
-                pstats = stats.get(pid, {})
-                is_pitcher = self.mapper._is_pitcher(player)
-                is_starter = idx >= 15 and idx < 20
-
-                if is_pitcher:
-                    record = self.mapper.map_pitcher(
-                        player,
-                        pstats,
-                        is_starter=is_starter,
-                    )
-                else:
-                    record = self.mapper.map_batter(player, pstats)
-
-                # Assign roster position based on slot
-                record.roster_position = self._slot_to_position(idx)
-                if idx < 9:
-                    record.batting_order = (
-                        idx + 1
-                    )  # 1-based (game uses order-1 as index)
-                else:
-                    record.batting_order = -1
-
-                mvp_players.append(record)
-
-            teams[slot].players = mvp_players
-
-        return teams
-
-    def _slot_to_position(self, slot: int) -> str:
-        """Map roster slot index to MVP position string."""
-        if slot < 9:
-            return ["C", "1B", "2B", "SS", "3B", "LF", "CF", "RF", "DH"][slot]
-        elif slot < 15:
-            return "B"  # Bench
-        elif slot < 20:
-            return ["SP1", "SP2", "SP3", "SP4", "SP5"][slot - 15]
-        else:
-            return ["CP", "SU", "MR", "MR", "LR"][min(slot - 20, 4)]
+        rosters: Dict[str, List[Player]] = {}
+        self.team_stats = {}
+        for roster in data.teams:
+            # Both guards are the old behaviour: a team with no players does not
+            # get a key, and neither does a team with no leader stats.
+            if roster.players:
+                rosters[roster.team.code] = roster.players
+            leaders = roster.extra.get("leaders") or {}
+            if leaders:
+                self.team_stats[roster.team.code] = leaders
+        return rosters
 
     def patch_rom(
         self,
@@ -226,252 +181,53 @@ class MVPPSPPatcher:
         on_progress: Optional[Callable[[float, str], None]] = None,
     ) -> PatchResult:
         """Apply roster patches to ISO."""
-        if self.on_status:
-            self.on_status("Loading ISO...")
-
-        writer = MVPPSPRomWriter(iso_path, output_path)
-        if not writer.load():
-            return PatchResult(
-                success=False,
-                error="Failed to load MVP Baseball PSP ISO",
+        try:
+            mapped = self._patcher.map_rosters(self._league_data(rosters))
+            result = self._patcher.patch(
+                rom_path=Path(iso_path),
+                output_path=Path(output_path),
+                rosters=mapped,
+                on_progress=on_progress,
             )
-
-        if self.on_status:
-            self.on_status("Mapping rosters...")
-        mvp_teams = self.map_rosters(rosters)
-
-        # Separate existing hashes into pitcher and batter pools
-        # to preserve cross-table references (pitchstat, batstat, etc.)
-        pitcher_hashes_set = set(writer.reader.records.get("pitchattrib", {}).keys())
-        all_hashes = list(writer.reader.records.get("attrib", {}).keys())
-        pitcher_pool = [h for h in all_hashes if h in pitcher_hashes_set]
-        batter_pool = [h for h in all_hashes if h not in pitcher_hashes_set]
-        pitcher_iter = iter(pitcher_pool)
-        batter_iter = iter(batter_pool)
-
-        teams_patched = 0
-        players_patched = 0
-
-        # Clear existing roster records for teams we're patching
-        patched_team_hashes = set()
-        for team in mvp_teams:
-            if team.players and team.hash_id:
-                patched_team_hashes.add(team.hash_id)
-
-        # Remove old roster entries for patched teams
-        old_roster = dict(writer.reader.records.get("roster", {}))
-        new_roster: Dict[str, Dict[int, str]] = {}
-        preserved_ids: set = set()
-        for rec_id, fields in old_roster.items():
-            team_hash = fields.get(ROSTER_TEAMID, "")
-            if team_hash not in patched_team_hashes:
-                new_roster[rec_id] = fields
-                preserved_ids.add(rec_id)
-
-        # Use IDs that don't collide with preserved entries
-        roster_counter = (
-            max(
-                (int(rid, 16) for rid in old_roster.keys()),
-                default=0,
-            )
-            + 1
-        )
-
-        for i, team in enumerate(mvp_teams):
-            if on_progress:
-                on_progress(
-                    i / TEAM_COUNT,
-                    f"Writing {team.name} ({len(team.players)} players)...",
-                )
-
-            if not team.players or not team.hash_id:
-                continue
-
-            for p_idx, player in enumerate(team.players):
-                # Reuse hash from matching pool (pitcher or batter)
-                if player.is_pitcher:
-                    try:
-                        player_hash = next(pitcher_iter)
-                    except StopIteration:
-                        # Fallback to batter pool
-                        try:
-                            player_hash = next(batter_iter)
-                        except StopIteration:
-                            player_hash = f"00{i:02x}{p_idx:05x}ff"
-                else:
-                    try:
-                        player_hash = next(batter_iter)
-                    except StopIteration:
-                        try:
-                            player_hash = next(pitcher_iter)
-                        except StopIteration:
-                            player_hash = f"00{i:02x}{p_idx:05x}ff"
-
-                player.hash_id = player_hash
-
-                # Write attrib record
-                attrib_fields = self._build_attrib_fields(player)
-                writer.update_player_record("attrib", player_hash, attrib_fields)
-
-                # Write LR attrib records (vs RHP and LHP)
-                lr_rhp = self._build_lr_attrib_fields(player, "rhp")
-                writer.update_player_record("lrattrib_rhp", player_hash, lr_rhp)
-                lr_lhp = self._build_lr_attrib_fields(player, "lhp")
-                writer.update_player_record("lrattrib_lhp", player_hash, lr_lhp)
-
-                # Write pitch attrib for pitchers
-                if player.is_pitcher:
-                    pa_fields = self._build_pitchattrib_fields(player)
-                    writer.update_player_record("pitchattrib", player_hash, pa_fields)
-
-                # Build roster entry with non-colliding hex ID
-                roster_id = f"{roster_counter:09x}"
-                roster_counter += 1
-                roster_fields = self._build_roster_fields(
-                    team.hash_id, player_hash, player, i
-                )
-                new_roster[roster_id] = roster_fields
-
-                players_patched += 1
-
-            teams_patched += 1
-
-        # Apply the rebuilt roster table
-        writer.update_records("roster", new_roster)
-
-        if on_progress:
-            on_progress(1.0, "Saving patched ISO...")
-
-        if self.on_status:
-            self.on_status("Saving patched ISO...")
-        if not writer.finalize():
-            return PatchResult(
-                success=False,
-                error="Failed to save patched ISO",
-            )
+        except RetroRosterError as exc:
+            # This library's own errors are the ones the old code returned as a
+            # failed `PatchResult`. Anything else is a bug and keeps propagating
+            # to `app.py`'s handler, which shows the exception text.
+            return PatchResult(success=False, error=str(exc))
 
         return PatchResult(
             success=True,
-            output_path=output_path,
-            teams_patched=teams_patched,
-            players_patched=players_patched,
+            output_path=result.output_path,
+            teams_patched=result.teams_patched,
+            players_patched=result.players_patched,
         )
 
-    def _build_attrib_fields(self, player: MVPPlayerRecord) -> Dict[int, str]:
-        """Build attrib CSV fields from a player record."""
-        pos_num = POS_STRING_TO_NUM.get(player.primary_position, 7)
-        fields = {
-            ATTRIB_FIRST_NAME: player.first_name,
-            ATTRIB_LAST_NAME: player.last_name,
-            ATTRIB_JERSEY: str(player.jersey),
-            ATTRIB_BATS: str(player.bats),
-            ATTRIB_THROWS: str(player.throws),
-            ATTRIB_PRIMARY_POS: str(pos_num),
-            ATTRIB_HEIGHT: str(player.height),
-            ATTRIB_WEIGHT: str(player.weight),
-            ATTRIB_PLATE_DISCIPLINE: str(player.plate_discipline),
-            ATTRIB_BUNTING: str(player.bunting),
-            ATTRIB_STEALING_AGGRESSIVE: str(player.stealing),
-            ATTRIB_BASERUNNING: str(player.baserunning),
-            ATTRIB_SPEED: str(player.speed),
-            ATTRIB_FIELDING: str(player.fielding),
-            ATTRIB_RANGE: str(player.arm_range),
-            ATTRIB_THROW_STRENGTH: str(player.throw_strength),
-            ATTRIB_THROW_ACCURACY: str(player.throw_accuracy),
-            ATTRIB_DURABILITY: str(player.durability),
-            ATTRIB_STARPOWER: str(player.starpower),
-        }
-        if player.secondary_position:
-            sec_num = POS_STRING_TO_NUM.get(player.secondary_position, 0)
-            fields[ATTRIB_SECONDARY_POS] = str(sec_num)
-        return fields
+    def _league_data(self, rosters: Dict[str, List[Player]]) -> LeagueData:
+        """Rebuild the library's `LeagueData` from the app's two state fields.
 
-    def _build_lr_attrib_fields(
-        self, player: MVPPlayerRecord, vs: str
-    ) -> Dict[int, str]:
-        """Build LR attrib fields (vs RHP or LHP).
+        Sorted by team code so a patch run is reproducible: `MODERN_MLB_TO_MVP`
+        collapses 32 provider codes onto 30 slots — `OAK`/`ATH` and `CWS`/`CHW`
+        — so which of a colliding pair wins depends on iteration order.
 
-        Only updates name and contact/power — spray charts and
-        tendencies are preserved from the original record via merge.
+        `League.season` is 0 and not the fetched season: nothing downstream of
+        `map_rosters` reads it, and the patch phase has no season to hand.
         """
-        if vs == "rhp":
-            contact = player.contact_rhp
-            power = player.power_rhp
-        else:
-            contact = player.contact_lhp
-            power = player.power_lhp
-
-        return {
-            0: player.first_name,
-            1: player.last_name,
-            LR_CONTACT: str(contact),
-            LR_POWER: str(power),
-        }
-
-    def _build_pitchattrib_fields(self, player: MVPPlayerRecord) -> Dict[int, str]:
-        """Build pitch attrib fields for a pitcher.
-
-        Pitch 1 is always fastball (no type field, fields 4-7).
-        Pitches 2-5 each have type+movement+desc+control+velocity (5 fields).
-        """
-        fields: Dict[int, str] = {
-            0: player.first_name,
-            1: player.last_name,
-            PA_STAMINA: str(player.stamina),
-            PA_PICKOFF: str(player.pickoff),
-        }
-        if player.pitches:
-            # Pitch 1 (fastball): fields 4-7, no type
-            p1 = player.pitches[0]
-            fields[PA_PITCH1_MOVEMENT] = str(p1.get("movement", 50))
-            fields[PA_PITCH1_CONTROL] = str(p1.get("control", 50))
-            fields[PA_PITCH1_VELOCITY] = str(p1.get("velocity", 50))
-
-        # Pitches 2-5: fields 8-12, 13-17, 18-22, 23-27
-        for i, pitch in enumerate(player.pitches[1:4]):
-            base = PA_PITCH2_TYPE + i * 5
-            fields[base] = str(pitch.get("type", 1))
-            fields[base + 1] = str(pitch.get("movement", 50))
-            fields[base + 3] = str(pitch.get("control", 50))
-            fields[base + 4] = str(pitch.get("velocity", 50))
-        return fields
-
-    def _build_roster_fields(
-        self,
-        team_hash: str,
-        player_hash: str,
-        player: MVPPlayerRecord,
-        team_index: int,
-    ) -> Dict[int, str]:
-        """Build roster CSV fields for a player."""
-        pos = player.roster_position
-        order = player.batting_order
-
-        # AL teams: indices 0-13, NL teams: 14-29
-        is_al = team_index < 14
-
-        fields = {
-            ROSTER_TEAMID: team_hash,
-            ROSTER_PLAYERID: player_hash,
-        }
-
-        if is_al:
-            fields[ROSTER_RH_AL_POS] = pos
-            fields[ROSTER_RH_AL_ORDER] = str(order)
-            fields[ROSTER_RH_NL_POS] = pos
-            fields[ROSTER_RH_NL_ORDER] = str(-1)
-            fields[ROSTER_LH_AL_POS] = pos
-            fields[ROSTER_LH_AL_ORDER] = str(order)
-            fields[ROSTER_LH_NL_POS] = pos
-            fields[ROSTER_LH_NL_ORDER] = str(-1)
-        else:
-            fields[ROSTER_RH_AL_POS] = pos
-            fields[ROSTER_RH_AL_ORDER] = str(-1)
-            fields[ROSTER_RH_NL_POS] = pos
-            fields[ROSTER_RH_NL_ORDER] = str(order)
-            fields[ROSTER_LH_AL_POS] = pos
-            fields[ROSTER_LH_AL_ORDER] = str(-1)
-            fields[ROSTER_LH_NL_POS] = pos
-            fields[ROSTER_LH_NL_ORDER] = str(order)
-
-        return fields
+        teams = [
+            TeamRoster(
+                team=Team(id=0, name=code, short_name=code, code=code),
+                players=list(players),
+                extra={"leaders": self.team_stats.get(code, {})},
+            )
+            for code, players in sorted(rosters.items())
+        ]
+        return LeagueData(
+            league=League(
+                id=0,
+                name="MLB",
+                country="USA",
+                country_code="US",
+                season=0,
+                teams_count=len(teams),
+            ),
+            teams=teams,
+        )
