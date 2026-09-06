@@ -1,20 +1,28 @@
-"""The NHL 05 PS2 adapter onto `retro-roster-patcher`.
+"""The game adapters onto `retro-roster-patcher`.
 
-The library's own suite covers the fetching, mapping and ISO writing. What is
+The library's own suite covers the fetching, mapping and ROM writing. What is
 untested by it, and what this file is for, is the translation the app forces:
 `app.py` stores the fetch result as a `{code: [Player]}` dict plus a separate
 `team_stats` dict, throws the patcher away, and builds a second one for the
-patch phase. The `LeagueData` the library needs therefore has to be rebuilt from
-those two dicts, and a field lost in that rebuild is lost silently — the patch
-still succeeds, just against the wrong data.
+patch phase. The `LeagueData` the library needs therefore has to be rebuilt
+from those two dicts, and a field lost in that rebuild is lost silently — the
+patch still succeeds, just against the wrong data.
 
 So the library patcher is stubbed here and the tests assert on what it was
-handed. An end-to-end check against a fabricated disc lives outside the repo;
-this is the part that is this repo's code.
+handed. End-to-end checks against fabricated ROMs live outside the repo; this
+is the part that is this repo's code.
+
+Every adapter in `GAMES` is the same adapter, so every test runs against all of
+them. That is the point of parameterising rather than copying the file per
+game: if one of them drifts, the shared behaviour stops being shared and a test
+says so. A game is only added here once its old-vs-new byte differential has
+passed with a passing negative control.
 """
 
+import importlib
 import os
 import sys
+from dataclasses import dataclass
 
 import pytest
 
@@ -30,7 +38,36 @@ from retro_roster_patcher.sports.models import (  # noqa: E402
     TeamRoster,
 )
 
-from services.nhl05_ps2_patcher.patcher import NHL05PS2Patcher  # noqa: E402
+
+@dataclass(frozen=True)
+class Game:
+    """One adapter, plus the team codes its mapper actually recognises.
+
+    `codes` matter: `map_rosters` is stubbed out in most tests, but the two
+    that construct a real patcher need codes the game's own mapper accepts.
+    """
+
+    module: str
+    cls: str
+    codes: tuple
+
+    def __str__(self):
+        return self.module.split(".")[1]
+
+
+GAMES = [
+    Game("services.nhl05_ps2_patcher.patcher", "NHL05PS2Patcher", ("ANA", "BOS", "WSH")),
+    Game("services.nhl07_psp_patcher.patcher", "NHL07PSPPatcher", ("ANA", "BOS", "WSH")),
+]
+
+
+@pytest.fixture(params=GAMES, ids=str)
+def game(request):
+    return request.param
+
+
+def patcher_class(game):
+    return getattr(importlib.import_module(game.module), game.cls)
 
 
 def player(pid, name="Some One", position="C"):
@@ -39,14 +76,10 @@ def player(pid, name="Some One", position="C"):
 
 def roster(code, players, leaders=None):
     return TeamRoster(
-        team=Team(id=pid_for(code), name=code, code=code),
+        team=Team(id=0, name=code, code=code),
         players=players,
         extra={"leaders": leaders or {}},
     )
-
-
-def pid_for(code):
-    return sum(ord(c) for c in code)
 
 
 def league_data(rosters):
@@ -64,7 +97,9 @@ class StubLibPatcher:
         self.mapped = []
         self.patch_calls = []
         self.fetch_result = league_data([])
-        self.patch_result = LibPatchResult(output_path="/out.iso", teams_patched=0, players_patched=0)
+        self.patch_result = LibPatchResult(
+            output_path="/out.iso", teams_patched=0, players_patched=0
+        )
         self.fetch_raises = None
         self.map_raises = None
         self.patch_raises = None
@@ -90,20 +125,28 @@ class StubLibPatcher:
         return self.patch_result
 
 
-@pytest.fixture
-def stubbed(monkeypatch):
-    """A shim whose library patcher is a stub, exposed as `.stub`."""
-    import services.nhl05_ps2_patcher.patcher as module
+def install_stub(monkeypatch, game):
+    """Swap the adapter's `_LibPatcher` for the stub. Returns the created list.
 
+    The uniform alias is what makes this work for every game, and is why the
+    shims import the library class under one name rather than a per-game one.
+    """
+    module = importlib.import_module(game.module)
     created = []
 
     def factory(*args, **kwargs):
-        stub = StubLibPatcher(*args, **kwargs)
-        created.append(stub)
-        return stub
+        created.append(StubLibPatcher(*args, **kwargs))
+        return created[-1]
 
-    monkeypatch.setattr(module, "_LibNHL05PS2Patcher", factory)
-    shim = NHL05PS2Patcher("/cache", provider="espn")
+    monkeypatch.setattr(module, "_LibPatcher", factory)
+    return created
+
+
+@pytest.fixture
+def stubbed(monkeypatch, game):
+    """An adapter whose library patcher is a stub, exposed as `.stub`."""
+    created = install_stub(monkeypatch, game)
+    shim = patcher_class(game)("/cache", provider="espn")
     shim.stub = created[0]
     return shim
 
@@ -111,18 +154,14 @@ def stubbed(monkeypatch):
 # ---------------------------------------------------------------- construction
 
 
-def test_provider_and_status_reach_the_library(monkeypatch):
-    import services.nhl05_ps2_patcher.patcher as module
-
-    created = []
-    monkeypatch.setattr(
-        module, "_LibNHL05PS2Patcher", lambda *a, **k: created.append(StubLibPatcher(*a, **k)) or created[-1]
-    )
+def test_provider_and_status_reach_the_library(monkeypatch, game):
+    created = install_stub(monkeypatch, game)
 
     def on_status(msg):
         pass
 
-    shim = NHL05PS2Patcher("/cache", on_status=on_status, provider="nhl")
+    shim = patcher_class(game)("/cache", on_status=on_status, provider="nhl")
+
     assert created[0].cache_dir == "/cache"
     assert created[0].provider == "nhl"
     assert created[0].on_status is on_status
@@ -132,7 +171,8 @@ def test_provider_and_status_reach_the_library(monkeypatch):
 
 
 def test_team_stats_exists_before_any_fetch(stubbed):
-    """`app.py`'s patch phase assigns over it, but the fetch phase reads it."""
+    """The old classes only created it inside `fetch_rosters`, so `app.py` reads
+    it through `getattr(patcher, "team_stats", {})`. Same answer, no raise."""
     assert stubbed.team_stats == {}
 
 
@@ -141,9 +181,7 @@ def test_team_stats_exists_before_any_fetch(stubbed):
 
 def test_fetch_flattens_to_code_keyed_players(stubbed):
     a, b = player(1), player(2)
-    stubbed.stub.fetch_result = league_data(
-        [roster("ANA", [a]), roster("BOS", [b])]
-    )
+    stubbed.stub.fetch_result = league_data([roster("ANA", [a]), roster("BOS", [b])])
 
     result = stubbed.fetch_rosters(season=2024)
 
@@ -162,9 +200,7 @@ def test_fetch_lifts_leaders_onto_team_stats(stubbed):
 
 def test_fetch_drops_a_team_with_no_players(stubbed):
     """The old behaviour: no key at all, rather than a key mapping to []."""
-    stubbed.stub.fetch_result = league_data(
-        [roster("ANA", []), roster("BOS", [player(2)])]
-    )
+    stubbed.stub.fetch_result = league_data([roster("ANA", []), roster("BOS", [player(2)])])
 
     assert list(stubbed.fetch_rosters()) == ["BOS"]
 
@@ -199,7 +235,7 @@ def test_fetch_forwards_the_progress_callback(stubbed):
 
 def test_fetch_propagates_an_api_error(stubbed):
     """`app.py` catches it and shows the text; the old code went quiet instead."""
-    stubbed.stub.fetch_raises = ApiError("provider returned no NHL teams")
+    stubbed.stub.fetch_raises = ApiError("provider returned no teams")
 
     with pytest.raises(ApiError):
         stubbed.fetch_rosters()
@@ -228,7 +264,7 @@ def test_patch_puts_team_stats_back_into_extra_leaders(stubbed):
 
 
 def test_patch_gives_a_team_with_no_stats_an_empty_leaders_dict(stubbed):
-    """Not a missing key: `map_rosters` does `roster.extra.get("leaders") or {}`,
+    """Not a missing key: every `map_rosters` does `extra.get("leaders") or {}`,
     but the ROM slot lookup happens first and a KeyError here would abort it."""
     stubbed.patch_rom("/in.iso", "/out.iso", {"ANA": [player(1)]})
 
@@ -246,7 +282,7 @@ def test_patch_orders_teams_by_code(stubbed):
 
 
 def test_patch_does_not_alias_the_callers_player_lists(stubbed):
-    """The app keeps `nhl.rosters` alive across repeated patch attempts."""
+    """The app keeps its `rosters` dict alive across repeated patch attempts."""
     players = [player(1)]
 
     stubbed.patch_rom("/in.iso", "/out.iso", {"ANA": players})
@@ -282,7 +318,7 @@ def test_patch_reports_success_with_the_libraries_counts(stubbed):
 
 
 def test_patch_turns_a_library_error_into_a_failed_result(stubbed):
-    stubbed.stub.patch_raises = RomError("DB.VIV is truncated")
+    stubbed.stub.patch_raises = RomError("the archive is truncated")
 
     result = stubbed.patch_rom("/in.iso", "/out.iso", {"ANA": [player(1)]})
 
@@ -308,15 +344,15 @@ def test_a_non_library_exception_still_propagates(stubbed):
 # ------------------------------------------------------------------- analysis
 
 
-def test_analyze_rom_of_a_missing_file_is_invalid_rather_than_raising(tmp_path):
-    """Two call sites run this on the pygame main thread when a ROM is picked.
+def test_analyze_rom_of_a_missing_file_is_invalid_rather_than_raising(tmp_path, game):
+    """Two call sites per game run this on the pygame main thread when a ROM is
+    picked, and `app.py` only ever reads `is_valid`.
 
-    The only unstubbed patcher in this file, so it is also the one check that
-    the real library constructor accepts the shim's arguments. It needs a
-    writable cache dir: the library's `EspnClient.__init__` creates it eagerly.
+    Unstubbed, so it is also the one check that the real library constructor
+    accepts the arguments the shim passes. It needs a writable cache dir: the
+    library's API clients create it eagerly.
     """
-    info = NHL05PS2Patcher(str(tmp_path)).analyze_rom("/does/not/exist.iso")
+    info = patcher_class(game)(str(tmp_path)).analyze_rom("/does/not/exist.iso")
 
     assert info.is_valid is False
     assert info.size == 0
-    assert info.team_slots == []

@@ -39,7 +39,7 @@ from typing import Callable, Dict, List, Optional
 from retro_roster_patcher.core.errors import RetroRosterError
 from retro_roster_patcher.games.nhl05_ps2.models import NHL05RomInfo
 from retro_roster_patcher.games.nhl05_ps2.patcher import (
-    NHL05PS2Patcher as _LibNHL05PS2Patcher,
+    NHL05PS2Patcher as _LibPatcher,
 )
 from retro_roster_patcher.games.nhl05_ps2.rom_reader import NHL05PS2RomReader
 from retro_roster_patcher.sports.models import League, LeagueData, Player, Team, TeamRoster
@@ -74,7 +74,7 @@ class NHL05PS2Patcher:
         self.on_status = on_status
         self.provider = provider
         self.team_stats: Dict[str, dict] = {}
-        self._patcher = _LibNHL05PS2Patcher(
+        self._patcher = _LibPatcher(
             cache_dir,
             provider=provider,
             on_status=on_status,

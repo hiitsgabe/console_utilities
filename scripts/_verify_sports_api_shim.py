@@ -47,7 +47,7 @@ CONSUMERS = [
     ("services.mvp_psp_patcher.stat_mapper", "Player", lib_models),
     ("services.nbalive95_patcher.stat_mapper", "Player", lib_models),
     # nhl05_ps2 has no entry: its stat_mapper is gone, folded into the library.
-    ("services.nhl07_psp_patcher.stat_mapper", "Player", lib_models),
+    # nhl07_psp has no entry either: same migration, same reason.
     ("services.nhl94_genesis_patcher.stat_mapper", "Player", lib_models),
     ("services.nhl94_snes_patcher.stat_mapper", "Player", lib_models),
 ]
