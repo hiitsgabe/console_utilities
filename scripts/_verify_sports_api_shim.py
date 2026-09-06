@@ -46,7 +46,7 @@ CONSUMERS = [
     ("services.kgj_mlb_patcher.stat_mapper", "Player", lib_models),
     ("services.mvp_psp_patcher.stat_mapper", "Player", lib_models),
     ("services.nbalive95_patcher.stat_mapper", "Player", lib_models),
-    ("services.nhl05_ps2_patcher.stat_mapper", "Player", lib_models),
+    # nhl05_ps2 has no entry: its stat_mapper is gone, folded into the library.
     ("services.nhl07_psp_patcher.stat_mapper", "Player", lib_models),
     ("services.nhl94_genesis_patcher.stat_mapper", "Player", lib_models),
     ("services.nhl94_snes_patcher.stat_mapper", "Player", lib_models),
