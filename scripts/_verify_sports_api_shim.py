@@ -43,13 +43,11 @@ CONSUMERS = [
     ("services.we_patcher.espn_client", "EspnClient", lib_espn),
     ("services.pes6_ps2_patcher.patcher", "EspnClient", lib_espn),
     ("services.iss_patcher.stat_mapper", "Player", lib_models),
-    ("services.kgj_mlb_patcher.stat_mapper", "Player", lib_models),
     ("services.mvp_psp_patcher.stat_mapper", "Player", lib_models),
-    ("services.nbalive95_patcher.stat_mapper", "Player", lib_models),
-    # nhl05_ps2 has no entry: its stat_mapper is gone, folded into the library.
-    # nhl07_psp has no entry either: same migration, same reason.
-    ("services.nhl94_genesis_patcher.stat_mapper", "Player", lib_models),
-    ("services.nhl94_snes_patcher.stat_mapper", "Player", lib_models),
+    # Every migrated game has dropped out of this list, and that is the point:
+    # its stat_mapper is gone, folded into the library, so there is no local
+    # copy left to have drifted. Gone so far: nhl05_ps2, nhl07_psp, nhl94_snes,
+    # nhl94_genesis, nbalive95, kgj_mlb.
 ]
 
 for module_path, attribute, expected in CONSUMERS:

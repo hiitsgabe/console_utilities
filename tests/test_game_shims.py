@@ -41,28 +41,46 @@ from retro_roster_patcher.sports.models import (  # noqa: E402
 
 @dataclass(frozen=True)
 class Game:
-    """One adapter, plus the team codes its mapper actually recognises.
+    """One adapter, plus whether it takes a `provider`.
 
-    `codes` matter: `map_rosters` is stubbed out in most tests, but the two
-    that construct a real patcher need codes the game's own mapper accepts.
+    Only the NHL games have two providers to choose between — the library
+    registers `providers=("espn", "nhl")` for them and `("espn",)` for the
+    others, so the MLB and NBA adapters deliberately have no such argument and
+    `app.py` must not pass one. The tests split on this field rather than
+    tolerating both shapes, so that a provider appearing on an ESPN-only game,
+    or vanishing from an NHL one, fails here.
     """
 
     module: str
     cls: str
-    codes: tuple
+    provider: bool = True
 
     def __str__(self):
         return self.module.split(".")[1]
 
 
 GAMES = [
-    Game("services.nhl05_ps2_patcher.patcher", "NHL05PS2Patcher", ("ANA", "BOS", "WSH")),
-    Game("services.nhl07_psp_patcher.patcher", "NHL07PSPPatcher", ("ANA", "BOS", "WSH")),
+    Game("services.nhl05_ps2_patcher.patcher", "NHL05PS2Patcher"),
+    Game("services.nhl07_psp_patcher.patcher", "NHL07PSPPatcher"),
+    Game("services.nhl94_snes_patcher.patcher", "NHL94SNESPatcher"),
+    Game("services.nhl94_genesis_patcher.patcher", "NHL94GenesisPatcher"),
+    Game("services.nbalive95_patcher.patcher", "NBALive95Patcher", provider=False),
+    Game("services.kgj_mlb_patcher.patcher", "KGJMLBPatcher", provider=False),
 ]
 
 
 @pytest.fixture(params=GAMES, ids=str)
 def game(request):
+    return request.param
+
+
+@pytest.fixture(params=[g for g in GAMES if g.provider], ids=str)
+def provider_game(request):
+    return request.param
+
+
+@pytest.fixture(params=[g for g in GAMES if not g.provider], ids=str)
+def espn_only_game(request):
     return request.param
 
 
@@ -146,7 +164,7 @@ def install_stub(monkeypatch, game):
 def stubbed(monkeypatch, game):
     """An adapter whose library patcher is a stub, exposed as `.stub`."""
     created = install_stub(monkeypatch, game)
-    shim = patcher_class(game)("/cache", provider="espn")
+    shim = patcher_class(game)("/cache")
     shim.stub = created[0]
     return shim
 
@@ -154,20 +172,36 @@ def stubbed(monkeypatch, game):
 # ---------------------------------------------------------------- construction
 
 
-def test_provider_and_status_reach_the_library(monkeypatch, game):
+def test_cache_dir_and_status_reach_the_library(monkeypatch, game):
     created = install_stub(monkeypatch, game)
 
     def on_status(msg):
         pass
 
-    shim = patcher_class(game)("/cache", on_status=on_status, provider="nhl")
+    shim = patcher_class(game)("/cache", on_status=on_status)
 
     assert created[0].cache_dir == "/cache"
-    assert created[0].provider == "nhl"
     assert created[0].on_status is on_status
-    # The app reads these back off the shim itself.
-    assert shim.provider == "nhl"
+    # The app reads this back off the shim itself.
     assert shim.cache_dir == "/cache"
+
+
+def test_provider_reaches_the_library(monkeypatch, provider_game):
+    created = install_stub(monkeypatch, provider_game)
+
+    shim = patcher_class(provider_game)("/cache", provider="nhl")
+
+    assert created[0].provider == "nhl"
+    # `app.py` reads it back off the shim to label the fetch.
+    assert shim.provider == "nhl"
+
+
+def test_an_espn_only_game_refuses_a_provider(espn_only_game):
+    """Not a courtesy check. The library registers one provider for these two,
+    so a `provider=` that the shim quietly swallowed would read as a working
+    choice at the call site while changing nothing."""
+    with pytest.raises(TypeError):
+        patcher_class(espn_only_game)("/cache", provider="nhl")
 
 
 def test_team_stats_exists_before_any_fetch(stubbed):

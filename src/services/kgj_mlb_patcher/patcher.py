@@ -1,22 +1,68 @@
-"""KGJ MLB Patcher - Main orchestrator.
+"""Ken Griffey Jr. MLB (SNES) patcher — the app's adapter onto `retro-roster-patcher`.
 
-Coordinates fetching MLB roster data from ESPN, mapping stats,
-and patching Ken Griffey Jr. Presents MLB (SNES) ROM.
+Same adapter as `services.nhl05_ps2_patcher.patcher` and
+`services.nhl07_psp_patcher.patcher`, and for the same reason: `app.py` builds
+one patcher for the fetch and a second one for the patch, keeping the result as
+a `{team code: [Player]}` dict plus a separate `team_stats` dict, so the
+`LeagueData` the library's `map_rosters` wants has to be rebuilt from those two
+dicts at patch time. See `services.nhl05_ps2_patcher.patcher` for the full
+argument.
+
+This game is ESPN-only, so there is no `provider` argument here and none is
+passed on. The library patcher declares `providers=("espn",)` and defaults to
+it; forwarding `provider="espn"` would buy nothing and add one more way for a
+typo in `app.py` to raise `CapabilityError`.
+
+`analyze_rom` delegates to the library patcher, unlike the two NHL shims, which
+deliberately bypass it. Those bypass because the library's deep validation
+decompresses megabytes of RefPack on the pygame main thread at every ROM
+selection. Nothing of the kind exists here: the ROM is 2 MB and uncompressed,
+and the library's `analyze_rom` is the same `KGJRomReader.load` + `get_info` the
+old code ran plus `_team_data_fits`, which is one comparison. Measured on this
+machine against the synthetic fixture, 1.3 ms for the library call and 1.3 ms
+for the bare reader — both of them the 2 MB `f.read()`. With nothing to save,
+delegating is the better choice, because it keeps the ROM-validity rule in one
+place rather than two.
+
+Three behaviour differences from the old local code:
+
+`team_stats` now exists from construction. The old class only created it inside
+`fetch_rosters`, so reading it first raised `AttributeError`; `app.py` works
+around that with `getattr(patcher, "team_stats", {})`. Initialising it is a
+widening — the workaround still returns the same `{}`.
+
+`fetch_rosters` raises `ApiError` when ESPN answers with no teams, or with no
+team that maps to a 1994 ROM slot, where the old code returned an empty dict and
+the screen went quiet. `app.py` catches it and shows the message.
+
+`analyze_rom` rejects one ROM the old code accepted, and that is the library's
+deliberate correction rather than a regression. `KGJRomReader.validate` bounds
+neither where the 14-byte team marker may match nor how much file follows it, so
+an image matching it within 25 280 bytes of the end used to report
+`is_valid=True` — and the patch then "succeeded" having written nothing, because
+every `write_player` past the end of the file answers False in silence. The
+library folds `_team_data_fits` into `is_valid`, and its `patch` raises
+`RomError` for the same image.
+
+`analyze_rom` otherwise keeps the old signature and the old missing-file answer.
+The library raises `RomError` for a file it cannot read, because its CLI probes
+every registered patcher against one ROM and needs to tell "not this game" from
+"not a file". `app.py` has no use for that distinction — two call sites per game
+run this on the pygame main thread when a ROM is picked, and both read only
+`is_valid` — so the error is turned back into the invalid `RomInfo` the old code
+returned.
 """
 
-from typing import Dict, List, Optional, Callable
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable, Dict, List, Optional
 
-from services.sports_api.models import Player
-from services.kgj_mlb_patcher.models import (
-    KGJTeamRecord,
-    KGJRomInfo,
-    TEAM_COUNT,
-    KGJ_TEAM_ORDER,
+from retro_roster_patcher.core.errors import RetroRosterError, RomError
+from retro_roster_patcher.core.models import RomInfo
+from retro_roster_patcher.games.kgj_mlb_snes.patcher import (
+    KGJMLBPatcher as _LibPatcher,
 )
-from services.kgj_mlb_patcher.stat_mapper import KGJStatMapper
-from services.kgj_mlb_patcher.rom_reader import KGJRomReader
-from services.kgj_mlb_patcher.rom_writer import KGJRomWriter
+from retro_roster_patcher.sports.models import League, LeagueData, Player, Team, TeamRoster
 
 
 @dataclass
@@ -31,7 +77,12 @@ class PatchResult:
 
 
 class KGJMLBPatcher:
-    """Main orchestrator for KGJ MLB roster patching."""
+    """Main orchestrator for KGJ MLB roster patching.
+
+    ESPN only; the game has no historical provider. The ROM's 28 slots are the
+    1994 league, so Arizona and Tampa Bay have nowhere to go and are dropped
+    before any request is made.
+    """
 
     def __init__(
         self,
@@ -40,18 +91,22 @@ class KGJMLBPatcher:
     ):
         self.cache_dir = cache_dir
         self.on_status = on_status
-        self.mapper = KGJStatMapper()
+        self.team_stats: Dict[str, dict] = {}
+        self._patcher = _LibPatcher(cache_dir, on_status=on_status)
 
-        from services.sports_api.espn_client import EspnClient
-
-        self.api = EspnClient(cache_dir, on_status)
-
-    def analyze_rom(self, rom_path: str) -> KGJRomInfo:
+    def analyze_rom(self, rom_path: str) -> RomInfo:
         """Validate ROM and read team slots."""
-        reader = KGJRomReader(rom_path)
-        if not reader.load():
-            return KGJRomInfo(path=rom_path, size=0)
-        return reader.get_info()
+        try:
+            return self._patcher.analyze_rom(Path(rom_path))
+        except RomError:
+            # An unreadable file is not a distinction `app.py` can act on: it
+            # reads `is_valid` and nothing else. Answer as the old code did.
+            return RomInfo(
+                path=str(rom_path),
+                size=0,
+                game_id=self._patcher.game_id,
+                is_valid=False,
+            )
 
     def fetch_rosters(
         self,
@@ -63,91 +118,19 @@ class KGJMLBPatcher:
         Returns dict mapping team abbreviation to player list.
         Also populates self.team_stats for use during patching.
         """
+        data = self._patcher.fetch(season=season, on_progress=on_progress)
+
         rosters: Dict[str, List[Player]] = {}
-        self.team_stats: Dict[str, dict] = {}
-
-        if self.on_status:
-            self.on_status("Fetching MLB teams...")
-        mlb_teams = self.api.get_mlb_teams()
-
-        if not mlb_teams:
-            if self.on_status:
-                self.on_status("No MLB teams found")
-            return rosters
-
-        # Filter to teams with KGJ ROM slots
-        mapped = [t for t in mlb_teams if self.mapper.get_team_slot(t.code) is not None]
-        total = len(mapped)
-
-        for i, team in enumerate(mapped):
-            if on_progress:
-                on_progress(i / total, f"Fetching {team.name}...")
-
-            players = self.api.get_baseball_squad(team.id)
-            stats = self.api.get_baseball_team_leaders(team.id, season)
-
-            if players:
-                rosters[team.code] = players
-            if stats:
-                self.team_stats[team.code] = stats
-
-        if on_progress:
-            on_progress(1.0, "Complete")
-
+        self.team_stats = {}
+        for roster in data.teams:
+            # Both guards are the old behaviour: a team with no players does not
+            # get a key, and neither does a team with no leader stats.
+            if roster.players:
+                rosters[roster.team.code] = roster.players
+            leaders = roster.extra.get("leaders") or {}
+            if leaders:
+                self.team_stats[roster.team.code] = leaders
         return rosters
-
-    def map_rosters_to_kgj(
-        self,
-        rosters: Dict[str, List[Player]],
-    ) -> List[KGJTeamRecord]:
-        """Map fetched rosters to KGJ team records.
-
-        Returns list of 28 KGJTeamRecord (one per ROM slot).
-        """
-        teams: List[KGJTeamRecord] = []
-        team_stats = getattr(self, "team_stats", {})
-
-        for i in range(TEAM_COUNT):
-            teams.append(
-                KGJTeamRecord(
-                    index=i,
-                    name=KGJ_TEAM_ORDER[i],
-                    players=[],
-                )
-            )
-
-        for team_code, players in rosters.items():
-            slot = self.mapper.get_team_slot(team_code)
-            if slot is None or slot >= TEAM_COUNT:
-                continue
-
-            stats = team_stats.get(team_code, {})
-
-            # Select 25 players ordered for ROM slots
-            selected = self.mapper.select_roster(players, stats)
-
-            # Map to KGJ format
-            kgj_players = []
-            for idx, player in enumerate(selected):
-                pid = str(player.id)
-                pstats = stats.get(pid, {})
-                is_pitcher = self.mapper._is_pitcher(player)
-                is_starter = idx < 20  # slots 15-19 are starters
-
-                if is_pitcher:
-                    record = self.mapper.map_pitcher(
-                        player,
-                        pstats,
-                        is_starter=is_starter,
-                    )
-                else:
-                    record = self.mapper.map_batter(player, pstats)
-
-                kgj_players.append(record)
-
-            teams[slot].players = kgj_players
-
-        return teams
 
     def patch_rom(
         self,
@@ -157,60 +140,54 @@ class KGJMLBPatcher:
         on_progress: Optional[Callable[[float, str], None]] = None,
     ) -> PatchResult:
         """Apply roster patches to ROM."""
-        if self.on_status:
-            self.on_status("Validating ROM...")
-        reader = KGJRomReader(rom_path)
-        if not reader.load() or not reader.validate():
-            return PatchResult(
-                success=False,
-                error="Invalid KGJ MLB ROM file",
+        try:
+            mapped = self._patcher.map_rosters(self._league_data(rosters))
+            result = self._patcher.patch(
+                rom_path=Path(rom_path),
+                output_path=Path(output_path),
+                rosters=mapped,
+                on_progress=on_progress,
             )
-
-        if self.on_status:
-            self.on_status("Mapping rosters...")
-        kgj_teams = self.map_rosters_to_kgj(rosters)
-
-        if self.on_status:
-            self.on_status("Initializing ROM writer...")
-        writer = KGJRomWriter(rom_path, output_path)
-        if not writer.load():
-            return PatchResult(
-                success=False,
-                error="Failed to load ROM for writing",
-            )
-
-        teams_patched = 0
-        players_patched = 0
-
-        for i, team in enumerate(kgj_teams):
-            if on_progress:
-                on_progress(
-                    i / TEAM_COUNT,
-                    f"Writing {team.name} ({len(team.players)} players)...",
-                )
-
-            if team.players:
-                written = writer.write_team_roster(i, team.players)
-                if written > 0:
-                    teams_patched += 1
-                    players_patched += written
-
-        if on_progress:
-            on_progress(1.0, "Saving patched ROM...")
-
-        writer.update_snes_checksum()
-
-        if self.on_status:
-            self.on_status("Saving patched ROM...")
-        if not writer.finalize():
-            return PatchResult(
-                success=False,
-                error="Failed to save patched ROM",
-            )
+        except RetroRosterError as exc:
+            # This library's own errors are the ones the old code returned as a
+            # failed `PatchResult`. Anything else is a bug and keeps propagating
+            # to `app.py`'s handler, which shows the exception text.
+            return PatchResult(success=False, error=str(exc))
 
         return PatchResult(
             success=True,
-            output_path=output_path,
-            teams_patched=teams_patched,
-            players_patched=players_patched,
+            output_path=result.output_path,
+            teams_patched=result.teams_patched,
+            players_patched=result.players_patched,
+        )
+
+    def _league_data(self, rosters: Dict[str, List[Player]]) -> LeagueData:
+        """Rebuild the library's `LeagueData` from the app's two state fields.
+
+        Sorted by team code so a patch run is reproducible: `MODERN_MLB_TO_KGJ`
+        folds 30 abbreviations onto 28 slots — CWS and CHW both name slot 3, OAK
+        and ATH both name slot 10 — so which of a colliding pair wins depends on
+        iteration order.
+
+        `League.season` is 0 and not the fetched season: nothing downstream of
+        `map_rosters` reads it, and the patch phase has no season to hand.
+        """
+        teams = [
+            TeamRoster(
+                team=Team(id=0, name=code, short_name=code, code=code),
+                players=list(players),
+                extra={"leaders": self.team_stats.get(code, {})},
+            )
+            for code, players in sorted(rosters.items())
+        ]
+        return LeagueData(
+            league=League(
+                id=0,
+                name="MLB",
+                country="USA",
+                country_code="US",
+                season=0,
+                teams_count=len(teams),
+            ),
+            teams=teams,
         )

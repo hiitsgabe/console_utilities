@@ -1,22 +1,62 @@
-"""NHL94 Genesis Patcher - Main orchestrator.
+"""NHL 94 Genesis patcher — the app's adapter onto `retro-roster-patcher`.
 
-Coordinates fetching roster data, mapping stats, and patching the ROM.
-Supports ESPN (current season) and NHL official API (historical).
+Same adapter as `services.nhl05_ps2_patcher.patcher`, and for the same reasons:
+`app.py` builds one patcher for the fetch and a second for the patch, keeping
+the result as a `{team code: [Player]}` dict plus a separate `team_stats` dict,
+so the `LeagueData` the library's `map_rosters` wants has to be rebuilt from
+those two dicts at patch time. See that module for the full argument.
+
+`analyze_rom` delegates to the library patcher here, unlike the NHL 05 and
+NHL 07 shims, which bypass it and drive the library's `RomReader` themselves.
+Those two games pay for a deep validation that decompresses megabytes of
+RefPack on the pygame main thread at every ROM selection. This game has nothing
+of the kind: the library's `analyze_rom` reads the 1 MB cartridge once and walks
+26 four-byte pointers and one length-prefixed string per team. There is no
+cheaper mode to opt into and no work worth skipping, so delegating costs
+nothing and keeps the library's guard against a truncated image, where a
+pointer near the end of the file makes the string read run off the end.
+
+The one thing that does not carry over is the failure mode. The library reports
+an unreadable path by raising `RomError`; this shim's callers need a falsy
+`RomInfo` instead, so the error is translated back into one. That is not
+defensive padding: the app builds a patcher and calls `analyze_rom` the moment
+a file is highlighted in the browser, including on paths that have just been
+deleted or unmounted, and "not a ROM" is the answer it wants for those.
+
+Two differences from the old local code:
+
+`team_stats` now exists from construction. The old class only created it inside
+`fetch_rosters`, so reading it first raised `AttributeError`; `app.py` works
+around that with `getattr(patcher, "team_stats", {})`. Initialising it is a
+widening — the workaround still returns the same `{}`.
+
+`fetch_rosters` raises `ApiError` when the provider answers with no teams, or
+when no returned team maps to a 1994 ROM slot, where the old code returned an
+empty dict and the screen went quiet.
+
+`analyze_rom` returns the library's `RomInfo` rather than `NHL94GenRomInfo`.
+The fields overlap on everything the app touches — it stores the object and
+reads only `.is_valid` — but `team_slots` is now `slots`, so a future roster
+editor reading the ROM's existing team names has to follow the rename.
+
+One library correction rides along in `map_rosters`. `MODERN_NHL_TO_NHL94_GEN`
+folds 30 codes onto 26 slots — LAK/LA, NJD/NJ, SJS/SJ and TBL/TB alias — and
+the old `map_rosters_to_nhl94` let whichever code came last win, so an empty
+roster arriving second wiped a populated one. The library keeps the populated
+roster instead. `_league_data` sorts by code so which of a colliding pair is
+seen first is at least reproducible.
 """
 
-from typing import Dict, List, Optional, Callable
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable, Dict, List, Optional
 
-from services.sports_api.models import Player
-from services.nhl94_genesis_patcher.models import (
-    NHL94GenTeamRecord,
-    NHL94GenRomInfo,
-    TEAM_COUNT,
-    NHL94_GEN_TEAM_ORDER,
+from retro_roster_patcher.core.errors import RetroRosterError, RomError
+from retro_roster_patcher.core.models import RomInfo
+from retro_roster_patcher.games.nhl94_genesis.patcher import (
+    NHL94GenesisPatcher as _LibPatcher,
 )
-from services.nhl94_genesis_patcher.stat_mapper import NHL94GenStatMapper
-from services.nhl94_genesis_patcher.rom_reader import NHL94GenesisRomReader
-from services.nhl94_genesis_patcher.rom_writer import NHL94GenesisRomWriter
+from retro_roster_patcher.sports.models import League, LeagueData, Player, Team, TeamRoster
 
 
 @dataclass
@@ -47,28 +87,28 @@ class NHL94GenesisPatcher:
         self.cache_dir = cache_dir
         self.on_status = on_status
         self.provider = provider
-        self.mapper = NHL94GenStatMapper()
+        self.team_stats: Dict[str, dict] = {}
+        self._patcher = _LibPatcher(
+            cache_dir,
+            provider=provider,
+            on_status=on_status,
+        )
 
-        if provider == "nhl":
-            from services.sports_api.nhl_api_client import NhlApiClient
+    def analyze_rom(self, rom_path: str) -> RomInfo:
+        """Validate ROM and read team slots.
 
-            self.api = NhlApiClient(cache_dir, on_status)
-        else:
-            from services.sports_api.espn_client import EspnClient
-
-            self.api = EspnClient(cache_dir, on_status)
-
-    def analyze_rom(self, rom_path: str) -> NHL94GenRomInfo:
-        """Validate ROM and read team slots."""
-        reader = NHL94GenesisRomReader(rom_path)
-        if not reader.load():
-            return NHL94GenRomInfo(
-                path=rom_path,
+        A file that cannot be opened is reported as an invalid ROM, not raised:
+        see the module docstring.
+        """
+        try:
+            return self._patcher.analyze_rom(Path(rom_path))
+        except RomError:
+            return RomInfo(
+                path=str(rom_path),
                 size=0,
-                team_slots=[],
+                game_id=self._patcher.game_id,
                 is_valid=False,
             )
-        return reader.get_info()
 
     def fetch_rosters(
         self,
@@ -80,96 +120,19 @@ class NHL94GenesisPatcher:
         Returns dict mapping team abbreviation to player list.
         Also populates self.team_stats for use during patching.
         """
+        data = self._patcher.fetch(season=season, on_progress=on_progress)
+
         rosters: Dict[str, List[Player]] = {}
-        self.team_stats: Dict[str, dict] = {}
-
-        if self.on_status:
-            self.on_status("Fetching NHL teams...")
-        nhl_teams = self.api.get_nhl_teams()
-
-        if not nhl_teams:
-            if self.on_status:
-                self.on_status("No NHL teams found")
-            return rosters
-
-        # Filter to teams with NHL94 Genesis ROM slots
-        mapped = [t for t in nhl_teams if self.mapper.get_team_slot(t.code) is not None]
-        total = len(mapped)
-
-        for i, team in enumerate(mapped):
-            if on_progress:
-                on_progress(i / total, f"Fetching {team.name}...")
-
-            if self.provider == "nhl":
-                players = self.api.get_hockey_squad(team.code, season)
-                stats = self.api.get_hockey_team_leaders(team.code, season)
-            else:
-                players = self.api.get_hockey_squad(team.id)
-                stats = self.api.get_hockey_team_leaders(team.id)
-
-            if players:
-                rosters[team.code] = players
-            if stats:
-                self.team_stats[team.code] = stats
-
-        if on_progress:
-            on_progress(1.0, "Complete")
-
+        self.team_stats = {}
+        for roster in data.teams:
+            # Both guards are the old behaviour: a team with no players does not
+            # get a key, and neither does a team with no leader stats.
+            if roster.players:
+                rosters[roster.team.code] = roster.players
+            leaders = roster.extra.get("leaders") or {}
+            if leaders:
+                self.team_stats[roster.team.code] = leaders
         return rosters
-
-    def map_rosters_to_nhl94(
-        self,
-        rosters: Dict[str, List[Player]],
-    ) -> List[NHL94GenTeamRecord]:
-        """Map fetched rosters to NHL94 Genesis team records.
-
-        Returns list of 26 NHL94GenTeamRecord (one per ROM slot).
-        """
-        teams: List[NHL94GenTeamRecord] = []
-        team_stats = getattr(self, "team_stats", {})
-
-        # Initialize empty teams for all 26 slots
-        for i in range(TEAM_COUNT):
-            teams.append(
-                NHL94GenTeamRecord(
-                    index=i,
-                    name=NHL94_GEN_TEAM_ORDER[i],
-                    city="",
-                    acronym="",
-                    players=[],
-                )
-            )
-
-        # Fill in rosters for mapped teams
-        for team_code, players in rosters.items():
-            slot = self.mapper.get_team_slot(team_code)
-            if slot is None or slot >= TEAM_COUNT:
-                continue
-
-            stats = team_stats.get(team_code, {})
-
-            # Select ~23 players, ordered for proper lines
-            selected = self.mapper.select_roster(
-                players,
-                stats,
-                max_players=23,
-            )
-
-            # Map to NHL94 format with real stats
-            nhl94_players = []
-            for player in selected:
-                pid = str(player.id)
-                pstats = stats.get(pid, {})
-                record = self.mapper.map_player(
-                    player,
-                    team_code,
-                    pstats,
-                )
-                nhl94_players.append(record)
-
-            teams[slot].players = nhl94_players
-
-        return teams
 
     def patch_rom(
         self,
@@ -179,74 +142,53 @@ class NHL94GenesisPatcher:
         on_progress: Optional[Callable[[float, str], None]] = None,
     ) -> PatchResult:
         """Apply roster patches to ROM."""
-        # Validate ROM
-        if self.on_status:
-            self.on_status("Validating ROM...")
-        reader = NHL94GenesisRomReader(rom_path)
-        if not reader.load() or not reader.validate():
-            return PatchResult(
-                success=False,
-                error="Invalid NHL94 Genesis ROM file",
+        try:
+            mapped = self._patcher.map_rosters(self._league_data(rosters))
+            result = self._patcher.patch(
+                rom_path=Path(rom_path),
+                output_path=Path(output_path),
+                rosters=mapped,
+                on_progress=on_progress,
             )
-
-        # Map rosters to NHL94 format
-        if self.on_status:
-            self.on_status("Mapping rosters...")
-        nhl94_teams = self.map_rosters_to_nhl94(rosters)
-
-        # Initialize writer
-        if self.on_status:
-            self.on_status("Initializing ROM writer...")
-        writer = NHL94GenesisRomWriter(rom_path, output_path)
-        if not writer.load():
-            return PatchResult(
-                success=False,
-                error="Failed to load ROM for writing",
-            )
-
-        # Disable checksum so the edited ROM boots
-        writer.disable_checksum()
-
-        # Write each team
-        teams_patched = 0
-        players_patched = 0
-
-        for i, team in enumerate(nhl94_teams):
-            if on_progress:
-                on_progress(
-                    i / TEAM_COUNT,
-                    f"Writing {team.name} ({len(team.players)} players)...",
-                )
-
-            if team.players:
-                written = writer.write_team_roster(i, team.players)
-                if written > 0:
-                    writer.write_team_header(
-                        i,
-                        team.players,
-                        actual_count=written,
-                    )
-                    teams_patched += 1
-                    players_patched += written
-
-        if on_progress:
-            on_progress(1.0, "Saving patched ROM...")
-
-        # Recalculate ROM header checksum
-        writer.update_header_checksum()
-
-        # Save patched ROM
-        if self.on_status:
-            self.on_status("Saving patched ROM...")
-        if not writer.finalize():
-            return PatchResult(
-                success=False,
-                error="Failed to save patched ROM",
-            )
+        except RetroRosterError as exc:
+            # This library's own errors are the ones the old code returned as a
+            # failed `PatchResult`. Anything else is a bug and keeps propagating
+            # to `app.py`'s handler, which shows the exception text.
+            return PatchResult(success=False, error=str(exc))
 
         return PatchResult(
             success=True,
-            output_path=output_path,
-            teams_patched=teams_patched,
-            players_patched=players_patched,
+            output_path=result.output_path,
+            teams_patched=result.teams_patched,
+            players_patched=result.players_patched,
+        )
+
+    def _league_data(self, rosters: Dict[str, List[Player]]) -> LeagueData:
+        """Rebuild the library's `LeagueData` from the app's two state fields.
+
+        Sorted by team code so a patch run is reproducible: four modern
+        abbreviations alias onto slots another code already claims, so which of
+        a colliding pair wins depends on iteration order.
+
+        `League.season` is 0 and not the fetched season: nothing downstream of
+        `map_rosters` reads it, and the patch phase has no season to hand.
+        """
+        teams = [
+            TeamRoster(
+                team=Team(id=0, name=code, short_name=code, code=code),
+                players=list(players),
+                extra={"leaders": self.team_stats.get(code, {})},
+            )
+            for code, players in sorted(rosters.items())
+        ]
+        return LeagueData(
+            league=League(
+                id=0,
+                name="NHL",
+                country="USA",
+                country_code="US",
+                season=0,
+                teams_count=len(teams),
+            ),
+            teams=teams,
         )
