@@ -42,12 +42,11 @@ same("nhl_api_client.NhlApiClient", nhl_api_client.NhlApiClient, lib_nhl.NhlApiC
 CONSUMERS = [
     ("services.we_patcher.espn_client", "EspnClient", lib_espn),
     ("services.pes6_ps2_patcher.patcher", "EspnClient", lib_espn),
-    ("services.iss_patcher.stat_mapper", "Player", lib_models),
     # Every migrated game has dropped out of this list, and that is the point:
     # its stat_mapper is gone, folded into the library, so there is no local
     # copy left to have drifted. Gone so far: nhl05_ps2, nhl07_psp, nhl94_snes,
-    # nhl94_genesis, nbalive95, kgj_mlb, mvp_psp. What remains is we2002 and
-    # iss_snes, not yet migrated, plus pes6_ps2, which has no library game.
+    # nhl94_genesis, nbalive95, kgj_mlb, mvp_psp, iss_snes. What remains is
+    # we2002, not yet migrated, plus pes6_ps2, which has no library game.
 ]
 
 for module_path, attribute, expected in CONSUMERS:

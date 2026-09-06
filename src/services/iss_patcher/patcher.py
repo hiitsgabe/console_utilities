@@ -1,24 +1,128 @@
-"""ISS SNES ROM patcher orchestrator — ties together API, stat mapping, and ROM patching."""
+"""International Superstar Soccer (SNES) — the app's adapter onto `retro-roster-patcher`.
 
-import os
-from typing import Callable, List, Optional
+Unlike the seven adapters that came before it, this one keeps the app's own
+five-argument surface rather than the library's: `app.py` drives ISS through
+`fetch_league` / `create_slot_mapping` / `patch_rom(rom, out, league_data,
+slot_mapping)` and reads no `PatchResult`, so `patch_rom` still returns the
+output path and still raises on failure. Everything below the surface is the
+library's.
 
-from .models import ISSRomInfo, ISSSlotMapping, ISSTeamRecord, TEAM_ENUM_ORDER
-from .stat_mapper import ISSStatMapper
-from .rom_reader import ISSRomReader
-from .rom_writer import ISSRomWriter
-from services.sports_api.models import LeagueData, TeamRoster
+`api_key` is accepted and never read. The app dropped API-Football and is ESPN
+only; the library's ISS patcher is ESPN only and has no credential. Removing the
+parameter is a separate commit that touches every ISS call site plus the
+settings screen, so the argument stays in the signature and is documented dead
+here rather than deleted in passing.
+
+`client` is accepted and never read either, and that is provably a no-op rather
+than a dropped behaviour. `app.py` passes it at exactly one site
+(`_start_iss_roster_fetch`) and only on the ESPN branch, where it hands over
+`services.sports_api.espn_client.EspnClient(WE_PATCHER_CACHE_DIR,
+on_status=on_status)`. That name is a re-export of
+`retro_roster_patcher.sports.espn.EspnClient` — `scripts/_verify_sports_api_shim.py`
+asserts the identity — and the library patcher builds
+`EspnClient(str(cache_dir), on_status)` from the same `cache_dir` and the same
+`on_status` this constructor was handed. Same class, same arguments, so
+honouring the injection would buy nothing and add a way to feed the ISS patcher
+a provider it does not support.
+
+Behaviour differences from the old local code, all of them below the surface:
+
+**Provider.** The old `fetch_league` built an `ApiFootballClient` unless `app.py`
+injected an ESPN one; this fetches from ESPN unconditionally. Choosing
+`api_football` in Settings therefore now yields ESPN data for ISS instead of an
+error or an API-Football squad. That follows the ESPN-only decision, and it is
+the one difference a user can see: the fetch phase is a different provider and
+its output cannot be compared against the old one byte for byte. The map and
+patch phases can be, and are — see `/var/tmp/migrate/iss_snes/`.
+
+**The partial callback no longer fills in.** Both versions fire
+`on_partial_data` once with a skeleton `LeagueData` whose teams are all
+`loading=True`, so the team tiles still appear before any squad is fetched. The
+old code then mutated *those same* `TeamRoster` objects as each squad arrived,
+so the modal filled in team by team; the library builds fresh rosters and
+publishes them only in its return value, so the skeleton stays "Loading..."
+until the whole fetch finishes and `app.py` replaces `league_data` wholesale.
+Progress text and the progress bar are unaffected. This is a regression in
+feedback granularity and is not fixable here — reproducing it means
+reimplementing `fetch`.
+
+**Per-team error strings lost a distinction that no longer has a source.** The
+old code turned `DailyLimitError` into "Daily API limit reached" and
+`RateLimitError` into "Rate limit reached"; the library reports `Failed: {exc}`
+for every squad failure. Both exception types are raised only by
+`services.sports_api.api_football`, so under the surviving provider the old code
+also produced `Failed: {exc}`. `TeamRoster.error` is still set and the roster
+preview modal still renders the "!" marker and the "Unavailable" header from it.
+
+**`get_squad` is now given the season.** The old call was
+`get_squad(team.id)`; the library passes `season` as well. ESPN's squad endpoint
+has no season in its URL, so the squad returned is unchanged — the season only
+enters the cache key, which is a correction: without it every season replayed
+whichever one was fetched first.
+
+**`patch_rom` refuses two ROMs the old code patched.** `ISSRomWriter` opens its
+output `r+b` and seeks absolutely, and seeking past the end extends the file, so
+the old code turned a too-small input into a 297 KB file of one hole and two
+flag tiles. The library gates `patch` on `reader.data_fits()`. It also raises
+rather than writing a negative-budget slice when the team-name-text pointer
+table points at or past its 0x44478 ceiling. Both are deliberate corrections;
+`app.py` shows the message.
+
+**A slot mapping naming a team that is not in the league data now raises.** The
+old loop skipped it silently. Unreachable from `app.py`, whose only mapping
+comes from `create_slot_mapping` over the same `league_data`.
+
+**Slots are patched in ascending order rather than in slot-mapping order.**
+`write_team_name_texts` breaks a tie between two equally long names by whichever
+it met first, so the old output depended on the order of the list handed in. The
+library sorts. `create_slot_mapping` is sequential and ascending, so the two
+agree on every mapping `app.py` can produce.
+"""
+
+from pathlib import Path
+from typing import Any, Callable, List, Optional
+
+from retro_roster_patcher.core.errors import RomError
+from retro_roster_patcher.core.models import RomInfo, SlotMapping
+from retro_roster_patcher.games.iss_snes.patcher import ISSPatcher as _LibPatcher
+from retro_roster_patcher.sports.models import LeagueData
 
 
 class ISSPatcher:
-    def __init__(self, api_key: str, cache_dir: str, on_status=None, client=None):
-        if client is not None:
-            self.api = client
-        else:
-            from services.sports_api.api_football import ApiFootballClient
+    """Orchestrator for International Superstar Soccer (SNES) roster patching.
 
-            self.api = ApiFootballClient(api_key, cache_dir, on_status=on_status)
-        self.mapper = ISSStatMapper()
+    ESPN only; league ids are ESPN's. The ROM's 27 slots are national teams and
+    the data source is a club league, so the slot assignment is arbitrary by
+    construction — `create_slot_mapping` offers the sequential one the app has
+    always used.
+    """
+
+    def __init__(
+        self,
+        api_key: str,
+        cache_dir: str,
+        on_status: Optional[Callable] = None,
+        client: Any = None,
+    ):
+        # `api_key` and `client` are both dead; see the module docstring for why
+        # each is still in the signature and why neither drops a behaviour.
+        self.api_key = api_key
+        self.cache_dir = cache_dir
+        self.on_status = on_status
+        # Set for the duration of one `fetch_league` call and read by the
+        # trampoline below. The library takes `on_partial` at construction,
+        # `app.py` supplies it per call.
+        self._on_partial_data: Optional[Callable[[LeagueData], None]] = None
+        self._patcher = _LibPatcher(
+            cache_dir,
+            on_status=on_status,
+            on_partial=self._emit_partial,
+        )
+
+    def _emit_partial(self, data: LeagueData) -> None:
+        """Forward the library's one partial publication to this call's callback."""
+        if self._on_partial_data is not None:
+            self._on_partial_data(data)
 
     def fetch_league(
         self,
@@ -27,194 +131,81 @@ class ISSPatcher:
         on_progress: Optional[Callable[[float, str], None]] = None,
         on_partial_data: Optional[Callable[[LeagueData], None]] = None,
     ) -> LeagueData:
-        """Fetch all teams and rosters for a league.
+        """Fetch every team and squad in one league.
 
-        Identical flow to WePatcher — uses the shared sports API layer.
+        `on_partial_data` fires once, with the teams known but no squads, so the
+        caller can render tiles before the squad requests start.
         """
-        from services.sports_api.models import League, TeamRoster as TR
+        self._on_partial_data = on_partial_data
+        try:
+            return self._patcher.fetch(
+                season=season,
+                league_id=league_id,
+                on_progress=on_progress,
+            )
+        finally:
+            # Cleared so a later fetch cannot publish into a stale callback.
+            self._on_partial_data = None
 
-        if on_progress:
-            on_progress(0.05, "Fetching league info...")
-        leagues = self.api.get_leagues(id=league_id, season=season)
-        league = next((l for l in leagues), None)
-        if not league:
-            raise ValueError(f"League {league_id} not found for season {season}")
+    def analyze_rom(self, rom_path: str) -> RomInfo:
+        """Validate a ROM and read its 27 team slots.
 
-        if on_progress:
-            on_progress(0.1, f"Fetching teams for {league.name}...")
-        teams = self.api.get_teams(league_id, season)
-
-        team_rosters = [
-            TR(team=t, players=[], player_stats={}, loading=True) for t in teams
-        ]
-        league_data = LeagueData(league=league, teams=team_rosters)
-        if on_partial_data:
-            on_partial_data(league_data)
-
-        for i, team in enumerate(teams):
-            progress = 0.1 + 0.8 * (i / max(len(teams), 1))
-            if on_progress:
-                on_progress(progress, f"Fetching squad: {team.name}...")
-            try:
-                players = self.api.get_squad(team.id)
-                player_stats = {}
-                try:
-                    stats_list = self.api.get_player_stats(team.id, season)
-                    player_stats = {s.player_id: s for s in stats_list}
-                except Exception:
-                    pass
-                team_rosters[i].players = players
-                team_rosters[i].player_stats = player_stats
-            except Exception as e:
-                from services.sports_api.api_football import (
-                    RateLimitError,
-                    DailyLimitError,
-                )
-
-                if isinstance(e, DailyLimitError):
-                    team_rosters[i].error = "Daily API limit reached"
-                elif isinstance(e, RateLimitError):
-                    team_rosters[i].error = "Rate limit reached"
-                else:
-                    team_rosters[i].error = f"Failed: {e}"
-            finally:
-                team_rosters[i].loading = False
-
-        if on_progress:
-            on_progress(1.0, "Done!")
-        return league_data
-
-    def analyze_rom(self, rom_path: str) -> ISSRomInfo:
-        """Read ROM and return info including available team slots."""
-        reader = ISSRomReader(rom_path)
-        return reader.get_rom_info()
+        `app.py` does not call this for ISS — both ROM-selection paths and the
+        auto-detect path go straight to `ISSRomReader` — but it is part of the
+        patcher surface, so it stays and answers the way the other shims do.
+        """
+        try:
+            return self._patcher.analyze_rom(Path(rom_path))
+        except RomError:
+            # An unreadable file is not a distinction a caller here can act on:
+            # the old code answered with an invalid `ISSRomInfo` rather than
+            # raising, so answer with an invalid `RomInfo`.
+            return RomInfo(
+                path=str(rom_path),
+                size=0,
+                game_id=self._patcher.game_id,
+                is_valid=False,
+            )
 
     def create_slot_mapping(
-        self, league_data: LeagueData, rom_info: ISSRomInfo
-    ) -> List[ISSSlotMapping]:
-        """Map league teams to ROM slots sequentially (0-26).
+        self, league_data: LeagueData, rom_info: Any
+    ) -> List[SlotMapping]:
+        """Map league teams to ROM slots sequentially: team *i* to slot *i*.
 
-        ISS has 27 team slots. Teams are mapped in order.
+        Teams past the 27th are dropped. `rom_info` is unused and was unused by
+        the old implementation too — every ISS ROM has the same 27 slots in the
+        same order, so there is nothing in it to consult.
+
+        These are the library's `SlotMapping`, not the old `ISSSlotMapping`. The
+        two carry different fields, and nothing outside this package read the
+        old ones: `slot_mapping_modal` renders `state.we_patcher.slot_mapping`
+        and needs a `slot_mapping_highlighted` that `ISSPatcherState` does not
+        have, and `real_team` / `slot_name` appear only under
+        `services/we_patcher` and `services/pes6_ps2_patcher`. The app stores
+        this list in `state.iss_patcher.slot_mapping` and hands it back to
+        `patch_rom`, which is the only thing that reads it.
         """
-        mappings = []
-        for i, tr in enumerate(league_data.teams):
-            if i >= len(TEAM_ENUM_ORDER):
-                break
-            slot_name = TEAM_ENUM_ORDER[i]
-            mappings.append(
-                ISSSlotMapping(
-                    real_team=tr.team,
-                    slot_index=i,
-                    slot_name=slot_name,
-                )
-            )
-        return mappings
-
-    @staticmethod
-    def _parse_hex_color(hex_str: str):
-        """Parse a hex color string like '#ff0000' or 'ff0000' to RGB tuple."""
-        if not hex_str:
-            return None
-        h = hex_str.lstrip("#")
-        if len(h) == 6:
-            return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
-        return None
+        return self._patcher.default_slot_mapping(league_data)
 
     def patch_rom(
         self,
         rom_path: str,
         output_path: str,
         league_data: LeagueData,
-        slot_mapping: List[ISSSlotMapping],
+        slot_mapping: List[SlotMapping],
         on_progress: Optional[Callable[[float, str], None]] = None,
     ) -> str:
-        """Apply all patches and write output ROM. Returns output_path."""
-        # Detect header
-        reader = ISSRomReader(rom_path)
-        reader.validate_rom()
-        header_offset = reader.header_offset
+        """Apply every patch and write the output ROM. Returns `output_path`.
 
-        writer = ISSRomWriter(rom_path, output_path, header_offset)
-
-        total = len(slot_mapping)
-        team_by_id = {tr.team.id: tr for tr in league_data.teams}
-
-        # Collect patched team names (only for teams being replaced)
-        patched_names = {}
-        patched_tile_names = {}  # Short codes for in-game name tiles (8×32px)
-        patched_flag_colors = {}  # {slot_index: (primary_rgb, alt_rgb)}
-
-        for i, mapping in enumerate(slot_mapping):
-            progress = i / max(total, 1)
-            team_roster = team_by_id.get(mapping.real_team.id)
-            if not team_roster:
-                continue
-
-            if on_progress:
-                on_progress(progress, f"Patching {mapping.real_team.name}...")
-
-            iss_team = self.mapper.map_team_with_league_context(
-                team_roster, league_data.teams
-            )
-
-            # Parse team colors from ESPN API
-            team_obj = mapping.real_team
-            primary = self._parse_hex_color(team_obj.color)
-            alt = self._parse_hex_color(team_obj.alternate_color)
-
-            # Kit colors: home, away, GK
-            if primary:
-                iss_team.kit_home = (primary, (255, 255, 255), primary)
-            if alt:
-                iss_team.kit_away = (alt, (255, 255, 255), alt)
-            # GK kit: green shirt, black shorts (standard default)
-            iss_team.kit_gk = ((0, 128, 0), (0, 0, 0))
-
-            # Write player names and data
-            writer.write_player_names(mapping.slot_index, iss_team.players)
-            writer.write_player_data(mapping.slot_index, iss_team.players)
-
-            # Write kit colors
-            writer.write_kit_colors(mapping.slot_index, iss_team)
-
-            # Write predominant color
-            if primary:
-                writer.write_predominant_color(mapping.slot_index, primary)
-
-            # Collect team name for selection screen
-            patched_names[mapping.slot_index] = iss_team.name
-            # Short code for in-game tile (3-letter abbreviation)
-            patched_tile_names[mapping.slot_index] = iss_team.short_name
-            # Flag colors: primary and alternate
-            if primary and alt:
-                patched_flag_colors[mapping.slot_index] = (primary, alt)
-            elif primary:
-                patched_flag_colors[mapping.slot_index] = (primary, primary)
-
-        if on_progress:
-            on_progress(0.80, "Writing flags...")
-
-        # Write simple two-band flag tiles and colors
-        writer.write_flag_tiles_and_colors(patched_flag_colors)
-
-        if on_progress:
-            on_progress(0.85, "Writing team names...")
-
-        # Write patched team names to selection screen text
-        writer.write_team_name_texts(patched_names)
-
-        # Replace team descriptions with full team names
-        writer.write_team_descriptions(patched_names)
-
-        if on_progress:
-            on_progress(0.90, "Writing in-game name tiles...")
-
-        # Write in-game team name tiles (displayed during matches)
-        writer.write_name_tiles(patched_tile_names)
-
-        if on_progress:
-            on_progress(0.95, "Finalizing...")
-        writer.finalize()
-        if on_progress:
-            on_progress(1.0, f"Done! Saved to {output_path}")
-        return output_path
+        Raises on failure rather than returning a result object: that is the
+        contract `app.py`'s ISS patch thread is written against, and it is the
+        one place this game's surface differs from the other seven.
+        """
+        mapped = self._patcher.map_rosters(league_data, slot_mapping)
+        result = self._patcher.patch(
+            rom_path=Path(rom_path),
+            output_path=Path(output_path),
+            rosters=mapped,
+            on_progress=on_progress,
+        )
+        return result.output_path
