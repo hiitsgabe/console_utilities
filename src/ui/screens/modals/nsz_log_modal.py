@@ -3,7 +3,7 @@ NSZ log viewer modal.
 
 Shows captured NSZ decompression diagnostics in a scrollable view with a
 "Save to error.log" action. Used after an NSZ extraction fails so the logs are
-visible in-app even when the nsz.log file is unreachable (e.g. Android).
+visible in-app even when the nsz.log file is unreachable.
 """
 
 import pygame

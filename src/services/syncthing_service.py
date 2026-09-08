@@ -13,7 +13,7 @@ from typing import Dict, List, Optional, Tuple, Any
 
 import requests
 
-from constants import BUILD_TARGET, DEV_MODE
+from constants import DEV_MODE
 from utils.logging import log_error
 
 
@@ -47,9 +47,9 @@ SYNC_SYSTEMS = [
 SYNCTHING_API_URL = "http://localhost:8384"
 
 # Candidate (url, verify_tls) pairs tried by is_running() to find a reachable
-# Syncthing GUI. Catfriend1's Syncthing-Fork on Android defaults to HTTPS with
-# a self-signed cert; some environments also fail to resolve "localhost". The
-# first responsive candidate is remembered for the lifetime of the service.
+# Syncthing GUI. Some builds serve the GUI over HTTPS with a self-signed cert,
+# and some environments fail to resolve "localhost". The first responsive
+# candidate is remembered for the lifetime of the service.
 _API_CANDIDATES = [
     ("http://localhost:8384", True),
     ("http://127.0.0.1:8384", True),
@@ -666,11 +666,6 @@ class SyncthingService:
             "/userdata/system/.config/syncthing/config.xml",
             "/userdata/system/configs/syncthing/config.xml",
         ]
-        # Android
-        if BUILD_TARGET == "android":
-            config_paths.append(
-                "/storage/emulated/0/Android/data/com.github.catfriend1.syncthingandroid/files/config.xml"
-            )
         for path in config_paths:
             try:
                 if os.path.exists(path):
@@ -690,8 +685,6 @@ class SyncthingService:
         """Get the default save path for a system on the current platform."""
         if DEV_MODE:
             return os.path.join(os.path.expanduser("~"), "game-saves", system)
-        elif BUILD_TARGET == "android":
-            return ""  # User must configure on Android
         elif os.path.exists("/userdata"):
             return f"/userdata/saves/{system}"
         else:
@@ -717,7 +710,7 @@ class SyncthingService:
             role: "host" or "console"
             device_ids: List of remote device IDs to share with
             base_path: Base path for host saves (ignored for console)
-            folder_overrides: Per-system path overrides (for Android)
+            folder_overrides: Per-system path overrides
 
         Returns:
             Tuple of (success_count, skip_count, error_systems)
@@ -747,7 +740,7 @@ class SyncthingService:
             else:
                 path = self.get_save_path(system)
 
-            # Skip if no path (Android without override)
+            # Skip if no path configured
             if not path:
                 skipped += 1
                 continue

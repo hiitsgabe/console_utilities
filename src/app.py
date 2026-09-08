@@ -13,8 +13,6 @@ from typing import Optional, Dict, Any
 from constants import (
     BEZEL_INSET,
     BUILD_TARGET,
-    CONFIG_FILE,
-    ADDED_SYSTEMS_FILE,
     DEV_MODE,
     FPS,
     SCREEN_WIDTH,
@@ -95,52 +93,13 @@ class ConsoleUtilitiesApp:
         # Initialize logging
         init_log_file()
 
-        # Migrate Android data from old internal storage to external files dir
-        if BUILD_TARGET == "android":
-            self._migrate_android_data()
-
-        # Block SDL event loop while app is paused (prevents GL calls during background)
-        if BUILD_TARGET == "android":
-            os.environ["SDL_ANDROID_BLOCK_ON_PAUSE"] = "1"
-            # Set SSL certificate bundle for requests/urllib on Android
-            try:
-                import certifi
-
-                os.environ["SSL_CERT_FILE"] = certifi.where()
-                os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
-            except ImportError:
-                pass
-
-        # Track Android background state for render guards
-        self._is_backgrounded = False
-        self._needs_display_restore = False
-
-        # Set Android immersive mode (hide system bars)
-        if BUILD_TARGET == "android":
-            self._set_android_immersive_mode()
-
         # Initialize pygame
         pygame.init()
         pygame.display.set_caption("Console Utilities")
 
-        # Create display - auto-detect native resolution on console/Android
+        # Create display - auto-detect native resolution on console
         if DEV_MODE:
             self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-        elif BUILD_TARGET == "android":
-            display_info = pygame.display.Info()
-            native_w, native_h = display_info.current_w, display_info.current_h
-            if native_h > native_w:
-                # Portrait: use fixed 800x600 scaled to fit
-                self.screen = pygame.display.set_mode(
-                    (SCREEN_WIDTH, SCREEN_HEIGHT),
-                    pygame.SCALED | pygame.FULLSCREEN,
-                )
-            else:
-                # Landscape: use native resolution
-                self.screen = pygame.display.set_mode(
-                    (native_w, native_h),
-                    pygame.SCALED | pygame.FULLSCREEN,
-                )
         else:
             display_info = pygame.display.Info()
             self.screen = pygame.display.set_mode(
@@ -209,7 +168,7 @@ class ConsoleUtilitiesApp:
         # Initialize image cache service
         self.image_cache = ImageCache()
 
-        # Initialize download manager (Android-native or desktop)
+        # Initialize download manager
         self._init_download_manager()
 
         # Initialize scraper manager
@@ -538,92 +497,8 @@ class ConsoleUtilitiesApp:
 
         return bezel
 
-    def _set_android_immersive_mode(self):
-        """Set Android immersive sticky mode to hide status bar and navigation bar."""
-        try:
-            from jnius import autoclass
-
-            PythonActivity = autoclass("org.kivy.android.PythonActivity")
-            View = autoclass("android.view.View")
-            activity = PythonActivity.mActivity
-
-            flags = (
-                View.SYSTEM_UI_FLAG_FULLSCREEN
-                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-            )
-
-            def _apply():
-                activity.getWindow().getDecorView().setSystemUiVisibility(flags)
-
-            activity.runOnUiThread(_apply)
-        except Exception:
-            pass
-
-    def _restore_android_display(self):
-        """Restore display after returning from an external activity (SAF picker etc)."""
-        try:
-            self._set_android_immersive_mode()
-            w, h = self.screen.get_size()
-            self.screen = pygame.display.set_mode(
-                (w, h), pygame.SCALED | pygame.FULLSCREEN
-            )
-
-            # Recreate overlay surfaces (GPU textures are lost on context restore)
-            self.scanline_surface = None
-            if self.theme.crt_scanlines:
-                self.scanline_surface = pygame.Surface((w, h), pygame.SRCALPHA)
-                for y in range(0, h, 3):
-                    pygame.draw.line(
-                        self.scanline_surface, (0, 0, 0, 40), (0, y), (w, y)
-                    )
-
-            self.bezel_surface = self._create_crt_bezel()
-            self.vignette_surface = self._create_vignette()
-
-            # Invalidate image cache (stale GPU-side data)
-            self.image_cache.clear()
-
-        except Exception as e:
-            # Surface not ready yet — re-flag for retry next frame
-            self._is_backgrounded = True
-            self._needs_display_restore = True
-            from utils.logging import log_error
-
-            log_error(f"[restore_display] Error, will retry: {e}")
-
-    def _handle_android_orientation(self, new_w: int, new_h: int):
-        """Handle Android orientation change. Portrait keeps 800x600, landscape resizes."""
-        is_portrait = new_h > new_w
-        if is_portrait:
-            # Portrait: use fixed 800x600 with SCALED to fit
-            self.screen = pygame.display.set_mode(
-                (SCREEN_WIDTH, SCREEN_HEIGHT),
-                pygame.SCALED | pygame.FULLSCREEN,
-            )
-        else:
-            # Landscape: use native resolution
-            self.screen = pygame.display.set_mode(
-                (new_w, new_h), pygame.SCALED | pygame.FULLSCREEN
-            )
-
-        # Recreate theme and overlays
-        self.theme = Theme()
-        self.scanline_surface = None
-        if self.theme.crt_scanlines:
-            sw, sh = self.screen.get_size()
-            self.scanline_surface = pygame.Surface((sw, sh), pygame.SRCALPHA)
-            for y in range(0, sh, 3):
-                pygame.draw.line(self.scanline_surface, (0, 0, 0, 40), (0, y), (sw, y))
-        self.bezel_surface = self._create_crt_bezel()
-        self.vignette_surface = self._create_vignette()
-        self.image_cache.clear()
-
     def _handle_resize(self, new_w: int, new_h: int):
-        """Handle screen resize (Android orientation change)."""
+        """Handle screen resize."""
         self.screen = pygame.display.set_mode((new_w, new_h), pygame.RESIZABLE)
 
         # Recreate theme
@@ -853,8 +728,6 @@ class ConsoleUtilitiesApp:
 
     def _render_frame(self):
         """Render a single frame (used during loading)."""
-        if self._is_backgrounded:
-            return
         self._draw_background()
         self.screen_manager.render(
             self.screen,
@@ -870,35 +743,6 @@ class ConsoleUtilitiesApp:
         pygame.display.flip()
         # Process events to prevent freezing
         pygame.event.pump()
-
-    def _migrate_android_data(self):
-        """Migrate config files from old SCRIPT_DIR to external files dir.
-
-        On Android, prior versions stored config inside the app's internal
-        storage (SCRIPT_DIR) which gets wiped on APK update.  If the new
-        external location is empty but the old location has data, copy it over.
-        """
-        import shutil
-
-        old_new_pairs = [
-            (os.path.join(SCRIPT_DIR, "config.json"), CONFIG_FILE),
-            (os.path.join(SCRIPT_DIR, "added_systems.json"), ADDED_SYSTEMS_FILE),
-            (
-                os.path.join(SCRIPT_DIR, "controller_mapping.json"),
-                os.path.join(os.path.dirname(CONFIG_FILE), "controller_mapping.json"),
-            ),
-        ]
-        for old_path, new_path in old_new_pairs:
-            try:
-                if (
-                    old_path != new_path
-                    and os.path.exists(old_path)
-                    and not os.path.exists(new_path)
-                ):
-                    os.makedirs(os.path.dirname(new_path), exist_ok=True)
-                    shutil.copy2(old_path, new_path)
-            except Exception:
-                pass
 
     def run(self):
         """Run the main application loop."""
@@ -951,20 +795,6 @@ class ConsoleUtilitiesApp:
                 id(it): getattr(it, "status", "") for it in items
             }
 
-            # Manage Android soft keyboard show/hide
-            if BUILD_TARGET == "android":
-                text_modal_was_open = getattr(self, "_text_modal_open", False)
-                text_modal_is_open = self._is_text_modal_open()
-                if text_modal_is_open and not text_modal_was_open:
-                    pygame.key.start_text_input()
-                    # Start each android text field at the beginning so a
-                    # leftover offset from a prior field never clips the new one.
-                    self.state.text_scroll_offset = 0
-                elif not text_modal_is_open and text_modal_was_open:
-                    pygame.key.stop_text_input()
-                    self.state.text_scroll_offset = 0
-                self._text_modal_open = text_modal_is_open
-
             # Process events — any input event dirties the frame
             for event in pygame.event.get():
                 _dirty = True
@@ -973,14 +803,11 @@ class ConsoleUtilitiesApp:
 
                 elif event.type == pygame.KEYDOWN:
                     # Skip ALL keyboard events if joystick is connected,
-                    # UNLESS tagged as web companion synthetic events
-                    # or on Android (soft keyboard sends KEYDOWN for backspace/enter).
+                    # UNLESS tagged as web companion synthetic events.
                     # Some consoles/controllers generate keyboard events alongside joystick events
                     # which causes double input. Joystick takes priority.
-                    if (
-                        self.joystick is not None
-                        and not getattr(event, "web_companion", False)
-                        and BUILD_TARGET != "android"
+                    if self.joystick is not None and not getattr(
+                        event, "web_companion", False
                     ):
                         continue
                     self.state.input_mode = "keyboard"
@@ -1014,61 +841,7 @@ class ConsoleUtilitiesApp:
                     self.touch.handle_mouse_motion(event, on_scroll=self._handle_scroll)
 
                 elif event.type == pygame.VIDEORESIZE:
-                    if BUILD_TARGET == "android":
-                        if self._needs_display_restore:
-                            # surfaceChanged() fires VIDEORESIZE — surface is now valid
-                            self._needs_display_restore = False
-                            self._is_backgrounded = False
-                            self._restore_android_display()
-                        else:
-                            # Only handle actual orientation changes, not keyboard/navbar resize
-                            cur_w, cur_h = self.screen.get_size()
-                            was_portrait = cur_h > cur_w
-                            is_portrait = event.h > event.w
-                            if was_portrait != is_portrait:
-                                self._handle_android_orientation(event.w, event.h)
-                    else:
-                        self._handle_resize(event.w, event.h)
-
-                elif BUILD_TARGET == "android" and event.type in (
-                    getattr(pygame, "APP_WILLENTERBACKGROUND", -1),
-                    0x101,  # SDL_APP_WILLENTERBACKGROUND raw value
-                ):
-                    self._is_backgrounded = True
-                    # Pause JNI operations in download manager
-                    if hasattr(self.download_manager, "pause"):
-                        self.download_manager.pause()
-
-                elif BUILD_TARGET == "android" and event.type in (
-                    getattr(pygame, "APP_DIDENTERFOREGROUND", -1),
-                    0x104,  # SDL_APP_DIDENTERFOREGROUND raw value
-                ):
-                    if self._is_backgrounded:
-                        self._needs_display_restore = True
-                        # Resume download manager (re-acquire activity, process pending)
-                        if hasattr(self.download_manager, "resume"):
-                            self.download_manager.resume()
-
-                elif event.type == pygame.TEXTINPUT:
-                    if BUILD_TARGET == "android":
-                        self._handle_text_input_event(event)
-
-                elif BUILD_TARGET == "android":
-                    from droid.updater import APK_INSTALL_EVENT
-
-                    if event.type == APK_INSTALL_EVENT:
-                        from droid.updater import install_apk
-
-                        try:
-                            install_apk(event.apk_path)
-                        except Exception as e:
-                            import traceback
-
-                            log_error(
-                                "APK install failed",
-                                type(e).__name__,
-                                traceback.format_exc(),
-                            )
+                    self._handle_resize(event.w, event.h)
 
             # Update image cache (process loaded images from background threads)
             if self.image_cache.update():
@@ -1114,17 +887,8 @@ class ConsoleUtilitiesApp:
                 self.web_companion.push_state(self.state, self.settings, self.data)
                 _dirty = True
 
-            # Deferred display restore: wait until surface is recreated by SDL
-            if self._needs_display_restore and pygame.display.get_surface() is not None:
-                self._needs_display_restore = False
-                self._is_backgrounded = False
-                self._restore_android_display()
-
-            # Draw (skip when backgrounded, display surface is gone, or nothing changed)
-            _surface_ok = (
-                not self._is_backgrounded and pygame.display.get_surface() is not None
-            )
-            if _surface_ok and _dirty:
+            # Draw (skip when the display surface is gone or nothing changed)
+            if pygame.display.get_surface() is not None and _dirty:
                 _dirty = False
                 try:
                     self._draw_background()
@@ -1181,9 +945,11 @@ class ConsoleUtilitiesApp:
                     # Web companion: capture frame for MJPEG thumbnail
                     if self.web_companion and self.web_companion._running:
                         self.web_companion.capture_frame(self.screen)
-                except pygame.error:
-                    # Surface was destroyed mid-frame (Android lifecycle race)
-                    self._is_backgrounded = True
+                except pygame.error as e:
+                    # Surface went away mid-frame; skip this one and retry next
+                    # loop rather than latching the app into a blank screen.
+                    _dirty = True
+                    log_error(f"[render] Surface error, retrying: {e}")
 
         # Cleanup
         if self.web_companion:
@@ -1194,49 +960,9 @@ class ConsoleUtilitiesApp:
         """Handle navigation from held direction."""
         self._move_highlight(direction)
 
-    def _android_text_modal_active(self) -> bool:
-        """True when an Android text-input modal field is on screen.
-
-        On Android these modals (auth token, search, folder name, URL input,
-        IA login email/password, scraper-wizard edit-name) use the native soft
-        keyboard, so left/right should scroll the field text via
-        ``text_scroll_offset`` rather than move an on-screen char-grid cursor.
-        """
-        s = self.state
-        if s.auth_token_input.show and s.auth_token_input.step == "input":
-            return True
-        if s.show_search_input:
-            return True
-        if s.folder_name_input.show:
-            return True
-        if s.url_input.show:
-            return True
-        if s.ia_login.show and s.ia_login.step in ("email", "password"):
-            return True
-        if s.scraper_wizard.show and s.scraper_wizard.step == "edit_name":
-            return True
-        return False
-
     def _move_highlight(self, direction: str):
         """Move highlight in the given direction."""
         # Check modals first (they take priority over modes)
-
-        # On Android the text input modals use the native soft keyboard (no
-        # on-screen char grid), so left/right scroll the field text horizontally
-        # instead of moving a meaningless grid cursor. Mirrors game_details.
-        if (
-            BUILD_TARGET == "android"
-            and direction in ("left", "right")
-            and self._android_text_modal_active()
-        ):
-            scroll_step = 20
-            if direction == "right":
-                self.state.text_scroll_offset += scroll_step
-            else:
-                self.state.text_scroll_offset = max(
-                    0, self.state.text_scroll_offset - scroll_step
-                )
-            return
 
         if self.state.auth_token_input.show:
             if self.state.auth_token_input.step == "input":
@@ -2349,9 +2075,7 @@ class ConsoleUtilitiesApp:
     def _handle_key_event(self, event: pygame.event.Event):
         """Handle keyboard events."""
         # Handle keyboard text input for search modal
-        if self.state.show_search_input and (
-            self.state.input_mode == "keyboard" or BUILD_TARGET == "android"
-        ):
+        if self.state.show_search_input and (self.state.input_mode == "keyboard"):
             if event.key == pygame.K_ESCAPE:
                 self._go_back()
             elif event.key == pygame.K_RETURN:
@@ -2366,12 +2090,8 @@ class ConsoleUtilitiesApp:
                 if clip:
                     self.state.search.input_text += clip
                     self.state.search.query = self.state.search.input_text
-            elif (
-                event.unicode
-                and event.unicode.isprintable()
-                and BUILD_TARGET != "android"
-            ):
-                # Add typed character (skip on Android — TEXTINPUT handles it)
+            elif event.unicode and event.unicode.isprintable():
+                # Add typed character
                 self.state.search.input_text += event.unicode
                 self.state.search.query = self.state.search.input_text
             return
@@ -2380,7 +2100,7 @@ class ConsoleUtilitiesApp:
         if (
             self.state.scraper_wizard.show
             and self.state.scraper_wizard.step == "edit_name"
-            and (self.state.input_mode == "keyboard" or BUILD_TARGET == "android")
+            and (self.state.input_mode == "keyboard")
         ):
             wizard = self.state.scraper_wizard
             if event.key == pygame.K_ESCAPE:
@@ -2394,18 +2114,12 @@ class ConsoleUtilitiesApp:
                 clip = self._get_clipboard_text()
                 if clip:
                     wizard.search_name += clip
-            elif (
-                event.unicode
-                and event.unicode.isprintable()
-                and BUILD_TARGET != "android"
-            ):
+            elif event.unicode and event.unicode.isprintable():
                 wizard.search_name += event.unicode
             return
 
         # Handle keyboard text input for IA login modal
-        if self.state.ia_login.show and (
-            self.state.input_mode == "keyboard" or BUILD_TARGET == "android"
-        ):
+        if self.state.ia_login.show and (self.state.input_mode == "keyboard"):
             step = self.state.ia_login.step
             if step in ("email", "password"):
                 if event.key == pygame.K_ESCAPE:
@@ -2424,11 +2138,7 @@ class ConsoleUtilitiesApp:
                             self.state.ia_login.email += clip
                         elif step == "password":
                             self.state.ia_login.password += clip
-                elif (
-                    event.unicode
-                    and event.unicode.isprintable()
-                    and BUILD_TARGET != "android"
-                ):
+                elif event.unicode and event.unicode.isprintable():
                     if step == "email":
                         self.state.ia_login.email += event.unicode
                     elif step == "password":
@@ -2436,9 +2146,7 @@ class ConsoleUtilitiesApp:
                 return
 
         # Handle keyboard text input for scraper login modal
-        if self.state.scraper_login.show and (
-            self.state.input_mode == "keyboard" or BUILD_TARGET == "android"
-        ):
+        if self.state.scraper_login.show and (self.state.input_mode == "keyboard"):
             step = self.state.scraper_login.step
             if step in ("username", "password", "api_key"):
                 if event.key == pygame.K_ESCAPE:
@@ -2467,11 +2175,7 @@ class ConsoleUtilitiesApp:
                             self.state.scraper_login.password += clip
                         elif step == "api_key":
                             self.state.scraper_login.api_key += clip
-                elif (
-                    event.unicode
-                    and event.unicode.isprintable()
-                    and BUILD_TARGET != "android"
-                ):
+                elif event.unicode and event.unicode.isprintable():
                     if step == "username":
                         self.state.scraper_login.username += event.unicode
                     elif step == "password":
@@ -2482,7 +2186,7 @@ class ConsoleUtilitiesApp:
 
         # Handle keyboard text input for WE Patcher league browser search
         if self.state.we_patcher.active_modal == "league_browser" and (
-            self.state.input_mode == "keyboard" or BUILD_TARGET == "android"
+            self.state.input_mode == "keyboard"
         ):
             if event.key == pygame.K_ESCAPE:
                 if self.state.we_patcher.league_search_active:
@@ -2507,18 +2211,14 @@ class ConsoleUtilitiesApp:
                 if clip:
                     self.state.we_patcher.league_search_query += clip
                     self.state.we_patcher.leagues_highlighted = 0
-            elif (
-                event.unicode
-                and event.unicode.isprintable()
-                and BUILD_TARGET != "android"
-            ):
+            elif event.unicode and event.unicode.isprintable():
                 self.state.we_patcher.league_search_query += event.unicode
                 self.state.we_patcher.leagues_highlighted = 0
             return
 
         # Handle keyboard text input for ISS Patcher league browser search
         if self.state.iss_patcher.active_modal == "league_browser" and (
-            self.state.input_mode == "keyboard" or BUILD_TARGET == "android"
+            self.state.input_mode == "keyboard"
         ):
             if event.key == pygame.K_ESCAPE:
                 if self.state.iss_patcher.league_search_active:
@@ -2543,18 +2243,14 @@ class ConsoleUtilitiesApp:
                 if clip:
                     self.state.iss_patcher.league_search_query += clip
                     self.state.iss_patcher.leagues_highlighted = 0
-            elif (
-                event.unicode
-                and event.unicode.isprintable()
-                and BUILD_TARGET != "android"
-            ):
+            elif event.unicode and event.unicode.isprintable():
                 self.state.iss_patcher.league_search_query += event.unicode
                 self.state.iss_patcher.leagues_highlighted = 0
             return
 
         # Handle keyboard text input for PES6 Patcher league browser search
         if self.state.pes6_ps2_patcher.active_modal == "league_browser" and (
-            self.state.input_mode == "keyboard" or BUILD_TARGET == "android"
+            self.state.input_mode == "keyboard"
         ):
             pes = self.state.pes6_ps2_patcher
             if event.key == pygame.K_ESCAPE:
@@ -2578,19 +2274,13 @@ class ConsoleUtilitiesApp:
                 if clip:
                     pes.league_search_query += clip
                     pes.leagues_highlighted = 0
-            elif (
-                event.unicode
-                and event.unicode.isprintable()
-                and BUILD_TARGET != "android"
-            ):
+            elif event.unicode and event.unicode.isprintable():
                 pes.league_search_query += event.unicode
                 pes.leagues_highlighted = 0
             return
 
         # Handle keyboard text input for IA download wizard
-        if self.state.ia_download_wizard.show and (
-            self.state.input_mode == "keyboard" or BUILD_TARGET == "android"
-        ):
+        if self.state.ia_download_wizard.show and (self.state.input_mode == "keyboard"):
             step = self.state.ia_download_wizard.step
             if step == "url":
                 if event.key == pygame.K_ESCAPE:
@@ -2606,11 +2296,7 @@ class ConsoleUtilitiesApp:
                     clip = self._get_clipboard_text()
                     if clip:
                         self.state.ia_download_wizard.url += clip
-                elif (
-                    event.unicode
-                    and event.unicode.isprintable()
-                    and BUILD_TARGET != "android"
-                ):
+                elif event.unicode and event.unicode.isprintable():
                     self.state.ia_download_wizard.url += event.unicode
                 return
 
@@ -2618,7 +2304,7 @@ class ConsoleUtilitiesApp:
         # Skip if folder browser is open (it handles its own input)
         if (
             self.state.ia_collection_wizard.show
-            and (self.state.input_mode == "keyboard" or BUILD_TARGET == "android")
+            and (self.state.input_mode == "keyboard")
             and not self.state.folder_browser.show
         ):
             step = self.state.ia_collection_wizard.step
@@ -2638,11 +2324,7 @@ class ConsoleUtilitiesApp:
                     clip = self._get_clipboard_text()
                     if clip:
                         wizard.custom_format_input += clip
-                elif (
-                    event.unicode
-                    and event.unicode.isprintable()
-                    and BUILD_TARGET != "android"
-                ):
+                elif event.unicode and event.unicode.isprintable():
                     wizard.custom_format_input += event.unicode
                 return
 
@@ -2664,11 +2346,7 @@ class ConsoleUtilitiesApp:
                             wizard.url += clip
                         elif step == "name":
                             wizard.collection_name += clip
-                elif (
-                    event.unicode
-                    and event.unicode.isprintable()
-                    and BUILD_TARGET != "android"
-                ):
+                elif event.unicode and event.unicode.isprintable():
                     if step == "url":
                         wizard.url += event.unicode
                     elif step == "name":
@@ -2681,7 +2359,6 @@ class ConsoleUtilitiesApp:
             and self.state.auth_token_input.step == "input"
             and (
                 self.state.input_mode == "keyboard"
-                or BUILD_TARGET == "android"
                 or getattr(event, "web_companion", False)
             )
         ):
@@ -2698,18 +2375,13 @@ class ConsoleUtilitiesApp:
                 clip = self._get_clipboard_text()
                 if clip:
                     self.state.auth_token_input.input_text += clip
-            elif (
-                event.unicode
-                and event.unicode.isprintable()
-                and BUILD_TARGET != "android"
-            ):
+            elif event.unicode and event.unicode.isprintable():
                 self.state.auth_token_input.input_text += event.unicode
             return
 
         # Handle keyboard/web-companion text input for URL input
         if self.state.url_input.show and (
             self.state.input_mode == "keyboard"
-            or BUILD_TARGET == "android"
             or getattr(event, "web_companion", False)
         ):
             if event.key == pygame.K_ESCAPE:
@@ -2725,18 +2397,13 @@ class ConsoleUtilitiesApp:
                 clip = self._get_clipboard_text()
                 if clip:
                     self.state.url_input.input_text += clip
-            elif (
-                event.unicode
-                and event.unicode.isprintable()
-                and BUILD_TARGET != "android"
-            ):
+            elif event.unicode and event.unicode.isprintable():
                 self.state.url_input.input_text += event.unicode
             return
 
         # Handle keyboard/web-companion text input for folder name
         if self.state.folder_name_input.show and (
             self.state.input_mode == "keyboard"
-            or BUILD_TARGET == "android"
             or getattr(event, "web_companion", False)
         ):
             if event.key == pygame.K_ESCAPE:
@@ -2752,11 +2419,7 @@ class ConsoleUtilitiesApp:
                 clip = self._get_clipboard_text()
                 if clip:
                     self.state.folder_name_input.input_text += clip
-            elif (
-                event.unicode
-                and event.unicode.isprintable()
-                and BUILD_TARGET != "android"
-            ):
+            elif event.unicode and event.unicode.isprintable():
                 self.state.folder_name_input.input_text += event.unicode
             return
 
@@ -2780,44 +2443,6 @@ class ConsoleUtilitiesApp:
             self._handle_detail_action()
         elif event.key == pygame.K_SPACE:
             self._handle_start_action()
-
-    def _handle_text_input_event(self, event: pygame.event.Event):
-        """Handle TEXTINPUT events from the Android soft keyboard."""
-        text = event.text
-        if not text:
-            return
-
-        if self.state.show_search_input:
-            self.state.search.input_text += text
-            self.state.search.query = self.state.search.input_text
-        elif self.state.ia_login.show:
-            step = self.state.ia_login.step
-            if step == "email":
-                self.state.ia_login.email += text
-            elif step == "password":
-                self.state.ia_login.password += text
-        elif self.state.scraper_login.show:
-            step = self.state.scraper_login.step
-            if step == "username":
-                self.state.scraper_login.username += text
-            elif step == "password":
-                self.state.scraper_login.password += text
-            elif step == "api_key":
-                self.state.scraper_login.api_key += text
-        elif (
-            self.state.auth_token_input.show
-            and self.state.auth_token_input.step == "input"
-        ):
-            self.state.auth_token_input.input_text += text
-        elif self.state.url_input.show:
-            self.state.url_input.input_text += text
-        elif self.state.folder_name_input.show:
-            self.state.folder_name_input.input_text += text
-        elif (
-            self.state.scraper_wizard.show
-            and self.state.scraper_wizard.step == "edit_name"
-        ):
-            self.state.scraper_wizard.search_name += text
 
     def _handle_joystick_event(self, event: pygame.event.Event):
         """Handle joystick button events."""
@@ -2997,7 +2622,7 @@ class ConsoleUtilitiesApp:
             if retry_btn and retry_btn.collidepoint(x, y):
                 self._handle_scraper_wizard_selection()
                 return
-            # Android on-screen nav buttons
+            # On-screen nav buttons
             nav_up = rects.get("nav_up")
             nav_down = rects.get("nav_down")
             nav_select = rects.get("nav_select")
@@ -3013,21 +2638,6 @@ class ConsoleUtilitiesApp:
                 return
             if nav_back and nav_back.collidepoint(x, y):
                 self._go_back()
-                return
-            # Backspace button (edit_name step)
-            bksp = rects.get("backspace")
-            if bksp and bksp.collidepoint(x, y):
-                wizard = self.state.scraper_wizard
-                if (
-                    wizard.step == "edit_name"
-                    and wizard.search_name
-                    and wizard.search_name_cursor > 0
-                ):
-                    wizard.search_name = (
-                        wizard.search_name[: wizard.search_name_cursor - 1]
-                        + wizard.search_name[wizard.search_name_cursor :]
-                    )
-                    wizard.search_name_cursor -= 1
                 return
             # List item clicks
             wizard = self.state.scraper_wizard
@@ -3088,18 +2698,14 @@ class ConsoleUtilitiesApp:
                     self._start_download()
                 return
 
-        # Check Android text modal OK/Cancel/Backspace buttons
-        text_ok = self.state.ui_rects.rects.get("text_ok")
-        text_cancel = self.state.ui_rects.rects.get("text_cancel")
-        text_bksp = self.state.ui_rects.rects.get("text_backspace")
-        if text_ok and text_ok.collidepoint(x, y):
-            self._handle_text_modal_ok_click()
+        # Check IA login OK/Cancel buttons
+        ia_ok = self.state.ui_rects.rects.get("ia_login_ok")
+        ia_cancel = self.state.ui_rects.rects.get("ia_login_cancel")
+        if ia_ok and ia_ok.collidepoint(x, y):
+            self._handle_ia_login_ok()
             return
-        if text_cancel and text_cancel.collidepoint(x, y):
-            self._handle_text_modal_cancel_click()
-            return
-        if text_bksp and text_bksp.collidepoint(x, y):
-            self._handle_text_modal_backspace()
+        if ia_cancel and ia_cancel.collidepoint(x, y):
+            self._go_back()
             return
 
         # Check modal character buttons (search/url input/IA modals)
@@ -3598,20 +3204,11 @@ class ConsoleUtilitiesApp:
             return
 
         if self.state.auth_token_input.show:
-            if (
-                BUILD_TARGET == "android"
-                and self.state.auth_token_input.step == "input"
-            ):
-                self._handle_text_modal_ok_click()
-            else:
-                self._handle_auth_token_selection()
+            self._handle_auth_token_selection()
             return
 
         if self.state.show_search_input:
-            if BUILD_TARGET == "android":
-                self._handle_text_modal_ok_click()
-            else:
-                self._handle_search_input_selection()
+            self._handle_search_input_selection()
             return
 
         if self.state.game_details.show:
@@ -3619,10 +3216,7 @@ class ConsoleUtilitiesApp:
             return
 
         if self.state.folder_name_input.show:
-            if BUILD_TARGET == "android":
-                self._handle_text_modal_ok_click()
-            else:
-                self._handle_folder_name_input_selection()
+            self._handle_folder_name_input_selection()
             return
 
         if (
@@ -3647,18 +3241,12 @@ class ConsoleUtilitiesApp:
             return
 
         if self.state.url_input.show:
-            if BUILD_TARGET == "android":
-                self._handle_text_modal_ok_click()
-            else:
-                self._handle_url_input_selection()
+            self._handle_url_input_selection()
             return
 
         # Internet Archive modal selection
         if self.state.ia_login.show:
-            if BUILD_TARGET == "android":
-                self._handle_text_modal_ok_click()
-            else:
-                self._handle_ia_login_selection()
+            self._handle_ia_login_selection()
             return
 
         if self.state.ia_download_wizard.show:
@@ -3670,10 +3258,7 @@ class ConsoleUtilitiesApp:
             return
 
         if self.state.scraper_login.show:
-            if BUILD_TARGET == "android":
-                self._handle_text_modal_ok_click()
-            else:
-                self._handle_scraper_login_selection()
+            self._handle_scraper_login_selection()
             return
 
         if self.state.scraper_wizard.show:
@@ -3935,19 +3520,8 @@ class ConsoleUtilitiesApp:
         )
 
     def _retry_manager(self):
-        """A desktop/python DownloadManager used to retry NSZ decompression.
-
-        Reuses the active manager when it is already the desktop one; otherwise
-        (Android native) lazily builds a desktop manager so the retry runs the
-        python decompression path, not the Android handler.
-        """
-        if isinstance(self.download_manager, _DesktopDownloadManager):
-            return self.download_manager
-        if getattr(self, "_retry_dl_manager", None) is None:
-            self._retry_dl_manager = _DesktopDownloadManager(
-                self.settings, self.state.download_queue
-            )
-        return self._retry_dl_manager
+        """The DownloadManager used to retry NSZ decompression."""
+        return self.download_manager
 
     def _retry_failed_download(self):
         """Retry NSZ decompression for the highlighted failed .nsz download."""
@@ -4296,16 +3870,6 @@ class ConsoleUtilitiesApp:
             self.state.confirm_modal.cancel_label = "Cancel"
             self.state.confirm_modal.button_index = 0
             self.state.confirm_modal.context = "clear_game_list_cache"
-        elif action == "toggle_python_downloader":
-            current = self.settings.get("use_python_downloader", False)
-            self.settings["use_python_downloader"] = not current
-            save_settings(self.settings)
-            # Re-initialize download manager with the new setting
-            self._init_download_manager()
-        elif action == "redraw_ui":
-            self._restore_android_display()
-        elif action == "request_storage_permission":
-            self._request_storage_permission()
         elif action == "check_for_updates":
             self._check_for_updates()
 
@@ -4459,41 +4023,10 @@ class ConsoleUtilitiesApp:
         self.state.confirm_modal.context = ""
 
     def _init_download_manager(self):
-        """Initialize the download manager based on platform and settings."""
-        use_android_native = BUILD_TARGET == "android" and not self.settings.get(
-            "use_python_downloader", False
+        """Initialize the download manager."""
+        self.download_manager = _DesktopDownloadManager(
+            self.settings, self.state.download_queue
         )
-        if use_android_native:
-            from droid.download_manager import AndroidDownloadManager
-
-            self.download_manager = AndroidDownloadManager(
-                self.settings, self.state.download_queue
-            )
-        else:
-            self.download_manager = _DesktopDownloadManager(
-                self.settings, self.state.download_queue
-            )
-
-    def _request_storage_permission(self):
-        """Request MANAGE_EXTERNAL_STORAGE permission on Android."""
-        try:
-            from jnius import autoclass
-
-            Environment = autoclass("android.os.Environment")
-            if Environment.isExternalStorageManager():
-                self._show_error("Storage permission already granted.")
-                return
-
-            PythonActivity = autoclass("org.kivy.android.PythonActivity")
-            Intent = autoclass("android.content.Intent")
-            Settings = autoclass("android.provider.Settings")
-            Uri = autoclass("android.net.Uri")
-            activity = PythonActivity.mActivity
-            intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-            intent.setData(Uri.parse("package:" + activity.getPackageName()))
-            activity.startActivity(intent)
-        except Exception as e:
-            self._show_error(f"Failed to request permission: {e}")
 
     def _check_for_updates(self):
         """Check GitHub releases for a newer version."""
@@ -4554,10 +4087,7 @@ class ConsoleUtilitiesApp:
                 "",
             ]
 
-            can_auto_update = BUILD_TARGET in (
-                "pygame",
-                "android",
-            ) and release_info.get("asset_url")
+            can_auto_update = BUILD_TARGET == "pygame" and release_info.get("asset_url")
 
             if can_auto_update:
                 size = release_info.get("asset_size", 0)
@@ -4587,13 +4117,11 @@ class ConsoleUtilitiesApp:
         thread.start()
 
     def _apply_update(self, release_info):
-        """Apply an update from release_info (pygame or Android)."""
+        """Apply an update from release_info."""
         self.state.confirm_modal.show = False
         self.state.loading.show = True
         self.state.loading.message = "Downloading update..."
         self.state.loading.progress = 0
-
-        is_android = BUILD_TARGET == "android"
 
         def on_progress(progress, status):
             self.state.loading.progress = int(progress * 100)
@@ -4602,23 +4130,13 @@ class ConsoleUtilitiesApp:
         def on_complete():
             self.state.loading.show = False
             self.state.confirm_modal.show = True
-            if is_android:
-                self.state.confirm_modal.title = "Installing Update"
-                self.state.confirm_modal.message_lines = [
-                    f"Installing {release_info['tag']}...",
-                    "",
-                    "The system installer should open.",
-                    "Follow the prompts to complete",
-                    "the update.",
-                ]
-            else:
-                self.state.confirm_modal.title = "Update Complete"
-                self.state.confirm_modal.message_lines = [
-                    f"Updated to {release_info['tag']}.",
-                    "",
-                    "Please restart the application",
-                    "to use the new version.",
-                ]
+            self.state.confirm_modal.title = "Update Complete"
+            self.state.confirm_modal.message_lines = [
+                f"Updated to {release_info['tag']}.",
+                "",
+                "Please restart the application",
+                "to use the new version.",
+            ]
             self.state.confirm_modal.ok_label = "OK"
             self.state.confirm_modal.cancel_label = ""
             self.state.confirm_modal.button_index = 0
@@ -4637,24 +4155,14 @@ class ConsoleUtilitiesApp:
             self.state.confirm_modal.button_index = 0
             self.state.confirm_modal.context = ""
 
-        if is_android:
-            from droid.updater import apply_android_update
+        from services.update_service import apply_pygame_update
 
-            apply_android_update(
-                release_info["asset_url"],
-                on_progress=on_progress,
-                on_complete=on_complete,
-                on_error=on_error,
-            )
-        else:
-            from services.update_service import apply_pygame_update
-
-            apply_pygame_update(
-                release_info["asset_url"],
-                on_progress=on_progress,
-                on_complete=on_complete,
-                on_error=on_error,
-            )
+        apply_pygame_update(
+            release_info["asset_url"],
+            on_progress=on_progress,
+            on_complete=on_complete,
+            on_error=on_error,
+        )
 
     def _handle_utils_selection(self):
         """Handle utils item selection."""
@@ -5122,8 +4630,8 @@ class ConsoleUtilitiesApp:
             self.state.folder_name_input.input_text = ""
             self.state.folder_name_input.cursor_position = 0
 
-        elif item_type in ("folder", "storage_volume"):
-            # Navigate into the folder or storage volume
+        elif item_type == "folder":
+            # Navigate into the folder
             self.state.folder_browser.current_path = item_path
             self.state.folder_browser.items = nav_loader(item_path)
             self.state.folder_browser.highlighted = 0
@@ -6223,7 +5731,7 @@ class ConsoleUtilitiesApp:
         self._apply_search_filter()
 
     def _submit_url_input(self):
-        """Handle URL input submission from keyboard/Android."""
+        """Handle URL input submission from the keyboard."""
         if self.state.url_input.context == "direct_download":
             self._submit_direct_download_url()
         else:
@@ -6269,31 +5777,6 @@ class ConsoleUtilitiesApp:
             0, len(self.state.download_queue.items) - 1
         )
 
-    def _handle_text_modal_ok_click(self):
-        """Handle OK button click on text input modals."""
-        if (
-            self.state.auth_token_input.show
-            and self.state.auth_token_input.step == "input"
-        ):
-            self._submit_auth_token()
-            return
-        if self.state.show_search_input:
-            self._submit_search_keyboard_input()
-        elif self.state.url_input.show:
-            self._submit_url_input()
-        elif self.state.folder_name_input.show:
-            self._submit_folder_name()
-        elif self.state.ia_login.show:
-            self._handle_ia_login_ok()
-        elif self.state.ia_download_wizard.show:
-            self._handle_ia_download_wizard_ok()
-        elif self.state.ia_collection_wizard.show:
-            self._handle_ia_collection_wizard_ok()
-
-    def _handle_text_modal_cancel_click(self):
-        """Handle Cancel button click on text input modals."""
-        self._go_back()
-
     def _handle_ia_login_ok(self):
         """Handle OK/Next/Login button click on IA login modal."""
         step = self.state.ia_login.step
@@ -6311,101 +5794,6 @@ class ConsoleUtilitiesApp:
             self.state.ia_login.password = ""
             self.state.ia_login.cursor_position = 0
             self.state.ia_login.error_message = ""
-
-    def _handle_ia_download_wizard_ok(self):
-        """Handle OK button tap on Android IA download wizard text steps."""
-        if self.state.ia_download_wizard.step == "url":
-            if self.state.ia_download_wizard.url:
-                self._validate_ia_download_item()
-
-    def _handle_ia_collection_wizard_ok(self):
-        """Handle OK button tap on Android IA collection wizard text steps."""
-        wizard = self.state.ia_collection_wizard
-        step = wizard.step
-
-        if step == "url":
-            if wizard.url:
-                self._validate_ia_collection_item()
-        elif step == "name":
-            if wizard.collection_name:
-                self._open_ia_collection_folder_browser()
-        elif step == "folder":
-            if wizard.folder_name:
-                wizard.step = "formats"
-            elif not self.state.folder_browser.show:
-                self._open_ia_collection_folder_browser()
-        elif step == "formats" and wizard.adding_custom_format:
-            if wizard.custom_format_input:
-                fmt = wizard.custom_format_input
-                if not fmt.startswith("."):
-                    fmt = "." + fmt
-                if fmt not in wizard.available_formats:
-                    wizard.available_formats.append(fmt)
-                    wizard.selected_formats.add(len(wizard.available_formats) - 1)
-            wizard.adding_custom_format = False
-            wizard.custom_format_input = ""
-            wizard.cursor_position = 0
-
-    def _handle_text_modal_backspace(self):
-        """Handle backspace button tap on Android text input modals."""
-        if (
-            self.state.auth_token_input.show
-            and self.state.auth_token_input.step == "input"
-        ):
-            if self.state.auth_token_input.input_text:
-                self.state.auth_token_input.input_text = (
-                    self.state.auth_token_input.input_text[:-1]
-                )
-        elif self.state.ia_login.show:
-            step = self.state.ia_login.step
-            if step == "email" and self.state.ia_login.email:
-                self.state.ia_login.email = self.state.ia_login.email[:-1]
-            elif step == "password" and self.state.ia_login.password:
-                self.state.ia_login.password = self.state.ia_login.password[:-1]
-        elif self.state.scraper_login.show:
-            step = self.state.scraper_login.step
-            if step == "username" and self.state.scraper_login.username:
-                self.state.scraper_login.username = self.state.scraper_login.username[
-                    :-1
-                ]
-            elif step == "password" and self.state.scraper_login.password:
-                self.state.scraper_login.password = self.state.scraper_login.password[
-                    :-1
-                ]
-            elif step == "api_key" and self.state.scraper_login.api_key:
-                self.state.scraper_login.api_key = self.state.scraper_login.api_key[:-1]
-        elif self.state.show_search_input:
-            if self.state.search.input_text:
-                self.state.search.input_text = self.state.search.input_text[:-1]
-                self.state.search.query = self.state.search.input_text
-        elif self.state.url_input.show:
-            if self.state.url_input.input_text:
-                self.state.url_input.input_text = self.state.url_input.input_text[:-1]
-        elif self.state.folder_name_input.show:
-            if self.state.folder_name_input.input_text:
-                self.state.folder_name_input.input_text = (
-                    self.state.folder_name_input.input_text[:-1]
-                )
-        elif self.state.ia_download_wizard.show:
-            if (
-                self.state.ia_download_wizard.step == "url"
-                and self.state.ia_download_wizard.url
-            ):
-                self.state.ia_download_wizard.url = (
-                    self.state.ia_download_wizard.url[:-1]
-                )
-        elif self.state.ia_collection_wizard.show:
-            wizard = self.state.ia_collection_wizard
-            step = wizard.step
-            if step == "formats" and wizard.adding_custom_format:
-                if wizard.custom_format_input:
-                    wizard.custom_format_input = wizard.custom_format_input[:-1]
-            elif step == "url" and wizard.url:
-                wizard.url = wizard.url[:-1]
-            elif step == "name" and wizard.collection_name:
-                wizard.collection_name = wizard.collection_name[:-1]
-            elif step == "folder" and wizard.folder_name:
-                wizard.folder_name = wizard.folder_name[:-1]
 
     def _apply_search_filter(self):
         """Apply search filter and close search modal."""
@@ -7392,8 +6780,8 @@ class ConsoleUtilitiesApp:
         step = self.state.ia_login.step
 
         if step == "email":
-            if self.state.input_mode == "keyboard" or BUILD_TARGET == "android":
-                # Keyboard/Android mode - Enter/OK pressed, move to password
+            if self.state.input_mode == "keyboard":
+                # Keyboard mode - Enter/OK pressed, move to password
                 if self.state.ia_login.email:
                     self.state.ia_login.step = "password"
                     self.state.ia_login.cursor_position = 0
@@ -7418,8 +6806,8 @@ class ConsoleUtilitiesApp:
                     self.state.ia_login.cursor_position = 0
 
         elif step == "password":
-            if self.state.input_mode == "keyboard" or BUILD_TARGET == "android":
-                # Keyboard/Android mode - Enter/OK pressed, test credentials
+            if self.state.input_mode == "keyboard":
+                # Keyboard mode - Enter/OK pressed, test credentials
                 if self.state.ia_login.password:
                     self._test_ia_credentials()
             else:

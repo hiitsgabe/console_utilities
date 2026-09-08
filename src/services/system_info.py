@@ -2,9 +2,9 @@
 System information gathering service.
 
 Collects OS, device, RAM, and disk-usage info using only the Python
-standard library so no new dependency (and no python-for-android recipe)
-is required. Every probe is individually guarded: a failure yields None
-for that field (or omits that disk) rather than raising.
+standard library, so no new dependency is required. Every probe is
+individually guarded: a failure yields None for that field (or omits that
+disk) rather than raising.
 """
 
 import os

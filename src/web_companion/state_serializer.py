@@ -698,12 +698,6 @@ def serialize_web_state(state, settings=None, data=None):
                 value = "ON" if s.get("web_companion_enabled", False) else "OFF"
             elif label == "Enable Syncthing Helper":
                 value = "ON" if s.get("syncthing_enabled", False) else "OFF"
-            elif label == "Use Python Downloader":
-                value = "ON" if s.get("use_python_downloader", False) else "OFF"
-            elif label == "Redraw UI":
-                value = "Refresh"
-            elif label == "Storage Permission":
-                value = "Request"
             elif label == "Check for Updates":
                 value = APP_VERSION
             items.append({"name": label, "selected": False, "value": value})

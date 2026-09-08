@@ -28,9 +28,6 @@ class AuthTokenModal:
         self.char_keyboard = CharKeyboard(theme)
         self.action_button = ActionButton(theme)
         self.text = Text(theme)
-        self.ok_rect = None
-        self.cancel_rect = None
-        self.backspace_rect = None
         self.enter_token_rect = None
 
     def render(
@@ -50,9 +47,6 @@ class AuthTokenModal:
         Returns:
             Tuple of (modal_rect, content_rect, close_rect, char_rects)
         """
-        self.ok_rect = None
-        self.cancel_rect = None
-        self.backspace_rect = None
         self.enter_token_rect = None
 
         if step == "message":
@@ -130,10 +124,6 @@ class AuthTokenModal:
         """Render the token input step."""
         if input_mode == "keyboard":
             return self._render_keyboard_mode(screen, input_text)
-        if input_mode == "android":
-            return self._render_android_mode(
-                screen, input_text, scroll_offset=scroll_offset
-            )
         return self._render_onscreen_keyboard_mode(
             screen, input_text, cursor_position, input_mode, shift_active
         )
@@ -211,125 +201,6 @@ class AuthTokenModal:
             size=self.theme.font_size_sm,
             align="center",
         )
-
-        return modal_rect, content_rect, None, []
-
-    def _render_android_mode(
-        self, screen: pygame.Surface, input_text: str, scroll_offset: int = 0
-    ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[Tuple]]:
-        """Render for Android."""
-        sw, sh = screen.get_size()
-        width = min(int(sw * 0.9), 600)
-        height = 230
-
-        modal_rect, content_rect, close_rect = self.modal_frame.render_top_aligned(
-            screen, width, height, title="Enter Auth Token", show_close=False
-        )
-
-        padding = self.theme.padding_sm
-        y = content_rect.top + padding
-
-        field_height = 48
-        bksp_width = 48
-        field_rect = pygame.Rect(
-            content_rect.left + padding,
-            y,
-            content_rect.width - padding * 3 - bksp_width,
-            field_height,
-        )
-        pygame.draw.rect(
-            screen,
-            self.theme.surface_hover,
-            field_rect,
-            border_radius=self.theme.radius_sm,
-        )
-
-        # Backspace button
-        bksp_rect = pygame.Rect(field_rect.right + padding, y, bksp_width, field_height)
-        pygame.draw.rect(
-            screen,
-            self.theme.surface_hover,
-            bksp_rect,
-            border_radius=self.theme.radius_sm,
-        )
-        self.text.render(
-            screen,
-            "<x]",
-            (bksp_rect.centerx, bksp_rect.centery - self.theme.font_size_md // 2),
-            color=self.theme.text_primary,
-            size=self.theme.font_size_md,
-            align="center",
-        )
-        self.backspace_rect = bksp_rect
-
-        if input_text:
-            self.text.render_scrolled(
-                screen,
-                input_text,
-                (
-                    field_rect.left + padding,
-                    field_rect.centery - self.theme.font_size_md // 2,
-                ),
-                max_width=field_rect.width - padding * 2,
-                scroll_offset=scroll_offset,
-                color=self.theme.text_primary,
-                size=self.theme.font_size_md,
-            )
-        else:
-            self.text.render(
-                screen,
-                "Paste or type token...",
-                (
-                    field_rect.left + padding,
-                    field_rect.centery - self.theme.font_size_md // 2,
-                ),
-                color=self.theme.text_disabled,
-                size=self.theme.font_size_md,
-                max_width=field_rect.width - padding * 2,
-            )
-
-        # Cursor
-        if input_text:
-            cursor_x = (
-                field_rect.left
-                + padding
-                + self.text.measure(input_text, self.theme.font_size_md)[0]
-                - scroll_offset
-                + 2
-            )
-            cursor_x = min(cursor_x, field_rect.right - 2)
-        else:
-            cursor_x = field_rect.left + padding
-        pygame.draw.line(
-            screen,
-            self.theme.primary,
-            (cursor_x, field_rect.top + 8),
-            (cursor_x, field_rect.bottom - 8),
-            2,
-        )
-
-        # OK / Cancel buttons
-        y = field_rect.bottom + padding * 3
-        button_width = 120
-        button_height = 44
-        button_spacing = self.theme.padding_lg
-
-        ok_rect = pygame.Rect(
-            content_rect.centerx - button_width - button_spacing // 2,
-            y,
-            button_width,
-            button_height,
-        )
-        cancel_rect = pygame.Rect(
-            content_rect.centerx + button_spacing // 2,
-            y,
-            button_width,
-            button_height,
-        )
-        self.action_button.render(screen, ok_rect, "OK", hover=True)
-        self.action_button.render_secondary(screen, cancel_rect, "Cancel", hover=False)
-        self.ok_rect = ok_rect
-        self.cancel_rect = cancel_rect
 
         return modal_rect, content_rect, None, []
 

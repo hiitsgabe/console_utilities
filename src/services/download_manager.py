@@ -814,11 +814,10 @@ class DownloadManager:
     def retry_nsz_decompression(self, item: DownloadQueueItem):
         """Re-run NSZ decompression for a failed item via the python path.
 
-        Runs the desktop ``decompress_nsz_file`` flow (the same one the python
-        downloader uses) in a background thread, independent of any Android
-        native download/extraction handler. Diagnostics go to error.log via
-        log_nsz so the attempt is visible in the in-app log viewer. Returns the
-        worker thread so callers can join it in tests.
+        Runs the desktop ``decompress_nsz_file`` flow in a background thread.
+        Diagnostics go to error.log via log_nsz so the attempt is visible in the
+        in-app log viewer. Returns the worker thread so callers can join it in
+        tests.
         """
         import threading
 

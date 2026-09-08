@@ -34,10 +34,8 @@ from ui.atoms.text import Text
 from ui.atoms.progress import ProgressBar
 from ui.molecules.action_button import ActionButton
 from utils.button_hints import get_combined_hints, get_button_hint
-from constants import BUILD_TARGET
 
 THUMB_SIZE = (64, 64)
-IS_ANDROID = BUILD_TARGET == "android"
 NAV_BAR_HEIGHT = 44
 
 
@@ -63,12 +61,11 @@ class ScraperWizardModal:
         self.done_button_rect: Optional[pygame.Rect] = None
         self.retry_button_rect: Optional[pygame.Rect] = None
         self._scroll_offset: int = 0
-        # Android on-screen nav button rects
+        # On-screen nav button rects
         self.nav_up_rect: Optional[pygame.Rect] = None
         self.nav_down_rect: Optional[pygame.Rect] = None
         self.nav_select_rect: Optional[pygame.Rect] = None
         self.nav_back_rect: Optional[pygame.Rect] = None
-        self.backspace_rect: Optional[pygame.Rect] = None
         # Filtered systems list set by app.py before rendering system picker
         self.system_picker_systems: List = []
 
@@ -125,7 +122,6 @@ class ScraperWizardModal:
         self.nav_down_rect = None
         self.nav_select_rect = None
         self.nav_back_rect = None
-        self.backspace_rect = None
         self._scroll_offset = 0
         self._button_focused = button_focused
         self._nav_bar_index = nav_bar_index
@@ -212,18 +208,9 @@ class ScraperWizardModal:
         scroll_offset: int = 0,
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[pygame.Rect]]:
         """Render editable game name step with on-screen keyboard."""
-        # Reset button rects
-        self.backspace_rect = None
-
         # Keyboard mode: simple text field, no on-screen keyboard
         if input_mode == "keyboard":
             return self._render_edit_name_keyboard(screen, search_name)
-
-        # Android mode: text field with OK/Cancel buttons
-        if input_mode == "android":
-            return self._render_edit_name_android(
-                screen, search_name, scroll_offset=scroll_offset
-            )
 
         # Gamepad/touch: on-screen CharKeyboard
         width = min(600, screen.get_width() - 40)
@@ -335,124 +322,6 @@ class ScraperWizardModal:
 
         return modal_rect, content_rect, None, []
 
-    def _render_edit_name_android(
-        self, screen: pygame.Surface, search_name: str, scroll_offset: int = 0
-    ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[pygame.Rect]]:
-        """Render edit name for Android (with OK/Cancel buttons)."""
-        sw, sh = screen.get_size()
-        width = min(int(sw * 0.9), 600)
-        height = 230
-
-        modal_rect, content_rect, close_rect = self.modal_frame.render_top_aligned(
-            screen, width, height, title="Edit Search Name", show_close=False
-        )
-
-        padding = self.theme.padding_sm
-        y = content_rect.top + padding
-
-        field_height = 48
-        bksp_width = 48
-        field_rect = pygame.Rect(
-            content_rect.left + padding,
-            y,
-            content_rect.width - padding * 3 - bksp_width,
-            field_height,
-        )
-        pygame.draw.rect(
-            screen,
-            self.theme.surface_hover,
-            field_rect,
-            border_radius=self.theme.radius_sm,
-        )
-
-        bksp_rect = pygame.Rect(field_rect.right + padding, y, bksp_width, field_height)
-        pygame.draw.rect(
-            screen,
-            self.theme.surface_hover,
-            bksp_rect,
-            border_radius=self.theme.radius_sm,
-        )
-        self.text.render(
-            screen,
-            "<x]",
-            (bksp_rect.centerx, bksp_rect.centery - self.theme.font_size_md // 2),
-            color=self.theme.text_primary,
-            size=self.theme.font_size_md,
-            align="center",
-        )
-        self.backspace_rect = bksp_rect
-
-        if search_name:
-            self.text.render_scrolled(
-                screen,
-                search_name,
-                (
-                    field_rect.left + padding,
-                    field_rect.centery - self.theme.font_size_md // 2,
-                ),
-                max_width=field_rect.width - padding * 2,
-                scroll_offset=scroll_offset,
-                color=self.theme.text_primary,
-                size=self.theme.font_size_md,
-            )
-        else:
-            self.text.render(
-                screen,
-                "Type to search...",
-                (
-                    field_rect.left + padding,
-                    field_rect.centery - self.theme.font_size_md // 2,
-                ),
-                color=self.theme.text_disabled,
-                size=self.theme.font_size_md,
-                max_width=field_rect.width - padding * 2,
-            )
-
-        if search_name:
-            cursor_x = (
-                field_rect.left
-                + padding
-                + self.text.measure(search_name, self.theme.font_size_md)[0]
-                - scroll_offset
-                + 2
-            )
-            cursor_x = min(cursor_x, field_rect.right - 2)
-        else:
-            cursor_x = field_rect.left + padding
-        pygame.draw.line(
-            screen,
-            self.theme.primary,
-            (cursor_x, field_rect.top + 8),
-            (cursor_x, field_rect.bottom - 8),
-            2,
-        )
-
-        # OK and Cancel buttons
-        y = field_rect.bottom + padding * 3
-        button_width = 120
-        button_height = 44
-        button_spacing = self.theme.padding_lg
-
-        ok_rect = pygame.Rect(
-            content_rect.centerx - button_width - button_spacing // 2,
-            y,
-            button_width,
-            button_height,
-        )
-        cancel_rect = pygame.Rect(
-            content_rect.centerx + button_spacing // 2,
-            y,
-            button_width,
-            button_height,
-        )
-
-        self.action_button.render(screen, ok_rect, "Search", hover=True)
-        self.action_button.render_secondary(screen, cancel_rect, "Cancel", hover=False)
-
-        self.start_button_rect = ok_rect
-
-        return modal_rect, content_rect, None, []
-
     def handle_edit_name_selection(
         self,
         cursor_position: int,
@@ -520,7 +389,7 @@ class ScraperWizardModal:
         padding = self.theme.padding_sm
         y = content_rect.top + padding
 
-        # Android nav buttons
+        # Nav buttons
         nav_h = self._render_nav_bar(screen, content_rect, show_select=True)
         y += nav_h
 
@@ -666,7 +535,7 @@ class ScraperWizardModal:
         padding = self.theme.padding_sm
         y = content_rect.top + padding
 
-        # Android nav buttons (select toggles checkbox)
+        # Nav buttons (select toggles checkbox)
         nav_h = self._render_nav_bar(screen, content_rect, show_select=True)
         y += nav_h
 
@@ -831,7 +700,7 @@ class ScraperWizardModal:
         padding = self.theme.padding_sm
         y = content_rect.top + padding
 
-        # Android nav buttons
+        # Nav buttons
         nav_h = self._render_nav_bar(screen, content_rect, show_select=True)
         y += nav_h
 
@@ -1074,7 +943,7 @@ class ScraperWizardModal:
         padding = self.theme.padding_sm
         y = content_rect.top + padding
 
-        # Android nav buttons (select toggles skip)
+        # Nav buttons (select toggles skip)
         nav_h = self._render_nav_bar(screen, content_rect, show_select=True)
         y += nav_h
 
@@ -1169,7 +1038,7 @@ class ScraperWizardModal:
         padding = self.theme.padding_sm
         y = content_rect.top + padding
 
-        # Android nav buttons
+        # Nav buttons
         nav_h = self._render_nav_bar(screen, content_rect, show_select=True)
         y += nav_h
 
@@ -1481,10 +1350,10 @@ class ScraperWizardModal:
         """Render on-screen navigation buttons at the top of the modal content.
 
         Draws Back, Up, Down, and optionally Select buttons in a horizontal bar.
-        Visible on Android always; on other platforms only when focused via d-pad.
+        Visible only when focused via d-pad.
         """
         nav_focused = self._nav_bar_index >= 0
-        if not IS_ANDROID and not nav_focused:
+        if not nav_focused:
             return 0
 
         padding = self.theme.padding_sm

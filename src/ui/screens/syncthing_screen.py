@@ -9,7 +9,6 @@ from typing import List, Dict, Any, Tuple, Optional, Set
 
 from ui.theme import Theme, default_theme
 from ui.templates.list_screen import ListScreenTemplate
-from constants import BUILD_TARGET
 from services.syncthing_service import SYNC_SYSTEMS
 
 
@@ -160,11 +159,7 @@ class SyncthingScreen:
                 "unknown": "?",
             }
             label = status_labels.get(status, status)
-            if BUILD_TARGET == "android":
-                # Android: always allow folder selection
-                _add_item((system.upper(), label), f"configure_{system}")
-            else:
-                _add_item((system.upper(), label), f"system_{system}")
+            _add_item((system.upper(), label), f"configure_{system}")
 
         # Custom saves
         _add_divider("--- CUSTOM SAVES ---")

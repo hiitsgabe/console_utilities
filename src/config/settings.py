@@ -9,7 +9,7 @@ import traceback
 from dataclasses import dataclass, field, asdict
 from typing import Dict, Any, List, Optional
 
-from constants import CONFIG_FILE, SCRIPT_DIR, DEV_MODE, BUILD_TARGET
+from constants import CONFIG_FILE, SCRIPT_DIR, DEV_MODE
 
 
 @dataclass
@@ -54,10 +54,6 @@ class Settings:
     rawg_api_key: str = ""
     igdb_client_id: str = ""
     igdb_client_secret: str = ""  # base64 encoded
-    # Android-specific settings
-    use_python_downloader: bool = (
-        False  # Use Python downloads/zip instead of Android-native
-    )
     # Web Companion
     web_companion_enabled: bool = True
     # Syncthing Save Sync
@@ -68,7 +64,7 @@ class Settings:
     syncthing_api_key: str = ""
     syncthing_folder_overrides: Dict[str, str] = field(
         default_factory=dict
-    )  # android per-system path overrides
+    )  # per-system path overrides
     syncthing_custom_saves: List[Dict[str, str]] = field(default_factory=list)
     # Frontend-specific paths
     esde_media_path: str = ""
@@ -95,19 +91,10 @@ class Settings:
         return cls(**filtered_data)
 
 
-def _get_android_external_dir() -> str:
-    """Get Android external files directory via JNI."""
-    from droid.storage import get_external_data_dir
-
-    return get_external_data_dir(SCRIPT_DIR)
-
-
 def _get_default_work_dir() -> str:
     """Get the default work directory based on environment."""
     if DEV_MODE:
         return os.path.join(SCRIPT_DIR, "..", "workdir", "downloads")
-    elif BUILD_TARGET == "android":
-        return os.path.join(_get_android_external_dir(), "downloads")
     elif os.path.exists("/userdata") and os.access("/userdata", os.W_OK):
         return "/userdata/downloads"
     else:
@@ -118,8 +105,6 @@ def _get_default_roms_dir() -> str:
     """Get the default ROMs directory based on environment."""
     if DEV_MODE:
         return os.path.join(SCRIPT_DIR, "..", "roms")
-    elif BUILD_TARGET == "android":
-        return os.path.join(_get_android_external_dir(), "roms")
     elif os.path.exists("/userdata") and os.access("/userdata", os.W_OK):
         return "/userdata/roms"
     else:

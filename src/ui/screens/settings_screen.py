@@ -94,14 +94,6 @@ class SettingsScreen:
         "Enable Syncthing Helper",
     ]
 
-    # Android section
-    ANDROID_SECTION = [
-        "--- ANDROID ---",
-        "Use Python Downloader",
-        "Redraw UI",
-        "Storage Permission",
-    ]
-
     # App section (last)
     APP_SECTION = [
         "--- APP ---",
@@ -199,11 +191,6 @@ class SettingsScreen:
         # Add Save Sync section
         divider_indices.add(len(items))
         items.extend(self.SAVE_SYNC_SECTION)
-
-        # Add Android section (only on Android)
-        if BUILD_TARGET == "android":
-            divider_indices.add(len(items))
-            items.extend(self.ANDROID_SECTION)
 
         # Add App section (last)
         divider_indices.add(len(items))
@@ -338,13 +325,6 @@ class SettingsScreen:
             elif item == "Enable Syncthing Helper":
                 value = "ON" if settings.get("syncthing_enabled", False) else "OFF"
                 items.append((item, value))
-            elif item == "Use Python Downloader":
-                value = "ON" if settings.get("use_python_downloader", False) else "OFF"
-                items.append((item, value))
-            elif item == "Redraw UI":
-                items.append((item, "Refresh"))
-            elif item == "Storage Permission":
-                items.append((item, "Request"))
             elif item == "Check for Updates":
                 items.append((item, APP_VERSION))
             else:
@@ -433,9 +413,6 @@ class SettingsScreen:
                 "Enable NSZ": "toggle_nsz_enabled",
                 "Web Companion": "toggle_web_companion",
                 "Enable Syncthing Helper": "toggle_syncthing_enabled",
-                "Use Python Downloader": "toggle_python_downloader",
-                "Redraw UI": "redraw_ui",
-                "Storage Permission": "request_storage_permission",
                 "Check for Updates": "check_for_updates",
             }
             return actions.get(item, "unknown")

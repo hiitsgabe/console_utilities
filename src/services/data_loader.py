@@ -19,7 +19,7 @@ from utils.logging import log_error
 _json_file: Optional[str] = None
 
 # Path to bundled JSON file in assets folder
-# In .pygame/zip bundles, SCRIPT_DIR is the project root; on Android it's src/
+# In .pygame/zip bundles, SCRIPT_DIR is the project root
 _bundled_path = os.path.join(SCRIPT_DIR, "assets", "bundled_data.json")
 if not os.path.exists(_bundled_path):
     _bundled_path = os.path.join(SCRIPT_DIR, "..", "assets", "bundled_data.json")

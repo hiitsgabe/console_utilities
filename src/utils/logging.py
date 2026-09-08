@@ -16,9 +16,8 @@ from constants import TEMP_LOG_DIR
 _log_file: str = os.path.join(TEMP_LOG_DIR, "error.log")
 
 # NSZ diagnostics are written into the main error.log, tagged so they are easy
-# to spot among other entries. A separate nsz.log proved unreliable/invisible
-# on Android, and error.log is the file that reliably persists and is
-# retrievable there.
+# to spot among other entries. A separate nsz.log proved unreliable, and
+# error.log is the file that reliably persists and is retrievable.
 NSZ_LOG_TAG: str = "[NSZ]"
 
 # Number of trailing error.log lines the in-app viewer shows.
@@ -102,11 +101,11 @@ def log_nsz(
     Log an NSZ diagnostic message into the main ``error.log`` and stdout.
 
     NSZ diagnostics go straight into ``error.log`` (tagged ``[NSZ]``) rather than
-    a separate file: error.log is created at startup and reliably persists / is
-    retrievable on Android, so entries survive even when a large-file extraction
-    crashes or the app is restarted mid-decompression. Each entry is also kept in
-    a small in-memory buffer as a fallback source for the in-app viewer when the
-    file cannot be read.
+    a separate file: error.log is created at startup and reliably persists, so
+    entries survive even when a large-file extraction crashes or the app is
+    restarted mid-decompression. Each entry is also kept in a small in-memory
+    buffer as a fallback source for the in-app viewer when the file cannot be
+    read.
 
     Args:
         error_msg: The message to log
