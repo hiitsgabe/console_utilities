@@ -197,9 +197,6 @@ def _handle_set_text(state, text):
     elif state.steam_shortcut.show and state.steam_shortcut.step == "search":
         state.steam_shortcut.search_query = text
         state.steam_shortcut.cursor_position = len(text)
-    elif state.syncthing.custom_step == "name_input":
-        state.syncthing.custom_name_input = text
-        state.syncthing.custom_name_cursor = len(text)
     else:
         # Fallback: if we're on games, activate search modal
         # so the subsequent submit_text will trigger _apply_search_filter

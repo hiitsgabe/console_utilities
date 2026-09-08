@@ -7,7 +7,7 @@ import json
 import os
 import traceback
 from dataclasses import dataclass, field, asdict
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 
 from constants import CONFIG_FILE, SCRIPT_DIR, DEV_MODE
 
@@ -56,16 +56,6 @@ class Settings:
     igdb_client_secret: str = ""  # base64 encoded
     # Web Companion
     web_companion_enabled: bool = True
-    # Syncthing Save Sync
-    syncthing_enabled: bool = False
-    syncthing_role: str = ""  # "host" or "console"
-    syncthing_host_device_id: str = ""
-    syncthing_base_path: str = ""  # host only, default ~/game-saves/
-    syncthing_api_key: str = ""
-    syncthing_folder_overrides: Dict[str, str] = field(
-        default_factory=dict
-    )  # per-system path overrides
-    syncthing_custom_saves: List[Dict[str, str]] = field(default_factory=list)
     # Frontend-specific paths
     esde_media_path: str = ""
     esde_gamelists_path: str = ""

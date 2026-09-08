@@ -63,7 +63,6 @@ from services.installed_checker import installed_checker
 from services.image_cache import ImageCache
 from services.download_manager import DownloadManager as _DesktopDownloadManager
 from services.scraper_manager import ScraperManager
-from services.syncthing_service import SyncthingService
 from services.auto_scrape import should_auto_scrape, new_completions
 from services import file_explorer_service
 from input.navigation import NavigationHandler
@@ -173,9 +172,6 @@ class ConsoleUtilitiesApp:
 
         # Tracks last-seen download status per queue item (auto-scrape trigger)
         self._dl_status_seen = {}
-
-        # Initialize Syncthing service (lazily when needed)
-        self.syncthing_service = None
 
         # Initialize web companion (lazy — started via settings toggle)
         # Not available on the standalone Windows build
@@ -1329,76 +1325,6 @@ class ConsoleUtilitiesApp:
         elif self.state.mode == "file_explorer":
             self._handle_file_explorer_navigation(direction)
 
-        elif self.state.mode == "syncthing":
-            # Check custom save sub-steps first
-            if self.state.syncthing.custom_step == "file_select":
-                max_items = (
-                    len(self.state.syncthing.custom_file_list) + 2
-                )  # header + files + confirm
-                divider_indices = {0}
-                if direction in ("up", "left"):
-                    new_pos = (
-                        self.state.syncthing.custom_file_highlighted - 1
-                    ) % max_items
-                    while new_pos in divider_indices and max_items > len(
-                        divider_indices
-                    ):
-                        new_pos = (new_pos - 1) % max_items
-                    self.state.syncthing.custom_file_highlighted = new_pos
-                elif direction in ("down", "right"):
-                    new_pos = (
-                        self.state.syncthing.custom_file_highlighted + 1
-                    ) % max_items
-                    while new_pos in divider_indices and max_items > len(
-                        divider_indices
-                    ):
-                        new_pos = (new_pos + 1) % max_items
-                    self.state.syncthing.custom_file_highlighted = new_pos
-                return  # Don't fall through to regular syncthing nav
-
-            step = self.state.syncthing.step
-            divider_indices = set()
-            if step == "not_found":
-                max_items = 4
-                divider_indices = {0, 1, 2}
-            elif step == "role_select":
-                max_items = 3
-                divider_indices = {0}
-            elif step == "configured":
-                items, _, divider_indices = (
-                    self.screen_manager.syncthing_screen._build_configured_items(
-                        self.settings,
-                        "",
-                        self.state.syncthing.system_statuses,
-                        self.state.syncthing.status_message,
-                        custom_saves=self.state.syncthing.custom_saves,
-                        custom_statuses=self.state.syncthing.custom_statuses,
-                    )
-                )
-                max_items = len(items)
-            elif step == "discovery":
-                max_items = (
-                    self.screen_manager.syncthing_screen.get_discovery_item_count(
-                        self.state.syncthing.discovery_results,
-                        self.state.syncthing.discovery_scanning,
-                    )
-                )
-                device_count = len(self.state.syncthing.discovery_results)
-                divider_indices = {0, device_count + 1}
-            else:
-                max_items = 1
-
-            if direction in ("up", "left"):
-                new_pos = (self.state.syncthing.highlighted - 1) % max_items
-                while new_pos in divider_indices and max_items > len(divider_indices):
-                    new_pos = (new_pos - 1) % max_items
-                self.state.syncthing.highlighted = new_pos
-            elif direction in ("down", "right"):
-                new_pos = (self.state.syncthing.highlighted + 1) % max_items
-                while new_pos in divider_indices and max_items > len(divider_indices):
-                    new_pos = (new_pos + 1) % max_items
-                self.state.syncthing.highlighted = new_pos
-
     def _handle_we_patcher_navigation(self, direction):
         """Handle D-pad navigation for we_patcher mode and its modals."""
         we = self.state.we_patcher
@@ -2518,18 +2444,6 @@ class ConsoleUtilitiesApp:
             self.state.game_details.show = False
             self.state.game_details.current_game = None
             self.state.text_scroll_offset = 0
-        elif self.state.mode == "syncthing":
-            if self.state.syncthing.custom_step == "file_select":
-                self.state.syncthing.custom_step = ""
-            elif self.state.syncthing.step == "discovery":
-                # Cancel scan and go back to role select
-                if self.state.syncthing.discovery_stop_event:
-                    self.state.syncthing.discovery_stop_event.set()
-                self.state.syncthing.step = "role_select"
-                self.state.syncthing.highlighted = 1
-            else:
-                self.state.mode = "systems"
-                self.state.highlighted = 0
         elif self.state.mode == "sports_patcher":
             self.state.mode = "systems"
             self.state.highlighted = 0
@@ -2876,9 +2790,6 @@ class ConsoleUtilitiesApp:
         elif self.state.mode == "system_settings":
             self._handle_system_settings_selection()
 
-        elif self.state.mode == "syncthing":
-            self._handle_syncthing_select()
-
         elif self.state.mode == "sports_patcher":
             from ui.screens.sports_patcher_screen import sports_patcher_screen
 
@@ -3095,11 +3006,6 @@ class ConsoleUtilitiesApp:
             # Navigate to downloads screen
             self.state.mode = "downloads"
             self.state.download_queue.highlighted = 0
-        elif context == "syncthing_reconfigure":
-            self.settings["syncthing_role"] = ""
-            self.settings["syncthing_host_device_id"] = ""
-            save_settings(self.settings)
-            self._enter_syncthing()
         elif context == "apply_update" and data:
             self._apply_update(data)
             return  # Don't close modal yet - _apply_update manages its own UI
@@ -3110,13 +3016,6 @@ class ConsoleUtilitiesApp:
             listings_dir = os.path.join(SYSTEMS_CACHE_DIR, "listings")
             shutil.rmtree(listings_dir, ignore_errors=True)
             os.makedirs(listings_dir, exist_ok=True)
-        elif context == "custom_save_mode":
-            # "Entire Folder" chosen
-            self._create_custom_save("folder")
-        elif context and context.startswith("custom_save_manage_"):
-            folder_id = context.replace("custom_save_manage_", "")
-            # "Change Path" chosen
-            self._open_folder_browser(f"custom_save_map_{folder_id}")
         elif context == "go_to_ia_settings":
             self._handle_confirm_modal_cancel()
             self.state.mode = "settings"
@@ -3128,25 +3027,6 @@ class ConsoleUtilitiesApp:
 
     def _handle_confirm_modal_cancel(self):
         """Handle confirm modal Cancel button."""
-        # Context-specific cancel actions
-        if self.state.confirm_modal.context == "custom_save_mode":
-            # "Select Files" chosen
-            self.state.confirm_modal.show = False
-            self.state.confirm_modal.context = ""
-            self._enter_custom_file_select()
-            return
-        if (
-            self.state.confirm_modal.context
-            and self.state.confirm_modal.context.startswith("custom_save_manage_")
-        ):
-            folder_id = self.state.confirm_modal.context.replace(
-                "custom_save_manage_", ""
-            )
-            self._remove_custom_save(folder_id)
-            self.state.confirm_modal.show = False
-            self.state.confirm_modal.context = ""
-            return
-        # Generic close
         self.state.confirm_modal.show = False
         self.state.confirm_modal.title = ""
         self.state.confirm_modal.message_lines = []
@@ -3234,11 +3114,6 @@ class ConsoleUtilitiesApp:
             self.state.systems_settings_highlighted = 0
         elif action == "remap_controller":
             self._collect_controller_mapping()
-        elif action == "toggle_syncthing_enabled":
-            self.settings["syncthing_enabled"] = not self.settings.get(
-                "syncthing_enabled", False
-            )
-            save_settings(self.settings)
         elif action == "toggle_sports_roster_enabled":
             self.settings["sports_roster_enabled"] = not self.settings.get(
                 "sports_roster_enabled", False
@@ -3673,8 +3548,6 @@ class ConsoleUtilitiesApp:
             self._show_rename_wizard()
         elif action == "ghost_cleaner":
             self._show_ghost_cleaner()
-        elif action == "syncthing":
-            self._enter_syncthing()
         elif action == "steam_shortcut":
             self._start_steam_shortcut()
 
@@ -3961,14 +3834,6 @@ class ConsoleUtilitiesApp:
             path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "mvp_psp_patcher_rom":
             path = self.settings.get("roms_dir", SCRIPT_DIR)
-        elif selection_type == "syncthing_base_path":
-            path = self.settings.get("syncthing_base_path", SCRIPT_DIR)
-        elif selection_type.startswith("syncthing_override_"):
-            path = self.settings.get("roms_dir", SCRIPT_DIR)
-        elif selection_type == "custom_save_source":
-            path = self.settings.get("roms_dir", SCRIPT_DIR)
-        elif selection_type.startswith("custom_save_map_"):
-            path = self.settings.get("roms_dir", SCRIPT_DIR)
         else:
             path = SCRIPT_DIR
 
@@ -4169,36 +4034,6 @@ class ConsoleUtilitiesApp:
             self.state.current_screen = "systems"
             self.state.highlighted = 0
             self._hide_loading()
-        elif selection_type.startswith("syncthing_override_"):
-            system = selection_type.replace("syncthing_override_", "")
-            overrides = self.settings.get("syncthing_folder_overrides", {})
-            overrides[system] = path
-            self.settings["syncthing_folder_overrides"] = overrides
-            save_settings(self.settings)
-        elif selection_type == "custom_save_source":
-            self.state.folder_browser.show = False
-            self.state.syncthing.custom_source_path = current_path
-            # Ask: entire folder or select files?
-            self.state.confirm_modal.show = True
-            self.state.confirm_modal.title = "Sync Mode"
-            self.state.confirm_modal.message_lines = [
-                f"Folder: {os.path.basename(current_path)}",
-                "",
-                "Sync the entire folder, or",
-                "select specific files?",
-            ]
-            self.state.confirm_modal.ok_label = "Entire Folder"
-            self.state.confirm_modal.cancel_label = "Select Files"
-            self.state.confirm_modal.button_index = 0
-            self.state.confirm_modal.context = "custom_save_mode"
-        elif selection_type.startswith("custom_save_map_"):
-            folder_id = selection_type.replace("custom_save_map_", "")
-            self.state.folder_browser.show = False
-            self._map_custom_save(folder_id, path)
-        elif selection_type == "syncthing_base_path":
-            self.settings["syncthing_base_path"] = path
-            save_settings(self.settings)
-            self.state.syncthing.status_message = f"Base path: {path}"
         elif selection_type == "nsz_keys":
             self.settings["nsz_keys_path"] = path
             save_settings(self.settings)
@@ -4640,20 +4475,13 @@ class ConsoleUtilitiesApp:
         current_path = self.state.folder_browser.current_path
 
         # For folder selection types, select the current directory
-        if (
-            selection_type
-            in (
-                "work_dir",
-                "roms_dir",
-                "custom_folder",
-                "esde_media_path",
-                "esde_gamelists_path",
-                "retroarch_thumbnails",
-                "syncthing_base_path",
-            )
-            or selection_type.startswith("syncthing_override_")
-            or selection_type == "custom_save_source"
-            or selection_type.startswith("custom_save_map_")
+        if selection_type in (
+            "work_dir",
+            "roms_dir",
+            "custom_folder",
+            "esde_media_path",
+            "esde_gamelists_path",
+            "retroarch_thumbnails",
         ):
             self._complete_folder_browser_selection(current_path, selection_type)
         elif selection_type == "add_system_folder":
@@ -5058,28 +4886,7 @@ class ConsoleUtilitiesApp:
 
         if is_done:
             # URL entry complete - handle the URL based on context
-            if self.state.url_input.context == "syncthing_device_id":
-                device_id = self.state.url_input.input_text.strip()
-                self.settings["syncthing_host_device_id"] = device_id
-                save_settings(self.settings)
-                self.state.url_input.show = False
-                # Add host device
-                if self.syncthing_service and device_id:
-                    self.syncthing_service.add_device(device_id, "game-saves-host")
-                self.state.syncthing.step = "configured"
-                self.state.syncthing.highlighted = 1
-                if self.syncthing_service:
-                    self.state.syncthing.system_statuses = (
-                        self.syncthing_service.get_system_sync_status()
-                    )
-            elif self.state.url_input.context == "custom_save_name":
-                name = self.state.url_input.input_text.strip()
-                self.state.url_input.show = False
-                if name:
-                    self.state.syncthing.custom_name_input = name
-                    # Open folder browser to pick source folder
-                    self._open_folder_browser("custom_save_source")
-            elif self.state.url_input.context == "direct_download":
+            if self.state.url_input.context == "direct_download":
                 self._submit_direct_download_url()
             else:
                 self.state.url_input.show = False
@@ -5697,524 +5504,6 @@ class ConsoleUtilitiesApp:
             or self.state.auth_token_input.show
             or self.state.steam_shortcut.show
         )
-
-    # ---- Syncthing Handlers ---- #
-
-    def _enter_syncthing(self):
-        """Enter the Syncthing sync screen."""
-        import threading
-
-        self.state.mode = "syncthing"
-        self.state.syncthing.step = "checking"
-        self.state.syncthing.highlighted = 1  # Skip first divider
-        self.state.syncthing.error_message = ""
-        self.state.syncthing.status_message = ""
-
-        def check_syncthing():
-            # Try to detect API key (re-detect if saved key is stale)
-            api_key = self.settings.get("syncthing_api_key", "")
-            if api_key:
-                # Verify the saved key still works (not stale)
-                test_svc = SyncthingService(api_key=api_key)
-                if not test_svc.get_device_id():
-                    api_key = ""  # Stale key, force re-detection
-            if not api_key:
-                api_key = SyncthingService.detect_api_key()
-                if api_key:
-                    self.settings["syncthing_api_key"] = api_key
-                    save_settings(self.settings)
-
-            self.syncthing_service = SyncthingService(api_key=api_key)
-
-            if self.syncthing_service.is_running():
-                device_id = self.syncthing_service.get_device_id()
-                self.state.syncthing.device_id = device_id
-
-                role = self.settings.get("syncthing_role", "")
-                if role:
-                    # Already configured — go to status view
-                    self.state.syncthing.step = "configured"
-                    self.state.syncthing.system_statuses = (
-                        self.syncthing_service.get_system_sync_status()
-                    )
-                    # Load custom saves from settings
-                    self.state.syncthing.custom_saves = self.settings.get(
-                        "syncthing_custom_saves", []
-                    )
-                    # Get custom save statuses
-                    if self.state.syncthing.custom_saves:
-                        self.state.syncthing.custom_statuses = (
-                            self.syncthing_service.get_custom_save_statuses(
-                                self.state.syncthing.custom_saves
-                            )
-                        )
-                else:
-                    self.state.syncthing.step = "role_select"
-            else:
-                self.state.syncthing.step = "not_found"
-
-        threading.Thread(target=check_syncthing, daemon=True).start()
-
-    def _start_syncthing_discovery(self):
-        """Launch background LDP discovery scan."""
-        import threading
-
-        self.state.syncthing.step = "discovery"
-        self.state.syncthing.discovery_results = []
-        self.state.syncthing.discovery_scanning = True
-        self.state.syncthing.discovery_seconds_left = 31
-        self.state.syncthing.highlighted = 0
-
-        stop_event = threading.Event()
-        self.state.syncthing.discovery_stop_event = stop_event
-
-        own_id = ""
-        if self.syncthing_service:
-            own_id = self.syncthing_service.get_device_id()
-
-        def run_discovery():
-            from services.syncthing_service import SyncthingService
-
-            # Fetch known device names once (from local Syncthing config)
-            known_names = {}
-            if self.syncthing_service:
-                try:
-                    config = self.syncthing_service.get_config()
-                    for d in config.get("devices", []):
-                        did = d.get("deviceID", "")
-                        dname = d.get("name", "")
-                        if did and dname:
-                            known_names[did] = dname
-                except Exception:
-                    pass
-
-            found = {}
-
-            def on_device_found(device):
-                # Apply known name if available
-                did = device["device_id"]
-                if did in known_names:
-                    device["name"] = known_names[did]
-                found[did] = device
-                self.state.syncthing.discovery_results = list(found.values())
-
-            def on_tick(seconds_left):
-                self.state.syncthing.discovery_seconds_left = seconds_left
-
-            SyncthingService.discover_local_devices(
-                timeout=31,
-                own_device_id=own_id,
-                stop_event=stop_event,
-                on_device_found=on_device_found,
-                on_tick=on_tick,
-            )
-            self.state.syncthing.discovery_scanning = False
-
-        threading.Thread(target=run_discovery, daemon=True).start()
-
-    def _handle_syncthing_select(self):
-        """Handle selection on the syncthing screen."""
-        # Custom save file selection takes priority
-        if self.state.syncthing.custom_step == "file_select":
-            idx = self.state.syncthing.custom_file_highlighted
-            if idx == 0:
-                return  # Header divider
-            elif idx <= len(self.state.syncthing.custom_file_list):
-                # Toggle file selection
-                filename = self.state.syncthing.custom_file_list[idx - 1]
-                if filename in self.state.syncthing.custom_selected_files:
-                    self.state.syncthing.custom_selected_files.discard(filename)
-                else:
-                    self.state.syncthing.custom_selected_files.add(filename)
-            else:
-                # Confirm button
-                if (
-                    self.state.syncthing.custom_selected_files
-                    and self.state.syncthing.custom_step == "file_select"
-                ):
-                    self.state.syncthing.custom_step = "creating"
-                    self._create_custom_save("files")
-                else:
-                    self.state.syncthing.status_message = "Select at least one file"
-            return
-
-        step = self.state.syncthing.step
-
-        if step == "not_found":
-            action = self.screen_manager.syncthing_screen.get_not_found_action(
-                self.state.syncthing.highlighted
-            )
-            if action == "retry":
-                self._enter_syncthing()
-
-        elif step == "role_select":
-            action = self.screen_manager.syncthing_screen.get_role_select_action(
-                self.state.syncthing.highlighted
-            )
-            if action == "select_host":
-                self.settings["syncthing_role"] = "host"
-                save_settings(self.settings)
-                self.state.syncthing.step = "configured"
-                self.state.syncthing.highlighted = 1
-                if self.syncthing_service:
-                    self.state.syncthing.system_statuses = (
-                        self.syncthing_service.get_system_sync_status()
-                    )
-            elif action == "select_console":
-                self.settings["syncthing_role"] = "console"
-                save_settings(self.settings)
-                self._start_syncthing_discovery()
-
-        elif step == "discovery":
-            action = self.screen_manager.syncthing_screen.get_discovery_action(
-                self.state.syncthing.highlighted,
-                self.state.syncthing.discovery_results,
-                self.state.syncthing.discovery_scanning,
-            )
-            if action.startswith("select_device_"):
-                idx = int(action.split("_")[-1])
-                if idx < len(self.state.syncthing.discovery_results):
-                    device = self.state.syncthing.discovery_results[idx]
-                    device_id = device["device_id"]
-                    self.settings["syncthing_host_device_id"] = device_id
-                    save_settings(self.settings)
-                    # Add host device to Syncthing
-                    if self.syncthing_service and device_id:
-                        name = device.get("name", "game-saves-host")
-                        self.syncthing_service.add_device(device_id, name)
-                    self.state.syncthing.step = "configured"
-                    self.state.syncthing.highlighted = 1
-                    if self.syncthing_service:
-                        self.state.syncthing.system_statuses = (
-                            self.syncthing_service.get_system_sync_status()
-                        )
-            elif action == "scan_again":
-                self._start_syncthing_discovery()
-            elif action == "enter_manually":
-                # Fall back to manual text input
-                self.state.url_input.show = True
-                self.state.url_input.input_text = self.settings.get(
-                    "syncthing_host_device_id", ""
-                )
-                self.state.url_input.cursor_position = len(
-                    self.state.url_input.input_text
-                )
-                self.state.url_input.context = "syncthing_device_id"
-
-        elif step == "configured":
-            action = self.screen_manager.syncthing_screen.get_configured_action(
-                self.state.syncthing.highlighted,
-                self.settings,
-                self.state.syncthing.system_statuses,
-                status_message=self.state.syncthing.status_message,
-                custom_saves=self.state.syncthing.custom_saves,
-                custom_statuses=self.state.syncthing.custom_statuses,
-            )
-            if action == "sync_all":
-                if not self.state.syncthing.configuring:
-                    self._syncthing_sync_all()
-            elif action == "reconfigure":
-                self.state.confirm_modal.show = True
-                self.state.confirm_modal.title = "Reconfigure Syncthing"
-                self.state.confirm_modal.message_lines = [
-                    "This will reset your role and",
-                    "device pairing. Continue?",
-                ]
-                self.state.confirm_modal.ok_label = "Reset"
-                self.state.confirm_modal.cancel_label = "Cancel"
-                self.state.confirm_modal.button_index = 0
-                self.state.confirm_modal.context = "syncthing_reconfigure"
-            elif action == "change_base_path":
-                self._open_folder_browser("syncthing_base_path")
-            elif action == "add_custom_save":
-                # Open name input using the URL input modal (reused for text entry)
-                self.state.url_input.show = True
-                self.state.url_input.input_text = ""
-                self.state.url_input.cursor_position = 0
-                self.state.url_input.context = "custom_save_name"
-            elif action and action.startswith("configure_"):
-                system = action.replace("configure_", "")
-                self._open_folder_browser(f"syncthing_override_{system}")
-            elif action and action.startswith("custom_"):
-                folder_id = action.replace("custom_", "")
-                # Find the save entry
-                saves = self.settings.get("syncthing_custom_saves", [])
-                save = next((s for s in saves if s.get("folder_id") == folder_id), None)
-                if save:
-                    if save.get("mapped"):
-                        # Already mapped — show options
-                        self.state.confirm_modal.show = True
-                        self.state.confirm_modal.title = save.get("name", "Custom Save")
-                        self.state.confirm_modal.message_lines = [
-                            f"Path: {save.get('local_path', 'N/A')}",
-                            "",
-                            "Change local path or remove?",
-                        ]
-                        self.state.confirm_modal.ok_label = "Change Path"
-                        self.state.confirm_modal.cancel_label = "Remove"
-                        self.state.confirm_modal.button_index = 0
-                        self.state.confirm_modal.context = (
-                            f"custom_save_manage_{folder_id}"
-                        )
-                        self.state.confirm_modal.data = save
-                    else:
-                        # Not mapped — open folder browser to pick local path
-                        self._open_folder_browser(f"custom_save_map_{folder_id}")
-
-    def _get_syncthing_remote_device_ids(self):
-        """Get remote device IDs for Syncthing sharing."""
-        if not self.syncthing_service:
-            return []
-        role = self.settings.get("syncthing_role", "")
-        if role == "host":
-            config = self.syncthing_service.get_config()
-            my_id = self.syncthing_service.get_device_id()
-            return [
-                d["deviceID"]
-                for d in config.get("devices", [])
-                if d["deviceID"] != my_id
-            ]
-        else:
-            host_id = self.settings.get("syncthing_host_device_id", "")
-            return [host_id] if host_id else []
-
-    def _syncthing_sync_all(self):
-        """Configure all system save folders in Syncthing."""
-        import threading
-
-        if not self.syncthing_service:
-            return
-
-        self.state.syncthing.status_message = "Configuring..."
-        self.state.syncthing.configuring = True
-
-        role = self.settings.get("syncthing_role", "")
-        host_device_id = self.settings.get("syncthing_host_device_id", "")
-
-        device_ids = self._get_syncthing_remote_device_ids()
-        if not device_ids and role != "host":
-            self.state.syncthing.status_message = "No devices paired yet"
-            self.state.syncthing.configuring = False
-            return
-
-        def do_sync():
-            try:
-                # Add host device if console
-                if role == "console" and host_device_id:
-                    self.syncthing_service.add_device(host_device_id, "game-saves-host")
-
-                success, skipped, errors = self.syncthing_service.configure_all_systems(
-                    role=role,
-                    device_ids=device_ids,
-                    base_path=self.settings.get("syncthing_base_path", ""),
-                    folder_overrides=self.settings.get(
-                        "syncthing_folder_overrides", {}
-                    ),
-                )
-
-                # Host: accept any pending device/folder requests from consoles
-                devices_accepted = 0
-                folders_accepted = 0
-                if role == "host":
-                    devices_accepted, folders_accepted = (
-                        self.syncthing_service.accept_pending_devices_and_folders(
-                            base_path=self.settings.get("syncthing_base_path", ""),
-                        )
-                    )
-
-                # Update status
-                self.state.syncthing.system_statuses = (
-                    self.syncthing_service.get_system_sync_status()
-                )
-
-                # Build status message
-                parts = []
-                if errors:
-                    parts.append(f"{success} added, {len(errors)} failed")
-                elif success > 0:
-                    parts.append(f"Configured {success} systems")
-                if devices_accepted:
-                    parts.append(f"{devices_accepted} device(s) accepted")
-                if folders_accepted:
-                    parts.append(f"{folders_accepted} folder(s) accepted")
-                if parts:
-                    self.state.syncthing.status_message = ". ".join(parts)
-                elif skipped > 0:
-                    self.state.syncthing.status_message = (
-                        "All systems already configured"
-                    )
-                else:
-                    self.state.syncthing.status_message = "No changes needed"
-            except Exception as e:
-                import traceback
-
-                log_error(
-                    "Syncthing sync failed",
-                    type(e).__name__,
-                    traceback.format_exc(),
-                )
-                self.state.syncthing.status_message = f"Error: {e}"
-            finally:
-                self.state.syncthing.configuring = False
-
-        threading.Thread(target=do_sync, daemon=True).start()
-
-    def _enter_custom_file_select(self):
-        """Enter file selection mode for custom save."""
-        path = self.state.syncthing.custom_source_path
-        if not path:
-            return
-        try:
-            files = [
-                f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))
-            ]
-            files.sort()
-        except Exception:
-            files = []
-        self.state.syncthing.custom_file_list = files
-        self.state.syncthing.custom_selected_files = set()
-        if not files:
-            self.state.syncthing.status_message = "No files found in folder"
-            self.state.syncthing.custom_step = ""
-            return
-        self.state.syncthing.custom_file_highlighted = 1
-        self.state.syncthing.custom_step = "file_select"
-
-    def _create_custom_save(self, sync_mode: str):
-        """Create a custom save sync in Syncthing."""
-        import threading
-
-        if not self.syncthing_service:
-            return
-
-        name = self.state.syncthing.custom_name_input
-        if not name:
-            return
-        source_path = self.state.syncthing.custom_source_path
-        sync_files = (
-            list(self.state.syncthing.custom_selected_files)
-            if sync_mode == "files"
-            else None
-        )
-        device_id = self.state.syncthing.device_id
-
-        device_ids = self._get_syncthing_remote_device_ids()
-        if not device_ids:
-            self.state.syncthing.status_message = "No devices paired"
-            return
-
-        self.state.syncthing.status_message = "Creating custom save..."
-
-        def do_create():
-            folder_id = self.syncthing_service.add_custom_save(
-                name=name,
-                source_path=source_path,
-                source_device=device_id,
-                device_ids=device_ids,
-                sync_mode=sync_mode,
-                sync_files=sync_files,
-            )
-            if folder_id:
-                saves = self.settings.get("syncthing_custom_saves", [])
-                saves.append(
-                    {
-                        "name": name,
-                        "folder_id": folder_id,
-                        "local_path": source_path,
-                        "mapped": True,
-                        "sync_mode": sync_mode,
-                        "sync_files": sync_files or [],
-                    }
-                )
-                self.settings["syncthing_custom_saves"] = saves
-                save_settings(self.settings)
-                self.state.syncthing.custom_saves = saves
-                self.state.syncthing.status_message = f"Created: {name}"
-            else:
-                self.state.syncthing.status_message = f"Failed to create: {name}"
-
-            self.state.syncthing.custom_step = ""
-            self.state.syncthing.custom_name_input = ""
-            self.state.syncthing.custom_source_path = ""
-            self.state.syncthing.custom_selected_files = set()
-
-        threading.Thread(target=do_create, daemon=True).start()
-
-    def _map_custom_save(self, folder_id: str, local_path: str):
-        """Map a custom save to a local path on this device."""
-        import threading
-        import shutil
-
-        if not self.syncthing_service:
-            return
-
-        self.state.syncthing.status_message = "Mapping custom save..."
-
-        def do_map():
-            saves = self.settings.get("syncthing_custom_saves", [])
-            save = next((s for s in saves if s.get("folder_id") == folder_id), None)
-            if not save:
-                self.state.syncthing.status_message = "Save not found"
-                return
-
-            staging_path = save.get("local_path", "")
-
-            # Move files from staging to chosen folder
-            if (
-                staging_path
-                and os.path.isdir(staging_path)
-                and staging_path != local_path
-            ):
-                os.makedirs(local_path, exist_ok=True)
-                for item in os.listdir(staging_path):
-                    src = os.path.join(staging_path, item)
-                    dst = os.path.join(local_path, item)
-                    if os.path.isfile(src):
-                        shutil.copy2(src, dst)
-
-            # Reconfigure Syncthing folder to point to new path
-            config = self.syncthing_service.get_config()
-            my_id = self.syncthing_service.get_device_id()
-            device_ids = [
-                d["deviceID"]
-                for d in config.get("devices", [])
-                if d["deviceID"] != my_id
-            ]
-
-            self.syncthing_service.remove_folder(folder_id)
-            self.syncthing_service.add_folder(
-                folder_id, save.get("name", ""), local_path, device_ids + [my_id]
-            )
-
-            # Write .stignore if file mode
-            from services.syncthing_service import SyncthingService
-
-            if save.get("sync_mode") == "files" and save.get("sync_files"):
-                SyncthingService.write_stignore(local_path, save["sync_files"])
-
-            # Update settings
-            save["local_path"] = local_path
-            save["mapped"] = True
-            self.settings["syncthing_custom_saves"] = saves
-            save_settings(self.settings)
-
-            # Update state
-            self.state.syncthing.custom_saves = saves
-            self.state.syncthing.custom_step = ""
-            self.state.syncthing.status_message = f"Mapped: {save.get('name', '')}"
-
-        threading.Thread(target=do_map, daemon=True).start()
-
-    def _remove_custom_save(self, folder_id: str):
-        """Remove a custom save sync."""
-        if self.syncthing_service:
-            self.syncthing_service.remove_folder(folder_id)
-        saves = self.settings.get("syncthing_custom_saves", [])
-        saves = [s for s in saves if s.get("folder_id") != folder_id]
-        self.settings["syncthing_custom_saves"] = saves
-        save_settings(self.settings)
-        self.state.syncthing.custom_saves = saves
-        self.state.syncthing.status_message = "Custom save removed"
 
     # ---- Internet Archive Handlers ---- #
 

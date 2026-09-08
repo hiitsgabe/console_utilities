@@ -88,12 +88,6 @@ class SettingsScreen:
         "Web Companion",
     ]
 
-    # Save Sync section
-    SAVE_SYNC_SECTION = [
-        "--- SAVE SYNC ---",
-        "Enable Syncthing Helper",
-    ]
-
     # App section (last)
     APP_SECTION = [
         "--- APP ---",
@@ -187,10 +181,6 @@ class SettingsScreen:
         if BUILD_TARGET != "windows":
             divider_indices.add(len(items))
             items.extend(self.WEB_COMPANION_SECTION)
-
-        # Add Save Sync section
-        divider_indices.add(len(items))
-        items.extend(self.SAVE_SYNC_SECTION)
 
         # Add App section (last)
         divider_indices.add(len(items))
@@ -322,9 +312,6 @@ class SettingsScreen:
             elif item == "Web Companion":
                 value = "ON" if settings.get("web_companion_enabled", False) else "OFF"
                 items.append((item, value))
-            elif item == "Enable Syncthing Helper":
-                value = "ON" if settings.get("syncthing_enabled", False) else "OFF"
-                items.append((item, value))
             elif item == "Check for Updates":
                 items.append((item, APP_VERSION))
             else:
@@ -412,7 +399,6 @@ class SettingsScreen:
                 "Auto-Scrape After Download": "toggle_auto_scrape_after_download",
                 "Enable NSZ": "toggle_nsz_enabled",
                 "Web Companion": "toggle_web_companion",
-                "Enable Syncthing Helper": "toggle_syncthing_enabled",
                 "Check for Updates": "check_for_updates",
             }
             return actions.get(item, "unknown")

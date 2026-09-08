@@ -921,54 +921,6 @@ class AuthTokenInputState:
 
 
 @dataclass
-class SyncthingState:
-    """State for Syncthing save sync screen."""
-
-    step: str = (
-        "checking"  # "checking", "not_found", "role_select", "discovery", "configured"
-    )
-    device_id: str = ""  # This device's ID
-    host_device_id_input: str = ""  # Input for host device ID (console mode)
-    cursor_position: int = 0
-    shift_active: bool = False
-    status_message: str = ""
-    error_message: str = ""
-    system_statuses: Dict[str, str] = field(
-        default_factory=dict
-    )  # system -> sync status
-    highlighted: int = 0
-    configuring: bool = False  # True during async configure
-    configure_result: str = ""  # "success", "partial", "error"
-
-    # Discovery
-    discovery_results: List[Dict[str, str]] = field(
-        default_factory=list
-    )  # found devices: [{device_id, name, ip}]
-    discovery_scanning: bool = False
-    discovery_seconds_left: int = 0
-    discovery_stop_event: Any = None  # threading.Event, typed as Any to avoid import
-
-    # Custom saves
-    custom_saves: List[Dict[str, Any]] = field(
-        default_factory=list
-    )  # loaded from settings/discovery
-    custom_statuses: Dict[str, str] = field(
-        default_factory=dict
-    )  # folder_id -> sync status
-    custom_highlighted: int = 0
-    custom_step: str = ""  # "", "name_input", "folder_browse", "file_select", "mapping"
-    custom_name_input: str = ""
-    custom_name_cursor: int = 0
-    custom_name_shift: bool = False
-    custom_source_path: str = ""
-    custom_selected_files: Set[str] = field(
-        default_factory=set
-    )  # filenames selected in file mode
-    custom_file_list: List[str] = field(default_factory=list)  # files in source folder
-    custom_file_highlighted: int = 0
-
-
-@dataclass
 class FileExplorerState:
     """State for the file explorer screen."""
 
@@ -1148,9 +1100,6 @@ class AppState:
         # ---- Steam Shortcut Creator ---- #
         self.steam_shortcut = SteamShortcutState()
 
-        # ---- Syncthing Save Sync ---- #
-        self.syncthing = SyncthingState()
-
         # ---- File Explorer ---- #
         self.file_explorer = FileExplorerState()
 
@@ -1221,8 +1170,6 @@ class AppState:
             self.system_settings_highlighted = 0
         elif new_mode == "credits":
             self.credits_scroll_offset = 0
-        elif new_mode == "syncthing":
-            self.syncthing.highlighted = 0
         elif new_mode == "file_explorer":
             self.file_explorer.highlighted = 0
             self.file_explorer.scroll_offset = 0

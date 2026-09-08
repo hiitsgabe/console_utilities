@@ -28,8 +28,6 @@ _FOLDER_SELECTION_TYPES = frozenset(
         "ia_download_folder",
         "steam_shortcut",
         "scraper_batch_folder",
-        "syncthing_base_path",
-        "custom_save_source",
         "folder",
     }
 )
@@ -37,9 +35,7 @@ _FOLDER_SELECTION_TYPES = frozenset(
 
 def is_folder_selection_type(selection_type: str) -> bool:
     """Whether the selection shows Select/Cancel buttons (folder pick) vs file pick."""
-    return selection_type in _FOLDER_SELECTION_TYPES or selection_type.startswith(
-        ("syncthing_override_", "custom_save_map_")
-    )
+    return selection_type in _FOLDER_SELECTION_TYPES
 
 
 class FolderBrowserModal:

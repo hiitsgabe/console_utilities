@@ -51,12 +51,6 @@ class UtilsScreen:
         "Ghost File Cleaner",
     ]
 
-    # Save sync section items (only shown when Syncthing is enabled)
-    SAVE_SYNC_SECTION_ITEMS = [
-        "--- SAVE SYNC ---",  # Divider
-        "Syncthing Sync",
-    ]
-
     # Steam section items
     STEAM_SECTION_ITEMS = [
         "--- STEAM ---",  # Divider
@@ -105,11 +99,6 @@ class UtilsScreen:
         # Add file management section
         divider_indices.add(len(items))
         items.extend(self.FILE_MANAGEMENT_SECTION_ITEMS)
-
-        # Add save sync section if enabled
-        if settings.get("syncthing_enabled", False):
-            divider_indices.add(len(items))
-            items.extend(self.SAVE_SYNC_SECTION_ITEMS)
 
         # Add Steam section
         divider_indices.add(len(items))
@@ -178,7 +167,6 @@ class UtilsScreen:
                 "Dedupe Games": "dedupe_games",
                 "Clean File Names": "clean_filenames",
                 "Ghost File Cleaner": "ghost_cleaner",
-                "Syncthing Sync": "syncthing",
                 "Steam Shortcut Creator": "steam_shortcut",
                 "NSZ to NSP Converter": "nsz_converter",
             }

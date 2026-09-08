@@ -49,7 +49,6 @@ from .nhl94_genesis_patcher_screen import NHL94GenesisPatcherScreen
 from .nhl07_psp_patcher_screen import NHL07PSPPatcherScreen
 from .nhl05_ps2_patcher_screen import NHL05PS2PatcherScreen
 from .pes6_ps2_patcher_screen import PES6PS2PatcherScreen
-from .syncthing_screen import SyncthingScreen
 from .downloads_screen import DownloadsScreen
 from .file_explorer_screen import FileExplorerScreen
 from .system_info_screen import SystemInfoScreen
@@ -91,7 +90,6 @@ class ScreenManager:
         self.nhl07_psp_patcher_screen = NHL07PSPPatcherScreen(theme)
         self.nhl05_ps2_patcher_screen = NHL05PS2PatcherScreen(theme)
         self.pes6_ps2_patcher_screen = PES6PS2PatcherScreen(theme)
-        self.syncthing_screen = SyncthingScreen(theme)
         self.file_explorer_screen = FileExplorerScreen(theme)
         self.system_info_screen = SystemInfoScreen(theme)
 
@@ -1104,67 +1102,6 @@ class ScreenManager:
             back_rect, item_rects, scroll_offset = self.pes6_ps2_patcher_screen.render(
                 screen, state.highlighted, state, settings
             )
-            rects["back"] = back_rect
-            rects["item_rects"] = item_rects
-            rects["scroll_offset"] = scroll_offset
-
-        elif state.mode == "syncthing":
-            if state.syncthing.custom_step == "file_select":
-                import os
-
-                folder_name = os.path.basename(state.syncthing.custom_source_path)
-                back_rect, item_rects, scroll_offset = (
-                    self.syncthing_screen.render_file_select(
-                        screen,
-                        state.syncthing.custom_file_highlighted,
-                        folder_name,
-                        state.syncthing.custom_file_list,
-                        state.syncthing.custom_selected_files,
-                    )
-                )
-            elif state.syncthing.step == "checking":
-                back_rect, item_rects, scroll_offset = (
-                    self.syncthing_screen.render_checking(screen)
-                )
-            elif state.syncthing.step == "not_found":
-                back_rect, item_rects, scroll_offset = (
-                    self.syncthing_screen.render_not_found(
-                        screen, state.syncthing.highlighted
-                    )
-                )
-            elif state.syncthing.step == "role_select":
-                back_rect, item_rects, scroll_offset = (
-                    self.syncthing_screen.render_role_select(
-                        screen, state.syncthing.highlighted
-                    )
-                )
-            elif state.syncthing.step == "discovery":
-                back_rect, item_rects, scroll_offset = (
-                    self.syncthing_screen.render_discovery(
-                        screen,
-                        state.syncthing.highlighted,
-                        state.syncthing.discovery_scanning,
-                        state.syncthing.discovery_seconds_left,
-                        state.syncthing.discovery_results,
-                    )
-                )
-            elif state.syncthing.step == "device_id_input":
-                back_rect, item_rects, scroll_offset = (
-                    self.syncthing_screen.render_checking(screen)
-                )
-            elif state.syncthing.step == "configured":
-                back_rect, item_rects, scroll_offset = (
-                    self.syncthing_screen.render_configured(
-                        screen,
-                        state.syncthing.highlighted,
-                        settings,
-                        state.syncthing.device_id,
-                        state.syncthing.system_statuses,
-                        state.syncthing.status_message,
-                        custom_saves=state.syncthing.custom_saves,
-                        custom_statuses=state.syncthing.custom_statuses,
-                    )
-                )
             rects["back"] = back_rect
             rects["item_rects"] = item_rects
             rects["scroll_offset"] = scroll_offset

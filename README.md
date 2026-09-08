@@ -22,7 +22,7 @@ A PyGame-based utility suite for handheld gaming consoles, with a retro CRT-them
 
 **This project is focused on low-end Linux-based devices**, the Batocera, Knulli, and Rocknix handhelds it was built for. Everything is tuned for that hardware: an 800x600 display, controller and keyboard navigation with no mouse or touch input, and no dependency on a desktop environment.
 
-**Want to run it on Android or macOS?** Use [retro_toolbox](https://github.com/hiitsgabe/retro_toolbox) instead. This app is not built for those platforms. It does still talk *to* Android devices as peers, for save sync and ES-DE Steam shortcuts, but it does not run on them.
+**Want to run it on Android or macOS?** Use [retro_toolbox](https://github.com/hiitsgabe/retro_toolbox) instead. This app is not built for those platforms. It does still generate ES-DE Steam shortcuts *for* Android devices, but it does not run on them.
 
 ---
 
@@ -61,16 +61,6 @@ A PyGame-based utility suite for handheld gaming consoles, with a retro CRT-them
 - **✏️ Filename Cleanup** — Batch rename files to clean formats
 - **👻 Ghost File Cleaner** — Find and remove orphaned split archives
 - **📂 ZIP/RAR Extraction** — Extract archives from the file browser
-
-### 🔄 Syncthing Save Sync
-- **Cross-Device Save Sync** — Synchronize game saves between your computer and Knulli/Batocera consoles or Android devices using Syncthing
-- **Hub-and-Spoke Architecture** — Computer acts as the hub, with multiple consoles and Android devices as spokes
-- **Per-System Folders** — Auto-configures shared folders for 22+ gaming systems (PSX, SNES, N64, GBA, NDS, PSP, and more)
-- **Custom Save Support** — Add custom save folders with selective file syncing and `.stignore` whitelisting
-- **Versioning** — Built-in 5-file rollback support for save safety
-- **Auto-Detection** — Discovers Syncthing API key from the local config automatically
-
-> **Note:** This is not Syncthing itself — it's a helper that configures an existing Syncthing installation through its REST API. See the [Syncthing Save Sync Guide](docs/syncthing-save-sync.md) for setup instructions.
 
 ### ⚙️ System Management
 - **Add Custom Systems** — Discover systems from directory listings or manually configure new sources
@@ -144,7 +134,6 @@ Runtime settings are auto-generated and stored in `config.json`:
 - **📚 Internet Archive** — Enable/disable, S3 credentials
 - **🖼️ Scraper** — Provider selection (Libretro, ScreenScraper, TheGamesDB, RAWG, IGDB), frontend format (EmulationStation, ES-DE, RetroArch, Pegasus), API credentials
 - **🔐 NSZ** — Enable/disable, keys file path
-- **🔄 Syncthing** — Enable/disable, role (host/console), device IDs, base path, custom saves
 
 ---
 
@@ -246,14 +235,13 @@ console_utilities/
 | 🎮 Primary target | Low-end Linux handhelds: Knulli RG35xxSP, Batocera, and Rocknix devices |
 | 🐧 Linux desktop | Runs from source |
 | 🪟 Windows | Standalone .exe bundle |
-| 📱 Android / 🍎 macOS | The app does not run here. Use [retro_toolbox](https://github.com/hiitsgabe/retro_toolbox). Android devices are still supported as sync and shortcut *targets* |
+| 📱 Android / 🍎 macOS | The app does not run here. Use [retro_toolbox](https://github.com/hiitsgabe/retro_toolbox). Android devices are still supported as ES-DE shortcut *targets* |
 | 🖥️ Display | 800x600 resolution, optimized for small screens |
 
 ---
 
 ## 📖 Documentation
 
-- 🔄 [Syncthing Save Sync Guide](docs/syncthing-save-sync.md) — Setting up cross-device save synchronization
 - ⚽ [Sports ROM Patcher Guide](docs/sports-rom-patcher.md) — How the sports roster patcher works
 - 📄 [Server Response Format](docs/server-response-format.md) — How your server needs to respond for the app to detect and list files
 - ➕ [Adding a System](docs/adding-a-system.md) — How to add custom gaming systems
@@ -298,7 +286,6 @@ console_utilities/
 This project incorporates the following open source libraries and projects:
 
 - **NSZ Library** — NSZ compression/decompression functionality provided by [nicoboss/nsz](https://github.com/nicoboss/nsz) — A compression/decompression tool with fast compression and decompression for various file formats.
-- **Syncthing** — Save synchronization powered by [Syncthing](https://syncthing.net/) — An open-source continuous file synchronization program.
 
 ---
 

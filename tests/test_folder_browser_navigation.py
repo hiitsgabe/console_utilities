@@ -2,9 +2,8 @@
 
 Regression: the Steam shortcut folder picker rendered Select/Cancel buttons but the
 D-pad navigation refused to focus them because a duplicated `is_folder_selection`
-predicate in `_navigate_folder_browser` was missing several selection types
-(steam_shortcut, syncthing_base_path, custom_save_source, syncthing_override_*,
-custom_save_map_*). Same latent bug for the syncthing/custom-save flows.
+predicate in `_navigate_folder_browser` was missing several selection types,
+steam_shortcut among them.
 """
 
 import importlib.util
@@ -68,10 +67,6 @@ def _navigate(selection_type, direction, initial_focus="list", items=("a", "b"))
 
 FOLDER_SELECTION_TYPES = [
     "steam_shortcut",
-    "syncthing_base_path",
-    "custom_save_source",
-    "syncthing_override_snes",
-    "custom_save_map_xyz",
     "work_dir",
     "roms_dir",
     "custom_folder",

@@ -696,8 +696,6 @@ def serialize_web_state(state, settings=None, data=None):
                 value = "ON" if s.get("nsz_enabled", False) else "OFF"
             elif label == "Web Companion":
                 value = "ON" if s.get("web_companion_enabled", False) else "OFF"
-            elif label == "Enable Syncthing Helper":
-                value = "ON" if s.get("syncthing_enabled", False) else "OFF"
             elif label == "Check for Updates":
                 value = APP_VERSION
             items.append({"name": label, "selected": False, "value": value})
@@ -972,9 +970,6 @@ def serialize_web_state(state, settings=None, data=None):
             "items": items,
             "highlighted": getattr(state, "system_settings_highlighted", 0),
         }
-
-    if state.mode == "syncthing":
-        return _serialize_syncthing(state, settings)
 
     if state.mode == "file_explorer":
         # Switch the web companion to the Files tab
@@ -1712,161 +1707,6 @@ def _build_batch_options(wizard, settings=None):
         }
     )
     return items
-
-
-def _serialize_syncthing(state, settings):
-    """Serialize syncthing screen state based on current step."""
-    sync = state.syncthing
-    step = sync.step
-
-    if step == "checking":
-        return {
-            "screen_type": "loading",
-            "title": "Syncthing Sync",
-            "message": "Checking Syncthing connection...",
-            "progress": 0,
-        }
-
-    if step == "not_found":
-        items = [
-            {"name": "--- Syncthing not found ---", "is_divider": True},
-            {"name": "--- Install Syncthing and ---", "is_divider": True},
-            {"name": "--- make sure it is running ---", "is_divider": True},
-            {"name": "Retry Connection", "selected": False},
-        ]
-        return {
-            "screen_type": "list",
-            "title": "Syncthing Sync",
-            "items": items,
-            "highlighted": sync.highlighted,
-        }
-
-    if step == "role_select":
-        items = [
-            {"name": "--- SELECT ROLE ---", "is_divider": True},
-            {"name": "Host (Computer)", "selected": False},
-            {"name": "Console (Knulli/Android)", "selected": False},
-        ]
-        return {
-            "screen_type": "list",
-            "title": "Syncthing Sync",
-            "items": items,
-            "highlighted": sync.highlighted,
-        }
-
-    if step == "discovery":
-        items = []
-        if sync.discovery_scanning:
-            items.append(
-                {
-                    "name": f"--- Scanning... ({sync.discovery_seconds_left}s remaining) ---",
-                    "is_divider": True,
-                }
-            )
-        else:
-            label = (
-                "--- Devices Found ---"
-                if sync.discovery_results
-                else "--- No Devices Found ---"
-            )
-            items.append({"name": label, "is_divider": True})
-
-        for device in sync.discovery_results:
-            name = device.get("name", "Unknown")
-            ip = device.get("ip", "")
-            items.append({"name": f"{name} ({ip})" if ip else name, "selected": False})
-
-        items.append({"name": "--- OPTIONS ---", "is_divider": True})
-        if not sync.discovery_scanning:
-            items.append({"name": "Scan Again", "selected": False})
-        items.append({"name": "Enter Manually", "selected": False})
-
-        return {
-            "screen_type": "list",
-            "title": "Syncthing Sync",
-            "items": items,
-            "highlighted": sync.highlighted,
-        }
-
-    if step == "configured":
-        from ui.screens.syncthing_screen import syncthing_screen
-        from services.syncthing_service import SYNC_SYSTEMS
-
-        display_items, actions, divider_indices = (
-            syncthing_screen._build_configured_items(
-                settings or {},
-                sync.device_id,
-                sync.system_statuses,
-                sync.status_message,
-                custom_saves=sync.custom_saves,
-                custom_statuses=sync.custom_statuses,
-            )
-        )
-        items = []
-        for i, item in enumerate(display_items):
-            if i in divider_indices:
-                items.append(
-                    {"name": str(item), "is_divider": True}
-                )
-            elif isinstance(item, tuple):
-                items.append(
-                    {"name": f"{item[0]}: {item[1]}", "selected": False}
-                )
-            else:
-                items.append({"name": str(item), "selected": False})
-
-        # Handle custom save sub-steps
-        if sync.custom_step == "name_input":
-            return {
-                "screen_type": "text_input",
-                "title": "Custom Save - Name",
-                "text": sync.custom_name_input,
-                "input_type": "text",
-                "cursor": sync.custom_name_cursor,
-            }
-        if sync.custom_step == "file_select":
-            file_items = [
-                {
-                    "name": f"--- Select files in {os.path.basename(sync.custom_source_path)} ---",
-                    "is_divider": True,
-                }
-            ]
-            for filename in sync.custom_file_list:
-                file_items.append(
-                    {
-                        "name": filename,
-                        "selected": filename in sync.custom_selected_files,
-                    }
-                )
-            count = len(sync.custom_selected_files)
-            file_items.append(
-                {
-                    "name": f"Confirm ({count} files)" if count else "Select files above",
-                    "selected": False,
-                }
-            )
-            return {
-                "screen_type": "list",
-                "title": "Custom Save - Files",
-                "items": file_items,
-                "highlighted": sync.custom_file_highlighted,
-                "multi_select": True,
-            }
-
-        return {
-            "screen_type": "list",
-            "title": "Syncthing Sync",
-            "items": items,
-            "highlighted": sync.highlighted,
-        }
-
-    # Fallback for unknown syncthing step
-    return {
-        "screen_type": "loading",
-        "title": "Syncthing Sync",
-        "message": step,
-        "progress": 0,
-    }
 
 
 def _serialize_steam_shortcut(shortcut):
