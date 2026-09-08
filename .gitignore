@@ -25,6 +25,9 @@ download.json
 assets/bundled_data.json
 assets/bundled_data_*.json
 assets/translations/we2002_*.ppf
+# The community English patch is copyrighted and is never shipped. The app
+# reads it from here only if the operator supplies their own copy.
+assets/translations/w202-english.ppf
 .env
 downloads/
 .claude
