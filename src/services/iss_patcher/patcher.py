@@ -21,12 +21,6 @@ a provider it does not support.
 
 Behaviour differences from the old local code, all of them below the surface:
 
-**Provider.** The old `fetch_league` built an `ApiFootballClient` unless `app.py`
-injected an ESPN one; this fetches from ESPN unconditionally. That is the one
-difference a user can see: the fetch phase is a different provider and its
-output cannot be compared against the old one byte for byte. The map and patch
-phases can be, and are — see `/var/tmp/migrate/iss_snes/`.
-
 **The partial callback no longer fills in.** Both versions fire
 `on_partial_data` once with a skeleton `LeagueData` whose teams are all
 `loading=True`, so the team tiles still appear before any squad is fetched. The
@@ -37,14 +31,6 @@ until the whole fetch finishes and `app.py` replaces `league_data` wholesale.
 Progress text and the progress bar are unaffected. This is a regression in
 feedback granularity and is not fixable here — reproducing it means
 reimplementing `fetch`.
-
-**Per-team error strings lost a distinction that no longer has a source.** The
-old code turned `DailyLimitError` into "Daily API limit reached" and
-`RateLimitError` into "Rate limit reached"; the library reports `Failed: {exc}`
-for every squad failure. Both exception types came from the API-Football client,
-which is gone, and neither limit exists on ESPN. `TeamRoster.error` is still set
-and the roster preview modal still renders the "!" marker and the "Unavailable"
-header from it.
 
 **`get_squad` is now given the season.** The old call was
 `get_squad(team.id)`; the library passes `season` as well. ESPN's squad endpoint

@@ -8,14 +8,6 @@ got: `patch_rom` returns a path and raises, rather than returning a
 
 Deliberate differences from the local code this replaces:
 
-`fetch_league` fetches from ESPN, the only roster source the app has. An
-explicit `client=` is still honoured, and that is how `app.py` injects the
-status-reporting `EspnClient`. The old code built an `ApiFootballClient` when no
-client was passed; that provider is gone, along with the two error strings that
-went with it, "Daily API limit reached" and "Rate limit reached". The library
-reports every squad failure as `Failed to load squad: {exc}`, and neither limit
-exists on ESPN.
-
 `fetch_league` no longer clears `TeamRoster.loading` team by team. The old code
 mutated the very rosters it had already handed to `on_partial_data`, so the UI
 watched each tile resolve. The library publishes an immutable skeleton and
