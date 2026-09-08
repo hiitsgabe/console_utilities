@@ -18,7 +18,11 @@ I will never ask you to donate money to this project, or for me, because of this
 
 > ⚠️ **Disclaimer:** This application does not endorse any form of piracy. Only download games you legally own.
 
-A PyGame-based utility suite for handheld gaming consoles, with a retro CRT-themed interface designed for D-pad and controller navigation. Browse, download, organize, and manage game files from configurable sources. Supports HTML directory listings, JSON APIs, and Internet Archive. Runs on Batocera/Knulli handhelds, macOS, Windows, and Linux.
+A PyGame-based utility suite for handheld gaming consoles, with a retro CRT-themed interface designed for D-pad and controller navigation. Browse, download, organize, and manage game files from configurable sources. Supports HTML directory listings, JSON APIs, and Internet Archive.
+
+**This project is focused on low-end Linux-based devices**, the Batocera, Knulli, and Rocknix handhelds it was built for. Everything is tuned for that hardware: an 800x600 display, controller and keyboard navigation with no mouse or touch input, and no dependency on a desktop environment.
+
+**Want to run it on Android or macOS?** Use [retro_toolbox](https://github.com/hiitsgabe/retro_toolbox) instead. This app is not built for those platforms. It does still talk *to* Android devices as peers, for save sync and ES-DE Steam shortcuts, but it does not run on them.
 
 ---
 
@@ -239,8 +243,10 @@ console_utilities/
 
 | Platform | Details |
 |----------|---------|
-| 🎮 Console | Knulli RG35xxSP and other Batocera-based handhelds |
-| 💻 Desktop | Windows (.exe) standalone; macOS and Linux from source |
+| 🎮 Primary target | Low-end Linux handhelds: Knulli RG35xxSP, Batocera, and Rocknix devices |
+| 🐧 Linux desktop | Runs from source |
+| 🪟 Windows | Standalone .exe bundle |
+| 📱 Android / 🍎 macOS | The app does not run here. Use [retro_toolbox](https://github.com/hiitsgabe/retro_toolbox). Android devices are still supported as sync and shortcut *targets* |
 | 🖥️ Display | 800x600 resolution, optimized for small screens |
 
 ---
