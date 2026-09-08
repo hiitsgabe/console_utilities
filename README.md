@@ -117,7 +117,6 @@ DEV_MODE=true python src/app.py
 
 ```bash
 make bundle            # 🎮 PyGame bundle for consoles
-make bundle-macos      # 🍎 macOS .app standalone
 make bundle-windows    # 🪟 Windows .exe standalone
 ```
 
@@ -241,7 +240,7 @@ console_utilities/
 | Platform | Details |
 |----------|---------|
 | 🎮 Console | Knulli RG35xxSP and other Batocera-based handhelds |
-| 💻 Desktop | macOS (.app), Windows (.exe), Linux |
+| 💻 Desktop | Windows (.exe) standalone; macOS and Linux from source |
 | 🖥️ Display | 800x600 resolution, optimized for small screens |
 
 ---
@@ -253,7 +252,6 @@ console_utilities/
 - 📄 [Server Response Format](docs/server-response-format.md) — How your server needs to respond for the app to detect and list files
 - ➕ [Adding a System](docs/adding-a-system.md) — How to add custom gaming systems
 - 🎮 [PyGame Bundle Guide](assets/docs/pygame.md) — Deploying to Batocera/Knulli consoles
-- 🍎 [macOS Build Guide](assets/docs/macos.md) — Building the macOS standalone app
 - 🪟 [Windows Build Guide](assets/docs/windows.md) — Building the Windows standalone app
 
 ---

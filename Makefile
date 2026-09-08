@@ -1,4 +1,4 @@
-.PHONY: run debug watch install dev clean test lint format setup bundle bundle-macos bundle-windows release
+.PHONY: run debug watch install dev clean test lint format setup bundle bundle-windows release
 
 # Load .env if present
 -include .env
@@ -108,29 +108,6 @@ bundle:
 	@echo "   📦 Bundled: requests, rarfile (pure Python)"
 	@echo "   ⚠️  Install native libs: pip install pygame zstandard pycryptodome"
 
-# Build macOS .app bundle (standalone executable)
-bundle-macos:
-	@echo "🍎 Building macOS app bundle..."
-	@rm -rf build/macos dist/macos dist/macos.zip
-	@mkdir -p dist/macos
-	@# Inject build info into constants before building
-	@if [ -n "$(VERSION)" ]; then \
-		sed -i.bak 's/^APP_VERSION = .*/APP_VERSION = "$(VERSION)"/' src/constants.py; \
-	fi
-	@sed -i.bak 's/^BUILD_TARGET = .*/BUILD_TARGET = "macos"/' src/constants.py
-	@rm -f src/constants.py.bak
-	@echo "📦 Running PyInstaller..."
-	@python3 -m PyInstaller console_utils.spec --distpath dist/macos --workpath build/macos --noconfirm
-	@# Restore constants after build
-	@git checkout src/constants.py 2>/dev/null || true
-	@# Copy macOS-specific docs
-	@cp assets/docs/macos.md dist/macos/README.md 2>/dev/null || echo "No macOS docs found"
-	@# Create zip with the .app and README
-	@cd dist/macos && zip -qr ../macos.zip "Console Utilities.app" README.md
-	@rm -rf build/macos dist/macos
-	@echo "✅ macOS app created: dist/macos.zip"
-	@echo "   Extract and drag Console Utilities.app to Applications"
-
 # Build Windows .exe bundle (standalone executable)
 bundle-windows:
 	@echo "🪟 Building Windows executable..."
@@ -176,7 +153,6 @@ release:
 help:
 	@echo "Available targets:"
 	@echo "  run           - Run the console utilities application"
-	@echo "  stream        - Stream to phone browser for touch testing"
 	@echo "  debug         - Run without auto-restart (shows full error logs)"
 	@echo "  watch         - Run with file watching (auto-restart on changes)"
 	@echo "  setup         - Create conda environment"
@@ -187,7 +163,6 @@ help:
 	@echo "  lint          - Lint code with flake8"
 	@echo "  test          - Run tests with pytest"
 	@echo "  bundle        - Create pygame bundle (.pygame file + assets)"
-	@echo "  bundle-macos  - Create macOS .app bundle (standalone)"
 	@echo "  bundle-windows- Create Windows .exe bundle (standalone)"
 	@echo "  release            - Create release and upload to GitHub (VERSION=v1.0.0)"
 	@echo "  help               - Show this help message"

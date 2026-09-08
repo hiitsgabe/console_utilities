@@ -25,7 +25,6 @@ RELEASES_API = (
 # Map BUILD_TARGET to the expected asset filename in GitHub releases
 TARGET_ASSET_MAP = {
     "pygame": "pygame.zip",
-    "macos": "macos.zip",
     "windows": "windows.zip",
 }
 

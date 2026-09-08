@@ -11,9 +11,12 @@ block_cipher = None
 # Get the directory containing the spec file
 spec_dir = os.path.dirname(os.path.abspath(SPEC))
 
-# See console_utils.spec for why the whole tree is collected rather than left to
-# PyInstaller's import graph: the game registry fills by import side effect, and
-# the WE2002 .ppf is read through importlib.resources.
+# retro_roster_patcher populates its game registry by importing every game
+# package for the side effect of @register. PyInstaller's static analysis
+# follows those, but the games are only reachable through that one import, so
+# collect the whole tree rather than trusting the graph. collect_data_files
+# picks up the WE2002 .ppf, which is read via importlib.resources and would
+# otherwise be absent from the bundle.
 _rrp_hiddenimports = collect_submodules('retro_roster_patcher')
 _rrp_datas = collect_data_files('retro_roster_patcher')
 

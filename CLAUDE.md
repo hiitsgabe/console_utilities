@@ -32,7 +32,6 @@ make clean      # Clean generated files and caches
 ### Building Distributions
 ```bash
 make bundle           # Create pygame bundle (.pygame file + assets)
-make bundle-macos     # Create macOS .app bundle (standalone)
 make bundle-windows   # Create Windows .exe bundle (standalone)
 ```
 

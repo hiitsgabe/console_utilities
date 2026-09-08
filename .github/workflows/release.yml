@@ -103,42 +103,6 @@ jobs:
           path: dist/pygame.zip
           retention-days: 30
 
-  build-macos:
-    needs: [resolve-version, download-bundled-data]
-    runs-on: macos-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Get version
-        id: version
-        run: echo "VERSION=${{ needs.resolve-version.outputs.version }}" >> $GITHUB_OUTPUT
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install dependencies
-        run: |
-          pip install pyinstaller pygame requests zstandard pycryptodome retro-roster-patcher
-
-      - name: Download bundled data
-        uses: actions/download-artifact@v4
-        with:
-          name: bundled-data
-          path: assets/
-
-      - name: Build macOS app
-        run: make bundle-macos VERSION=${{ steps.version.outputs.VERSION }}
-
-      - name: Upload macOS bundle
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-bundle
-          path: dist/macos.zip
-          retention-days: 30
-
   build-windows:
     needs: [resolve-version, download-bundled-data]
     runs-on: windows-latest
@@ -196,7 +160,7 @@ jobs:
           retention-days: 30
 
   release:
-    needs: [resolve-version, build-pygame-bundle, build-macos, build-windows]
+    needs: [resolve-version, build-pygame-bundle, build-windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -210,12 +174,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: pygame-bundle
-          path: dist/
-
-      - name: Download macOS bundle
-        uses: actions/download-artifact@v4
-        with:
-          name: macos-bundle
           path: dist/
 
       - name: Download Windows bundle
@@ -296,7 +254,6 @@ jobs:
             | Platform | File | Description |
             |----------|------|-------------|
             | 🎮 Pygame | `pygame.zip` | For systems with pygame installed |
-            | 🍎 macOS | `macos.zip` | Standalone .app bundle |
             | 🪟 Windows | `windows.zip` | Standalone .exe bundle |
 
             ### Pygame Bundle Installation
@@ -312,11 +269,6 @@ jobs:
             4. Open the **Pygame / Ports** system — *Console Utilities* will appear there
             5. Launch it like any other game
 
-            ### macOS Installation
-            1. Download `macos.zip`
-            2. Extract and drag `Console Utilities.app` to Applications
-            3. Double-click to run
-
             ### Windows Installation
             1. Download `windows.zip`
             2. Extract the folder
@@ -328,7 +280,6 @@ jobs:
             - zstandard, pycryptodome (installed by install_req.sh)
           files: |
             dist/pygame.zip
-            dist/macos.zip
             dist/windows.zip
           draft: false
           prerelease: false
