@@ -120,9 +120,8 @@ class IALoginModal:
         width = min(650, screen.get_width() - 40)
         height = 420
 
-        show_close = input_mode == "touch"
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title=title, show_close=show_close
+            screen, width, height, title=title
         )
 
         # Show "Email:" label above keyboard
@@ -184,9 +183,8 @@ class IALoginModal:
         width = min(650, screen.get_width() - 40)
         height = 420
 
-        show_close = input_mode == "touch"
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title=title, show_close=show_close
+            screen, width, height, title=title
         )
 
         # Show "Password:" label above keyboard
@@ -238,7 +236,7 @@ class IALoginModal:
         height = 210
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title=title, show_close=False
+            screen, width, height, title=title
         )
 
         padding = self.theme.padding_sm
@@ -339,7 +337,7 @@ class IALoginModal:
         height = 150
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Internet Archive Login", show_close=False
+            screen, width, height, title="Internet Archive Login"
         )
 
         # Draw loading message
@@ -371,7 +369,7 @@ class IALoginModal:
         height = 230
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Login Successful", show_close=False
+            screen, width, height, title="Login Successful"
         )
 
         padding = self.theme.padding_sm
@@ -418,7 +416,7 @@ class IALoginModal:
         height = 230
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Login Failed", show_close=False
+            screen, width, height, title="Login Failed"
         )
 
         padding = self.theme.padding_sm

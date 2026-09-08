@@ -5,8 +5,7 @@ Centralizes all global state into a single AppState class for better maintainabi
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Set, Dict, Optional, Any, Tuple
-import pygame
+from typing import List, Set, Dict, Optional, Any
 
 
 @dataclass
@@ -39,19 +38,6 @@ class NavigationTiming:
     velocity: Dict[str, int] = field(
         default_factory=lambda: {"up": 0, "down": 0, "left": 0, "right": 0}
     )
-
-
-@dataclass
-class TouchState:
-    """State for touch/mouse input handling."""
-
-    start_pos: Optional[Tuple[int, int]] = None
-    last_pos: Optional[Tuple[int, int]] = None
-    start_time: int = 0
-    is_scrolling: bool = False
-    scroll_accumulated: float = 0
-    last_click_time: int = 0
-    last_clicked_item: int = -1
 
 
 @dataclass
@@ -120,7 +106,6 @@ class GameDetailsState:
 
     show: bool = False
     current_game: Optional[Any] = None
-    button_focused: bool = True  # Download button is focused by default
     loading_size: bool = False  # True while fetching file size
 
 
@@ -1036,22 +1021,13 @@ class FileExplorerState:
 
 @dataclass
 class UIRects:
-    """Stores rectangles for clickable UI elements."""
+    """Per-frame geometry published by the renderer.
 
-    menu_items: List[pygame.Rect] = field(default_factory=list)
-    back_button: Optional[pygame.Rect] = None
-    search_button: Optional[pygame.Rect] = None
-    download_button: Optional[pygame.Rect] = None
-    close_button: Optional[pygame.Rect] = None
-    folder_select_button: Optional[pygame.Rect] = None
-    folder_cancel_button: Optional[pygame.Rect] = None
-    confirm_ok_button: Optional[pygame.Rect] = None
-    confirm_cancel_button: Optional[pygame.Rect] = None
-    nsz_log_refresh_button: Optional[pygame.Rect] = None
-    nsz_log_close_button: Optional[pygame.Rect] = None
-    modal_char_rects: List[Any] = field(default_factory=list)
-    modal_back_button: Optional[pygame.Rect] = None
-    scroll_offset: int = 0  # Current scroll offset for item index calculation
+    Navigation is controller and keyboard only, so this no longer carries
+    hit-test rectangles. What remains are the layout measurements screens
+    report back for scroll clamping, keyed by name in ``rects``.
+    """
+
     rects: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -1098,8 +1074,7 @@ class AppState:
         # ---- Input State ---- #
         self.navigation = NavigationState()
         self.navigation_timing = NavigationTiming()
-        self.touch = TouchState()
-        self.input_mode: str = "keyboard"  # "touch", "keyboard", or "gamepad"
+        self.input_mode: str = "keyboard"  # "keyboard" or "gamepad"
 
         # ---- Search State ---- #
         self.search = SearchState()

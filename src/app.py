@@ -68,7 +68,6 @@ from services.auto_scrape import should_auto_scrape, new_completions
 from services import file_explorer_service
 from input.navigation import NavigationHandler
 from input.controller import ControllerHandler
-from input.touch import TouchHandler
 from ui.theme import Theme
 from ui.keyboard_state import ia_wizard_needs_keyboard
 from ui.screens.screen_manager import ScreenManager
@@ -159,8 +158,6 @@ class ConsoleUtilitiesApp:
 
         self.controller = ControllerHandler(self.controller_mapping)
         self.controller.set_joystick(self.joystick)
-
-        self.touch = TouchHandler()
 
         # Initialize screen manager
         self.screen_manager = ScreenManager(self.theme)
@@ -270,10 +267,8 @@ class ConsoleUtilitiesApp:
         mapping = {}
         current_index = 0
         last_input_time = 0
-        touch_detected = False
         pad = max(self.theme.padding_md, BEZEL_INSET + 4)
         line_h = self.theme.font_size_md + 4
-        skip_btn_rect = pygame.Rect(0, 0, 0, 0)
 
         while current_index < len(essential_buttons):
             current_time = pygame.time.get_ticks()
@@ -303,25 +298,6 @@ class ConsoleUtilitiesApp:
                 val = mapping.get(mapped_key, "?")
                 mapped_surf = self.font.render(f"{mapped_key}: {val}", True, SUCCESS)
                 self.screen.blit(mapped_surf, (pad, y_offset + i * line_h))
-
-            # Only show skip button after a touch/click is detected
-            if touch_detected:
-                skip_text = "Use Touch - Skip Map"
-                skip_font = pygame.font.Font(
-                    self.theme.font_path, self.theme.font_size_md
-                )
-                skip_surf = skip_font.render(skip_text, True, self.theme.background)
-                btn_w = skip_surf.get_width() + pad * 2
-                btn_h = skip_surf.get_height() + pad
-                sw, sh = self.screen.get_size()
-                skip_btn_rect = pygame.Rect(
-                    sw - pad - btn_w, sh - pad - btn_h, btn_w, btn_h
-                )
-                pygame.draw.rect(self.screen, self.theme.primary, skip_btn_rect)
-                self.screen.blit(
-                    skip_surf,
-                    (skip_btn_rect.x + pad, skip_btn_rect.y + pad // 2),
-                )
 
             if self.scanline_surface:
                 self.screen.blit(self.scanline_surface, (0, 0))
@@ -363,13 +339,6 @@ class ConsoleUtilitiesApp:
                             mapping[button_key] = ("hat", 1, 0)
                             current_index += 1
                             last_input_time = current_time
-
-                elif event.type == pygame.MOUSEBUTTONDOWN:
-                    if touch_detected and skip_btn_rect.collidepoint(event.pos):
-                        mapping = {"touchscreen_mode": True}
-                        save_controller_mapping(mapping)
-                        return True
-                    touch_detected = True
 
             pygame.time.wait(16)
 
@@ -825,21 +794,6 @@ class ConsoleUtilitiesApp:
                     self.state.input_mode = "gamepad"
                     self._handle_joystick_event(event)
 
-                elif event.type == pygame.MOUSEBUTTONDOWN:
-                    if event.button == 1:
-                        self.state.input_mode = "touch"
-                        self.touch.handle_mouse_down(event)
-
-                elif event.type == pygame.MOUSEBUTTONUP:
-                    if event.button == 1:
-                        self.touch.handle_mouse_up(event, on_click=self._handle_click)
-
-                elif event.type == pygame.MOUSEWHEEL:
-                    self.touch.handle_mouse_wheel(event, on_scroll=self._handle_scroll)
-
-                elif event.type == pygame.MOUSEMOTION:
-                    self.touch.handle_mouse_motion(event, on_scroll=self._handle_scroll)
-
                 elif event.type == pygame.VIDEORESIZE:
                     self._handle_resize(event.w, event.h)
 
@@ -912,29 +866,7 @@ class ConsoleUtilitiesApp:
                         get_hires_image=self._get_hires_image,
                     )
 
-                    # Store rects for click handling
-                    self.state.ui_rects.menu_items = rects.get("item_rects", [])
-                    self.state.ui_rects.back_button = rects.get("back")
-                    self.state.ui_rects.download_button = rects.get("download_button")
-                    self.state.ui_rects.close_button = rects.get("close")
-                    self.state.ui_rects.modal_char_rects = rects.get("char_rects", [])
-                    self.state.ui_rects.scroll_offset = rects.get("scroll_offset", 0)
-                    self.state.ui_rects.folder_select_button = rects.get(
-                        "select_button"
-                    )
-                    self.state.ui_rects.folder_cancel_button = rects.get(
-                        "cancel_button"
-                    )
-                    self.state.ui_rects.confirm_ok_button = rects.get("confirm_ok")
-                    self.state.ui_rects.confirm_cancel_button = rects.get(
-                        "confirm_cancel"
-                    )
-                    self.state.ui_rects.nsz_log_refresh_button = rects.get(
-                        "nsz_log_refresh"
-                    )
-                    self.state.ui_rects.nsz_log_close_button = rects.get(
-                        "nsz_log_close"
-                    )
+                    # Publish this frame's layout measurements (scroll extents)
                     self.state.ui_rects.rects = rects
 
                     if self.scanline_surface:
@@ -2468,461 +2400,6 @@ class ConsoleUtilitiesApp:
                 self._file_explorer_page("down")
         elif action == "start":
             self._handle_start_action()
-
-    def _handle_click(self, pos: tuple):
-        """Handle click/tap events."""
-        x, y = pos
-
-        # Check modal close button first
-        if self.state.ui_rects.close_button:
-            if self.state.ui_rects.close_button.collidepoint(x, y):
-                self._go_back()
-                return
-
-        # Check color picker clicks (team rows + color swatches)
-        if (
-            self.state.mode == "we_patcher"
-            and self.state.we_patcher.active_modal == "color_picker"
-        ) or (
-            self.state.mode == "iss_patcher"
-            and self.state.iss_patcher.active_modal == "color_picker"
-        ):
-            self._handle_color_picker_click(x, y)
-            return
-
-        # Check confirm modal buttons
-        if self.state.confirm_modal.show:
-            if self.state.ui_rects.confirm_ok_button:
-                if self.state.ui_rects.confirm_ok_button.collidepoint(x, y):
-                    self._handle_confirm_modal_ok()
-                    return
-            if self.state.ui_rects.confirm_cancel_button:
-                if self.state.ui_rects.confirm_cancel_button.collidepoint(x, y):
-                    self._handle_confirm_modal_cancel()
-                    return
-            return
-
-        # Check NSZ log modal buttons
-        if self.state.nsz_log_modal.show:
-            if self.state.ui_rects.nsz_log_refresh_button:
-                if self.state.ui_rects.nsz_log_refresh_button.collidepoint(x, y):
-                    self._refresh_nsz_log_modal()
-                    return
-            if self.state.ui_rects.nsz_log_close_button:
-                if self.state.ui_rects.nsz_log_close_button.collidepoint(x, y):
-                    self.state.nsz_log_modal.show = False
-                    return
-            return
-
-        # Check steam shortcut modal clicks
-        if (
-            self.state.steam_shortcut.show
-            and self.state.steam_shortcut.step == "results"
-        ):
-            for i, rect in enumerate(self.state.ui_rects.menu_items):
-                if rect.collidepoint(x, y):
-                    self.state.steam_shortcut.selected_index = (
-                        i + self.state.ui_rects.scroll_offset
-                    )
-                    self._handle_steam_result_selection()
-                    return
-            return
-
-        if (
-            self.state.steam_shortcut.show
-            and self.state.steam_shortcut.step == "complete"
-        ):
-            steam_ok = self.state.ui_rects.rects.get("steam_ok")
-            if steam_ok and steam_ok.collidepoint(x, y):
-                self.state.steam_shortcut.show = False
-                return
-            return
-
-        # Check folder browser buttons (skip if folder name input is showing on top)
-        if self.state.folder_browser.show and not self.state.folder_name_input.show:
-            if self.state.ui_rects.folder_select_button:
-                if self.state.ui_rects.folder_select_button.collidepoint(x, y):
-                    self._handle_folder_browser_confirm()
-                    return
-            if self.state.ui_rects.folder_cancel_button:
-                if self.state.ui_rects.folder_cancel_button.collidepoint(x, y):
-                    ConsoleUtilitiesApp._reset_folder_browser_state(self)
-                    return
-            # Check folder browser items (account for scroll offset)
-            for i, rect in enumerate(self.state.ui_rects.menu_items):
-                if rect.collidepoint(x, y):
-                    self.state.folder_browser.highlighted = (
-                        i + self.state.ui_rects.scroll_offset
-                    )
-                    self._handle_folder_browser_selection()
-                    return
-            return
-
-        # Check scraper wizard clicks
-        if self.state.scraper_wizard.show:
-            # System picker overlay intercepts clicks when active
-            if self.state.scraper_wizard.system_picker_active:
-                rects = self.state.ui_rects.rects
-                # Close button
-                close_btn = rects.get("close")
-                if close_btn and close_btn.collidepoint(x, y):
-                    self._close_system_picker()
-                    return
-                # Keyboard character clicks
-                for i, rect in enumerate(rects.get("char_rects", [])):
-                    if rect.collidepoint(x, y):
-                        wizard = self.state.scraper_wizard
-                        modal = self.screen_manager.scraper_wizard_modal
-                        new_text, is_done, toggle_shift = (
-                            modal.handle_system_picker_key(
-                                i,
-                                wizard.system_picker_search,
-                                shift_active=wizard.system_picker_shift,
-                            )
-                        )
-                        if toggle_shift:
-                            wizard.system_picker_shift = not wizard.system_picker_shift
-                        wizard.system_picker_search = new_text
-                        wizard.system_picker_highlighted = 0
-                        if is_done:
-                            wizard.system_picker_search_active = False
-                        return
-                # System list item clicks
-                for i, rect in enumerate(rects.get("item_rects", [])):
-                    if rect.collidepoint(x, y):
-                        filtered = self._get_filtered_systems()
-                        scroll_start = max(
-                            0,
-                            self.state.scraper_wizard.system_picker_highlighted
-                            - max(1, len(rects.get("item_rects", [])))
-                            + 2,
-                        )
-                        idx = i + scroll_start
-                        if 0 <= idx < len(filtered):
-                            self.state.scraper_wizard.system_picker_highlighted = idx
-                            self._select_system_from_picker()
-                        return
-                return
-
-            rects = self.state.ui_rects.rects
-            # Action buttons
-            select_btn = rects.get("select_button")
-            start_btn = rects.get("start_button")
-            done_btn = rects.get("done_button")
-            retry_btn = rects.get("retry_button")
-            if select_btn and select_btn.collidepoint(x, y):
-                self._select_batch_folder()
-                return
-            if start_btn and start_btn.collidepoint(x, y):
-                self._handle_start_action()
-                return
-            if done_btn and done_btn.collidepoint(x, y):
-                self._close_scraper_wizard()
-                return
-            if retry_btn and retry_btn.collidepoint(x, y):
-                self._handle_scraper_wizard_selection()
-                return
-            # On-screen nav buttons
-            nav_up = rects.get("nav_up")
-            nav_down = rects.get("nav_down")
-            nav_select = rects.get("nav_select")
-            nav_back = rects.get("nav_back")
-            if nav_up and nav_up.collidepoint(x, y):
-                self._navigate_scraper_wizard("up")
-                return
-            if nav_down and nav_down.collidepoint(x, y):
-                self._navigate_scraper_wizard("down")
-                return
-            if nav_select and nav_select.collidepoint(x, y):
-                self._handle_scraper_wizard_selection()
-                return
-            if nav_back and nav_back.collidepoint(x, y):
-                self._go_back()
-                return
-            # List item clicks
-            wizard = self.state.scraper_wizard
-            step = wizard.step
-            for i, rect in enumerate(self.state.ui_rects.menu_items):
-                if rect.collidepoint(x, y):
-                    idx = i + self.state.ui_rects.scroll_offset
-                    if step == "game_select":
-                        wizard.selected_game_index = idx
-                        self._handle_scraper_wizard_selection()
-                    elif step == "rom_list":
-                        wizard.batch_current_index = idx
-                        self._handle_scraper_wizard_selection()
-                    elif step in ("batch_options", "image_select"):
-                        wizard.image_highlighted = idx
-                        self._handle_scraper_wizard_selection()
-                    elif step == "video_select":
-                        wizard.video_highlighted = idx
-                        self._handle_scraper_wizard_selection()
-                    return
-            return
-
-        # Check IA download wizard list items
-        if self.state.ia_download_wizard.show:
-            step = self.state.ia_download_wizard.step
-            if step == "file_select":
-                for i, rect in enumerate(self.state.ui_rects.menu_items):
-                    if rect.collidepoint(x, y):
-                        self.state.ia_download_wizard.selected_file_index = i
-                        self._handle_ia_download_wizard_selection()
-                        return
-                return
-
-        # Check IA collection wizard list items (format selection)
-        if self.state.ia_collection_wizard.show:
-            step = self.state.ia_collection_wizard.step
-            if step == "formats":
-                for i, rect in enumerate(self.state.ui_rects.menu_items):
-                    if rect.collidepoint(x, y):
-                        self.state.ia_collection_wizard.format_highlighted = i
-                        self._handle_ia_collection_wizard_selection()
-                        return
-                # Only return if in formats mode - fall through to char_rect check otherwise
-                return
-
-        # Check auth token "Enter Token" button
-        auth_enter = self.state.ui_rects.rects.get("auth_enter_token")
-        if auth_enter and auth_enter.collidepoint(x, y):
-            self._handle_auth_token_selection()
-            return
-
-        # Check download button (modal or games screen)
-        if self.state.ui_rects.download_button:
-            if self.state.ui_rects.download_button.collidepoint(x, y):
-                if self.state.game_details.show:
-                    self._handle_game_details_selection()
-                elif self.state.mode == "games" and self.state.selected_games:
-                    self._start_download()
-                return
-
-        # Check IA login OK/Cancel buttons
-        ia_ok = self.state.ui_rects.rects.get("ia_login_ok")
-        ia_cancel = self.state.ui_rects.rects.get("ia_login_cancel")
-        if ia_ok and ia_ok.collidepoint(x, y):
-            self._handle_ia_login_ok()
-            return
-        if ia_cancel and ia_cancel.collidepoint(x, y):
-            self._go_back()
-            return
-
-        # Check modal character buttons (search/url input/IA modals)
-        if self.state.ui_rects.modal_char_rects:
-            for char_rect, char_index, char in self.state.ui_rects.modal_char_rects:
-                if char_rect.collidepoint(x, y):
-                    # Set cursor position and trigger selection based on active modal
-                    if (
-                        self.state.auth_token_input.show
-                        and self.state.auth_token_input.step == "input"
-                    ):
-                        self.state.auth_token_input.cursor_position = char_index
-                        self._handle_auth_token_selection()
-                    elif self.state.show_search_input:
-                        self.state.search.cursor_position = char_index
-                        self._handle_search_input_selection()
-                    elif self.state.url_input.show:
-                        self.state.url_input.cursor_position = char_index
-                        self._handle_url_input_selection()
-                    elif self.state.folder_name_input.show:
-                        self.state.folder_name_input.cursor_position = char_index
-                        self._handle_folder_name_input_selection()
-                    elif self.state.ia_login.show:
-                        self.state.ia_login.cursor_position = char_index
-                        self._handle_ia_login_selection()
-                    elif self.state.ia_download_wizard.show:
-                        self.state.ia_download_wizard.cursor_position = char_index
-                        self._handle_ia_download_wizard_selection()
-                    elif self.state.ia_collection_wizard.show:
-                        self.state.ia_collection_wizard.cursor_position = char_index
-                        self._handle_ia_collection_wizard_selection()
-                    elif self.state.scraper_login.show:
-                        self.state.scraper_login.cursor_position = char_index
-                        self._handle_scraper_login_selection()
-                    elif (
-                        self.state.scraper_wizard.show
-                        and self.state.scraper_wizard.step == "edit_name"
-                    ):
-                        self.state.scraper_wizard.search_name_cursor = char_index
-                        self._handle_scraper_wizard_selection()
-                    elif (
-                        self.state.mode == "we_patcher"
-                        and self.state.we_patcher.active_modal == "league_browser"
-                        and self.state.we_patcher.league_search_active
-                    ):
-                        self.state.we_patcher.league_search_cursor = char_index
-                        self._handle_league_browser_selection()
-                    elif (
-                        self.state.mode == "iss_patcher"
-                        and self.state.iss_patcher.active_modal == "league_browser"
-                        and self.state.iss_patcher.league_search_active
-                    ):
-                        self.state.iss_patcher.league_search_cursor = char_index
-                        self._handle_iss_league_browser_selection()
-                    elif (
-                        self.state.mode == "pes6_ps2_patcher"
-                        and self.state.pes6_ps2_patcher.active_modal == "league_browser"
-                        and self.state.pes6_ps2_patcher.league_search_active
-                    ):
-                        self.state.pes6_ps2_patcher.league_search_cursor = char_index
-                        self._handle_pes6_ps2_patcher_selection()
-                    return
-
-        # Check back button
-        if self.state.ui_rects.back_button:
-            if self.state.ui_rects.back_button.collidepoint(x, y):
-                self._go_back()
-                return
-
-        # File explorer click handling
-        if self.state.mode == "file_explorer":
-            self._handle_file_explorer_click(x, y)
-            return
-
-        # Check Season / Language arrow buttons (iss_patcher main menu only)
-        if (
-            self.state.mode == "iss_patcher"
-            and self.state.iss_patcher.active_modal is None
-        ):
-            left_arrow = self.state.ui_rects.rects.get("season_left_arrow")
-            right_arrow = self.state.ui_rects.rects.get("season_right_arrow")
-            if left_arrow and left_arrow.collidepoint(x, y):
-                self._handle_iss_patcher_navigation("left")
-                return
-            if right_arrow and right_arrow.collidepoint(x, y):
-                self._handle_iss_patcher_navigation("right")
-                return
-        # Check Season arrow buttons (nhl94_patcher main menu only)
-        if (
-            self.state.mode == "nhl94_patcher"
-            and self.state.nhl94_patcher.active_modal is None
-        ):
-            left_arrow = self.state.ui_rects.rects.get("season_left_arrow")
-            right_arrow = self.state.ui_rects.rects.get("season_right_arrow")
-            if left_arrow and left_arrow.collidepoint(x, y):
-                self.state.highlighted = 0  # Season row
-                self._handle_nhl94_patcher_navigation("left")
-                return
-            if right_arrow and right_arrow.collidepoint(x, y):
-                self.state.highlighted = 0  # Season row
-                self._handle_nhl94_patcher_navigation("right")
-                return
-        # Check Season arrow buttons (nhl07_patcher main menu only)
-        if (
-            self.state.mode == "nhl07_patcher"
-            and self.state.nhl07_psp_patcher.active_modal is None
-        ):
-            left_arrow = self.state.ui_rects.rects.get("season_left_arrow")
-            right_arrow = self.state.ui_rects.rects.get("season_right_arrow")
-            if left_arrow and left_arrow.collidepoint(x, y):
-                self.state.highlighted = 0  # Season row
-                self._handle_nhl07_patcher_navigation("left")
-                return
-            if right_arrow and right_arrow.collidepoint(x, y):
-                self.state.highlighted = 0  # Season row
-                self._handle_nhl07_patcher_navigation("right")
-                return
-        # Check Season arrow buttons (nhl05_patcher main menu only)
-        if (
-            self.state.mode == "nhl05_patcher"
-            and self.state.nhl05_ps2_patcher.active_modal is None
-        ):
-            left_arrow = self.state.ui_rects.rects.get("season_left_arrow")
-            right_arrow = self.state.ui_rects.rects.get("season_right_arrow")
-            if left_arrow and left_arrow.collidepoint(x, y):
-                self.state.highlighted = 0  # Season row
-                self._handle_nhl05_patcher_navigation("left")
-                return
-            if right_arrow and right_arrow.collidepoint(x, y):
-                self.state.highlighted = 0  # Season row
-                self._handle_nhl05_patcher_navigation("right")
-                return
-        # Check Season arrow buttons (nhl94_gen_patcher main menu only)
-        if (
-            self.state.mode == "nhl94_gen_patcher"
-            and self.state.nhl94_gen_patcher.active_modal is None
-        ):
-            left_arrow = self.state.ui_rects.rects.get("season_left_arrow")
-            right_arrow = self.state.ui_rects.rects.get("season_right_arrow")
-            if left_arrow and left_arrow.collidepoint(x, y):
-                self.state.highlighted = 0  # Season row
-                self._handle_nhl94_gen_patcher_navigation("left")
-                return
-            if right_arrow and right_arrow.collidepoint(x, y):
-                self.state.highlighted = 0  # Season row
-                self._handle_nhl94_gen_patcher_navigation("right")
-                return
-        # Check Season / Language arrow buttons (we_patcher main menu only)
-        if (
-            self.state.mode == "we_patcher"
-            and self.state.we_patcher.active_modal is None
-        ):
-            left_arrow = self.state.ui_rects.rects.get("season_left_arrow")
-            right_arrow = self.state.ui_rects.rects.get("season_right_arrow")
-            if left_arrow and left_arrow.collidepoint(x, y):
-                self._handle_we_patcher_navigation("left")
-                return
-            if right_arrow and right_arrow.collidepoint(x, y):
-                self._handle_we_patcher_navigation("right")
-                return
-            lang_left = self.state.ui_rects.rects.get("lang_left_arrow")
-            lang_right = self.state.ui_rects.rects.get("lang_right_arrow")
-            if lang_left and lang_left.collidepoint(x, y):
-                self._cycle_we_patcher_language(-1)
-                return
-            if lang_right and lang_right.collidepoint(x, y):
-                self._cycle_we_patcher_language(1)
-                return
-
-        # Check menu items (account for scroll offset)
-        for i, rect in enumerate(self.state.ui_rects.menu_items):
-            if rect.collidepoint(x, y):
-                # Add scroll offset to get actual item index
-                actual_index = i + self.state.ui_rects.scroll_offset
-                if self.state.mode == "systems_list":
-                    self.state.systems_list_highlighted = actual_index
-                elif self.state.mode == "add_systems":
-                    self.state.add_systems_highlighted = actual_index
-                elif self.state.mode == "systems_settings":
-                    self.state.systems_settings_highlighted = actual_index
-                elif self.state.mode == "system_settings":
-                    self.state.system_settings_highlighted = actual_index
-                elif (
-                    self.state.mode == "we_patcher"
-                    and self.state.we_patcher.active_modal == "league_browser"
-                ):
-                    self.state.we_patcher.leagues_highlighted = actual_index
-                elif (
-                    self.state.mode == "iss_patcher"
-                    and self.state.iss_patcher.active_modal == "league_browser"
-                ):
-                    self.state.iss_patcher.leagues_highlighted = actual_index
-                elif (
-                    self.state.mode == "pes6_ps2_patcher"
-                    and self.state.pes6_ps2_patcher.active_modal == "league_browser"
-                ):
-                    self.state.pes6_ps2_patcher.leagues_highlighted = actual_index
-                elif self.state.mode == "syncthing":
-                    if self.state.syncthing.custom_step == "file_select":
-                        self.state.syncthing.custom_file_highlighted = actual_index
-                    else:
-                        self.state.syncthing.highlighted = actual_index
-                else:
-                    self.state.highlighted = actual_index
-                self._select_item()
-                return
-
-    def _handle_scroll(self, amount: float):
-        """Handle scroll events. Amount is in items (can be multiple)."""
-        # Handle multiple items at once for smoother scrolling
-        steps = int(abs(amount))
-        if steps == 0:
-            steps = 1 if amount != 0 else 0
-
-        direction = "up" if amount > 0 else "down"
-        for _ in range(steps):
-            self._move_highlight(direction)
 
     def _go_back(self):
         """Handle back navigation."""
@@ -5681,7 +5158,7 @@ class ConsoleUtilitiesApp:
             self.state.auth_token_input.cursor_position = 0
         elif self.state.auth_token_input.step == "input":
             # On-screen keyboard selection
-            if self.state.input_mode in ("gamepad", "touch"):
+            if self.state.input_mode == "gamepad":
                 from ui.screens.modals.auth_token_modal import AuthTokenModal
 
                 modal = AuthTokenModal()
@@ -12262,63 +11739,6 @@ class ConsoleUtilitiesApp:
         patcher.color_picker.picking = "primary"
         patcher.active_modal = "color_picker"
 
-    def _handle_color_picker_click(self, x, y):
-        """Handle click/tap in the color picker modal."""
-        from constants import WE_PATCHER_CACHE_DIR
-        from services.team_color_cache import COLOR_PALETTE, set_team_color
-
-        rects = self.state.ui_rects.rects
-        patcher = self.state.active_patcher
-        cp = patcher.color_picker
-        league_data = patcher.league_data
-        if not league_data or not hasattr(league_data, "teams"):
-            return
-
-        teams = league_data.teams
-
-        # Check team row clicks
-        for rect, team_idx in rects.get("color_picker_teams", []):
-            if rect.collidepoint(x, y):
-                cp.team_index = team_idx
-                cp.picking = "primary"
-                cp.color_index = 0
-                return
-
-        # Check primary swatch clicks
-        for rect, color_idx in rects.get("color_picker_primary", []):
-            if rect.collidepoint(x, y):
-                team = teams[cp.team_index].team
-                _, hex_color = COLOR_PALETTE[color_idx]
-                team.color = hex_color
-                set_team_color(
-                    WE_PATCHER_CACHE_DIR,
-                    team.id,
-                    team.color,
-                    team.alternate_color or "",
-                )
-                cp.picking = "secondary"
-                cp.color_index = color_idx
-                return
-
-        # Check secondary swatch clicks
-        for rect, color_idx in rects.get("color_picker_secondary", []):
-            if rect.collidepoint(x, y):
-                team = teams[cp.team_index].team
-                _, hex_color = COLOR_PALETTE[color_idx]
-                team.alternate_color = hex_color
-                set_team_color(
-                    WE_PATCHER_CACHE_DIR,
-                    team.id,
-                    team.color or "",
-                    team.alternate_color,
-                )
-                # Advance to next team
-                cp.picking = "primary"
-                cp.color_index = 0
-                if cp.team_index < len(teams) - 1:
-                    cp.team_index += 1
-                return
-
     def _handle_color_picker_selection(self):
         """Handle select press in the color picker modal."""
         from constants import WE_PATCHER_CACHE_DIR
@@ -12845,119 +12265,6 @@ class ConsoleUtilitiesApp:
             fe.highlighted = max(0, fe.highlighted - page_size)
         else:
             fe.highlighted = min(max_items - 1, fe.highlighted + page_size)
-
-    def _handle_file_explorer_click(self, x, y):
-        """Handle touch/click events in the file explorer."""
-        fe = self.state.file_explorer
-        rects = self.state.ui_rects.rects
-
-        # Error OK button
-        if fe.error_message:
-            error_ok = rects.get("error_ok")
-            if error_ok and error_ok.collidepoint(x, y):
-                fe.error_message = ""
-            return
-
-        # Delete modal buttons
-        if fe.delete_modal_open:
-            delete_yes = rects.get("delete_yes")
-            delete_no = rects.get("delete_no")
-            if delete_yes and delete_yes.collidepoint(x, y):
-                fe.delete_highlighted = 0
-                self._handle_file_explorer_select()
-            elif delete_no and delete_no.collidepoint(x, y):
-                fe.delete_highlighted = 1
-                self._handle_file_explorer_select()
-            return
-
-        # Extract modal options
-        if fe.extract_modal_open:
-            extract_options = rects.get("extract_options", [])
-            for i, opt_rect in enumerate(extract_options):
-                if opt_rect.collidepoint(x, y):
-                    fe.extract_highlighted = i
-                    self._handle_file_explorer_select()
-                    return
-            return
-
-        # Input modal keyboard
-        if fe.input_modal_open:
-            kb_char_rects = rects.get("kb_char_rects", [])
-            for char_rect, char_index, char in kb_char_rects:
-                if char_rect.collidepoint(x, y):
-                    fe.kb_selected_index = char_index
-                    self._handle_file_explorer_kb_select()
-                    return
-            return
-
-        # Context menu items (click outside closes)
-        if fe.context_menu_open:
-            ctx_items = rects.get("context_menu_items", [])
-            for i, rect in enumerate(ctx_items):
-                if rect.collidepoint(x, y):
-                    fe.context_menu_highlighted = i
-                    self._handle_file_explorer_context_action()
-                    return
-            # Click outside — close
-            fe.context_menu_open = False
-            fe.context_menu_actions = []
-            return
-
-        # Viewer close button
-        if fe.viewer_open:
-            viewer_close = rects.get("viewer_close")
-            if viewer_close and viewer_close.collidepoint(x, y):
-                fe.viewer_open = False
-                fe.viewer_content = []
-                fe.viewer_title = ""
-                fe.viewer_scroll = 0
-            return
-
-        # Touch action buttons
-        touch_back = rects.get("touch_back")
-        if touch_back and touch_back.collidepoint(x, y):
-            self._handle_file_explorer_back()
-            return
-
-        touch_open = rects.get("touch_open")
-        if touch_open and touch_open.collidepoint(x, y):
-            self._handle_file_explorer_select()
-            return
-
-        touch_actions = rects.get("touch_actions")
-        if touch_actions and touch_actions.collidepoint(x, y):
-            self._open_file_explorer_context_menu()
-            return
-
-        touch_paste = rects.get("touch_paste")
-        if touch_paste and touch_paste.collidepoint(x, y):
-            self._file_explorer_paste()
-            return
-
-        touch_deselect = rects.get("touch_deselect")
-        if touch_deselect and touch_deselect.collidepoint(x, y):
-            fe.selected = set()
-            return
-
-        # File list items
-        item_rects = rects.get("item_rects", [])
-        scroll_offset = rects.get("scroll_offset", 0)
-        for i, rect in enumerate(item_rects):
-            if rect.collidepoint(x, y):
-                actual_index = i + scroll_offset
-                now = pygame.time.get_ticks()
-                if (
-                    fe.highlighted == actual_index
-                    and now - self.state.touch.last_click_time < 400
-                    and self.state.touch.last_clicked_item == actual_index
-                ):
-                    # Double-tap — open
-                    self._handle_file_explorer_select()
-                else:
-                    fe.highlighted = actual_index
-                self.state.touch.last_click_time = now
-                self.state.touch.last_clicked_item = actual_index
-                return
 
 
 def main():

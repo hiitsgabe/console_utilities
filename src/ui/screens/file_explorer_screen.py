@@ -76,8 +76,7 @@ class FileExplorerScreen:
         footer_y = h - footer_h - inset
         footer_rect = pygame.Rect(inset, footer_y, w - inset * 2, footer_h)
         pygame.draw.rect(screen, self.theme.surface, footer_rect)
-        touch_rects = self._render_footer(screen, footer_rect, fe, input_mode)
-        rects.update(touch_rects)
+        rects.update(self._render_footer(screen, footer_rect, fe, input_mode))
 
         # File list area
         list_y = breadcrumb_rect.bottom
@@ -180,49 +179,15 @@ class FileExplorerScreen:
             size=font_sm,
         )
 
-        if input_mode == "touch":
-            rects.update(self._render_touch_buttons(screen, rect, fe))
-        else:
-            hints = self._get_button_hints(fe, input_mode)
-            self.text.render(
-                screen,
-                hints,
-                (rect.right - self.theme.padding_md, text_y),
-                color=self.theme.text_secondary,
-                size=font_sm,
-                align="right",
-            )
-        return rects
-
-    def _render_touch_buttons(self, screen, rect, fe):
-        rects: Dict[str, Any] = {}
-        btn_h = 28
-        btn_y = rect.top + (rect.height - btn_h) // 2
-        btn_x = rect.right - self.theme.padding_md
-        btn_spacing = 8
-
-        if fe.clipboard_paths:
-            buttons = [("Paste", "touch_paste"), ("Back", "touch_back")]
-        elif fe.selected:
-            buttons = [
-                ("Actions", "touch_actions"),
-                ("Deselect", "touch_deselect"),
-                ("Back", "touch_back"),
-            ]
-        else:
-            buttons = [
-                ("Open", "touch_open"),
-                ("Actions", "touch_actions"),
-                ("Back", "touch_back"),
-            ]
-
-        for label, key in reversed(buttons):
-            btn_w = max(60, len(label) * 9 + 16)
-            btn_x -= btn_w
-            btn_rect = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
-            self.action_button.render(screen, btn_rect, label)
-            rects[key] = btn_rect
-            btn_x -= btn_spacing
+        hints = self._get_button_hints(fe, input_mode)
+        self.text.render(
+            screen,
+            hints,
+            (rect.right - self.theme.padding_md, text_y),
+            color=self.theme.text_secondary,
+            size=font_sm,
+            align="right",
+        )
         return rects
 
     def _get_button_hints(self, fe, input_mode):

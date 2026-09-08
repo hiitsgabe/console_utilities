@@ -254,9 +254,6 @@ def needs_controller_mapping() -> bool:
         True if mapping is needed, False otherwise
     """
     try:
-        if _controller_mapping and _controller_mapping.get("touchscreen_mode"):
-            return False
-
         essential_buttons = [
             "select",
             "back",

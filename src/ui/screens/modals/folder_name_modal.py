@@ -67,7 +67,7 @@ class FolderNameModal:
         height = 150
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Enter Folder Name", show_close=False
+            screen, width, height, title="Enter Folder Name"
         )
 
         padding = self.theme.padding_sm
@@ -153,9 +153,8 @@ class FolderNameModal:
         height = 350
 
         # Show close button only for touch mode
-        show_close = input_mode == "touch"
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Enter Folder Name", show_close=show_close
+            screen, width, height, title="Enter Folder Name"
         )
 
         # Render character keyboard with default charset (alphanumeric)

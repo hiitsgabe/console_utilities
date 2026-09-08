@@ -145,9 +145,8 @@ class IACollectionModal:
         width = min(650, screen.get_width() - 40)
         height = 420
 
-        show_close = input_mode == "touch"
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title=title, show_close=show_close
+            screen, width, height, title=title
         )
 
         padding = self.theme.padding_sm
@@ -187,7 +186,7 @@ class IACollectionModal:
         height = 150
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Add IA Collection", show_close=False
+            screen, width, height, title="Add IA Collection"
         )
 
         self.text.render(
@@ -234,9 +233,8 @@ class IACollectionModal:
         width = min(650, screen.get_width() - 40)
         height = 420
 
-        show_close = input_mode == "touch"
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title=title, show_close=show_close
+            screen, width, height, title=title
         )
 
         padding = self.theme.padding_sm
@@ -292,9 +290,8 @@ class IACollectionModal:
         width = min(650, screen.get_width() - 40)
         height = 420
 
-        show_close = input_mode == "touch"
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title=title, show_close=show_close
+            screen, width, height, title=title
         )
 
         padding = self.theme.padding_sm
@@ -340,7 +337,7 @@ class IACollectionModal:
         height = 180
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title=title, show_close=False
+            screen, width, height, title=title
         )
 
         padding = self.theme.padding_sm
@@ -447,9 +444,8 @@ class IACollectionModal:
         width = min(500, screen.get_width() - 40)
         height = min(400, screen.get_height() - 60)
 
-        show_close = input_mode == "touch"
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Select File Formats", show_close=show_close
+            screen, width, height, title="Select File Formats"
         )
 
         padding = self.theme.padding_sm
@@ -568,9 +564,8 @@ class IACollectionModal:
         width = min(650, screen.get_width() - 40)
         height = 420
 
-        show_close = input_mode == "touch"
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Add Custom Format", show_close=show_close
+            screen, width, height, title="Add Custom Format"
         )
 
         padding = self.theme.padding_sm
@@ -617,7 +612,7 @@ class IACollectionModal:
         height = 280 if should_unzip else 200
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Collection Options", show_close=False
+            screen, width, height, title="Collection Options"
         )
 
         padding = self.theme.padding_sm
@@ -725,7 +720,7 @@ class IACollectionModal:
         height = 300 if should_unzip else 280
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Confirm Collection", show_close=False
+            screen, width, height, title="Confirm Collection"
         )
 
         padding = self.theme.padding_sm
@@ -820,7 +815,7 @@ class IACollectionModal:
         height = 180
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Error", show_close=False
+            screen, width, height, title="Error"
         )
 
         padding = self.theme.padding_sm

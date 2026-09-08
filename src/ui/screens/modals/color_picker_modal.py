@@ -38,7 +38,7 @@ class ColorPickerModal:
         modal_rect = pygame.Rect(margin, margin, width, height)
 
         _, content_rect, close_rect = self.modal_frame.render(
-            screen, modal_rect, title="Set Team Colors", show_close=True
+            screen, modal_rect, title="Set Team Colors"
         )
 
         result = {

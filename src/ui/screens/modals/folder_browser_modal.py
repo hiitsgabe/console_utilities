@@ -99,7 +99,6 @@ class FolderBrowserModal:
             screen,
             modal_rect,
             title="Select " + selection_type.replace("_", " ").title(),
-            show_close=True,
         )
 
         # Draw current path

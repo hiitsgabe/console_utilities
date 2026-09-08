@@ -1,4 +1,4 @@
-.PHONY: run debug stream watch install dev clean test lint format setup bundle bundle-macos bundle-windows release
+.PHONY: run debug watch install dev clean test lint format setup bundle bundle-macos bundle-windows release
 
 # Load .env if present
 -include .env
@@ -9,10 +9,6 @@ CONDA_ACTIVATE = conda run -n $(CONDA_ENV)
 # Default target
 run:
 	DEV_MODE=true $(CONDA_ACTIVATE) watchmedo auto-restart --patterns="*.py;download.json" --recursive --signal SIGTERM python src/app.py
-
-# Stream to phone browser for touch testing (open the printed URL on your phone)
-stream:
-	SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy DEV_MODE=true $(CONDA_ACTIVATE)  watchmedo auto-restart --patterns="*.py;download.json" --recursive --signal SIGTERM python src/stream_server.py
 
 # Run without auto-restart to see full error logs
 debug:

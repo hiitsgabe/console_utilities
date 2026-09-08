@@ -87,16 +87,10 @@ class ControllerHandler:
         Returns:
             True if mapping is incomplete, False otherwise
         """
-        # Touchscreen mode doesn't need button mapping
-        if self._mapping.get("touchscreen_mode"):
-            return False
-
-        # Check if all essential buttons are mapped
+        # Check if all essential buttons are mapped. A mapping saved by an older
+        # build may only carry the retired "touchscreen_mode" flag, which no
+        # longer satisfies anything, so those configs are re-prompted here.
         return not all(button in self._mapping for button in self.ESSENTIAL_BUTTONS)
-
-    def is_touchscreen_mode(self) -> bool:
-        """Check if running in touchscreen-only mode."""
-        return self._mapping.get("touchscreen_mode", False)
 
     def input_matches_action(self, event: pygame.event.Event, action: str) -> bool:
         """

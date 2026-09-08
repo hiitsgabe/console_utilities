@@ -43,7 +43,7 @@ make bundle-windows   # Create Windows .exe bundle (standalone)
 
 ### State Management
 - **Centralized state in src/state.py**: All application state is managed through the `AppState` dataclass
-- State includes: navigation, touch input, download progress, screen state, and application lifecycle
+- State includes: navigation, download progress, screen state, and application lifecycle
 - Services and UI components receive state as parameters rather than managing their own state
 
 ### UI Architecture (Atomic Design Pattern)
@@ -66,7 +66,7 @@ The UI follows Atomic Design principles for component composition:
 ### Input Handling
 - **src/input/controller.py**: Controller/gamepad input handling with button mapping
 - **src/input/navigation.py**: D-pad navigation with acceleration and repeat handling
-- **src/input/touch.py**: Touch/mouse input with gesture detection (swipe, scroll, tap)
+- Navigation is controller and keyboard only; there are no mouse or touch handlers
 
 ### Configuration
 - **src/constants.py**: Global constants, paths, colors, and environment detection (DEV_MODE vs console)

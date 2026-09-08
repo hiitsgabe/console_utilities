@@ -64,7 +64,7 @@ class ConfirmModal:
 
         # Render modal frame
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title=title, show_close=True
+            screen, width, height, title=title
         )
 
         # Anchor buttons to bottom of content area

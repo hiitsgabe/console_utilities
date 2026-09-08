@@ -10,7 +10,6 @@ from ui.templates.list_screen import ListScreenTemplate
 from ui.templates.grid_screen import GridScreenTemplate
 from ui.atoms.text import Text
 from ui.molecules.thumbnail import Thumbnail
-from ui.molecules.action_button import ActionButton
 from utils.button_hints import get_download_hint
 from services.installed_checker import installed_checker
 from constants import BEZEL_INSET
@@ -41,7 +40,6 @@ class GamesScreen:
         self.grid_template = GridScreenTemplate(theme)
         self.text = Text(theme)
         self.thumbnail = Thumbnail(theme)
-        self.action_button = ActionButton(theme)
 
     def render(
         self,
@@ -56,13 +54,7 @@ class GamesScreen:
         show_download_all: bool = False,
         text_scroll_offset: int = 0,
         view_type: str = "list",
-    ) -> Tuple[
-        Optional[pygame.Rect],
-        List[pygame.Rect],
-        int,
-        Optional[pygame.Rect],
-        Optional[pygame.Rect],
-    ]:
+    ) -> Tuple[Optional[pygame.Rect], List[pygame.Rect], int, Optional[pygame.Rect]]:
         """
         Render the games screen.
 
@@ -74,12 +66,12 @@ class GamesScreen:
             selected_games: Set of selected game indices
             search_query: Current search query (for subtitle)
             get_thumbnail: Function to get thumbnail for a game
-            input_mode: Current input mode ("keyboard", "gamepad", "touch")
+            input_mode: Current input mode ("keyboard" or "gamepad")
             show_download_all: Whether to show "Download All" button
             view_type: "list" or "grid"
 
         Returns:
-            Tuple of (back_rect, item_rects, scroll_offset, download_button_rect, download_all_rect)
+            Tuple of (back_rect, item_rects, scroll_offset, download_all_rect)
         """
         title = f"{system_name} Games"
         subtitle = f"Search: {search_query}" if search_query else None
@@ -130,11 +122,8 @@ class GamesScreen:
             )
 
         # Draw status bar when games are selected
-        download_button_rect = None
         if selected_games:
-            download_button_rect = self._render_status_bar(
-                screen, len(selected_games), input_mode
-            )
+            self._render_status_bar(screen, len(selected_games), input_mode)
 
         # Get the "Download All" button rect if shown
         download_all_rect = None
@@ -143,13 +132,7 @@ class GamesScreen:
             if len(item_rects) > len(games) - scroll_offset:
                 download_all_rect = item_rects[-1]
 
-        return (
-            back_rect,
-            item_rects,
-            scroll_offset,
-            download_button_rect,
-            download_all_rect,
-        )
+        return back_rect, item_rects, scroll_offset, download_all_rect
 
     def render_with_buttons(
         self,
@@ -242,36 +225,18 @@ class GamesScreen:
             align="left",
         )
 
-        download_button_rect = None
-
-        if input_mode == "touch":
-            # For touch mode, render a tappable download button
-            button_width = 100
-            button_height = 32
-            button_rect = pygame.Rect(
-                screen_width - inset - self.theme.padding_md - button_width,
-                bar_y + (bar_height - button_height) // 2,
-                button_width,
-                button_height,
-            )
-            self.action_button.render(screen, button_rect, "Download", hover=True)
-            download_button_rect = button_rect
-        else:
-            # For keyboard/gamepad, show hint text
-            hint_text = get_download_hint(input_mode)
-            self.text.render(
-                screen,
-                hint_text,
-                (
-                    screen_width - inset - self.theme.padding_md,
-                    text_y,
-                ),
-                color=self.theme.warning,
-                size=self.theme.font_size_md,
-                align="right",
-            )
-
-        return download_button_rect
+        hint_text = get_download_hint(input_mode)
+        self.text.render(
+            screen,
+            hint_text,
+            (
+                screen_width - inset - self.theme.padding_md,
+                text_y,
+            ),
+            color=self.theme.warning,
+            size=self.theme.font_size_md,
+            align="right",
+        )
 
 
 # Default instance

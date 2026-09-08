@@ -76,7 +76,7 @@ A PyGame-based utility suite for handheld gaming consoles, with a retro CRT-them
 
 ### 🖥️ Interface
 - **CRT Theme** — Phosphor green retro aesthetic with scanlines, vignette, and bezel effects
-- **Controller & Keyboard** — Full D-pad/gamepad support with acceleration and touch/mouse input
+- **Controller & Keyboard** — Full D-pad/gamepad support with acceleration
 - **Auto-Updates** — Check for and install app updates from within the app
 
 ---
@@ -200,8 +200,7 @@ console_utilities/
 │   │   └── nhl07_psp_patcher/       # 🏒 PSP hockey ISO patcher
 │   ├── input/
 │   │   ├── controller.py             # 🎮 Controller/gamepad input
-│   │   ├── navigation.py             # 🕹️ D-pad navigation with acceleration
-│   │   └── touch.py                  # 👆 Touch/mouse input
+│   │   └── navigation.py             # 🕹️ D-pad navigation with acceleration
 │   ├── ui/                            # 🎨 UI components (Atomic Design)
 │   │   ├── theme.py                  # 🎨 Design tokens and theming
 │   │   ├── atoms/                    # 🔵 Basic components

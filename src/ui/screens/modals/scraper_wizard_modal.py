@@ -216,9 +216,8 @@ class ScraperWizardModal:
         width = min(600, screen.get_width() - 40)
         height = 350
 
-        show_close = input_mode == "touch"
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Edit Search Name", show_close=show_close
+            screen, width, height, title="Edit Search Name"
         )
 
         char_rects, input_rect = self.char_keyboard.render(
@@ -256,7 +255,7 @@ class ScraperWizardModal:
         height = 150
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Edit Search Name", show_close=False
+            screen, width, height, title="Edit Search Name"
         )
 
         padding = self.theme.padding_sm
@@ -345,7 +344,7 @@ class ScraperWizardModal:
         height = 180
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Searching...", show_close=False
+            screen, width, height, title="Searching..."
         )
 
         self.text.render(
@@ -381,9 +380,8 @@ class ScraperWizardModal:
         width = min(600, screen.get_width() - 40)
         height = min(450, screen.get_height() - 60)
 
-        show_close = input_mode == "touch"
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Select Game", show_close=show_close
+            screen, width, height, title="Select Game"
         )
 
         padding = self.theme.padding_sm
@@ -527,9 +525,8 @@ class ScraperWizardModal:
         width = min(700, screen.get_width() - 40)
         height = min(450, screen.get_height() - 60)
 
-        show_close = input_mode == "touch"
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Select Images", show_close=show_close
+            screen, width, height, title="Select Images"
         )
 
         padding = self.theme.padding_sm
@@ -692,9 +689,8 @@ class ScraperWizardModal:
         width = min(500, screen.get_width() - 40)
         height = min(350, screen.get_height() - 60)
 
-        show_close = input_mode == "touch"
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Select Video", show_close=show_close
+            screen, width, height, title="Select Video"
         )
 
         padding = self.theme.padding_sm
@@ -800,7 +796,7 @@ class ScraperWizardModal:
         height = 180
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Downloading Images", show_close=False
+            screen, width, height, title="Downloading Images"
         )
 
         padding = self.theme.padding_sm
@@ -843,7 +839,7 @@ class ScraperWizardModal:
         height = 150
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Updating Metadata", show_close=False
+            screen, width, height, title="Updating Metadata"
         )
 
         self.text.render(
@@ -865,7 +861,7 @@ class ScraperWizardModal:
         height = 180
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Complete", show_close=True
+            screen, width, height, title="Complete"
         )
 
         self.text.render(
@@ -894,7 +890,7 @@ class ScraperWizardModal:
         height = 200
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Error", show_close=True
+            screen, width, height, title="Error"
         )
 
         padding = self.theme.padding_sm
@@ -931,13 +927,11 @@ class ScraperWizardModal:
         width = min(600, screen.get_width() - 40)
         height = min(480, screen.get_height() - 60)
 
-        show_close = input_mode == "touch"
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
             screen,
             width,
             height,
             title=f"ROMs Found ({len(batch_roms)})",
-            show_close=show_close,
         )
 
         padding = self.theme.padding_sm
@@ -1030,9 +1024,8 @@ class ScraperWizardModal:
         width = min(500, screen.get_width() - 40)
         height = min(480, screen.get_height() - 60)
 
-        show_close = input_mode == "touch"
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Batch Options", show_close=show_close
+            screen, width, height, title="Batch Options"
         )
 
         padding = self.theme.padding_sm
@@ -1164,7 +1157,6 @@ class ScraperWizardModal:
             width,
             height,
             title=f"Processing ({done}/{total})",
-            show_close=False,
         )
 
         padding = self.theme.padding_sm
@@ -1235,7 +1227,7 @@ class ScraperWizardModal:
         )
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Batch Complete", show_close=True
+            screen, width, height, title="Batch Complete"
         )
 
         padding = self.theme.padding_sm
@@ -1432,7 +1424,7 @@ class ScraperWizardModal:
         height = min(480, screen.get_height() - 60)
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Select System", show_close=True
+            screen, width, height, title="Select System"
         )
 
         padding = self.theme.padding_sm

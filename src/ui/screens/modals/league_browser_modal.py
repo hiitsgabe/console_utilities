@@ -40,7 +40,7 @@ class LeagueBrowserModal:
         modal_rect = pygame.Rect(margin, margin, width, height)
 
         _, content_rect, close_rect = self.modal_frame.render(
-            screen, modal_rect, title="Select League", show_close=True
+            screen, modal_rect, title="Select League"
         )
 
         char_rects = []

@@ -8,7 +8,6 @@ from typing import Dict, Any, Tuple, Optional
 from ui.theme import Theme, default_theme
 from ui.organisms.modal_frame import ModalFrame
 from ui.molecules.thumbnail import Thumbnail
-from ui.molecules.action_button import ActionButton
 from ui.atoms.text import Text
 from utils.button_hints import get_game_details_hints
 from services.installed_checker import installed_checker
@@ -26,14 +25,12 @@ class GameDetailsModal:
     - Large thumbnail image
     - Complete filename
     - File size
-    - Download button
     """
 
     def __init__(self, theme: Theme = default_theme):
         self.theme = theme
         self.modal_frame = ModalFrame(theme)
         self.thumbnail = Thumbnail(theme)
-        self.action_button = ActionButton(theme)
         self.text = Text(theme)
 
     def render(
@@ -41,11 +38,10 @@ class GameDetailsModal:
         screen: pygame.Surface,
         game: Dict[str, Any],
         hires_image: Optional[pygame.Surface] = None,
-        button_focused: bool = True,
         loading_size: bool = False,
         input_mode: str = "keyboard",
         text_scroll_offset: int = 0,
-    ) -> Tuple[pygame.Rect, Optional[pygame.Rect], Optional[pygame.Rect]]:
+    ) -> Tuple[pygame.Rect, Optional[pygame.Rect]]:
         """
         Render the game details modal.
 
@@ -53,12 +49,11 @@ class GameDetailsModal:
             screen: Surface to render to
             game: Game data dictionary
             hires_image: Optional hi-res thumbnail
-            button_focused: Whether download button is focused
             loading_size: Whether file size is being loaded
-            input_mode: Current input mode ("touch", "keyboard", "gamepad")
+            input_mode: Current input mode ("keyboard" or "gamepad")
 
         Returns:
-            Tuple of (modal_rect, download_button_rect, close_button_rect)
+            Tuple of (modal_rect, close_button_rect)
         """
         screen_width, screen_height = screen.get_size()
 
@@ -66,10 +61,8 @@ class GameDetailsModal:
         width = min(500, screen_width - 40)
         height = min(screen_height - 60, 600)
 
-        # Render modal frame - only show close button in touch mode
-        show_close = input_mode == "touch"
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Game Details", show_close=show_close
+            screen, width, height, title="Game Details"
         )
 
         # Vertical layout - centered
@@ -175,36 +168,18 @@ class GameDetailsModal:
                 align="center",
             )
 
-        # Bottom section - show button for touch, hints for keyboard/gamepad
-        download_rect = None
+        # Bottom section - button hints
+        hints = get_game_details_hints(input_mode)
+        self.text.render(
+            screen,
+            hints,
+            (center_x, content_rect.bottom - self.theme.padding_md),
+            color=self.theme.text_secondary,
+            size=self.theme.font_size_sm,
+            align="center",
+        )
 
-        if input_mode == "touch":
-            # Download button at bottom (centered)
-            button_width = 150
-            button_height = 45
-            download_rect = pygame.Rect(
-                center_x - button_width // 2,
-                content_rect.bottom - button_height - self.theme.padding_sm,
-                button_width,
-                button_height,
-            )
-            self.action_button.render(
-                screen, download_rect, "Download", hover=button_focused
-            )
-        else:
-            # Show hints for keyboard/gamepad
-            hints = get_game_details_hints(input_mode)
-
-            self.text.render(
-                screen,
-                hints,
-                (center_x, content_rect.bottom - self.theme.padding_md),
-                color=self.theme.text_secondary,
-                size=self.theme.font_size_sm,
-                align="center",
-            )
-
-        return modal_rect, download_rect, close_rect
+        return modal_rect, close_rect
 
     def _get_game_name(self, game: Dict[str, Any]) -> str:
         """Extract display name from game."""

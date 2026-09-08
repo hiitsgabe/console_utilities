@@ -29,7 +29,6 @@ class ModalTemplate:
         width: int,
         height: int,
         title: Optional[str] = None,
-        show_close: bool = True,
         buttons: Optional[List[Tuple[str, str]]] = None,  # [(label, style), ...]
     ) -> Tuple[pygame.Rect, pygame.Rect, Optional[pygame.Rect], List[pygame.Rect]]:
         """
@@ -40,7 +39,6 @@ class ModalTemplate:
             width: Modal width
             height: Modal height
             title: Optional title
-            show_close: Show close button
             buttons: Optional list of (label, style) tuples
                     style can be: "primary", "secondary", "success", "danger"
 
@@ -56,7 +54,7 @@ class ModalTemplate:
 
         # Render modal frame
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, total_height, title, show_close
+            screen, width, total_height, title
         )
 
         # Adjust content rect to exclude button area
@@ -123,7 +121,7 @@ class ModalTemplate:
         height = 200
 
         modal_rect, content_rect, close_rect, button_rects = self.render(
-            screen, width, height, title, show_close=(buttons is None), buttons=buttons
+            screen, width, height, title, buttons=buttons
         )
 
         # Draw message
@@ -163,9 +161,7 @@ class ModalTemplate:
         width = 350
         height = 140
 
-        modal_rect, content_rect, _, _ = self.render(
-            screen, width, height, show_close=False
-        )
+        modal_rect, content_rect, _, _ = self.render(screen, width, height)
 
         if progress is not None:
             # Show message at top
@@ -239,7 +235,7 @@ class ModalTemplate:
             buttons = [("OK", "primary")]
 
         modal_rect, content_rect, close_rect, button_rects = self.render(
-            screen, width, height, title, show_close=False, buttons=buttons
+            screen, width, height, title, buttons=buttons
         )
 
         # Draw error icon

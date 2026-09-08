@@ -68,7 +68,7 @@ class SearchModal:
 
         # No close button for keyboard mode
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Search Games", show_close=False
+            screen, width, height, title="Search Games"
         )
 
         padding = self.theme.padding_sm
@@ -154,9 +154,8 @@ class SearchModal:
         height = 350
 
         # Show close button only for touch mode
-        show_close = input_mode == "touch"
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Search Games", show_close=show_close
+            screen, width, height, title="Search Games"
         )
 
         # Render character keyboard

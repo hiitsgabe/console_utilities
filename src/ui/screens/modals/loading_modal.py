@@ -72,7 +72,7 @@ class LoadingModal:
 
         # Render modal frame
         modal_rect, content_rect, _ = modal_frame.render_centered(
-            screen, width, height, title="Downloading", show_close=False
+            screen, width, height, title="Downloading"
         )
 
         # Render progress

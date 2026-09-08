@@ -40,7 +40,7 @@ class RosterPreviewModal:
             title = f"Roster Preview - {league_data.league.name}"
 
         _, content_rect, close_rect = self.modal_frame.render(
-            screen, modal_rect, title=title, show_close=True
+            screen, modal_rect, title=title
         )
 
         item_rects = []

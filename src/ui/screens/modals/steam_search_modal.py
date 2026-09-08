@@ -37,7 +37,6 @@ class SteamSearchModal:
             screen,
             margin=max(30, BEZEL_INSET),
             title=f'Steam: "{query}"',
-            show_close=True,
         )
 
         if not results:
@@ -101,7 +100,7 @@ class SteamSearchModal:
         height = 200
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Shortcut Created", show_close=True
+            screen, width, height, title="Shortcut Created"
         )
 
         y = content_rect.top + self.theme.padding_md

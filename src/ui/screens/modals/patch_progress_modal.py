@@ -33,7 +33,7 @@ class PatchProgressModal:
         height = 260
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Patching ROM", show_close=not we.is_patching
+            screen, width, height, title="Patching ROM"
         )
 
         item_rects = []

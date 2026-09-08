@@ -1,14 +1,12 @@
 """
 Input handling for Console Utilities.
-Handles keyboard, controller, and touch input.
+Handles keyboard and controller input.
 """
 
 from .navigation import NavigationHandler
 from .controller import ControllerHandler
-from .touch import TouchHandler
 
 __all__ = [
     "NavigationHandler",
     "ControllerHandler",
-    "TouchHandler",
 ]

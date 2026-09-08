@@ -121,9 +121,8 @@ class IADownloadModal:
         width = min(650, screen.get_width() - 40)
         height = 420
 
-        show_close = input_mode == "touch"
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title=title, show_close=show_close
+            screen, width, height, title=title
         )
 
         padding = self.theme.padding_sm
@@ -167,7 +166,6 @@ class IADownloadModal:
             width,
             height,
             title="Download from Internet Archive",
-            show_close=False,
         )
 
         padding = self.theme.padding_sm
@@ -260,7 +258,6 @@ class IADownloadModal:
             width,
             height,
             title="Download from Internet Archive",
-            show_close=False,
         )
 
         self.text.render(
@@ -302,13 +299,11 @@ class IADownloadModal:
         width = min(600, screen.get_width() - 40)
         height = min(450, screen.get_height() - 60)
 
-        show_close = input_mode == "touch"
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
             screen,
             width,
             height,
             title=f"Select File - {item_id}",
-            show_close=show_close,
         )
 
         padding = self.theme.padding_sm
@@ -461,7 +456,6 @@ class IADownloadModal:
             width,
             height,
             title="Download Options",
-            show_close=False,
         )
 
         padding = self.theme.padding_sm
@@ -577,7 +571,7 @@ class IADownloadModal:
         height = 180
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Error", show_close=False
+            screen, width, height, title="Error"
         )
 
         padding = self.theme.padding_sm

@@ -36,21 +36,6 @@ GAMEPAD_BUTTONS: Dict[str, str] = {
     "right_shoulder": "R",
 }
 
-TOUCH_BUTTONS: Dict[str, str] = {
-    "select": "Tap",
-    "back": "Back",
-    "start": "Menu",
-    "search": "Search",
-    "detail": "Long press",
-    "up": "Swipe up",
-    "down": "Swipe down",
-    "left": "Swipe left",
-    "right": "Swipe right",
-    "delete": "Delete",
-    "left_shoulder": "L",
-    "right_shoulder": "R",
-}
-
 
 def get_button_name(action: str, input_mode: str) -> str:
     """
@@ -58,17 +43,14 @@ def get_button_name(action: str, input_mode: str) -> str:
 
     Args:
         action: The action name (e.g., "select", "back", "start")
-        input_mode: Current input mode ("keyboard", "gamepad", or "touch")
+        input_mode: Current input mode ("keyboard" or "gamepad")
 
     Returns:
         The button name for the given action and input mode
     """
     if input_mode == "gamepad":
         return GAMEPAD_BUTTONS.get(action, action)
-    elif input_mode == "touch":
-        return TOUCH_BUTTONS.get(action, action)
-    else:  # keyboard
-        return KEYBOARD_BUTTONS.get(action, action)
+    return KEYBOARD_BUTTONS.get(action, action)
 
 
 def get_button_hint(action: str, label: str, input_mode: str) -> str:

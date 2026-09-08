@@ -78,7 +78,7 @@ class UrlInputModal:
         height = 150
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title=title, show_close=False
+            screen, width, height, title=title
         )
 
         padding = self.theme.padding_sm
@@ -165,9 +165,8 @@ class UrlInputModal:
         height = 380
 
         # Show close button only for touch mode
-        show_close = input_mode == "touch"
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title=title, show_close=show_close
+            screen, width, height, title=title
         )
 
         # Render character keyboard with URL charset

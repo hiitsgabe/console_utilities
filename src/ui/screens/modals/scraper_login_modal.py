@@ -284,13 +284,11 @@ class ScraperLoginModal:
         width = min(650, screen.get_width() - 40)
         height = 420
 
-        show_close = input_mode == "touch"
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
             screen,
             width,
             height,
             title=title,
-            show_close=show_close,
         )
 
         padding = self.theme.padding_sm
@@ -342,9 +340,8 @@ class ScraperLoginModal:
         width = min(650, screen.get_width() - 40)
         height = 420
 
-        show_close = input_mode == "touch"
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title=title, show_close=show_close
+            screen, width, height, title=title
         )
 
         padding = self.theme.padding_sm
@@ -397,9 +394,8 @@ class ScraperLoginModal:
         width = min(650, screen.get_width() - 40)
         height = 420
 
-        show_close = input_mode == "touch"
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title=title, show_close=show_close
+            screen, width, height, title=title
         )
 
         padding = self.theme.padding_sm
@@ -459,9 +455,8 @@ class ScraperLoginModal:
         width = min(650, screen.get_width() - 40)
         height = 420
 
-        show_close = input_mode == "touch"
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title=title, show_close=show_close
+            screen, width, height, title=title
         )
 
         padding = self.theme.padding_sm
@@ -507,7 +502,7 @@ class ScraperLoginModal:
         height = 180
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title=title, show_close=False
+            screen, width, height, title=title
         )
 
         padding = self.theme.padding_sm
@@ -593,7 +588,7 @@ class ScraperLoginModal:
         height = 150
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title=f"{provider_name} Login", show_close=False
+            screen, width, height, title=f"{provider_name} Login"
         )
 
         self.text.render(
@@ -628,7 +623,7 @@ class ScraperLoginModal:
         height = 180
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Login Successful", show_close=False
+            screen, width, height, title="Login Successful"
         )
 
         padding = self.theme.padding_sm
@@ -676,7 +671,7 @@ class ScraperLoginModal:
         height = 180
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Login Failed", show_close=False
+            screen, width, height, title="Login Failed"
         )
 
         padding = self.theme.padding_sm

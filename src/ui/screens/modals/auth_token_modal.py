@@ -81,7 +81,7 @@ class AuthTokenModal:
         height = text_height + button_height + self.theme.padding_lg * 4 + 80
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Authentication Required", show_close=True
+            screen, width, height, title="Authentication Required"
         )
 
         # Draw message lines
@@ -136,7 +136,7 @@ class AuthTokenModal:
         height = 150
 
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Enter Auth Token", show_close=False
+            screen, width, height, title="Enter Auth Token"
         )
 
         padding = self.theme.padding_sm
@@ -216,9 +216,8 @@ class AuthTokenModal:
         width = min(650, screen.get_width() - 40)
         height = 380
 
-        show_close = input_mode == "touch"
         modal_rect, content_rect, close_rect = self.modal_frame.render_centered(
-            screen, width, height, title="Enter Auth Token", show_close=show_close
+            screen, width, height, title="Enter Auth Token"
         )
 
         char_rects, input_rect = self.char_keyboard.render(

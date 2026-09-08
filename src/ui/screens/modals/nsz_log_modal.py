@@ -76,7 +76,6 @@ class NszLogModal:
                 self.WIDTH,
                 self.HEIGHT,
                 title="NSZ / Extraction Log (error.log)",
-                show_close=False,
                 buttons=buttons,
             )
         )

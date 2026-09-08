@@ -301,17 +301,15 @@ class ScreenManager:
                 if get_hires_image
                 else None
             )
-            modal_rect, download_rect, close_rect = self.game_details_modal.render(
+            modal_rect, close_rect = self.game_details_modal.render(
                 screen,
                 state.game_details.current_game,
                 hires_image,
-                button_focused=state.game_details.button_focused,
                 loading_size=state.game_details.loading_size,
                 input_mode=state.input_mode,
                 text_scroll_offset=state.text_scroll_offset,
             )
             rects["modal"] = modal_rect
-            rects["download_button"] = download_rect
             rects["close"] = close_rect
             return rects
 
@@ -869,7 +867,7 @@ class ScreenManager:
                 state.search.filtered_list if state.search.mode else state.game_list
             )
 
-            back_rect, item_rects, scroll_offset, download_btn, download_all_btn = (
+            back_rect, item_rects, scroll_offset, download_all_btn = (
                 self.games_screen.render(
                     screen,
                     system_name,
@@ -887,8 +885,6 @@ class ScreenManager:
             rects["back"] = back_rect
             rects["item_rects"] = item_rects
             rects["scroll_offset"] = scroll_offset
-            if download_btn:
-                rects["download_button"] = download_btn
             if download_all_btn:
                 rects["download_all_button"] = download_all_btn
 

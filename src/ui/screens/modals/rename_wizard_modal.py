@@ -57,7 +57,7 @@ class RenameWizardModal:
         title = self._get_step_title(step)
 
         _, content_rect, close_rect = self.modal_frame.render(
-            screen, modal_rect, title=title, show_close=True
+            screen, modal_rect, title=title
         )
 
         item_rects = []
