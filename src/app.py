@@ -1898,12 +1898,7 @@ class ConsoleUtilitiesApp:
             import subprocess
             import platform
 
-            if platform.system() == "Darwin":
-                result = subprocess.run(
-                    ["pbpaste"], capture_output=True, text=True, timeout=2
-                )
-                text = result.stdout
-            elif platform.system() == "Windows":
+            if platform.system() == "Windows":
                 result = subprocess.run(
                     ["powershell", "-command", "Get-Clipboard"],
                     capture_output=True,
