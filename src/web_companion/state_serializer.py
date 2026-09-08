@@ -715,10 +715,20 @@ def serialize_web_state(state, settings=None, data=None):
         }
 
     if state.mode == "sports_patcher":
-        from ui.screens.sports_patcher_screen import SportsPatcherScreen
+        from ui.screens import sports_patcher_screen as screen
 
-        sp = SportsPatcherScreen()
-        items = [{"name": label, "selected": False} for label, _ in sp.GAMES]
+        sp = screen.sports_patcher_screen
+
+        # The games are grouped by sport, so the list carries a header row per
+        # section. Reuse the screen's own rows to keep the two lists indexed
+        # alike: `state.highlighted` counts headers.
+        divider_indices = sp.get_divider_indices()
+        items = []
+        for i, (label, _) in enumerate(sp._items):
+            item = {"name": label, "selected": False}
+            if i in divider_indices:
+                item["is_divider"] = True
+            items.append(item)
         return {
             "screen_type": "list",
             "title": "Sports Game Updater",
