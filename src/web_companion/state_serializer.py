@@ -458,23 +458,6 @@ def serialize_web_state(state, settings=None, data=None):
                 "progress": 0,
             }
 
-    # API key input
-    if state.scraper_login.show:
-        if state.scraper_login.step == "api_key":
-            return {
-                "screen_type": "text_input",
-                "title": f"{state.scraper_login.provider.title()} - API Key",
-                "text": state.scraper_login.api_key,
-                "input_type": "text",
-                "cursor": state.scraper_login.cursor_position,
-            }
-        return {
-            "screen_type": "loading",
-            "title": f"{state.scraper_login.provider.title()} API Key",
-            "message": f"Step: {state.scraper_login.step}",
-            "progress": 0,
-        }
-
     # Steam shortcut modal
     if state.steam_shortcut.show:
         return _serialize_steam_shortcut(state.steam_shortcut)
@@ -638,19 +621,6 @@ def serialize_web_state(state, settings=None, data=None):
                     value = "Not logged in"
             elif label == "Enable Sports Updater":
                 value = "ON" if s.get("sports_roster_enabled", False) else "OFF"
-            elif label == "Roster Soccer Data Source":
-                provider = s.get("sports_roster_provider", "espn")
-                provider_labels = {
-                    "espn": "ESPN (Free)",
-                    "api_football": "API-Football (Paid)",
-                }
-                value = provider_labels.get(provider, provider)
-            elif label == "API-Football Key":
-                key = s.get("api_football_key", "")
-                if key:
-                    value = "••••••" + key[-3:] if len(key) > 3 else "••••••"
-                else:
-                    value = "Not set"
             elif label == "Roster Hockey Data Source":
                 nhl_provider = s.get("nhl94_provider", "espn")
                 nhl_labels = {

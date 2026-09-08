@@ -26,7 +26,6 @@ from .modals.confirm_modal import ConfirmModal
 from .modals.ia_login_modal import IALoginModal
 from .modals.ia_download_modal import IADownloadModal
 from .modals.ia_collection_modal import IACollectionModal
-from .modals.scraper_login_modal import ScraperLoginModal
 from .modals.dedupe_wizard_modal import DedupeWizardModal
 from .modals.rename_wizard_modal import RenameWizardModal
 from .modals.ghost_cleaner_modal import GhostCleanerModal
@@ -101,7 +100,6 @@ class ScreenManager:
         self.ia_login_modal = IALoginModal(theme)
         self.ia_download_modal = IADownloadModal(theme)
         self.ia_collection_modal = IACollectionModal(theme)
-        self.scraper_login_modal = ScraperLoginModal(theme)
         self.dedupe_wizard_modal = DedupeWizardModal(theme)
         self.rename_wizard_modal = RenameWizardModal(theme)
         self.ghost_cleaner_modal = GhostCleanerModal(theme)
@@ -397,26 +395,6 @@ class ScreenManager:
             rects["close"] = close_rect
             rects["char_rects"] = char_rects
             rects["item_rects"] = item_rects
-            return rects
-
-        if state.scraper_login.show:
-            modal_rect, content_rect, close_rect, char_rects = (
-                self.scraper_login_modal.render(
-                    screen,
-                    state.scraper_login.provider,
-                    state.scraper_login.step,
-                    state.scraper_login.username,
-                    state.scraper_login.password,
-                    state.scraper_login.api_key,
-                    state.scraper_login.cursor_position,
-                    state.scraper_login.error_message,
-                    input_mode=state.input_mode,
-                    shift_active=state.scraper_login.shift_active,
-                )
-            )
-            rects["modal"] = modal_rect
-            rects["close"] = close_rect
-            rects["char_rects"] = char_rects
             return rects
 
         if state.dedupe_wizard.show:
@@ -900,8 +878,6 @@ class ScreenManager:
             rects["back"] = back_rect
             rects["item_rects"] = item_rects
             rects["scroll_offset"] = scroll_offset
-            rects["season_left_arrow"] = self.we_patcher_screen.season_arrow_left
-            rects["season_right_arrow"] = self.we_patcher_screen.season_arrow_right
             rects["lang_left_arrow"] = self.we_patcher_screen.lang_arrow_left
             rects["lang_right_arrow"] = self.we_patcher_screen.lang_arrow_right
 
@@ -912,8 +888,6 @@ class ScreenManager:
             rects["back"] = back_rect
             rects["item_rects"] = item_rects
             rects["scroll_offset"] = scroll_offset
-            rects["season_left_arrow"] = self.iss_patcher_screen.season_arrow_left
-            rects["season_right_arrow"] = self.iss_patcher_screen.season_arrow_right
 
         elif state.mode == "nhl94_patcher":
             back_rect, item_rects, scroll_offset = self.nhl94_patcher_screen.render(

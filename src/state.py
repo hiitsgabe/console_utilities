@@ -236,21 +236,6 @@ class IACollectionWizardState:
 
 
 @dataclass
-class ScraperLoginState:
-    """State for the API key input modal."""
-
-    show: bool = False
-    provider: str = "api_football"
-    step: str = "api_key"
-    username: str = ""
-    password: str = ""
-    api_key: str = ""
-    cursor_position: int = 0
-    error_message: str = ""
-    shift_active: bool = False
-
-
-@dataclass
 class DedupeWizardState:
     """State for dedupe games wizard modal."""
 
@@ -387,7 +372,7 @@ class ISSPatcherState:
     # Roster preview
     roster_preview_team_index: int = 0
     roster_preview_player_index: int = 0
-    # Color picker (API-Football only)
+    # Color picker (manual override for colours ESPN omits)
     color_picker: ColorPickerState = field(default_factory=ColorPickerState)
     # UI navigation
     active_modal: Optional[str] = None
@@ -438,7 +423,7 @@ class WePatcherState:
     # Roster preview
     roster_preview_team_index: int = 0
     roster_preview_player_index: int = 0
-    # Color picker (API-Football only)
+    # Color picker (manual override for colours ESPN omits)
     color_picker: ColorPickerState = field(default_factory=ColorPickerState)
     # UI navigation
     active_modal: Optional[str] = None
@@ -974,9 +959,6 @@ class AppState:
         self.ia_download_wizard = IADownloadWizardState()
         self.ia_collection_wizard = IACollectionWizardState()
 
-        # ---- API Key Input ---- #
-        self.scraper_login = ScraperLoginState()
-
         # ---- Dedupe ---- #
         self.dedupe_wizard = DedupeWizardState()
 
@@ -1110,7 +1092,6 @@ class AppState:
         self.ia_login.show = False
         self.ia_download_wizard.show = False
         self.ia_collection_wizard.show = False
-        self.scraper_login.show = False
         self.dedupe_wizard.show = False
         self.rename_wizard.show = False
         self.ghost_cleaner_wizard.show = False

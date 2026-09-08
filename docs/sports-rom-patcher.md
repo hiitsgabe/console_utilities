@@ -151,25 +151,17 @@ The patcher writes updated data into a **new output file**, leaving your origina
 
 ## Data Providers
 
-The patcher fetches real-world roster and statistics data from sports APIs. You can choose between providers in Settings depending on the sport:
+The patcher fetches real-world roster and statistics data from sports APIs. Hockey offers a choice of provider in Settings; the other sports have a single source:
 
 | Provider | Sports | Auth Required | Season Coverage |
 |----------|--------|--------------|-----------------|
 | ESPN | Baseball, Basketball, Hockey, Soccer | No | Current season |
 | Public Hockey API | Hockey | No | 1993 to present |
-| API-Football | Soccer | Yes (paid key) | Multiple seasons |
 
 - **Baseball**: ESPN provides current-season MLB roster and statistics data (AVG, HR, RBI, OPS, ERA, W, SV, etc.).
 - **Basketball**: ESPN provides current-season NBA roster and statistics data (PTS, REB, AST, STL, BLK, FG%, 3P%, etc.).
 - **Hockey**: Choose between ESPN (current season, no setup) or the Public Hockey API (historical seasons back to 1993, no setup).
-- **Soccer**: ESPN works out of the box for the current season. API-Football supports historical seasons and additional leagues but requires a paid API key.
-
-### Configuring API-Football
-
-1. Sign up for an API key at API-Football
-2. Open **Settings** in Console Utilities
-3. Enter your API key in the API-Football configuration section
-4. The soccer patchers will now offer API-Football as a data provider alongside ESPN
+- **Soccer**: ESPN is the only source, and it serves the current season only. There is nothing to configure.
 
 ## Attribute Mapping
 

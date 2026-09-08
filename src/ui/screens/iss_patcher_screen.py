@@ -3,8 +3,6 @@
 import os
 from datetime import datetime
 
-import pygame
-
 from ui.theme import Theme, default_theme
 from ui.templates.list_screen import ListScreenTemplate
 from ui.atoms.text import Text
@@ -23,8 +21,6 @@ class ISSPatcherScreen:
         self.theme = theme
         self.template = ListScreenTemplate(theme)
         self.text = Text(theme)
-        self.season_arrow_left: pygame.Rect = None
-        self.season_arrow_right: pygame.Rect = None
 
     def _get_items(self, state, settings):
         """Build the menu items as (label, value, action) tuples.
@@ -32,35 +28,18 @@ class ISSPatcherScreen:
         Order: Season → Select League → Preview Rosters → ROM → Patch
         """
         iss = state.iss_patcher
-        provider = (settings or {}).get("sports_roster_provider", "espn")
-        api_key = (settings or {}).get("api_football_key", "")
-        needs_key = provider == "api_football" and not api_key
 
         # ── Season ────────────────────────────────────────────────────────
-        if provider == "espn":
-            season_value = str(datetime.now().year)
-            season_action = "locked"
-        else:
-            season_value = ""
-            season_action = "change_season"
-
-        items = [("Season", season_value, season_action)]
+        # ESPN only serves the current season, so the row is read-only.
+        items = [("Season", str(datetime.now().year), "locked")]
 
         # ── Select League ─────────────────────────────────────────────────
-        if needs_key:
-            step1_value = "API key required"
-        elif iss.selected_league:
+        if iss.selected_league:
             step1_value = getattr(iss.selected_league, "name", str(iss.selected_league))
         else:
             step1_value = "Not selected"
 
-        items.append(
-            (
-                "1. Select League",
-                step1_value,
-                "needs_api_key" if needs_key else "select_league",
-            )
-        )
+        items.append(("1. Select League", step1_value, "select_league"))
 
         # ── Preview Rosters ───────────────────────────────────────────────
         if iss.league_data:
@@ -84,26 +63,26 @@ class ISSPatcherScreen:
             )
         )
 
-        # ── Set Team Colors (API-Football only) ──────────────────────────
-        if provider == "api_football":
-            from services.team_color_cache import all_teams_have_colors
+        # ── Set Team Colors ───────────────────────────────────────────────
+        # ESPN supplies colours, so this is an override for the ones it omits.
+        from services.team_color_cache import all_teams_have_colors
 
-            if iss.league_data and all_teams_have_colors(iss.league_data):
-                colors_value = "All colors set"
-            elif iss.league_data:
-                colors_value = "Colors required"
-            else:
-                colors_value = "Complete step 2 first"
-            items.append(
-                (
-                    "3. Set Team Colors",
-                    colors_value,
-                    "set_colors" if iss.league_data else "locked",
-                )
+        if iss.league_data and all_teams_have_colors(iss.league_data):
+            colors_value = "All colors set"
+        elif iss.league_data:
+            colors_value = "Some colors missing"
+        else:
+            colors_value = "Complete step 2 first"
+        items.append(
+            (
+                "3. Set Team Colors",
+                colors_value,
+                "set_colors" if iss.league_data else "locked",
             )
+        )
 
         # ── Select ROM ────────────────────────────────────────────────────
-        step_rom = "4" if provider == "api_football" else "3"
+        step_rom = "4"
         if iss.rom_path and iss.rom_valid:
             rom_value = os.path.basename(iss.zip_path or iss.rom_path)
         elif iss.rom_path:
@@ -130,30 +109,21 @@ class ISSPatcherScreen:
             )
 
         # ── Patch ROM ─────────────────────────────────────────────────────
-        step_patch = "5" if provider == "api_football" else "4"
-        if provider == "api_football":
-            from services.team_color_cache import all_teams_have_colors as _athc
-
-            colors_ok = iss.league_data and _athc(iss.league_data)
-        else:
-            colors_ok = True
-
+        # Colours are not a gate: a team the picker never reached is patched
+        # with whatever ESPN supplied.
+        can_patch = bool(iss.league_data and iss.rom_valid)
         if iss.patch_complete:
             patch_value = "Complete"
-        elif iss.league_data and iss.rom_valid and colors_ok:
+        elif can_patch:
             patch_value = "Ready to patch"
         else:
             patch_value = f"Complete steps 1+{step_rom} first"
 
         items.append(
             (
-                f"{step_patch}. Patch ROM",
+                "5. Patch ROM",
                 patch_value,
-                (
-                    "patch_rom"
-                    if (iss.league_data and iss.rom_valid and colors_ok)
-                    else "locked"
-                ),
+                "patch_rom" if can_patch else "locked",
             )
         )
 
@@ -176,78 +146,7 @@ class ISSPatcherScreen:
             item_spacing=8,
         )
 
-        # Draw the Season row control for API-Football
-        self.season_arrow_left = None
-        self.season_arrow_right = None
-
-        provider = (settings or {}).get("sports_roster_provider", "espn")
-        if provider == "api_football":
-            season_idx = next(
-                (i for i, (_, _, a) in enumerate(items) if a == "change_season"), None
-            )
-            if season_idx is not None:
-                visible_idx = season_idx - scroll_offset
-                if 0 <= visible_idx < len(item_rects):
-                    row = item_rects[visible_idx]
-                    season = (
-                        state.iss_patcher.selected_season or datetime.now().year - 1
-                    )
-                    is_hl = highlighted == season_idx
-                    self._draw_arrow_control(screen, row, str(season), is_hl)
-
         return back_rect, item_rects, scroll_offset
-
-    def _draw_arrow_control(
-        self, screen, row: pygame.Rect, label: str, is_highlighted: bool
-    ):
-        """Draw < value > control on the right side of a row."""
-        btn_w, btn_h = 32, 30
-        value_w = 56
-        margin = 10
-        gap = 6
-
-        rx = row.right - margin
-        right_btn = pygame.Rect(rx - btn_w, row.centery - btn_h // 2, btn_w, btn_h)
-        value_cx = right_btn.left - gap - value_w // 2
-        left_btn = pygame.Rect(
-            value_cx - value_w // 2 - gap - btn_w,
-            row.centery - btn_h // 2,
-            btn_w,
-            btn_h,
-        )
-
-        arrow_color = (
-            self.theme.primary if is_highlighted else self.theme.text_secondary
-        )
-        value_color = self.theme.primary if is_highlighted else self.theme.text_primary
-
-        self.text.render(
-            screen,
-            "<",
-            (left_btn.centerx, left_btn.centery - self.theme.font_size_sm // 2),
-            color=arrow_color,
-            size=self.theme.font_size_sm,
-            align="center",
-        )
-        self.text.render(
-            screen,
-            label,
-            (value_cx, row.centery - self.theme.font_size_md // 2),
-            color=value_color,
-            size=self.theme.font_size_md,
-            align="center",
-        )
-        self.text.render(
-            screen,
-            ">",
-            (right_btn.centerx, right_btn.centery - self.theme.font_size_sm // 2),
-            color=arrow_color,
-            size=self.theme.font_size_sm,
-            align="center",
-        )
-
-        self.season_arrow_left = left_btn
-        self.season_arrow_right = right_btn
 
     def get_action(self, index: int, state, settings=None) -> str:
         items = self._get_items(state, settings)
@@ -257,7 +156,7 @@ class ISSPatcherScreen:
 
     def get_count(self, state=None, settings=None) -> int:
         if state is None:
-            return 5  # Season + 4 steps
+            return 6  # Season + 5 steps
         return len(self._get_items(state, settings))
 
 

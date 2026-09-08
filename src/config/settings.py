@@ -35,10 +35,8 @@ class Settings:
     ia_secret_key: str = ""  # S3 secret key (base64 encoded for minimal obfuscation)
     # Sports Roster settings
     sports_roster_enabled: bool = False
-    sports_roster_provider: str = "espn"  # espn, api_football
     nhl94_provider: str = "espn"  # espn, nhl
     nhl07_provider: str = "espn"  # espn, nhl
-    api_football_key: str = ""
     we_patcher_language: str = "en"  # en, es, fr, pt
     # Web Companion
     web_companion_enabled: bool = True

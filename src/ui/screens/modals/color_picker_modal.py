@@ -1,4 +1,4 @@
-"""Color picker modal for assigning team colors (API-Football only)."""
+"""Color picker modal for overriding the team colors ESPN leaves empty."""
 
 import pygame
 from typing import List, Tuple, Optional, Dict

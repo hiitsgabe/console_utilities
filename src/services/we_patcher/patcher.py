@@ -8,22 +8,13 @@ got: `patch_rom` returns a path and raises, rather than returning a
 
 Deliberate differences from the local code this replaces:
 
-`api_key` is accepted and ignored. The API-Football provider was dropped from
-the app; ESPN is the only roster source, and the library's WE2002 patcher has
-no key. Removing the parameter means editing every call site plus the settings
-screen, which is its own commit; until then the argument stays so the positional
-`WePatcher(api_key, cache_dir)` calls in `app.py` keep working.
-
-`fetch_league` falls back to ESPN rather than to API-Football. An explicit
-`client=` is still honoured, and that is how `app.py` injects the
-status-reporting `EspnClient` on its ESPN branch; what changed is the omission
-case. The old code built an `ApiFootballClient` when no client was passed, which
-is exactly what `app.py`'s `sports_roster_provider == "api_football"` branch
-does, so selecting API-Football in Settings now yields ESPN data instead. That
-is the ESPN-only decision, and it is the one difference a user can see. The two
-provider-specific `TeamRoster.error` strings that went with it, "Daily API limit
-reached" and "Rate limit reached", are gone too: the library reports every squad
-failure as `Failed to load squad: {exc}`, and neither limit exists on ESPN.
+`fetch_league` fetches from ESPN, the only roster source the app has. An
+explicit `client=` is still honoured, and that is how `app.py` injects the
+status-reporting `EspnClient`. The old code built an `ApiFootballClient` when no
+client was passed; that provider is gone, along with the two error strings that
+went with it, "Daily API limit reached" and "Rate limit reached". The library
+reports every squad failure as `Failed to load squad: {exc}`, and neither limit
+exists on ESPN.
 
 `fetch_league` no longer clears `TeamRoster.loading` team by team. The old code
 mutated the very rosters it had already handed to `on_partial_data`, so the UI
@@ -97,12 +88,9 @@ _ASSETS_DIR = os.path.abspath(
 
 
 class WePatcher:
-    """Fetch, map and patch WE2002 rosters.
+    """Fetch, map and patch WE2002 rosters."""
 
-    `api_key` is vestigial; see the module docstring.
-    """
-
-    def __init__(self, api_key: str, cache_dir: str, on_status=None, client=None):
+    def __init__(self, cache_dir: str, on_status=None, client=None):
         self._patcher = _LibPatcher(
             cache_dir,
             on_status=on_status,

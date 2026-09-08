@@ -62,8 +62,6 @@ class SettingsScreen:
     SPORTS_ROSTER_SECTION = [
         "--- SPORTS ROSTER ---",
         "Enable Sports Updater",
-        "Roster Soccer Data Source",
-        "API-Football Key",
         "Roster Hockey Data Source",
     ]
 
@@ -146,10 +144,8 @@ class SettingsScreen:
         items.append(self.SPORTS_ROSTER_SECTION[0])
         items.append(self.SPORTS_ROSTER_SECTION[1])
         if sports_roster_enabled:
-            items.append(self.SPORTS_ROSTER_SECTION[2])  # Roster Soccer Data Source
-            if settings.get("sports_roster_provider", "espn") == "api_football":
-                items.append(self.SPORTS_ROSTER_SECTION[3])  # API-Football Key
-            items.append(self.SPORTS_ROSTER_SECTION[4])  # Roster Hockey Data Source
+            # Soccer has only one source (ESPN), so there is no soccer row here.
+            items.append(self.SPORTS_ROSTER_SECTION[2])  # Roster Hockey Data Source
 
         # Add NSZ section
         nsz_enabled = settings.get("nsz_enabled", False)
@@ -249,20 +245,6 @@ class SettingsScreen:
             elif item == "Enable Sports Updater":
                 value = "ON" if settings.get("sports_roster_enabled", False) else "OFF"
                 items.append((item, value))
-            elif item == "Roster Soccer Data Source":
-                provider = settings.get("sports_roster_provider", "espn")
-                provider_labels = {
-                    "espn": "ESPN (Free)",
-                    "api_football": "API-Football (Paid)",
-                }
-                items.append((item, provider_labels.get(provider, provider)))
-            elif item == "API-Football Key":
-                key = settings.get("api_football_key", "")
-                if key:
-                    value = "••••••" + key[-3:] if len(key) > 3 else "••••••"
-                else:
-                    value = "Not set"
-                items.append((item, value))
             elif item == "Roster Hockey Data Source":
                 nhl_provider = settings.get("nhl94_provider", "espn")
                 nhl_labels = {
@@ -355,8 +337,6 @@ class SettingsScreen:
                 "Show Download All Button": "toggle_download_all",
                 "Skip Installed Games": "toggle_exclude_installed",
                 "Enable Sports Updater": "toggle_sports_roster_enabled",
-                "Roster Soccer Data Source": "toggle_roster_provider",
-                "API-Football Key": "edit_api_football_key",
                 "Roster Hockey Data Source": "toggle_nhl94_provider",
                 "Enable NSZ": "toggle_nsz_enabled",
                 "Web Companion": "toggle_web_companion",

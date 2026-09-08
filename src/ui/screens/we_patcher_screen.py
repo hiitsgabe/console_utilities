@@ -33,8 +33,6 @@ class WePatcherScreen:
         self.template = ListScreenTemplate(theme)
         self.text = Text(theme)
         # Set after each render — used for click/touch hit-testing
-        self.season_arrow_left: pygame.Rect = None
-        self.season_arrow_right: pygame.Rect = None
         self.lang_arrow_left: pygame.Rect = None
         self.lang_arrow_right: pygame.Rect = None
 
@@ -45,40 +43,21 @@ class WePatcherScreen:
         Order: Season → Language → Select League → Preview Rosters → ROM → Map → Patch
         """
         we = state.we_patcher
-        provider = (settings or {}).get("sports_roster_provider", "espn")
-        api_key = (settings or {}).get("api_football_key", "")
-        needs_key = provider == "api_football" and not api_key
 
         # ── Season ─────────────────────────────────────────────────────────
-        # For API-Football: secondary is empty — we draw it manually with buttons.
-        # For ESPN: show year as plain secondary text (read-only).
-        if provider == "espn":
-            season_value = str(datetime.now().year)
-            season_action = "locked"
-        else:
-            season_value = ""  # drawn manually in render()
-            season_action = "change_season"
-
-        items = [("Season", season_value, season_action)]
+        # ESPN only serves the current season, so the row is read-only.
+        items = [("Season", str(datetime.now().year), "locked")]
 
         # ── Language ───────────────────────────────────────────────────────
         items.append(("Language", "", "change_language"))
 
         # ── Select League ───────────────────────────────────────────────────
-        if needs_key:
-            step1_value = "API key required"
-        elif we.selected_league:
+        if we.selected_league:
             step1_value = getattr(we.selected_league, "name", str(we.selected_league))
         else:
             step1_value = "Not selected"
 
-        items.append(
-            (
-                "1. Select League",
-                step1_value,
-                "needs_api_key" if needs_key else "select_league",
-            )
-        )
+        items.append(("1. Select League", step1_value, "select_league"))
 
         # ── Preview Rosters ─────────────────────────────────────────────────
         if we.league_data:
@@ -102,26 +81,26 @@ class WePatcherScreen:
             )
         )
 
-        # ── Set Team Colors (API-Football only) ────────────────────────────
-        if provider == "api_football":
-            from services.team_color_cache import all_teams_have_colors
+        # ── Set Team Colors ─────────────────────────────────────────────────
+        # ESPN supplies colours, so this is an override for the ones it omits.
+        from services.team_color_cache import all_teams_have_colors
 
-            if we.league_data and all_teams_have_colors(we.league_data):
-                colors_value = "All colors set"
-            elif we.league_data:
-                colors_value = "Colors required"
-            else:
-                colors_value = "Complete step 2 first"
-            items.append(
-                (
-                    "3. Set Team Colors",
-                    colors_value,
-                    "set_colors" if we.league_data else "locked",
-                )
+        if we.league_data and all_teams_have_colors(we.league_data):
+            colors_value = "All colors set"
+        elif we.league_data:
+            colors_value = "Some colors missing"
+        else:
+            colors_value = "Complete step 2 first"
+        items.append(
+            (
+                "3. Set Team Colors",
+                colors_value,
+                "set_colors" if we.league_data else "locked",
             )
+        )
 
         # ── Select ROM ──────────────────────────────────────────────────────
-        step_rom = "4" if provider == "api_football" else "3"
+        step_rom = "4"
         if we.rom_path and we.rom_valid:
             rom_value = os.path.basename(we.zip_path or we.rom_path)
         elif we.rom_path:
@@ -148,30 +127,20 @@ class WePatcherScreen:
             )
 
         # ── Patch ROM ───────────────────────────────────────────────────────
-        step_patch = "5" if provider == "api_football" else "4"
-        if provider == "api_football":
-            from services.team_color_cache import all_teams_have_colors as _athc
-
-            colors_ok = we.league_data and _athc(we.league_data)
-        else:
-            colors_ok = True
-
+        # Colours are not a gate: a team the picker never reached is patched
+        # with whatever ESPN supplied.
         if we.patch_complete:
             patch_value = "Complete"
-        elif we.league_data and we.rom_valid and colors_ok:
+        elif we.league_data and we.rom_valid:
             patch_value = "Ready to patch"
         else:
             patch_value = f"Complete steps 1+{step_rom} first"
 
         items.append(
             (
-                f"{step_patch}. Patch ROM",
+                "5. Patch ROM",
                 patch_value,
-                (
-                    "patch_rom"
-                    if (we.league_data and we.rom_valid and colors_ok)
-                    else "locked"
-                ),
+                "patch_rom" if (we.league_data and we.rom_valid) else "locked",
             )
         )
 
@@ -194,23 +163,6 @@ class WePatcherScreen:
             item_spacing=8,
         )
 
-        # Draw the Season row control (arrow buttons + year) for API-Football
-        self.season_arrow_left = None
-        self.season_arrow_right = None
-
-        provider = (settings or {}).get("sports_roster_provider", "espn")
-        if provider == "api_football":
-            season_idx = next(
-                (i for i, (_, _, a) in enumerate(items) if a == "change_season"), None
-            )
-            if season_idx is not None:
-                visible_idx = season_idx - scroll_offset
-                if 0 <= visible_idx < len(item_rects):
-                    row = item_rects[visible_idx]
-                    season = state.we_patcher.selected_season or datetime.now().year - 1
-                    is_hl = highlighted == season_idx
-                    self._draw_arrow_control(screen, row, str(season), is_hl, "season")
-
         # Draw the Language row control (arrow buttons + language name)
         self.lang_arrow_left = None
         self.lang_arrow_right = None
@@ -224,16 +176,16 @@ class WePatcherScreen:
                 lang_code = (settings or {}).get("we_patcher_language", "en")
                 lang_name = LANGUAGES.get(lang_code, "English")
                 is_hl = highlighted == lang_idx
-                self._draw_arrow_control(screen, row, lang_name, is_hl, "lang")
+                self._draw_arrow_control(screen, row, lang_name, is_hl)
 
         return back_rect, item_rects, scroll_offset
 
     def _draw_arrow_control(
-        self, screen, row: pygame.Rect, label: str, is_highlighted: bool, target: str
+        self, screen, row: pygame.Rect, label: str, is_highlighted: bool
     ):
         """Draw < value > control on the right side of a row."""
         btn_w, btn_h = 32, 30
-        value_w = 100 if target == "lang" else 56
+        value_w = 100
         margin = 10
         gap = 6
 
@@ -283,15 +235,8 @@ class WePatcherScreen:
             align="center",
         )
 
-        if target == "season":
-            self.season_arrow_left = left_btn
-            self.season_arrow_right = right_btn
-        else:
-            self.lang_arrow_left = left_btn
-            self.lang_arrow_right = right_btn
-
-    # Keep legacy name for backwards compatibility
-    _draw_season_control = _draw_arrow_control
+        self.lang_arrow_left = left_btn
+        self.lang_arrow_right = right_btn
 
     def get_action(self, index: int, state, settings=None) -> str:
         items = self._get_items(state, settings)
@@ -301,7 +246,7 @@ class WePatcherScreen:
 
     def get_count(self, state=None, settings=None) -> int:
         if state is None:
-            return 6  # Season + Language + 4 steps
+            return 7  # Season + Language + 5 steps
         return len(self._get_items(state, settings))
 
 

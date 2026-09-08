@@ -41,7 +41,7 @@ A PyGame-based utility suite for handheld gaming consoles, with a retro CRT-them
 - **Installed Detection** — Optionally hide games already downloaded
 
 ### ⚽🏒⚾ Sports ROM Patcher
-- **Live Roster Updates** — Fetch current or historical season rosters from public sports APIs (ESPN, NHL API, API-Football) and patch them into your legally owned game ROMs
+- **Live Roster Updates** — Fetch current or historical season rosters from public sports APIs (ESPN, NHL API) and patch them into your legally owned game ROMs
 - **Multi-Platform Support** — Patchers for retro soccer, baseball, and hockey titles across PS1, SNES, Genesis, and PSP
 - **Step-by-Step Workflow** — Guided process: select season → fetch rosters → preview teams → pick your ROM → patch
 - **Roster Preview** — View fetched teams and players before committing changes

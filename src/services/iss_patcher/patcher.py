@@ -7,14 +7,8 @@ slot_mapping)` and reads no `PatchResult`, so `patch_rom` still returns the
 output path and still raises on failure. Everything below the surface is the
 library's.
 
-`api_key` is accepted and never read. The app dropped API-Football and is ESPN
-only; the library's ISS patcher is ESPN only and has no credential. Removing the
-parameter is a separate commit that touches every ISS call site plus the
-settings screen, so the argument stays in the signature and is documented dead
-here rather than deleted in passing.
-
-`client` is accepted and never read either, and that is provably a no-op rather
-than a dropped behaviour. `app.py` passes it at exactly one site
+`client` is accepted and never read, and that is provably a no-op rather than a
+dropped behaviour. `app.py` passes it at exactly one site
 (`_start_iss_roster_fetch`) and only on the ESPN branch, where it hands over
 `services.sports_api.espn_client.EspnClient(WE_PATCHER_CACHE_DIR,
 on_status=on_status)`. That name is a re-export of
@@ -28,12 +22,10 @@ a provider it does not support.
 Behaviour differences from the old local code, all of them below the surface:
 
 **Provider.** The old `fetch_league` built an `ApiFootballClient` unless `app.py`
-injected an ESPN one; this fetches from ESPN unconditionally. Choosing
-`api_football` in Settings therefore now yields ESPN data for ISS instead of an
-error or an API-Football squad. That follows the ESPN-only decision, and it is
-the one difference a user can see: the fetch phase is a different provider and
-its output cannot be compared against the old one byte for byte. The map and
-patch phases can be, and are — see `/var/tmp/migrate/iss_snes/`.
+injected an ESPN one; this fetches from ESPN unconditionally. That is the one
+difference a user can see: the fetch phase is a different provider and its
+output cannot be compared against the old one byte for byte. The map and patch
+phases can be, and are — see `/var/tmp/migrate/iss_snes/`.
 
 **The partial callback no longer fills in.** Both versions fire
 `on_partial_data` once with a skeleton `LeagueData` whose teams are all
@@ -49,10 +41,10 @@ reimplementing `fetch`.
 **Per-team error strings lost a distinction that no longer has a source.** The
 old code turned `DailyLimitError` into "Daily API limit reached" and
 `RateLimitError` into "Rate limit reached"; the library reports `Failed: {exc}`
-for every squad failure. Both exception types are raised only by
-`services.sports_api.api_football`, so under the surviving provider the old code
-also produced `Failed: {exc}`. `TeamRoster.error` is still set and the roster
-preview modal still renders the "!" marker and the "Unavailable" header from it.
+for every squad failure. Both exception types came from the API-Football client,
+which is gone, and neither limit exists on ESPN. `TeamRoster.error` is still set
+and the roster preview modal still renders the "!" marker and the "Unavailable"
+header from it.
 
 **`get_squad` is now given the season.** The old call was
 `get_squad(team.id)`; the library passes `season` as well. ESPN's squad endpoint
@@ -99,14 +91,12 @@ class ISSPatcher:
 
     def __init__(
         self,
-        api_key: str,
         cache_dir: str,
         on_status: Optional[Callable] = None,
         client: Any = None,
     ):
-        # `api_key` and `client` are both dead; see the module docstring for why
-        # each is still in the signature and why neither drops a behaviour.
-        self.api_key = api_key
+        # `client` is dead; see the module docstring for why it is still in the
+        # signature and why ignoring it drops no behaviour.
         self.cache_dir = cache_dir
         self.on_status = on_status
         # Set for the duration of one `fetch_league` call and read by the

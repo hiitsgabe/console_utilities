@@ -168,10 +168,6 @@ def _handle_set_text(state, text):
         elif step == "folder":
             state.ia_collection_wizard.folder_name = text
             state.ia_collection_wizard.cursor_position = len(text)
-    elif state.scraper_login.show:
-        if state.scraper_login.step == "api_key":
-            state.scraper_login.api_key = text
-            state.scraper_login.cursor_position = len(text)
     elif state.steam_shortcut.show and state.steam_shortcut.step == "search":
         state.steam_shortcut.search_query = text
         state.steam_shortcut.cursor_position = len(text)

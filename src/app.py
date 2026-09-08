@@ -985,13 +985,6 @@ class ConsoleUtilitiesApp:
                 self._navigate_ia_options_select(direction)
             return
 
-        if self.state.scraper_login.show:
-            if self.state.scraper_login.step == "api_key":
-                self._navigate_keyboard_modal(
-                    direction, self.state.scraper_login, char_set="url"
-                )
-            return
-
         if self.state.dedupe_wizard.show:
             self._navigate_dedupe_wizard(direction)
             return
@@ -1343,23 +1336,10 @@ class ConsoleUtilitiesApp:
             # Main we_patcher menu
             from ui.screens.we_patcher_screen import we_patcher_screen
 
-            # Left/Right on the Season row changes year (API-Football only)
             if direction in ("left", "right"):
                 action = we_patcher_screen.get_action(
                     self.state.highlighted, self.state, self.settings
                 )
-                if action == "change_season":
-                    provider = self.settings.get("sports_roster_provider", "espn")
-                    if provider == "api_football":
-                        from datetime import datetime as _dt
-
-                        max_year = _dt.now().year
-                        delta = -1 if direction == "left" else 1
-                        we.selected_season = max(
-                            2010, min(max_year, we.selected_season + delta)
-                        )
-                        we.league_data = None  # force re-fetch on next preview
-                    return
                 if action == "change_language":
                     delta = -1 if direction == "left" else 1
                     self._cycle_we_patcher_language(delta)
@@ -1915,25 +1895,6 @@ class ConsoleUtilitiesApp:
                         self.state.ia_login.password += event.unicode
                 return
 
-        # Handle keyboard text input for the API key modal
-        if self.state.scraper_login.show and (self.state.input_mode == "keyboard"):
-            if self.state.scraper_login.step == "api_key":
-                if event.key == pygame.K_ESCAPE:
-                    self._go_back()
-                elif event.key == pygame.K_RETURN:
-                    self._handle_scraper_login_selection()
-                elif event.key == pygame.K_BACKSPACE:
-                    self.state.scraper_login.api_key = self.state.scraper_login.api_key[
-                        :-1
-                    ]
-                elif self._is_paste_event(event):
-                    clip = self._get_clipboard_text()
-                    if clip:
-                        self.state.scraper_login.api_key += clip
-                elif event.unicode and event.unicode.isprintable():
-                    self.state.scraper_login.api_key += event.unicode
-                return
-
         # Handle keyboard text input for WE Patcher league browser search
         if self.state.we_patcher.active_modal == "league_browser" and (
             self.state.input_mode == "keyboard"
@@ -2311,8 +2272,6 @@ class ConsoleUtilitiesApp:
                 self.state.ia_collection_wizard.cursor_position = 0
             else:
                 self._close_ia_collection_wizard()
-        elif self.state.scraper_login.show:
-            self._close_scraper_login()
         elif self.state.dedupe_wizard.show:
             self._close_dedupe_wizard()
         elif self.state.rename_wizard.show:
@@ -2520,10 +2479,6 @@ class ConsoleUtilitiesApp:
 
         if self.state.ia_collection_wizard.show:
             self._handle_ia_collection_wizard_selection()
-            return
-
-        if self.state.scraper_login.show:
-            self._handle_scraper_login_selection()
             return
 
         if self.state.dedupe_wizard.show:
@@ -2980,21 +2935,6 @@ class ConsoleUtilitiesApp:
                 "sports_roster_enabled", False
             )
             save_settings(self.settings)
-        elif action == "toggle_roster_provider":
-            providers = ["espn", "api_football"]
-            current = self.settings.get("sports_roster_provider", "espn")
-            idx = providers.index(current) if current in providers else 0
-            new_provider = providers[(idx + 1) % len(providers)]
-            self.settings["sports_roster_provider"] = new_provider
-            save_settings(self.settings)
-            # Reset cached leagues so they reload from the new provider
-            self.state.we_patcher.available_leagues = []
-            self.state.we_patcher.all_leagues_loaded = False
-            # ESPN only supports the current year — reset season when switching to it
-            if new_provider == "espn":
-                from datetime import datetime as _dt
-
-                self.state.we_patcher.selected_season = _dt.now().year
         elif action == "toggle_nhl94_provider":
             providers = ["espn", "nhl"]
             current = self.settings.get("nhl94_provider", "espn")
@@ -3010,8 +2950,6 @@ class ConsoleUtilitiesApp:
                 self.state.nhl94_patcher.selected_season = (
                     now.year if now.month >= 10 else now.year - 1
                 )
-        elif action == "edit_api_football_key":
-            self._show_api_football_key_input()
         elif action == "ia_login":
             self._show_ia_login()
         elif action == "toggle_nsz_enabled":
@@ -4455,12 +4393,6 @@ class ConsoleUtilitiesApp:
             self.state.ia_collection_wizard.shift_active = (
                 not self.state.ia_collection_wizard.shift_active
             )
-        elif self.state.scraper_login.show and (
-            self.state.scraper_login.step == "api_key"
-        ):
-            self.state.scraper_login.shift_active = (
-                not self.state.scraper_login.shift_active
-            )
         elif (
             self.state.mode == "we_patcher"
             and self.state.we_patcher.active_modal == "league_browser"
@@ -5043,7 +4975,6 @@ class ConsoleUtilitiesApp:
         self.state.ia_login.show = False
         self.state.ia_download_wizard.show = False
         self.state.ia_collection_wizard.show = False
-        self.state.scraper_login.show = False
         self.state.dedupe_wizard.show = False
         self.state.rename_wizard.show = False
         self.state.ghost_cleaner_wizard.show = False
@@ -5144,7 +5075,6 @@ class ConsoleUtilitiesApp:
             or self.state.folder_name_input.show
             or self.state.url_input.show
             or self.state.ia_login.show
-            or self.state.scraper_login.show
             or (
                 self.state.auth_token_input.show
                 and self.state.auth_token_input.step == "input"
@@ -5171,7 +5101,6 @@ class ConsoleUtilitiesApp:
             or self.state.ia_login.show
             or self.state.ia_download_wizard.show
             or self.state.ia_collection_wizard.show
-            or self.state.scraper_login.show
             or self.state.dedupe_wizard.show
             or self.state.rename_wizard.show
             or self.state.ghost_cleaner_wizard.show
@@ -5822,53 +5751,6 @@ class ConsoleUtilitiesApp:
             wizard.step = "error"
             wizard.error_message = "Failed to save collection"
 
-    def _show_api_football_key_input(self):
-        """Show API-Football key input modal."""
-        self.state.scraper_login.show = True
-        self.state.scraper_login.provider = "api_football"
-        self.state.scraper_login.step = "api_key"
-        self.state.scraper_login.api_key = self.settings.get("api_football_key", "")
-        self.state.scraper_login.cursor_position = 0
-        self.state.scraper_login.error_message = ""
-
-    def _close_scraper_login(self):
-        """Close the API key input modal."""
-        self.state.scraper_login.show = False
-        self.state.scraper_login.step = "api_key"
-        self.state.scraper_login.api_key = ""
-        self.state.scraper_login.cursor_position = 0
-        self.state.scraper_login.error_message = ""
-
-    def _handle_scraper_login_selection(self):
-        """Handle selection in the API key input modal."""
-        login = self.state.scraper_login
-        if login.step != "api_key":
-            return
-
-        if self.state.input_mode == "keyboard":
-            self.settings["api_football_key"] = login.api_key
-            save_settings(self.settings)
-            self._close_scraper_login()
-            return
-
-        from ui.screens.modals.scraper_login_modal import ScraperLoginModal
-
-        modal = ScraperLoginModal()
-        new_text, is_done, toggle_shift = modal.handle_selection(
-            login.provider,
-            login.step,
-            login.cursor_position,
-            login.api_key,
-            shift_active=login.shift_active,
-        )
-        if toggle_shift:
-            login.shift_active = not login.shift_active
-        login.api_key = new_text
-        if is_done and new_text:
-            self.settings["api_football_key"] = new_text
-            save_settings(self.settings)
-            self._close_scraper_login()
-
     # ========== Dedupe Wizard Methods ========== #
 
     def _close_dedupe_wizard(self):
@@ -6454,17 +6336,6 @@ class ConsoleUtilitiesApp:
         elif action == "patch_rom":
             we.active_modal = "patch_progress"
             self._start_patching()
-        elif action == "needs_api_key":
-            self.state.confirm_modal.show = True
-            self.state.confirm_modal.title = "API Key Required"
-            self.state.confirm_modal.message_lines = [
-                "Set your API-Football key in",
-                "Settings > Sports Roster first.",
-            ]
-            self.state.confirm_modal.ok_label = "OK"
-            self.state.confirm_modal.cancel_label = ""
-            self.state.confirm_modal.button_index = 0
-            self.state.confirm_modal.context = ""
         # "locked" and "unknown" are silently ignored
 
     def _handle_league_browser_selection(self):
@@ -6543,23 +6414,13 @@ class ConsoleUtilitiesApp:
         import threading
         from constants import WE_PATCHER_CACHE_DIR
 
-        provider = self.settings.get("sports_roster_provider", "espn")
-        api_key = self.settings.get("api_football_key", "")
-        if provider == "api_football" and not api_key:
-            return
-
         state = self.state
 
         # Show featured leagues immediately — no API call needed
         if not state.we_patcher.available_leagues:
-            if provider == "espn":
-                from services.we_patcher import EspnClient
+            from services.we_patcher import EspnClient
 
-                client = EspnClient(WE_PATCHER_CACHE_DIR)
-            else:
-                from services.we_patcher import ApiFootballClient
-
-                client = ApiFootballClient(api_key, WE_PATCHER_CACHE_DIR)
+            client = EspnClient(WE_PATCHER_CACHE_DIR)
             state.we_patcher.available_leagues = client.get_featured_leagues()
 
         if not league_id or not season:
@@ -6577,20 +6438,14 @@ class ConsoleUtilitiesApp:
                 def on_status(msg):
                     state.we_patcher.fetch_status = msg
 
-                if provider == "espn":
-                    from services.we_patcher import EspnClient
+                from services.we_patcher import EspnClient
 
-                    espn_client = EspnClient(WE_PATCHER_CACHE_DIR, on_status=on_status)
-                    patcher = WePatcher(
-                        api_key,
-                        WE_PATCHER_CACHE_DIR,
-                        on_status=on_status,
-                        client=espn_client,
-                    )
-                else:
-                    patcher = WePatcher(
-                        api_key, WE_PATCHER_CACHE_DIR, on_status=on_status
-                    )
+                espn_client = EspnClient(WE_PATCHER_CACHE_DIR, on_status=on_status)
+                patcher = WePatcher(
+                    WE_PATCHER_CACHE_DIR,
+                    on_status=on_status,
+                    client=espn_client,
+                )
 
                 def progress(p, msg):
                     state.we_patcher.fetch_progress = p
@@ -6605,35 +6460,16 @@ class ConsoleUtilitiesApp:
                 )
                 state.we_patcher.league_data = league_data
             except Exception as e:
-                from services.we_patcher.api_football import SeasonNotAvailableError
-
-                if isinstance(e, SeasonNotAvailableError):
-                    import re as _re
-
-                    match = _re.search(r"(\d{4})\s+to\s+(\d{4})", e.api_message)
-                    if match:
-                        available = f"Available: {match.group(1)}–{match.group(2)}"
-                    else:
-                        available = "Use the Season row to pick a different year."
-                    state.we_patcher.fetch_error = (
-                        f"Season {season} is not available. {available}"
-                    )
-                else:
-                    state.we_patcher.fetch_error = str(e)
+                state.we_patcher.fetch_error = str(e)
             finally:
                 state.we_patcher.is_fetching = False
 
         threading.Thread(target=_fetch, daemon=True).start()
 
     def _load_all_leagues(self):
-        """Background fetch of all leagues from the active roster provider."""
+        """Background fetch of all leagues from ESPN."""
         import threading
         from constants import WE_PATCHER_CACHE_DIR
-
-        provider = self.settings.get("sports_roster_provider", "espn")
-        api_key = self.settings.get("api_football_key", "")
-        if provider == "api_football" and not api_key:
-            return
 
         state = self.state
         state.we_patcher.is_fetching = True
@@ -6642,14 +6478,9 @@ class ConsoleUtilitiesApp:
 
         def _fetch():
             try:
-                if provider == "espn":
-                    from services.we_patcher import EspnClient
+                from services.we_patcher import EspnClient
 
-                    client = EspnClient(WE_PATCHER_CACHE_DIR)
-                else:
-                    from services.we_patcher import ApiFootballClient
-
-                    client = ApiFootballClient(api_key, WE_PATCHER_CACHE_DIR)
+                client = EspnClient(WE_PATCHER_CACHE_DIR)
                 leagues = client.get_leagues()
                 state.we_patcher.available_leagues = leagues
                 state.we_patcher.all_leagues_loaded = True
@@ -6707,24 +6538,21 @@ class ConsoleUtilitiesApp:
         from constants import WE_PATCHER_CACHE_DIR
 
         we = self.state.we_patcher
-        api_key = self.settings.get("api_football_key", "")
         language = self.settings.get("we_patcher_language", "en")
 
         if not we.league_data or not we.rom_path:
             return
 
-        # Apply cached team colors (for API-Football which lacks color data)
-        provider = self.settings.get("sports_roster_provider", "espn")
-        if provider == "api_football":
-            from services.team_color_cache import apply_cached_colors
+        # Fill any colour the roster source left empty from the picker's cache
+        from services.team_color_cache import apply_cached_colors
 
-            apply_cached_colors(WE_PATCHER_CACHE_DIR, we.league_data)
+        apply_cached_colors(WE_PATCHER_CACHE_DIR, we.league_data)
 
         # Auto-generate slot mapping if not already present
         if not we.slot_mapping and we.rom_info:
             from services.we_patcher import WePatcher
 
-            patcher = WePatcher(api_key, WE_PATCHER_CACHE_DIR)
+            patcher = WePatcher(WE_PATCHER_CACHE_DIR)
             we.slot_mapping = patcher.create_slot_mapping(we.league_data, we.rom_info)
 
         we.is_patching = True
@@ -6775,7 +6603,7 @@ class ConsoleUtilitiesApp:
                 from services.we_patcher import WePatcher
 
                 # Patch the data track first (RomWriter copies input to output)
-                patcher = WePatcher(api_key, WE_PATCHER_CACHE_DIR)
+                patcher = WePatcher(WE_PATCHER_CACHE_DIR)
 
                 def progress(p, msg):
                     we.patch_progress = p
@@ -6928,18 +6756,6 @@ class ConsoleUtilitiesApp:
                 action = iss_patcher_screen.get_action(
                     self.state.highlighted, self.state, self.settings
                 )
-                if action == "change_season":
-                    provider = self.settings.get("sports_roster_provider", "espn")
-                    if provider == "api_football":
-                        from datetime import datetime as _dt
-
-                        max_year = _dt.now().year
-                        delta = -1 if direction == "left" else 1
-                        iss.selected_season = max(
-                            2010, min(max_year, iss.selected_season + delta)
-                        )
-                        iss.league_data = None
-                    return
                 if action in ("select_rom", "auto_detect_rom"):
                     iss.rom_select_mode = (
                         "auto" if iss.rom_select_mode == "manual" else "manual"
@@ -7052,17 +6868,6 @@ class ConsoleUtilitiesApp:
         elif action == "patch_rom":
             iss.active_modal = "patch_progress"
             self._start_iss_patching()
-        elif action == "needs_api_key":
-            self.state.confirm_modal.show = True
-            self.state.confirm_modal.title = "API Key Required"
-            self.state.confirm_modal.message_lines = [
-                "Set your API-Football key in",
-                "Settings > Sports Roster first.",
-            ]
-            self.state.confirm_modal.ok_label = "OK"
-            self.state.confirm_modal.cancel_label = ""
-            self.state.confirm_modal.button_index = 0
-            self.state.confirm_modal.context = ""
 
     def _handle_nhl94_patcher_selection(self):
         """Handle item selection on the nhl94_patcher main menu."""
@@ -7201,22 +7006,12 @@ class ConsoleUtilitiesApp:
         import threading
         from constants import WE_PATCHER_CACHE_DIR
 
-        provider = self.settings.get("sports_roster_provider", "espn")
-        api_key = self.settings.get("api_football_key", "")
-        if provider == "api_football" and not api_key:
-            return
-
         state = self.state
 
         if not state.iss_patcher.available_leagues:
-            if provider == "espn":
-                from services.sports_api.espn_client import EspnClient
+            from services.sports_api.espn_client import EspnClient
 
-                client = EspnClient(WE_PATCHER_CACHE_DIR)
-            else:
-                from services.sports_api.api_football import ApiFootballClient
-
-                client = ApiFootballClient(api_key, WE_PATCHER_CACHE_DIR)
+            client = EspnClient(WE_PATCHER_CACHE_DIR)
             state.iss_patcher.available_leagues = client.get_featured_leagues()
 
         if not league_id or not season:
@@ -7233,20 +7028,14 @@ class ConsoleUtilitiesApp:
                 def on_status(msg):
                     state.iss_patcher.fetch_status = msg
 
-                if provider == "espn":
-                    from services.sports_api.espn_client import EspnClient
+                from services.sports_api.espn_client import EspnClient
 
-                    espn_client = EspnClient(WE_PATCHER_CACHE_DIR, on_status=on_status)
-                    patcher = ISSPatcher(
-                        api_key,
-                        WE_PATCHER_CACHE_DIR,
-                        on_status=on_status,
-                        client=espn_client,
-                    )
-                else:
-                    patcher = ISSPatcher(
-                        api_key, WE_PATCHER_CACHE_DIR, on_status=on_status
-                    )
+                espn_client = EspnClient(WE_PATCHER_CACHE_DIR, on_status=on_status)
+                patcher = ISSPatcher(
+                    WE_PATCHER_CACHE_DIR,
+                    on_status=on_status,
+                    client=espn_client,
+                )
 
                 def progress(p, msg):
                     state.iss_patcher.fetch_progress = p
@@ -7271,11 +7060,6 @@ class ConsoleUtilitiesApp:
         import threading
         from constants import WE_PATCHER_CACHE_DIR
 
-        provider = self.settings.get("sports_roster_provider", "espn")
-        api_key = self.settings.get("api_football_key", "")
-        if provider == "api_football" and not api_key:
-            return
-
         state = self.state
         state.iss_patcher.is_fetching = True
         state.iss_patcher.fetch_status = "Fetching all leagues..."
@@ -7283,14 +7067,9 @@ class ConsoleUtilitiesApp:
 
         def _fetch():
             try:
-                if provider == "espn":
-                    from services.sports_api.espn_client import EspnClient
+                from services.sports_api.espn_client import EspnClient
 
-                    client = EspnClient(WE_PATCHER_CACHE_DIR)
-                else:
-                    from services.sports_api.api_football import ApiFootballClient
-
-                    client = ApiFootballClient(api_key, WE_PATCHER_CACHE_DIR)
+                client = EspnClient(WE_PATCHER_CACHE_DIR)
                 leagues = client.get_leagues()
                 state.iss_patcher.available_leagues = leagues
                 state.iss_patcher.all_leagues_loaded = True
@@ -9418,22 +9197,19 @@ class ConsoleUtilitiesApp:
         from constants import WE_PATCHER_CACHE_DIR
 
         iss = self.state.iss_patcher
-        api_key = self.settings.get("api_football_key", "")
 
         if not iss.league_data or not iss.rom_path:
             return
 
-        # Apply cached team colors (for API-Football which lacks color data)
-        provider = self.settings.get("sports_roster_provider", "espn")
-        if provider == "api_football":
-            from services.team_color_cache import apply_cached_colors
+        # Fill any colour the roster source left empty from the picker's cache
+        from services.team_color_cache import apply_cached_colors
 
-            apply_cached_colors(WE_PATCHER_CACHE_DIR, iss.league_data)
+        apply_cached_colors(WE_PATCHER_CACHE_DIR, iss.league_data)
 
         if not iss.slot_mapping and iss.rom_info:
             from services.iss_patcher import ISSPatcher
 
-            patcher = ISSPatcher(api_key, WE_PATCHER_CACHE_DIR)
+            patcher = ISSPatcher(WE_PATCHER_CACHE_DIR)
             iss.slot_mapping = patcher.create_slot_mapping(
                 iss.league_data, iss.rom_info
             )
@@ -9465,7 +9241,7 @@ class ConsoleUtilitiesApp:
             try:
                 from services.iss_patcher import ISSPatcher
 
-                patcher = ISSPatcher(api_key, WE_PATCHER_CACHE_DIR)
+                patcher = ISSPatcher(WE_PATCHER_CACHE_DIR)
 
                 def progress(p, msg):
                     iss.patch_progress = p
