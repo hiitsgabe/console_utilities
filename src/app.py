@@ -62,8 +62,6 @@ from services.file_listing import (
 from services.installed_checker import installed_checker
 from services.image_cache import ImageCache
 from services.download_manager import DownloadManager as _DesktopDownloadManager
-from services.scraper_manager import ScraperManager
-from services.auto_scrape import should_auto_scrape, new_completions
 from services import file_explorer_service
 from input.navigation import NavigationHandler
 from input.controller import ControllerHandler
@@ -166,12 +164,6 @@ class ConsoleUtilitiesApp:
 
         # Initialize download manager
         self._init_download_manager()
-
-        # Initialize scraper manager
-        self.scraper_manager = ScraperManager(self.settings, self.state.scraper_queue)
-
-        # Tracks last-seen download status per queue item (auto-scrape trigger)
-        self._dl_status_seen = {}
 
         # Initialize web companion (lazy — started via settings toggle)
         # Not available on the standalone Windows build
@@ -742,24 +734,6 @@ class ConsoleUtilitiesApp:
                         _dirty = True
                         break
 
-            # Auto-scrape newly completed downloads (opt-in, default OFF)
-            items = self.state.download_queue.items
-            completed_ids = new_completions(
-                self._dl_status_seen,
-                items,
-                id,
-                lambda it: getattr(it, "status", ""),
-            )
-            if completed_ids and should_auto_scrape(self.settings):
-                by_id = {id(it): it for it in items}
-                for cid in completed_ids:
-                    it = by_id.get(cid)
-                    if it is not None:
-                        self._trigger_auto_scrape(it)
-            self._dl_status_seen = {
-                id(it): getattr(it, "status", "") for it in items
-            }
-
             # Process events — any input event dirties the frame
             for event in pygame.event.get():
                 _dirty = True
@@ -817,7 +791,6 @@ class ConsoleUtilitiesApp:
             if (
                 self.state.download_queue.active
                 or self.state.loading.show
-                or self.state.scraper_queue.active
                 or self.state.text_scroll_offset
                 or self.state.confirm_modal.loading
                 or getattr(self.state.active_patcher, "is_fetching", False)
@@ -842,15 +815,6 @@ class ConsoleUtilitiesApp:
                 _dirty = False
                 try:
                     self._draw_background()
-
-                    # Pre-compute filtered systems for system picker rendering
-                    if (
-                        self.state.scraper_wizard.show
-                        and self.state.scraper_wizard.system_picker_active
-                    ):
-                        self.screen_manager.scraper_wizard_modal.system_picker_systems = (
-                            self._get_filtered_systems()
-                        )
 
                     # Render current screen
                     rects = self.screen_manager.render(
@@ -1022,19 +986,10 @@ class ConsoleUtilitiesApp:
             return
 
         if self.state.scraper_login.show:
-            step = self.state.scraper_login.step
-            if step in ("username", "password", "api_key"):
-                char_set = "url" if step == "api_key" else "default"
+            if self.state.scraper_login.step == "api_key":
                 self._navigate_keyboard_modal(
-                    direction, self.state.scraper_login, char_set=char_set
+                    direction, self.state.scraper_login, char_set="url"
                 )
-            return
-
-        if self.state.scraper_wizard.show:
-            if self.state.scraper_wizard.system_picker_active:
-                self._navigate_system_picker(direction)
-                return
-            self._navigate_scraper_wizard(direction)
             return
 
         if self.state.dedupe_wizard.show:
@@ -1136,7 +1091,7 @@ class ConsoleUtilitiesApp:
                     self.state.highlighted = (self.state.highlighted + 1) % max_items
                     self.state.text_scroll_offset = 0
 
-        elif self.state.mode in ("settings", "utils", "scraper_menu"):
+        elif self.state.mode in ("settings", "utils"):
             if self.state.mode == "settings":
                 from ui.screens.settings_screen import settings_screen
 
@@ -1144,11 +1099,6 @@ class ConsoleUtilitiesApp:
                 _, divider_indices = settings_screen._get_settings_items(
                     self.settings, self.data
                 )
-            elif self.state.mode == "scraper_menu":
-                from ui.screens.scraper_menu_screen import scraper_menu_screen
-
-                max_items = scraper_menu_screen.get_max_items(self.settings)
-                _, divider_indices = scraper_menu_screen._get_items(self.settings)
             else:
                 from ui.screens.utils_screen import utils_screen
 
@@ -1263,17 +1213,6 @@ class ConsoleUtilitiesApp:
             elif direction in ("down", "right"):
                 self.state.download_queue.highlighted = (
                     self.state.download_queue.highlighted + 1
-                ) % max_items
-
-        elif self.state.mode == "scraper_downloads":
-            max_items = len(self.state.scraper_queue.items) or 1
-            if direction in ("up", "left"):
-                self.state.scraper_queue.highlighted = (
-                    self.state.scraper_queue.highlighted - 1
-                ) % max_items
-            elif direction in ("down", "right"):
-                self.state.scraper_queue.highlighted = (
-                    self.state.scraper_queue.highlighted + 1
                 ) % max_items
 
         elif self.state.mode == "sports_patcher":
@@ -1949,28 +1888,6 @@ class ConsoleUtilitiesApp:
                 self.state.search.query = self.state.search.input_text
             return
 
-        # Handle keyboard text input for scraper wizard edit_name step
-        if (
-            self.state.scraper_wizard.show
-            and self.state.scraper_wizard.step == "edit_name"
-            and (self.state.input_mode == "keyboard")
-        ):
-            wizard = self.state.scraper_wizard
-            if event.key == pygame.K_ESCAPE:
-                self._go_back()
-            elif event.key == pygame.K_RETURN:
-                self._search_scraper_game()
-            elif event.key == pygame.K_BACKSPACE:
-                if wizard.search_name:
-                    wizard.search_name = wizard.search_name[:-1]
-            elif self._is_paste_event(event):
-                clip = self._get_clipboard_text()
-                if clip:
-                    wizard.search_name += clip
-            elif event.unicode and event.unicode.isprintable():
-                wizard.search_name += event.unicode
-            return
-
         # Handle keyboard text input for IA login modal
         if self.state.ia_login.show and (self.state.input_mode == "keyboard"):
             step = self.state.ia_login.step
@@ -1998,43 +1915,23 @@ class ConsoleUtilitiesApp:
                         self.state.ia_login.password += event.unicode
                 return
 
-        # Handle keyboard text input for scraper login modal
+        # Handle keyboard text input for the API key modal
         if self.state.scraper_login.show and (self.state.input_mode == "keyboard"):
-            step = self.state.scraper_login.step
-            if step in ("username", "password", "api_key"):
+            if self.state.scraper_login.step == "api_key":
                 if event.key == pygame.K_ESCAPE:
                     self._go_back()
                 elif event.key == pygame.K_RETURN:
                     self._handle_scraper_login_selection()
                 elif event.key == pygame.K_BACKSPACE:
-                    if step == "username" and self.state.scraper_login.username:
-                        self.state.scraper_login.username = (
-                            self.state.scraper_login.username[:-1]
-                        )
-                    elif step == "password" and self.state.scraper_login.password:
-                        self.state.scraper_login.password = (
-                            self.state.scraper_login.password[:-1]
-                        )
-                    elif step == "api_key" and self.state.scraper_login.api_key:
-                        self.state.scraper_login.api_key = (
-                            self.state.scraper_login.api_key[:-1]
-                        )
+                    self.state.scraper_login.api_key = self.state.scraper_login.api_key[
+                        :-1
+                    ]
                 elif self._is_paste_event(event):
                     clip = self._get_clipboard_text()
                     if clip:
-                        if step == "username":
-                            self.state.scraper_login.username += clip
-                        elif step == "password":
-                            self.state.scraper_login.password += clip
-                        elif step == "api_key":
-                            self.state.scraper_login.api_key += clip
+                        self.state.scraper_login.api_key += clip
                 elif event.unicode and event.unicode.isprintable():
-                    if step == "username":
-                        self.state.scraper_login.username += event.unicode
-                    elif step == "password":
-                        self.state.scraper_login.password += event.unicode
-                    elif step == "api_key":
-                        self.state.scraper_login.api_key += event.unicode
+                    self.state.scraper_login.api_key += event.unicode
                 return
 
         # Handle keyboard text input for WE Patcher league browser search
@@ -2392,9 +2289,6 @@ class ConsoleUtilitiesApp:
                 # Go back to name step in IA collection wizard
                 self.state.ia_collection_wizard.step = "name"
                 self.state.ia_collection_wizard.cursor_position = 0
-            elif selection_type in ("scraper_batch_folder", "scraper_rom_select"):
-                # Close the scraper wizard too
-                self._close_scraper_wizard()
             elif selection_type == "steam_shortcut":
                 # Go back to results
                 self.state.steam_shortcut.step = "results"
@@ -2419,16 +2313,6 @@ class ConsoleUtilitiesApp:
                 self._close_ia_collection_wizard()
         elif self.state.scraper_login.show:
             self._close_scraper_login()
-        elif self.state.scraper_wizard.show:
-            if self.state.scraper_wizard.system_picker_active:
-                self._close_system_picker()
-            elif self.state.scraper_wizard.step == "video_select":
-                self.state.scraper_wizard.step = "image_select"
-            elif self.state.scraper_wizard.step == "edit_name":
-                self.state.scraper_wizard.step = "rom_select"
-                self._open_folder_browser("scraper_rom_select")
-            else:
-                self._close_scraper_wizard()
         elif self.state.dedupe_wizard.show:
             self._close_dedupe_wizard()
         elif self.state.rename_wizard.show:
@@ -2558,10 +2442,6 @@ class ConsoleUtilitiesApp:
             else:
                 self.state.mode = "systems_list"
             self.state.highlighted = 0
-        elif self.state.mode == "scraper_downloads":
-            # Go back to scraper menu; scraping continues in background
-            self.state.mode = "scraper_menu"
-            self.state.highlighted = 0
         elif self.state.mode == "file_explorer":
             self._handle_file_explorer_back()
 
@@ -2569,7 +2449,6 @@ class ConsoleUtilitiesApp:
             "settings",
             "utils",
             "credits",
-            "scraper_menu",
             "system_info",
         ):
             self.state.mode = "systems"
@@ -2647,13 +2526,6 @@ class ConsoleUtilitiesApp:
             self._handle_scraper_login_selection()
             return
 
-        if self.state.scraper_wizard.show:
-            if self.state.scraper_wizard.system_picker_active:
-                self._handle_system_picker_selection()
-                return
-            self._handle_scraper_wizard_selection()
-            return
-
         if self.state.dedupe_wizard.show:
             self._handle_dedupe_wizard_selection()
             return
@@ -2686,9 +2558,6 @@ class ConsoleUtilitiesApp:
             elif action == "systems_list":
                 self.state.mode = "systems_list"
                 # Don't reset systems_list_highlighted to preserve position
-            elif action == "scraper_menu":
-                self.state.mode = "scraper_menu"
-                self.state.highlighted = 0
             elif action == "sports_patcher":
                 self.state.mode = "sports_patcher"
                 self.state.highlighted = 1
@@ -2772,9 +2641,6 @@ class ConsoleUtilitiesApp:
 
         elif self.state.mode == "utils":
             self._handle_utils_selection()
-
-        elif self.state.mode == "scraper_menu":
-            self._handle_scraper_menu_selection()
 
         elif self.state.mode == "add_systems":
             self._handle_add_systems_selection()
@@ -3146,30 +3012,6 @@ class ConsoleUtilitiesApp:
                 )
         elif action == "edit_api_football_key":
             self._show_api_football_key_input()
-        elif action == "toggle_scraper_enabled":
-            self.settings["scraper_enabled"] = not self.settings.get(
-                "scraper_enabled", False
-            )
-            save_settings(self.settings)
-            # Reset highlight if disabling scraper to avoid out of bounds
-            if not self.settings.get("scraper_enabled", False):
-                self.state.highlighted = 0
-        elif action == "toggle_scraper_frontend":
-            frontends = [
-                "emulationstation_base",
-                "esde_android",
-                "retroarch",
-                "pegasus",
-            ]
-            current = self.settings.get("scraper_frontend", "emulationstation_base")
-            idx = frontends.index(current) if current in frontends else 0
-            self.settings["scraper_frontend"] = frontends[(idx + 1) % len(frontends)]
-            save_settings(self.settings)
-        elif action == "toggle_auto_scrape_after_download":
-            self.settings["auto_scrape_after_download"] = not self.settings.get(
-                "auto_scrape_after_download", False
-            )
-            save_settings(self.settings)
         elif action == "ia_login":
             self._show_ia_login()
         elif action == "toggle_nsz_enabled":
@@ -3332,7 +3174,7 @@ class ConsoleUtilitiesApp:
             game_elem,
             "desc",
             "A download management tool for handheld gaming consoles. "
-            "Manage ROMs, scrape game metadata, and organize your library.",
+            "Manage and organize your ROM library.",
         )
         if os.path.exists(logo_dest):
             _set_elem(game_elem, "image", "./images/logo.png")
@@ -3545,6 +3387,8 @@ class ConsoleUtilitiesApp:
             self._show_ghost_cleaner()
         elif action == "steam_shortcut":
             self._start_steam_shortcut()
+        elif action == "add_to_frontend":
+            self._add_to_frontend()
 
     def _enter_system_info(self):
         """Gather system info and switch to the System Information screen."""
@@ -3666,63 +3510,6 @@ class ConsoleUtilitiesApp:
             self.state.folder_browser.show = False
             self._show_error(f"Failed to create shortcut: {e}")
 
-    def _handle_scraper_menu_selection(self):
-        """Handle scraper menu item selection."""
-        from ui.screens.scraper_menu_screen import scraper_menu_screen
-
-        action = scraper_menu_screen.get_action(self.state.highlighted, self.settings)
-
-        if action == "divider":
-            return
-        elif action == "scrape_images":
-            self._show_scraper_wizard(batch_mode=False)
-        elif action == "batch_scrape":
-            self._show_scraper_wizard(batch_mode=True)
-        elif action == "toggle_scraper_provider":
-            providers = [
-                "libretro",
-                "screenscraper",
-                "thegamesdb",
-                "rawg",
-                "igdb",
-            ]
-            current = self.settings.get("scraper_provider", "libretro")
-            idx = providers.index(current) if current in providers else 0
-            self.settings["scraper_provider"] = providers[(idx + 1) % len(providers)]
-            save_settings(self.settings)
-        elif action == "toggle_scraper_fallback":
-            current = self.settings.get("scraper_fallback_enabled", True)
-            self.settings["scraper_fallback_enabled"] = not current
-            save_settings(self.settings)
-        elif action == "toggle_mixed_images":
-            current = self.settings.get("scraper_mixed_images", False)
-            self.settings["scraper_mixed_images"] = not current
-            save_settings(self.settings)
-        elif action == "cycle_parallel_downloads":
-            options = [1, 2, 3, 4, 5]
-            current = self.settings.get("scraper_parallel_downloads", 1)
-            idx = options.index(current) if current in options else 0
-            self.settings["scraper_parallel_downloads"] = options[
-                (idx + 1) % len(options)
-            ]
-            save_settings(self.settings)
-        elif action == "screenscraper_login":
-            self._show_screenscraper_login()
-        elif action == "thegamesdb_api_key":
-            self._show_thegamesdb_api_key_input()
-        elif action == "rawg_api_key":
-            self._show_rawg_api_key_input()
-        elif action == "igdb_login":
-            self._show_igdb_login()
-        elif action == "select_esde_media_path":
-            self._open_folder_browser("esde_media_path")
-        elif action == "select_esde_gamelists_path":
-            self._open_folder_browser("esde_gamelists_path")
-        elif action == "select_retroarch_thumbnails":
-            self._open_folder_browser("retroarch_thumbnails")
-        elif action == "add_to_frontend":
-            self._add_to_frontend()
-
     def _show_dedupe_wizard(self):
         """Show the dedupe games wizard."""
         from state import DedupeWizardState
@@ -3766,17 +3553,6 @@ class ConsoleUtilitiesApp:
         elif selection_type == "nsz_keys":
             current = self.settings.get("nsz_keys_path", "")
             path = os.path.dirname(current) if current else SCRIPT_DIR
-        elif selection_type == "esde_media_path":
-            current = self.settings.get("esde_media_path", "")
-            path = current if current else SCRIPT_DIR
-        elif selection_type == "esde_gamelists_path":
-            current = self.settings.get("esde_gamelists_path", "")
-            path = current if current else SCRIPT_DIR
-        elif selection_type == "retroarch_thumbnails":
-            current = self.settings.get("retroarch_thumbnails_path", "")
-            path = current if current else SCRIPT_DIR
-        elif selection_type in ("scraper_rom_select", "scraper_batch_folder"):
-            path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type == "dedupe_folder":
             path = self.settings.get("roms_dir", SCRIPT_DIR)
         elif selection_type in ("extract_zip", "extract_rar", "extract_7z"):
@@ -3992,9 +3768,6 @@ class ConsoleUtilitiesApp:
                 "work_dir",
                 "roms_dir",
                 "custom_folder",
-                "esde_media_path",
-                "esde_gamelists_path",
-                "retroarch_thumbnails",
                 "add_system_folder",
                 "ia_collection_folder",
                 "dedupe_folder",
@@ -4002,7 +3775,6 @@ class ConsoleUtilitiesApp:
                 "ghost_cleaner_folder",
                 "ia_download_folder",
                 "steam_shortcut",
-                "scraper_batch_folder",
                 "folder",
             )
             if selection_type not in folder_only_types:
@@ -4032,18 +3804,6 @@ class ConsoleUtilitiesApp:
         elif selection_type == "nsz_keys":
             self.settings["nsz_keys_path"] = path
             save_settings(self.settings)
-        elif selection_type == "scraper_rom_select":
-            # ROM file selected via folder browser for scraper wizard
-            wizard = self.state.scraper_wizard
-            wizard.selected_rom_path = path
-            wizard.selected_rom_name = os.path.basename(path)
-            from services.scraper_service import get_scraper_service
-
-            service = get_scraper_service(self.settings)
-            wizard.search_name = service.extract_game_name(path)
-            wizard.search_name_cursor = 0
-            wizard.search_name_shift = False
-            wizard.step = "edit_name"
         elif selection_type == "extract_zip":
             # Extract ZIP file to same folder
             self._extract_zip_file(path)
@@ -4066,15 +3826,6 @@ class ConsoleUtilitiesApp:
                 sys_s = settings_map.setdefault(system_name, {})
                 sys_s["custom_folder"] = path
                 save_settings(self.settings)
-        elif selection_type == "esde_media_path":
-            self.settings["esde_media_path"] = path
-            save_settings(self.settings)
-        elif selection_type == "esde_gamelists_path":
-            self.settings["esde_gamelists_path"] = path
-            save_settings(self.settings)
-        elif selection_type == "retroarch_thumbnails":
-            self.settings["retroarch_thumbnails_path"] = path
-            save_settings(self.settings)
         elif selection_type == "we_patcher_rom":
             from utils.zip_rom import (
                 is_zip,
@@ -4474,9 +4225,6 @@ class ConsoleUtilitiesApp:
             "work_dir",
             "roms_dir",
             "custom_folder",
-            "esde_media_path",
-            "esde_gamelists_path",
-            "retroarch_thumbnails",
         ):
             self._complete_folder_browser_selection(current_path, selection_type)
         elif selection_type == "add_system_folder":
@@ -4500,18 +4248,6 @@ class ConsoleUtilitiesApp:
             self.state.ghost_cleaner_wizard.folder_path = current_path
             self.state.folder_browser.show = False
             self._start_ghost_scan()
-        elif selection_type == "scraper_batch_folder":
-            self.state.folder_browser.show = False
-            wizard = self.state.scraper_wizard
-            wizard.folder_current_path = current_path
-            # Scan folder for ROMs and go to rom_list step
-            roms = self.scraper_manager.scan_folder(current_path)
-            wizard.batch_roms = [
-                {"name": r["name"], "path": r["path"], "status": "pending"}
-                for r in roms
-            ]
-            wizard.batch_current_index = 0
-            wizard.step = "rom_list"
         elif selection_type == "ia_download_folder":
             self.state.ia_download_wizard.output_folder = current_path
             self.state.folder_browser.show = False
@@ -4720,7 +4456,7 @@ class ConsoleUtilitiesApp:
                 not self.state.ia_collection_wizard.shift_active
             )
         elif self.state.scraper_login.show and (
-            self.state.scraper_login.step in ("username", "password", "api_key")
+            self.state.scraper_login.step == "api_key"
         ):
             self.state.scraper_login.shift_active = (
                 not self.state.scraper_login.shift_active
@@ -5163,14 +4899,6 @@ class ConsoleUtilitiesApp:
             pes.league_search_active = not pes.league_search_active
             if not pes.league_search_active:
                 pes.league_search_cursor = 0
-        elif (
-            self.state.scraper_wizard.show
-            and self.state.scraper_wizard.system_picker_active
-        ):
-            wizard = self.state.scraper_wizard
-            wizard.system_picker_search_active = not wizard.system_picker_search_active
-            if not wizard.system_picker_search_active:
-                wizard.system_picker_cursor = 0
         elif self.state.mode == "file_explorer":
             fe = self.state.file_explorer
             if (
@@ -5278,49 +5006,6 @@ class ConsoleUtilitiesApp:
                 self.state.ia_collection_wizard.step = "confirm"
                 return
 
-        # Handle scraper wizard - start button triggers actions based on step
-        if self.state.scraper_wizard.show:
-            step = self.state.scraper_wizard.step
-            if step == "edit_name":
-                self._search_scraper_game()
-                return
-            elif step == "image_select":
-                wizard = self.state.scraper_wizard
-                wizard.button_focused = False
-                wizard.nav_bar_index = -1
-                if wizard.available_videos:
-                    wizard.step = "video_select"
-                    wizard.video_highlighted = 0
-                else:
-                    self._start_scraper_download()
-                return
-            elif step == "video_select":
-                self.state.scraper_wizard.button_focused = False
-                self.state.scraper_wizard.nav_bar_index = -1
-                self._start_scraper_download()
-                return
-            elif step == "rom_list":
-                # Continue to batch options — auto-detect system from folder
-                wizard = self.state.scraper_wizard
-                wizard.button_focused = False
-                wizard.nav_bar_index = -1
-                wizard.step = "batch_options"
-                wizard.image_highlighted = 0
-                if not wizard.batch_system:
-                    from services.scraper_providers.screenscraper import (
-                        ScreenScraperProvider,
-                    )
-
-                    folder_name = os.path.basename(wizard.folder_current_path)
-                    normalized = folder_name.lower().replace("-", "").replace("_", "")
-                    if normalized in ScreenScraperProvider.SYSTEM_ID_MAP:
-                        wizard.batch_system = folder_name.lower()
-                return
-            elif step == "batch_options":
-                # Start batch processing
-                self._start_batch_scrape()
-                return
-
         # Handle dedupe wizard - don't close on Start button
         if self.state.dedupe_wizard.show:
             return
@@ -5359,7 +5044,6 @@ class ConsoleUtilitiesApp:
         self.state.ia_download_wizard.show = False
         self.state.ia_collection_wizard.show = False
         self.state.scraper_login.show = False
-        self.state.scraper_wizard.show = False
         self.state.dedupe_wizard.show = False
         self.state.rename_wizard.show = False
         self.state.ghost_cleaner_wizard.show = False
@@ -5465,10 +5149,6 @@ class ConsoleUtilitiesApp:
                 self.state.auth_token_input.show
                 and self.state.auth_token_input.step == "input"
             )
-            or (
-                self.state.scraper_wizard.show
-                and self.state.scraper_wizard.step == "edit_name"
-            )
             or ia_wizard_needs_keyboard(
                 self.state.ia_download_wizard.show,
                 self.state.ia_download_wizard.step,
@@ -5492,7 +5172,6 @@ class ConsoleUtilitiesApp:
             or self.state.ia_download_wizard.show
             or self.state.ia_collection_wizard.show
             or self.state.scraper_login.show
-            or self.state.scraper_wizard.show
             or self.state.dedupe_wizard.show
             or self.state.rename_wizard.show
             or self.state.ghost_cleaner_wizard.show
@@ -6143,846 +5822,6 @@ class ConsoleUtilitiesApp:
             wizard.step = "error"
             wizard.error_message = "Failed to save collection"
 
-    # ---- Scraper Wizard Handlers ---- #
-
-    def _show_scraper_wizard(self, batch_mode: bool = False):
-        """Show the game image scraper wizard modal."""
-        wizard = self.state.scraper_wizard
-        wizard.show = True
-        wizard.batch_mode = batch_mode
-        wizard.folder_current_path = self.settings.get("roms_dir", SCRIPT_DIR)
-
-        if batch_mode:
-            wizard.step = "folder_select"
-            self._open_folder_browser("scraper_batch_folder")
-        else:
-            wizard.step = "rom_select"
-            self._open_folder_browser("scraper_rom_select")
-        wizard.folder_items = []
-        wizard.folder_highlighted = 0
-        wizard.selected_rom_path = ""
-        wizard.selected_rom_name = ""
-        wizard.search_results = []
-        wizard.selected_game_index = 0
-        wizard.available_images = []
-        wizard.selected_images = set()
-        wizard.image_highlighted = 0
-        wizard.available_videos = []
-        wizard.selected_video_index = -1
-        wizard.video_highlighted = 0
-        wizard.download_progress = 0.0
-        wizard.current_download = ""
-        wizard.error_message = ""
-        wizard.batch_roms = []
-        wizard.batch_current_index = 0
-        wizard.batch_auto_select = True
-        wizard.nav_bar_index = -1
-        if (
-            self.settings.get("scraper_mixed_images", False)
-            and self.settings.get("scraper_provider", "libretro") == "screenscraper"
-        ):
-            wizard.batch_default_images = ["mixrbv2"]
-        else:
-            wizard.batch_default_images = ["box-2D", "boxart"]
-
-    def _close_scraper_wizard(self):
-        """Close the scraper wizard modal."""
-        wizard = self.state.scraper_wizard
-        wizard.show = False
-        wizard.step = "rom_select"
-        wizard.folder_items = []
-        wizard.search_results = []
-        wizard.available_images = []
-        wizard.selected_images = set()
-        wizard.available_videos = []
-        wizard.selected_video_index = -1
-        wizard.batch_roms = []
-        self.screen_manager.scraper_wizard_modal.clear_thumbs()
-
-    def _navigate_scraper_list(
-        self,
-        wizard,
-        direction,
-        max_items,
-        attr,
-        has_button=False,
-        nav_bar_count=0,
-    ):
-        """Navigate a scraper wizard list with optional action button and navbar.
-
-        Up/down navigate list items. Left/right navigate the navbar buttons
-        or toggle focus to the action button.
-        """
-        cur = getattr(wizard, attr)
-
-        # Navbar is focused — left/right cycle buttons, down exits to list
-        if wizard.nav_bar_index >= 0:
-            if direction == "left":
-                if wizard.nav_bar_index > 0:
-                    wizard.nav_bar_index -= 1
-            elif direction == "right":
-                if wizard.nav_bar_index < nav_bar_count - 1:
-                    wizard.nav_bar_index += 1
-            elif direction == "down":
-                wizard.nav_bar_index = -1
-            return
-
-        if direction == "up":
-            if wizard.button_focused:
-                wizard.button_focused = False
-            elif cur > 0:
-                setattr(wizard, attr, cur - 1)
-            elif nav_bar_count > 0:
-                # At top of list — move focus to navbar
-                wizard.nav_bar_index = 0
-        elif direction == "down":
-            if not wizard.button_focused and cur < max_items - 1:
-                setattr(wizard, attr, cur + 1)
-        elif direction == "right":
-            if has_button and not wizard.button_focused:
-                wizard.button_focused = True
-        elif direction == "left":
-            if wizard.button_focused:
-                wizard.button_focused = False
-            elif nav_bar_count > 0:
-                # In list — move focus to navbar
-                wizard.nav_bar_index = 0
-
-    def _navigate_scraper_wizard(self, direction: str):
-        """Handle navigation in scraper wizard."""
-        wizard = self.state.scraper_wizard
-        step = wizard.step
-
-        if step == "edit_name":
-            # Navigate the on-screen keyboard grid
-            from ui.organisms.char_keyboard import CharKeyboard
-
-            keyboard = CharKeyboard()
-            total_chars = keyboard.get_total_chars("default")
-            chars_per_row = 13
-            cur = wizard.search_name_cursor
-            if direction == "up" and cur >= chars_per_row:
-                cur -= chars_per_row
-            elif direction == "down" and cur + chars_per_row < total_chars:
-                cur += chars_per_row
-            elif direction == "left" and cur > 0:
-                cur -= 1
-            elif direction == "right" and cur < total_chars - 1:
-                cur += 1
-            wizard.search_name_cursor = cur
-            return
-
-        elif step == "game_select":
-            max_items = len(wizard.search_results) or 1
-            self._navigate_scraper_list(
-                wizard,
-                direction,
-                max_items,
-                "selected_game_index",
-                has_button=True,
-                nav_bar_count=4,
-            )
-
-        elif step == "image_select":
-            max_items = len(wizard.available_images) or 1
-            self._navigate_scraper_list(
-                wizard,
-                direction,
-                max_items,
-                "image_highlighted",
-                has_button=True,
-                nav_bar_count=4,
-            )
-
-        elif step == "video_select":
-            max_items = 1 + len(wizard.available_videos)
-            self._navigate_scraper_list(
-                wizard,
-                direction,
-                max_items,
-                "video_highlighted",
-                has_button=True,
-                nav_bar_count=4,
-            )
-
-        elif step == "rom_list":
-            max_items = len(wizard.batch_roms) or 1
-            self._navigate_scraper_list(
-                wizard,
-                direction,
-                max_items,
-                "batch_current_index",
-                has_button=True,
-                nav_bar_count=4,
-            )
-
-        elif step == "batch_options":
-            mixed = (
-                self.settings.get("scraper_mixed_images", False)
-                and self.settings.get("scraper_provider", "libretro") == "screenscraper"
-            )
-            max_items = (9 if mixed else 7) + 1
-            self._navigate_scraper_list(
-                wizard,
-                direction,
-                max_items,
-                "image_highlighted",
-                has_button=True,
-                nav_bar_count=4,
-            )
-
-        elif step in ("complete", "batch_complete", "error"):
-            # These steps only have a button, always focused
-            wizard.button_focused = True
-
-    def _handle_scraper_wizard_selection(self):
-        """Handle selection in scraper wizard."""
-        wizard = self.state.scraper_wizard
-        step = wizard.step
-
-        # Handle navbar button activation
-        if wizard.nav_bar_index >= 0:
-            nav_actions = ["back", "up", "down", "select"]
-            action = nav_actions[wizard.nav_bar_index]
-            wizard.nav_bar_index = -1
-            if action == "back":
-                self._go_back()
-            elif action == "up":
-                self._navigate_scraper_wizard("up")
-            elif action == "down":
-                self._navigate_scraper_wizard("down")
-            elif action == "select":
-                self._handle_scraper_wizard_selection()
-            return
-
-        if step == "edit_name":
-            # Handle on-screen keyboard character selection
-            modal = self.screen_manager.scraper_wizard_modal
-            new_text, is_done, toggle_shift = modal.handle_edit_name_selection(
-                wizard.search_name_cursor,
-                wizard.search_name,
-                shift_active=wizard.search_name_shift,
-            )
-            if toggle_shift:
-                wizard.search_name_shift = not wizard.search_name_shift
-            wizard.search_name = new_text
-            if is_done:
-                self._search_scraper_game()
-            return
-
-        elif step == "game_select":
-            if wizard.button_focused:
-                self._handle_start_action()
-            elif wizard.search_results:
-                self._fetch_scraper_images()
-
-        elif step == "image_select":
-            if wizard.button_focused:
-                self._handle_start_action()
-            elif wizard.image_highlighted in wizard.selected_images:
-                wizard.selected_images.discard(wizard.image_highlighted)
-            else:
-                wizard.selected_images.add(wizard.image_highlighted)
-
-        elif step == "video_select":
-            if wizard.button_focused:
-                self._handle_start_action()
-            elif wizard.video_highlighted == 0:
-                wizard.selected_video_index = -1  # No video
-            else:
-                idx = wizard.video_highlighted - 1
-                if wizard.selected_video_index == idx:
-                    wizard.selected_video_index = -1  # Deselect
-                else:
-                    wizard.selected_video_index = idx
-
-        elif step == "rom_list":
-            if wizard.button_focused:
-                self._handle_start_action()
-            elif wizard.batch_current_index < len(wizard.batch_roms):
-                rom = wizard.batch_roms[wizard.batch_current_index]
-                if rom.get("status") == "skipped":
-                    rom["status"] = "pending"
-                else:
-                    rom["status"] = "skipped"
-
-        elif step == "batch_options":
-            if wizard.button_focused:
-                self._handle_start_action()
-            else:
-                self._handle_batch_options_selection()
-
-        elif step in ("complete", "batch_complete"):
-            self._close_scraper_wizard()
-
-        elif step == "error":
-            # Reopen folder browser to retry
-            wizard.error_message = ""
-            if wizard.batch_mode:
-                wizard.step = "folder_select"
-                self._open_folder_browser("scraper_batch_folder")
-            else:
-                wizard.step = "rom_select"
-                self._open_folder_browser("scraper_rom_select")
-
-    def _select_batch_folder(self):
-        """Select current folder for batch scraping."""
-        wizard = self.state.scraper_wizard
-
-        roms = self.scraper_manager.scan_folder(wizard.folder_current_path)
-        roms = [
-            {"name": r["name"], "path": r["path"], "status": "pending"} for r in roms
-        ]
-
-        if not roms:
-            wizard.error_message = "No ROM files found in folder"
-            wizard.step = "error"
-            return
-
-        wizard.batch_roms = roms
-        wizard.batch_current_index = 0
-        wizard.step = "rom_list"
-
-    def _handle_batch_options_selection(self):
-        """Handle selection in batch options step."""
-        wizard = self.state.scraper_wizard
-        highlighted = wizard.image_highlighted
-
-        if highlighted == 0:
-            # Open system picker modal
-            self._open_system_picker()
-        elif highlighted == 1:
-            # Toggle auto-select
-            wizard.batch_auto_select = not wizard.batch_auto_select
-        else:
-            # Toggle image type or video
-            if (
-                self.settings.get("scraper_mixed_images", False)
-                and self.settings.get("scraper_provider", "libretro") == "screenscraper"
-            ):
-                all_types = [
-                    "box-2D",
-                    "boxart",
-                    "mixrbv1",
-                    "mixrbv2",
-                    "screenshot",
-                    "wheel",
-                    "fanart",
-                ]
-            else:
-                all_types = ["box-2D", "boxart", "screenshot", "wheel", "fanart"]
-
-            img_index = highlighted - 2
-            if img_index < len(all_types):
-                img_type = all_types[img_index]
-                if img_type in wizard.batch_default_images:
-                    wizard.batch_default_images.remove(img_type)
-                else:
-                    wizard.batch_default_images.append(img_type)
-            else:
-                # Download Video toggle
-                self.state.scraper_queue.download_video = (
-                    not self.state.scraper_queue.download_video
-                )
-
-    def _search_scraper_game(self):
-        """Search for game info using scraper provider."""
-        wizard = self.state.scraper_wizard
-        wizard.step = "searching"
-
-        from services.scraper_service import get_scraper_service
-
-        # Set system context from ROM path for Libretro
-        rom_dir = os.path.basename(os.path.dirname(wizard.selected_rom_path))
-        self.settings["current_system_folder"] = rom_dir
-
-        service = get_scraper_service(self.settings)
-        service.reset_provider()
-
-        rom_path = wizard.selected_rom_path
-        # Use the user-edited search name if available
-        game_name = wizard.search_name or service.extract_game_name(rom_path)
-        wizard.selected_rom_name = game_name
-
-        def search():
-            success, results, error = service.search_game(game_name, rom_path=rom_path)
-
-            from services.scraper_outcome import classify_search_outcome
-
-            outcome = classify_search_outcome(success, results, error)
-            if outcome == "error":
-                wizard.step = "error"
-                wizard.error_message = error or "Search failed"
-                return
-            if outcome == "no_match":
-                wizard.step = "error"
-                wizard.error_message = f"No game found for: {game_name}"
-                return
-
-            # Convert results to dict format for display
-            wizard.search_results = [
-                {
-                    "id": r.id,
-                    "name": r.name,
-                    "platform": r.platform,
-                    "release_date": r.release_date,
-                    "description": r.description,
-                }
-                for r in results
-            ]
-            wizard.selected_game_index = 0
-            wizard.step = "game_select"
-
-        from threading import Thread
-
-        thread = Thread(target=search, daemon=True)
-        thread.start()
-
-    def _fetch_scraper_images(self):
-        """Fetch available images for selected game."""
-        wizard = self.state.scraper_wizard
-        wizard.step = "searching"
-
-        if not wizard.search_results or wizard.selected_game_index >= len(
-            wizard.search_results
-        ):
-            return
-
-        game = wizard.search_results[wizard.selected_game_index]
-        game_id = game.get("id", "")
-
-        from services.scraper_service import get_scraper_service
-
-        service = get_scraper_service(self.settings)
-
-        def fetch():
-            success, images, error = service.get_game_images(game_id)
-
-            if not success:
-                wizard.step = "error"
-                wizard.error_message = error or "Failed to fetch images"
-                return
-
-            if not images:
-                wizard.step = "error"
-                wizard.error_message = "No images available"
-                return
-
-            # Convert images to dict format for display
-            wizard.available_images = [
-                {
-                    "type": img.type,
-                    "url": img.url,
-                    "region": img.region,
-                    "label": service.provider.get_image_type_label(img.type),
-                }
-                for img in images
-            ]
-            # Pre-select all images
-            wizard.selected_images = set(range(len(wizard.available_images)))
-            wizard.image_highlighted = 0
-
-            # Also fetch videos if provider supports them
-            wizard.available_videos = []
-            wizard.selected_video_index = -1
-            v_success, videos, _ = service.get_game_videos(game_id)
-            if v_success and videos:
-                wizard.available_videos = [
-                    {
-                        "url": v.url,
-                        "region": v.region,
-                        "format": v.format,
-                        "normalized": v.normalized,
-                        "label": "Video (Normalized)" if v.normalized else "Video",
-                    }
-                    for v in videos
-                ]
-
-            wizard.step = "image_select"
-
-        from threading import Thread
-
-        thread = Thread(target=fetch, daemon=True)
-        thread.start()
-
-    def _start_scraper_download(self):
-        """Start downloading selected images and optional video."""
-        wizard = self.state.scraper_wizard
-
-        if not wizard.selected_images or not wizard.available_images:
-            return
-
-        wizard.step = "downloading"
-        wizard.download_progress = 0.0
-
-        # Get selected images
-        selected = [
-            wizard.available_images[i]
-            for i in sorted(wizard.selected_images)
-            if i < len(wizard.available_images)
-        ]
-
-        # Get selected video (if any)
-        selected_video = None
-        if wizard.selected_video_index >= 0 and wizard.selected_video_index < len(
-            wizard.available_videos
-        ):
-            selected_video = wizard.available_videos[wizard.selected_video_index]
-
-        # Get game info for metadata
-        game_info = {}
-        if wizard.search_results and wizard.selected_game_index < len(
-            wizard.search_results
-        ):
-            game_info = wizard.search_results[wizard.selected_game_index]
-
-        from services.scraper_service import get_scraper_service
-        from services.scraper_providers.base_provider import GameImage, GameVideo
-        from services.metadata_writer import get_metadata_writer
-
-        service = get_scraper_service(self.settings)
-
-        def download():
-            # Convert dict images back to GameImage objects
-            images = [
-                GameImage(
-                    type=img["type"],
-                    url=img["url"],
-                    region=img.get("region", ""),
-                )
-                for img in selected
-            ]
-
-            total_items = len(images) + (1 if selected_video else 0)
-
-            def progress_callback(current, total, current_name):
-                progress = current / total_items if total_items > 0 else 0
-                wizard.download_progress = min(progress, 1.0)
-                wizard.current_download = current_name
-
-            success, paths, error = service.download_images(
-                images, wizard.selected_rom_path, progress_callback
-            )
-
-            if not success:
-                wizard.step = "error"
-                wizard.error_message = error or "Download failed"
-                return
-
-            # Download video if selected
-            if selected_video:
-                wizard.current_download = "Video"
-                video = GameVideo(
-                    url=selected_video["url"],
-                    region=selected_video.get("region", ""),
-                    format=selected_video.get("format", "mp4"),
-                    normalized=selected_video.get("normalized", False),
-                )
-                video_path = service.get_video_output_path(
-                    wizard.selected_rom_path, video.format
-                )
-                if video_path:
-                    v_success, v_error = service.download_video(video, video_path)
-                    if v_success:
-                        paths.append(video_path)
-                    else:
-                        print(f"Failed to download video: {v_error}")
-
-            wizard.download_progress = 1.0
-
-            # Update metadata
-            wizard.step = "updating_metadata"
-            writer = get_metadata_writer(self.settings)
-            writer.update_metadata(wizard.selected_rom_path, game_info, paths)
-
-            wizard.step = "complete"
-
-        from threading import Thread
-
-        thread = Thread(target=download, daemon=True)
-        thread.start()
-
-    def _start_batch_scrape(self):
-        """Start background batch scraping and close wizard."""
-        wizard = self.state.scraper_wizard
-
-        # Build ROM list from wizard state (filter out skipped)
-        roms = [
-            {"name": r["name"], "path": r["path"]}
-            for r in wizard.batch_roms
-            if r.get("status") != "skipped"
-        ]
-
-        if not roms:
-            return
-
-        # Start background scraping via ScraperManager
-        self.scraper_manager.start_batch(
-            folder_path=wizard.folder_current_path,
-            roms=roms,
-            default_images=list(wizard.batch_default_images),
-            auto_select=wizard.batch_auto_select,
-            download_video=self.state.scraper_queue.download_video,
-            system=wizard.batch_system,
-        )
-
-        # Close wizard and navigate to scraper downloads screen
-        self._close_scraper_wizard()
-        self.state.mode = "scraper_downloads"
-        self.state.scraper_queue.highlighted = 0
-
-    def _trigger_auto_scrape(self, item):
-        """Auto-scrape a single completed download item (best-effort, opt-in)."""
-        try:
-            filename = self.download_manager._get_filename(item.game)
-            folder = self.download_manager._get_roms_folder(item.system_data)
-            rom_path = os.path.join(folder, filename)
-            roms = [{"name": filename, "path": rom_path}]
-            system = (
-                item.system_data.get("name", "")
-                if isinstance(item.system_data, dict)
-                else ""
-            )
-            self.scraper_manager.start_batch(
-                folder_path=folder,
-                roms=roms,
-                default_images=[],
-                auto_select=True,
-                download_video=False,
-                system=system,
-            )
-        except Exception as e:
-            log_error(f"Auto-scrape trigger failed: {e}")
-
-    # Comprehensive Batocera system list: (display_name, batocera_folder_id)
-    # folder_id maps to ScreenScraper systemeid via SYSTEM_ID_MAP
-    _ALL_SYSTEMS = [
-        # Nintendo Home
-        ("NES / Famicom", "nes"),
-        ("Famicom Disk System", "fds"),
-        ("SNES / Super Famicom", "snes"),
-        ("SNES MSU-1", "snesmsu1"),
-        ("Satellaview", "satellaview"),
-        ("SuFami Turbo", "sufami"),
-        ("Nintendo 64", "n64"),
-        ("Nintendo 64DD", "n64dd"),
-        ("GameCube", "gamecube"),
-        ("Wii", "wii"),
-        ("Wii U", "wiiu"),
-        ("Switch", "switch"),
-        # Nintendo Handhelds
-        ("Game Boy", "gb"),
-        ("Game Boy Color", "gbc"),
-        ("Game Boy Advance", "gba"),
-        ("Virtual Boy", "virtualboy"),
-        ("Nintendo DS", "nds"),
-        ("Nintendo 3DS", "3ds"),
-        ("Pokemon Mini", "pokemini"),
-        # PlayStation
-        ("PlayStation", "psx"),
-        ("PlayStation 2", "ps2"),
-        ("PlayStation 3", "ps3"),
-        ("PSP", "psp"),
-        ("PS Vita", "psvita"),
-        # Sega Home
-        ("SG-1000", "sg1000"),
-        ("Master System", "mastersystem"),
-        ("Mega Drive / Genesis", "genesis"),
-        ("Sega CD", "segacd"),
-        ("Sega 32X", "sega32x"),
-        ("Saturn", "saturn"),
-        ("Dreamcast", "dreamcast"),
-        ("Naomi", "naomi"),
-        ("Naomi 2", "naomi2"),
-        # Sega Handhelds
-        ("Game Gear", "gamegear"),
-        # Atari
-        ("Atari 2600", "atari2600"),
-        ("Atari 5200", "atari5200"),
-        ("Atari 7800", "atari7800"),
-        ("Atari ST", "atarist"),
-        ("Atari 800 / XL / XE", "atari800"),
-        ("Atari Jaguar", "jaguar"),
-        ("Atari Jaguar CD", "jaguarcd"),
-        ("Atari Lynx", "lynx"),
-        # NEC
-        ("PC Engine / TG-16", "pcengine"),
-        ("PC Engine CD / TG-CD", "pcenginecd"),
-        ("SuperGrafx", "supergrafx"),
-        ("PC-FX", "pcfx"),
-        # SNK
-        ("Neo Geo MVS/AES", "neogeo"),
-        ("Neo Geo CD", "neogeocd"),
-        ("Neo Geo Pocket", "ngp"),
-        ("Neo Geo Pocket Color", "ngpc"),
-        # Other Consoles
-        ("3DO", "3do"),
-        ("ColecoVision", "colecovision"),
-        ("Intellivision", "intellivision"),
-        ("Odyssey 2 / Videopac", "odyssey2"),
-        ("Vectrex", "vectrex"),
-        ("Channel F", "channelf"),
-        ("Philips CD-i", "cdi"),
-        ("Supervision", "supervision"),
-        # Arcade
-        ("Arcade / MAME", "arcade"),
-        ("FinalBurn Neo", "fbneo"),
-        ("CPS-1", "cps1"),
-        ("CPS-2", "cps2"),
-        ("CPS-3", "cps3"),
-        ("Atomiswave", "atomiswave"),
-        ("Sega Model 2", "model2"),
-        ("Sega Model 3", "model3"),
-        # Computers
-        ("MSX", "msx"),
-        ("MSX2", "msx2"),
-        ("Amiga", "amiga"),
-        ("Amiga CD32", "amigacd32"),
-        ("Amiga CDTV", "amigacdtv"),
-        ("Amstrad CPC", "amstradcpc"),
-        ("ZX Spectrum", "zxspectrum"),
-        ("ZX81", "zx81"),
-        ("Commodore 64", "c64"),
-        ("DOS / DOSBox", "dos"),
-        ("PC-88", "pc88"),
-        ("PC-98", "pc98"),
-        ("Sharp X68000", "x68000"),
-        ("Sharp X1", "x1"),
-        ("SAM Coupe", "samcoupe"),
-        ("Thomson", "thomson"),
-        ("TI-99/4A", "ti99"),
-        ("Apple II", "apple2"),
-        ("Apple IIGS", "apple2gs"),
-        ("BBC Micro", "bbcmicro"),
-        ("Dragon 32/64", "dragondata"),
-        ("Oric", "oric"),
-        ("TRS-80 CoCo", "trs80coco"),
-        # Handhelds & Misc
-        ("WonderSwan", "wswan"),
-        ("WonderSwan Color", "wswanc"),
-        ("Game & Watch", "gw"),
-        ("Gamate", "gamate"),
-        ("Mega Duck", "megaduck"),
-        ("Arduboy", "arduboy"),
-        # Fantasy / Engines
-        ("PICO-8", "pico8"),
-        ("TIC-80", "tic80"),
-        ("Uzebox", "uzebox"),
-        ("ScummVM", "scummvm"),
-        ("EasyRPG", "easyrpg"),
-        ("Solarus", "solarus"),
-        ("OpenBOR", "openbor"),
-        ("LowRes NX", "lowresnx"),
-    ]
-
-    def _open_system_picker(self):
-        """Open the system picker modal for batch scraper."""
-        wizard = self.state.scraper_wizard
-        wizard.system_picker_active = True
-        wizard.system_picker_highlighted = 0
-        wizard.system_picker_search = ""
-        wizard.system_picker_search_active = False
-        wizard.system_picker_cursor = 0
-        wizard.system_picker_shift = False
-        # Pre-select current system if set
-        if wizard.batch_system:
-            for i, (_, sys_id) in enumerate(self._ALL_SYSTEMS):
-                if sys_id == wizard.batch_system:
-                    wizard.system_picker_highlighted = i
-                    break
-
-    def _close_system_picker(self):
-        """Close the system picker without changing selection."""
-        wizard = self.state.scraper_wizard
-        if wizard.system_picker_search_active:
-            wizard.system_picker_search_active = False
-            wizard.system_picker_cursor = 0
-        else:
-            wizard.system_picker_active = False
-
-    def _select_system_from_picker(self):
-        """Confirm system selection from picker modal."""
-        wizard = self.state.scraper_wizard
-        filtered = self._get_filtered_systems()
-        if filtered and 0 <= wizard.system_picker_highlighted < len(filtered):
-            _, sys_id = filtered[wizard.system_picker_highlighted]
-            wizard.batch_system = sys_id
-        wizard.system_picker_active = False
-
-    def _get_filtered_systems(self):
-        """Return systems filtered by current search query."""
-        query = self.state.scraper_wizard.system_picker_search.lower().strip()
-        if not query:
-            return [("Auto (detect from folder)", "")] + list(self._ALL_SYSTEMS)
-        return [
-            (name, sid)
-            for name, sid in self._ALL_SYSTEMS
-            if query in name.lower() or query in sid.lower()
-        ]
-
-    def _navigate_system_picker(self, direction):
-        """Handle d-pad navigation in the system picker modal."""
-        wizard = self.state.scraper_wizard
-        filtered = self._get_filtered_systems()
-        max_items = len(filtered) or 1
-
-        if wizard.system_picker_search_active:
-            # Navigate on-screen keyboard
-            from ui.organisms.char_keyboard import CharKeyboard
-
-            keyboard = CharKeyboard()
-            total_chars = keyboard.get_total_chars("default")
-            chars_per_row = 13
-            cur = wizard.system_picker_cursor
-            if direction == "up" and cur >= chars_per_row:
-                cur -= chars_per_row
-            elif direction == "down" and cur + chars_per_row < total_chars:
-                cur += chars_per_row
-            elif direction == "left" and cur > 0:
-                cur -= 1
-            elif direction == "right" and cur < total_chars - 1:
-                cur += 1
-            wizard.system_picker_cursor = cur
-        else:
-            if direction == "up":
-                if wizard.system_picker_highlighted > 0:
-                    wizard.system_picker_highlighted -= 1
-            elif direction == "down":
-                if wizard.system_picker_highlighted < max_items - 1:
-                    wizard.system_picker_highlighted += 1
-
-    def _handle_system_picker_selection(self):
-        """Handle A/select in system picker."""
-        wizard = self.state.scraper_wizard
-        if wizard.system_picker_search_active:
-            # Character selected from keyboard
-            modal = self.screen_manager.scraper_wizard_modal
-            new_text, is_done, toggle_shift = modal.handle_system_picker_key(
-                wizard.system_picker_cursor,
-                wizard.system_picker_search,
-                shift_active=wizard.system_picker_shift,
-            )
-            if toggle_shift:
-                wizard.system_picker_shift = not wizard.system_picker_shift
-            wizard.system_picker_search = new_text
-            wizard.system_picker_highlighted = 0
-            if is_done:
-                wizard.system_picker_search_active = False
-        else:
-            self._select_system_from_picker()
-
-    def _show_screenscraper_login(self):
-        """Show ScreenScraper login modal."""
-        self.state.scraper_login.show = True
-        self.state.scraper_login.provider = "screenscraper"
-        self.state.scraper_login.step = "username"
-        self.state.scraper_login.username = self.settings.get(
-            "screenscraper_username", ""
-        )
-        self.state.scraper_login.password = ""
-        self.state.scraper_login.cursor_position = 0
-        self.state.scraper_login.error_message = ""
-
     def _show_api_football_key_input(self):
         """Show API-Football key input modal."""
         self.state.scraper_login.show = True
@@ -6992,384 +5831,43 @@ class ConsoleUtilitiesApp:
         self.state.scraper_login.cursor_position = 0
         self.state.scraper_login.error_message = ""
 
-    def _show_thegamesdb_api_key_input(self):
-        """Show TheGamesDB API key input modal."""
-        self.state.scraper_login.show = True
-        self.state.scraper_login.provider = "thegamesdb"
-        self.state.scraper_login.step = "api_key"
-        self.state.scraper_login.api_key = self.settings.get("thegamesdb_api_key", "")
-        self.state.scraper_login.cursor_position = 0
-        self.state.scraper_login.error_message = ""
-
-    def _show_rawg_api_key_input(self):
-        """Show RAWG API key input modal."""
-        self.state.scraper_login.show = True
-        self.state.scraper_login.provider = "rawg"
-        self.state.scraper_login.step = "api_key"
-        self.state.scraper_login.api_key = self.settings.get("rawg_api_key", "")
-        self.state.scraper_login.cursor_position = 0
-        self.state.scraper_login.error_message = ""
-
-    def _show_igdb_login(self):
-        """Show IGDB login modal (Client ID + Client Secret)."""
-        self.state.scraper_login.show = True
-        self.state.scraper_login.provider = "igdb"
-        self.state.scraper_login.step = "username"
-        self.state.scraper_login.username = self.settings.get("igdb_client_id", "")
-        self.state.scraper_login.password = ""
-        self.state.scraper_login.cursor_position = 0
-        self.state.scraper_login.error_message = ""
-
     def _close_scraper_login(self):
-        """Close the scraper login modal."""
+        """Close the API key input modal."""
         self.state.scraper_login.show = False
-        self.state.scraper_login.step = "username"
-        self.state.scraper_login.username = ""
-        self.state.scraper_login.password = ""
+        self.state.scraper_login.step = "api_key"
         self.state.scraper_login.api_key = ""
         self.state.scraper_login.cursor_position = 0
         self.state.scraper_login.error_message = ""
 
     def _handle_scraper_login_selection(self):
-        """Handle selection in scraper login modal."""
+        """Handle selection in the API key input modal."""
         login = self.state.scraper_login
-        step = login.step
-        provider = login.provider
+        if login.step != "api_key":
+            return
 
-        if provider == "screenscraper":
-            if step == "username":
-                if self.state.input_mode == "keyboard":
-                    # Keyboard mode - Enter pressed, move to password
-                    if login.username:
-                        login.step = "password"
-                        login.cursor_position = 0
-                else:
-                    # Gamepad/touch mode - handle on-screen keyboard
-                    from ui.screens.modals.scraper_login_modal import ScraperLoginModal
+        if self.state.input_mode == "keyboard":
+            self.settings["api_football_key"] = login.api_key
+            save_settings(self.settings)
+            self._close_scraper_login()
+            return
 
-                    modal = ScraperLoginModal()
-                    new_text, is_done, toggle_shift = modal.handle_selection(
-                        provider,
-                        step,
-                        login.cursor_position,
-                        login.username,
-                        shift_active=self.state.scraper_login.shift_active,
-                    )
-                    if toggle_shift:
-                        self.state.scraper_login.shift_active = (
-                            not self.state.scraper_login.shift_active
-                        )
-                    login.username = new_text
-                    if is_done and new_text:
-                        login.step = "password"
-                        login.cursor_position = 0
+        from ui.screens.modals.scraper_login_modal import ScraperLoginModal
 
-            elif step == "password":
-                if self.state.input_mode == "keyboard":
-                    # Keyboard mode - Enter pressed, test credentials
-                    if login.password:
-                        self._test_screenscraper_credentials()
-                else:
-                    from ui.screens.modals.scraper_login_modal import ScraperLoginModal
-
-                    modal = ScraperLoginModal()
-                    new_text, is_done, toggle_shift = modal.handle_selection(
-                        provider,
-                        step,
-                        login.cursor_position,
-                        login.password,
-                        shift_active=self.state.scraper_login.shift_active,
-                    )
-                    if toggle_shift:
-                        self.state.scraper_login.shift_active = (
-                            not self.state.scraper_login.shift_active
-                        )
-                    login.password = new_text
-                    if is_done and new_text:
-                        self._test_screenscraper_credentials()
-
-            elif step == "complete":
-                self._close_scraper_login()
-
-            elif step == "error":
-                # Go back to username step to retry
-                login.step = "username"
-                login.password = ""
-                login.cursor_position = 0
-                login.error_message = ""
-
-        elif provider == "api_football":
-            if step == "api_key":
-                if self.state.input_mode == "keyboard":
-                    self.settings["api_football_key"] = login.api_key
-                    save_settings(self.settings)
-                    self._close_scraper_login()
-                else:
-                    from ui.screens.modals.scraper_login_modal import ScraperLoginModal
-
-                    modal = ScraperLoginModal()
-                    new_text, is_done, toggle_shift = modal.handle_selection(
-                        provider,
-                        step,
-                        login.cursor_position,
-                        login.api_key,
-                        shift_active=self.state.scraper_login.shift_active,
-                    )
-                    if toggle_shift:
-                        self.state.scraper_login.shift_active = (
-                            not self.state.scraper_login.shift_active
-                        )
-                    login.api_key = new_text
-                    if is_done and new_text:
-                        self.settings["api_football_key"] = new_text
-                        save_settings(self.settings)
-                        self._close_scraper_login()
-
-        elif provider == "thegamesdb":
-            if step == "api_key":
-                if self.state.input_mode == "keyboard":
-                    if login.api_key:
-                        self._test_thegamesdb_credentials()
-                else:
-                    from ui.screens.modals.scraper_login_modal import ScraperLoginModal
-
-                    modal = ScraperLoginModal()
-                    new_text, is_done, toggle_shift = modal.handle_selection(
-                        provider,
-                        step,
-                        login.cursor_position,
-                        login.api_key,
-                        shift_active=self.state.scraper_login.shift_active,
-                    )
-                    if toggle_shift:
-                        self.state.scraper_login.shift_active = (
-                            not self.state.scraper_login.shift_active
-                        )
-                    login.api_key = new_text
-                    if is_done and new_text:
-                        self._test_thegamesdb_credentials()
-
-            elif step == "complete":
-                self._close_scraper_login()
-
-            elif step == "error":
-                login.step = "api_key"
-                login.cursor_position = 0
-                login.error_message = ""
-
-        elif provider == "rawg":
-            if step == "api_key":
-                if self.state.input_mode == "keyboard":
-                    if login.api_key:
-                        self._test_rawg_credentials()
-                else:
-                    from ui.screens.modals.scraper_login_modal import ScraperLoginModal
-
-                    modal = ScraperLoginModal()
-                    new_text, is_done, toggle_shift = modal.handle_selection(
-                        provider,
-                        step,
-                        login.cursor_position,
-                        login.api_key,
-                        shift_active=self.state.scraper_login.shift_active,
-                    )
-                    if toggle_shift:
-                        self.state.scraper_login.shift_active = (
-                            not self.state.scraper_login.shift_active
-                        )
-                    login.api_key = new_text
-                    if is_done and new_text:
-                        self._test_rawg_credentials()
-
-            elif step == "complete":
-                self._close_scraper_login()
-
-            elif step == "error":
-                login.step = "api_key"
-                login.cursor_position = 0
-                login.error_message = ""
-
-        elif provider == "igdb":
-            if step == "username":
-                if self.state.input_mode == "keyboard":
-                    if login.username:
-                        login.step = "password"
-                        login.cursor_position = 0
-                else:
-                    from ui.screens.modals.scraper_login_modal import (
-                        ScraperLoginModal,
-                    )
-
-                    modal = ScraperLoginModal()
-                    new_text, is_done, toggle_shift = modal.handle_selection(
-                        provider,
-                        step,
-                        login.cursor_position,
-                        login.username,
-                        shift_active=login.shift_active,
-                    )
-                    if toggle_shift:
-                        login.shift_active = not login.shift_active
-                    login.username = new_text
-                    if is_done and new_text:
-                        login.step = "password"
-                        login.cursor_position = 0
-
-            elif step == "password":
-                if self.state.input_mode == "keyboard":
-                    if login.password:
-                        self._test_igdb_credentials()
-                else:
-                    from ui.screens.modals.scraper_login_modal import (
-                        ScraperLoginModal,
-                    )
-
-                    modal = ScraperLoginModal()
-                    new_text, is_done, toggle_shift = modal.handle_selection(
-                        provider,
-                        step,
-                        login.cursor_position,
-                        login.password,
-                        shift_active=login.shift_active,
-                    )
-                    if toggle_shift:
-                        login.shift_active = not login.shift_active
-                    login.password = new_text
-                    if is_done and new_text:
-                        self._test_igdb_credentials()
-
-            elif step == "complete":
-                self._close_scraper_login()
-
-            elif step == "error":
-                login.step = "username"
-                login.password = ""
-                login.cursor_position = 0
-                login.error_message = ""
-
-    def _test_screenscraper_credentials(self):
-        """Test ScreenScraper credentials in background thread."""
-        import base64
-
-        login = self.state.scraper_login
-        login.step = "testing"
-
-        username = login.username
-        password = login.password
-
-        def test_credentials():
-            from services.scraper_providers.screenscraper import ScreenScraperProvider
-
-            encoded_password = base64.b64encode(password.encode()).decode()
-            provider = ScreenScraperProvider(
-                username=username,
-                password=encoded_password,
-            )
-
-            success, error = provider.test_credentials()
-
-            if success:
-                # Save credentials
-                self.settings["screenscraper_username"] = username
-                self.settings["screenscraper_password"] = encoded_password
-                save_settings(self.settings)
-                login.step = "complete"
-            else:
-                login.step = "error"
-                login.error_message = error or "Invalid credentials"
-
-        from threading import Thread
-
-        thread = Thread(target=test_credentials, daemon=True)
-        thread.start()
-
-    def _test_thegamesdb_credentials(self):
-        """Test TheGamesDB API key in background thread."""
-        login = self.state.scraper_login
-        login.step = "testing"
-
-        api_key = login.api_key
-
-        def test_credentials():
-            from services.scraper_providers.thegamesdb import TheGamesDBProvider
-
-            provider = TheGamesDBProvider(api_key=api_key)
-
-            success, results, error = provider.search_game("Mario")
-
-            if success:
-                # Save API key
-                self.settings["thegamesdb_api_key"] = api_key
-                save_settings(self.settings)
-                login.step = "complete"
-            else:
-                login.step = "error"
-                login.error_message = error or "Invalid API key"
-
-        from threading import Thread
-
-        thread = Thread(target=test_credentials, daemon=True)
-        thread.start()
-
-    def _test_rawg_credentials(self):
-        """Test RAWG API key in background thread."""
-        login = self.state.scraper_login
-        login.step = "testing"
-
-        api_key = login.api_key
-
-        def test_credentials():
-            from services.scraper_providers.rawg import RAWGProvider
-
-            provider = RAWGProvider(api_key=api_key)
-
-            success, results, error = provider.search_game("Mario")
-
-            if success:
-                # Save API key
-                self.settings["rawg_api_key"] = api_key
-                save_settings(self.settings)
-                login.step = "complete"
-            else:
-                login.step = "error"
-                login.error_message = error or "Invalid API key"
-
-        from threading import Thread
-
-        thread = Thread(target=test_credentials, daemon=True)
-        thread.start()
-
-    def _test_igdb_credentials(self):
-        """Test IGDB credentials in background thread."""
-        login = self.state.scraper_login
-        login.step = "testing"
-
-        client_id = login.username
-        client_secret = login.password
-
-        def test_credentials():
-            from services.scraper_providers.igdb import IGDBProvider
-
-            provider = IGDBProvider(
-                client_id=client_id,
-                client_secret=client_secret,
-            )
-
-            success, results, error = provider.search_game("Mario")
-
-            if success:
-                self.settings["igdb_client_id"] = client_id
-                self.settings["igdb_client_secret"] = client_secret
-                save_settings(self.settings)
-                login.step = "complete"
-            else:
-                login.step = "error"
-                login.error_message = error or "Invalid credentials"
-
-        from threading import Thread
-
-        thread = Thread(target=test_credentials, daemon=True)
-        thread.start()
+        modal = ScraperLoginModal()
+        new_text, is_done, toggle_shift = modal.handle_selection(
+            login.provider,
+            login.step,
+            login.cursor_position,
+            login.api_key,
+            shift_active=login.shift_active,
+        )
+        if toggle_shift:
+            login.shift_active = not login.shift_active
+        login.api_key = new_text
+        if is_done and new_text:
+            self.settings["api_football_key"] = new_text
+            save_settings(self.settings)
+            self._close_scraper_login()
 
     # ========== Dedupe Wizard Methods ========== #
 

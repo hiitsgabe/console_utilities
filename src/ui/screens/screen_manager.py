@@ -26,7 +26,6 @@ from .modals.confirm_modal import ConfirmModal
 from .modals.ia_login_modal import IALoginModal
 from .modals.ia_download_modal import IADownloadModal
 from .modals.ia_collection_modal import IACollectionModal
-from .modals.scraper_wizard_modal import ScraperWizardModal
 from .modals.scraper_login_modal import ScraperLoginModal
 from .modals.dedupe_wizard_modal import DedupeWizardModal
 from .modals.rename_wizard_modal import RenameWizardModal
@@ -37,7 +36,6 @@ from .modals.patch_progress_modal import PatchProgressModal
 from .modals.color_picker_modal import ColorPickerModal
 from .modals.auth_token_modal import AuthTokenModal
 from .modals.steam_search_modal import SteamSearchModal
-from .scraper_menu_screen import ScraperMenuScreen
 from .sports_patcher_screen import SportsPatcherScreen
 from .we_patcher_screen import WePatcherScreen
 from .iss_patcher_screen import ISSPatcherScreen
@@ -52,7 +50,6 @@ from .pes6_ps2_patcher_screen import PES6PS2PatcherScreen
 from .downloads_screen import DownloadsScreen
 from .file_explorer_screen import FileExplorerScreen
 from .system_info_screen import SystemInfoScreen
-from .scraper_downloads_screen import ScraperDownloadsScreen
 from ui.molecules.status_footer import StatusFooter, StatusFooterItem
 
 
@@ -77,8 +74,6 @@ class ScreenManager:
         self.systems_settings_screen = SystemsSettingsScreen(theme)
         self.system_settings_screen = SystemSettingsScreen(theme)
         self.downloads_screen = DownloadsScreen(theme)
-        self.scraper_downloads_screen = ScraperDownloadsScreen(theme)
-        self.scraper_menu_screen = ScraperMenuScreen(theme)
         self.sports_patcher_screen = SportsPatcherScreen(theme)
         self.we_patcher_screen = WePatcherScreen(theme)
         self.iss_patcher_screen = ISSPatcherScreen(theme)
@@ -107,7 +102,6 @@ class ScreenManager:
         self.ia_download_modal = IADownloadModal(theme)
         self.ia_collection_modal = IACollectionModal(theme)
         self.scraper_login_modal = ScraperLoginModal(theme)
-        self.scraper_wizard_modal = ScraperWizardModal(theme)
         self.dedupe_wizard_modal = DedupeWizardModal(theme)
         self.rename_wizard_modal = RenameWizardModal(theme)
         self.ghost_cleaner_modal = GhostCleanerModal(theme)
@@ -423,95 +417,6 @@ class ScreenManager:
             rects["modal"] = modal_rect
             rects["close"] = close_rect
             rects["char_rects"] = char_rects
-            return rects
-
-        if state.scraper_wizard.show:
-            modal_rect, content_rect, close_rect, item_rects = (
-                self.scraper_wizard_modal.render(
-                    screen,
-                    state.scraper_wizard.step,
-                    state.scraper_wizard.folder_items,
-                    state.scraper_wizard.folder_highlighted,
-                    state.scraper_wizard.folder_current_path,
-                    state.scraper_wizard.selected_rom_path,
-                    state.scraper_wizard.selected_rom_name,
-                    state.scraper_wizard.search_results,
-                    state.scraper_wizard.selected_game_index,
-                    state.scraper_wizard.available_images,
-                    state.scraper_wizard.selected_images,
-                    state.scraper_wizard.image_highlighted,
-                    state.scraper_wizard.download_progress,
-                    state.scraper_wizard.current_download,
-                    state.scraper_wizard.error_message,
-                    input_mode=state.input_mode,
-                    available_videos=state.scraper_wizard.available_videos,
-                    selected_video_index=state.scraper_wizard.selected_video_index,
-                    video_highlighted=state.scraper_wizard.video_highlighted,
-                    batch_mode=state.scraper_wizard.batch_mode,
-                    batch_roms=state.scraper_wizard.batch_roms,
-                    batch_current_index=state.scraper_wizard.batch_current_index,
-                    batch_auto_select=state.scraper_wizard.batch_auto_select,
-                    batch_default_images=state.scraper_wizard.batch_default_images,
-                    mixed_images_enabled=(
-                        settings.get("scraper_mixed_images", False)
-                        and settings.get("scraper_provider", "libretro")
-                        == "screenscraper"
-                    ),
-                    download_video=state.scraper_queue.download_video,
-                    batch_system=state.scraper_wizard.batch_system,
-                    search_name=state.scraper_wizard.search_name,
-                    search_name_cursor=state.scraper_wizard.search_name_cursor,
-                    search_name_shift=state.scraper_wizard.search_name_shift,
-                    button_focused=state.scraper_wizard.button_focused,
-                    nav_bar_index=state.scraper_wizard.nav_bar_index,
-                    scroll_offset=state.text_scroll_offset,
-                )
-            )
-            rects["modal"] = modal_rect
-            rects["close"] = close_rect
-            rects["item_rects"] = item_rects
-            # edit_name step returns char_rects from CharKeyboard
-            if state.scraper_wizard.step == "edit_name":
-                rects["char_rects"] = item_rects
-            rects["scroll_offset"] = self.scraper_wizard_modal._scroll_offset
-            wm = self.scraper_wizard_modal
-            if wm.select_button_rect:
-                rects["select_button"] = wm.select_button_rect
-            if wm.start_button_rect:
-                rects["start_button"] = wm.start_button_rect
-            if wm.done_button_rect:
-                rects["done_button"] = wm.done_button_rect
-            if wm.retry_button_rect:
-                rects["retry_button"] = wm.retry_button_rect
-            if wm.nav_up_rect:
-                rects["nav_up"] = wm.nav_up_rect
-            if wm.nav_down_rect:
-                rects["nav_down"] = wm.nav_down_rect
-            if wm.nav_select_rect:
-                rects["nav_select"] = wm.nav_select_rect
-            if wm.nav_back_rect:
-                rects["nav_back"] = wm.nav_back_rect
-
-            # System picker overlay on top of batch options
-            if state.scraper_wizard.system_picker_active:
-                sw = state.scraper_wizard
-                filtered = wm.system_picker_systems or []
-                sp_modal, sp_content, sp_close, sp_chars, sp_items = (
-                    self.scraper_wizard_modal.render_system_picker(
-                        screen,
-                        filtered,
-                        sw.system_picker_highlighted,
-                        sw.system_picker_search,
-                        sw.system_picker_search_active,
-                        sw.system_picker_cursor,
-                        sw.system_picker_shift,
-                    )
-                )
-                rects["modal"] = sp_modal
-                rects["close"] = sp_close
-                rects["item_rects"] = sp_items
-                rects["char_rects"] = sp_chars
-
             return rects
 
         if state.dedupe_wizard.show:
@@ -980,24 +885,6 @@ class ScreenManager:
             rects["item_rects"] = item_rects
             rects["scroll_offset"] = scroll_offset
 
-        elif state.mode == "scraper_downloads":
-            back_rect, item_rects, scroll_offset = self.scraper_downloads_screen.render(
-                screen,
-                state.scraper_queue,
-                input_mode=state.input_mode,
-            )
-            rects["back"] = back_rect
-            rects["item_rects"] = item_rects
-            rects["scroll_offset"] = scroll_offset
-
-        elif state.mode == "scraper_menu":
-            back_rect, item_rects, scroll_offset = self.scraper_menu_screen.render(
-                screen, state.highlighted, settings
-            )
-            rects["back"] = back_rect
-            rects["item_rects"] = item_rects
-            rects["scroll_offset"] = scroll_offset
-
         elif state.mode == "sports_patcher":
             back_rect, item_rects, scroll_offset = self.sports_patcher_screen.render(
                 screen, state.highlighted, settings
@@ -1111,7 +998,7 @@ class ScreenManager:
             rects.update(fe_rects)
 
         # Render stacked status footers on non-download screens
-        if state.mode not in ("downloads", "scraper_downloads"):
+        if state.mode != "downloads":
             footer_items = self._build_footer_items(state)
             if footer_items:
                 self.status_footer.render(screen, footer_items)
@@ -1161,20 +1048,6 @@ class ScreenManager:
                         color=self.theme.secondary,
                     )
                 )
-
-        # Scraper queue footer (only while actively scraping)
-        sq = state.scraper_queue
-        if sq.active:
-            total = len(sq.items)
-            done = sum(1 for it in sq.items if it.status == "done")
-            progress = done / total if total > 0 else 0.0
-            items.append(
-                StatusFooterItem(
-                    label=sq.current_status or f"Scraping: {done}/{total}",
-                    progress=progress,
-                    color=self.theme.primary,
-                )
-            )
 
         return items
 

@@ -2,11 +2,14 @@
 Utils screen - Utility functions menu.
 """
 
+import os
 import pygame
 from typing import List, Tuple, Optional, Set, Dict, Any
+from xml.etree import ElementTree as ET
 
 from ui.theme import Theme, default_theme
 from ui.templates.list_screen import ListScreenTemplate
+from constants import SCRIPT_DIR
 
 
 class UtilsScreen:
@@ -84,6 +87,10 @@ class UtilsScreen:
         divider_indices.add(len(items))
         items.extend(self.SYSTEM_SECTION_ITEMS)
 
+        # Only offer the frontend link while the app is not registered yet
+        if not self._is_linked_to_frontend(settings):
+            items.append("Link App to Frontend")
+
         # Add download section
         divider_indices.add(len(items))
         items.extend(self.DOWNLOAD_SECTION_ITEMS)
@@ -110,6 +117,46 @@ class UtilsScreen:
             items.extend(self.NSZ_SECTION_ITEMS)
 
         return items, divider_indices
+
+    def _is_linked_to_frontend(self, settings: Dict[str, Any]) -> bool:
+        """Check if the app is already registered in the frontend gamelist.xml."""
+        from constants import BUILD_TARGET
+
+        roms_dir = settings.get("roms_dir", "")
+        if not roms_dir:
+            return False
+
+        build_folder = BUILD_TARGET if BUILD_TARGET != "source" else "pygame"
+        gamelist_path = os.path.join(roms_dir, build_folder, "gamelist.xml")
+
+        if not os.path.exists(gamelist_path):
+            return False
+
+        pygame_file = None
+        try:
+            for f in os.listdir(SCRIPT_DIR):
+                if f.endswith(".pygame"):
+                    pygame_file = f
+                    break
+        except OSError:
+            pass
+
+        if not pygame_file:
+            pygame_file = "console_utils.pygame"
+
+        game_path = f"./{pygame_file}"
+
+        try:
+            tree = ET.parse(gamelist_path)
+            root = tree.getroot()
+            for game in root.findall("game"):
+                path_elem = game.find("path")
+                if path_elem is not None and path_elem.text == game_path:
+                    return True
+        except (ET.ParseError, OSError):
+            pass
+
+        return False
 
     def render(
         self, screen: pygame.Surface, highlighted: int, settings: Dict[str, Any]
@@ -158,6 +205,7 @@ class UtilsScreen:
             item = items[index]
             actions = {
                 "System Information": "system_info",
+                "Link App to Frontend": "add_to_frontend",
                 "Download from URL": "download_url",
                 "Download from Internet Archive": "ia_download",
                 "Add Internet Archive Collection": "ia_add_collection",

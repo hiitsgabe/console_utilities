@@ -56,7 +56,6 @@ A PyGame-based utility suite for handheld gaming consoles, with a retro CRT-them
 - **🎮 Steam Shortcut Creator** — Search Steam games and create `.steam` shortcut files for ES-DE frontends on Android — browse with banner images, pick a folder, and generate the shortcut
 - **🔗 Direct URL Download** — Download a file from any URL
 - **📚 Internet Archive Integration** — Download individual files or add entire IA collections as systems
-- **🖼️ Image Scraping** — Scrape game artwork from multiple providers (Libretro, ScreenScraper, TheGamesDB, RAWG, IGDB) with batch mode support
 - **🔄 File Deduplication** — Detect and remove duplicate files (safe and fuzzy matching)
 - **✏️ Filename Cleanup** — Batch rename files to clean formats
 - **👻 Ghost File Cleaner** — Find and remove orphaned split archives
@@ -132,7 +131,6 @@ Runtime settings are auto-generated and stored in `config.json`:
 - **📁 Directories** — Working directory, ROMs directory
 - **🖥️ Display** — Box art thumbnails, USA-only filter, skip installed games
 - **📚 Internet Archive** — Enable/disable, S3 credentials
-- **🖼️ Scraper** — Provider selection (Libretro, ScreenScraper, TheGamesDB, RAWG, IGDB), frontend format (EmulationStation, ES-DE, RetroArch, Pegasus), API credentials
 - **🔐 NSZ** — Enable/disable, keys file path
 
 ---
@@ -182,8 +180,6 @@ console_utilities/
 │   │   ├── image_cache.py            # 🖼️ Thumbnail caching
 │   │   ├── installed_checker.py      # ✅ Local file detection
 │   │   ├── internet_archive.py       # 📚 Internet Archive API
-│   │   ├── scraper_manager.py        # 🔍 Image scraper orchestration
-│   │   ├── scraper_providers/        # 🎨 Libretro, ScreenScraper, etc.
 │   │   ├── we_patcher/              # ⚽ PS1 soccer ROM patcher
 │   │   ├── iss_patcher/             # ⚽ SNES soccer ROM patcher
 │   │   ├── kgj_mlb_patcher/         # ⚾ SNES baseball ROM patcher

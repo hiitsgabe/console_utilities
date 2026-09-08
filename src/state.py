@@ -237,66 +237,17 @@ class IACollectionWizardState:
 
 @dataclass
 class ScraperLoginState:
-    """State for scraper login modal (ScreenScraper/TheGamesDB)."""
+    """State for the API key input modal."""
 
     show: bool = False
-    provider: str = "screenscraper"  # screenscraper, thegamesdb, or libretro
-    step: str = "username"  # username, password, api_key, testing, complete, error
+    provider: str = "api_football"
+    step: str = "api_key"
     username: str = ""
     password: str = ""
     api_key: str = ""
     cursor_position: int = 0
     error_message: str = ""
     shift_active: bool = False
-
-
-@dataclass
-class ScraperWizardState:
-    """State for game image scraper wizard modal."""
-
-    show: bool = False
-    step: str = (
-        "rom_select"  # rom_select, searching, game_select, image_select, video_select, downloading, updating_metadata, complete, error
-    )
-    # Single ROM mode
-    selected_rom_path: str = ""
-    selected_rom_name: str = ""
-    search_name: str = ""  # Editable game name for search
-    search_name_cursor: int = 0  # Keyboard grid cursor (for CharKeyboard)
-    search_name_shift: bool = False  # Shift state for on-screen keyboard
-    folder_items: List[Dict[str, Any]] = field(default_factory=list)
-    folder_highlighted: int = 0
-    folder_current_path: str = ""
-    search_results: List[Dict[str, Any]] = field(default_factory=list)
-    selected_game_index: int = 0
-    available_images: List[Dict[str, Any]] = field(default_factory=list)
-    selected_images: Set[int] = field(default_factory=set)
-    image_highlighted: int = 0
-    download_progress: float = 0.0
-    current_download: str = ""
-    error_message: str = ""
-    # Video selection
-    available_videos: List[Dict[str, Any]] = field(default_factory=list)
-    selected_video_index: int = -1  # -1 = no video selected
-    video_highlighted: int = 0
-    # Batch mode
-    batch_mode: bool = False
-    batch_roms: List[Dict[str, Any]] = field(default_factory=list)
-    batch_current_index: int = 0
-    batch_auto_select: bool = True
-    batch_default_images: List[str] = field(
-        default_factory=lambda: ["box-2D", "boxart"]
-    )
-    batch_system: str = ""  # per-batch platform override (e.g. "psx", "snes")
-    button_focused: bool = False  # Whether action button at bottom is focused
-    nav_bar_index: int = -1  # Focused navbar button index (-1 = not focused)
-    # System picker modal state
-    system_picker_active: bool = False
-    system_picker_highlighted: int = 0
-    system_picker_search: str = ""
-    system_picker_search_active: bool = False
-    system_picker_cursor: int = 0
-    system_picker_shift: bool = False
 
 
 @dataclass
@@ -349,36 +300,6 @@ class RenameWizardState:
     files_renamed: int = 0
     error_message: str = ""
     mode_highlighted: int = 0
-
-
-@dataclass
-class ScraperQueueItem:
-    """State for a single scraper queue item."""
-
-    name: str  # ROM display name
-    path: str  # ROM file path
-    status: str = (
-        "pending"  # pending | searching | downloading | done | error | skipped
-    )
-    skip_reason: str = ""  # e.g. "image_exists"
-    error: str = ""
-
-
-@dataclass
-class ScraperQueueState:
-    """State for background batch scraping queue."""
-
-    items: List[ScraperQueueItem] = field(default_factory=list)
-    active: bool = False  # True when scraper thread is running
-    current_index: int = 0
-    current_status: str = ""  # Human-readable status text
-    folder_path: str = ""
-    auto_select: bool = True
-    default_images: List[str] = field(default_factory=lambda: ["box-2D", "boxart"])
-    parallel_workers: int = 1
-    highlighted: int = 0  # Currently highlighted item in scraper downloads screen
-    download_video: bool = False  # Download video for each ROM during batch
-    system: str = ""  # Per-batch platform override (e.g. "psx", "snes")
 
 
 @dataclass
@@ -1053,18 +974,14 @@ class AppState:
         self.ia_download_wizard = IADownloadWizardState()
         self.ia_collection_wizard = IACollectionWizardState()
 
-        # ---- Scraper ---- #
+        # ---- API Key Input ---- #
         self.scraper_login = ScraperLoginState()
-        self.scraper_wizard = ScraperWizardState()
 
         # ---- Dedupe ---- #
         self.dedupe_wizard = DedupeWizardState()
 
         # ---- Rename ---- #
         self.rename_wizard = RenameWizardState()
-
-        # ---- Scraper Queue (background batch) ---- #
-        self.scraper_queue = ScraperQueueState()
 
         # ---- Ghost Cleaner ---- #
         self.ghost_cleaner_wizard = GhostCleanerWizardState()
@@ -1194,7 +1111,6 @@ class AppState:
         self.ia_download_wizard.show = False
         self.ia_collection_wizard.show = False
         self.scraper_login.show = False
-        self.scraper_wizard.show = False
         self.dedupe_wizard.show = False
         self.rename_wizard.show = False
         self.ghost_cleaner_wizard.show = False

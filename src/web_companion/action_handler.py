@@ -66,12 +66,6 @@ def handle_action(state, action_data):
             state.folder_browser.focus_area = "list"
             state.folder_browser.highlighted = index
             _post_key(pygame.K_RETURN)
-        elif state.scraper_wizard.show and state.scraper_wizard.step in (
-            "rom_select",
-            "folder_select",
-        ):
-            state.scraper_wizard.folder_highlighted = index
-            _post_key(pygame.K_RETURN)
 
     elif action == "select_folder":
         # Confirm current folder in folder browser
@@ -79,9 +73,6 @@ def handle_action(state, action_data):
             state.folder_browser.focus_area = "buttons"
             state.folder_browser.button_index = 0  # Select
             _post_key(pygame.K_RETURN)
-        elif state.scraper_wizard.show and state.scraper_wizard.step == "folder_select":
-            # Trigger Start action to select folder for batch scraping
-            _post_key(pygame.K_SPACE)
 
     elif action == "cycle_field":
         # Cycle a patcher form field left/right (season, language, etc.)
@@ -178,22 +169,9 @@ def _handle_set_text(state, text):
             state.ia_collection_wizard.folder_name = text
             state.ia_collection_wizard.cursor_position = len(text)
     elif state.scraper_login.show:
-        step = state.scraper_login.step
-        if step == "username":
-            state.scraper_login.username = text
-            state.scraper_login.cursor_position = len(text)
-        elif step == "password":
-            state.scraper_login.password = text
-            state.scraper_login.cursor_position = len(text)
-        elif step == "api_key":
+        if state.scraper_login.step == "api_key":
             state.scraper_login.api_key = text
             state.scraper_login.cursor_position = len(text)
-    elif state.scraper_wizard.show and state.scraper_wizard.step == "edit_name":
-        state.scraper_wizard.search_name = text
-        state.scraper_wizard.search_name_cursor = len(text)
-    elif state.scraper_wizard.show and state.scraper_wizard.system_picker_active:
-        state.scraper_wizard.system_picker_search = text
-        state.scraper_wizard.system_picker_highlighted = 0
     elif state.steam_shortcut.show and state.steam_shortcut.step == "search":
         state.steam_shortcut.search_query = text
         state.steam_shortcut.cursor_position = len(text)
@@ -255,24 +233,6 @@ def _handle_select_index(state, index):
             state.ia_collection_wizard.format_highlighted = index
         elif step == "options":
             state.ia_collection_wizard.options_highlighted = index
-    elif state.scraper_wizard.show:
-        if state.scraper_wizard.system_picker_active:
-            state.scraper_wizard.system_picker_highlighted = index
-            _post_key(pygame.K_RETURN)
-            return
-        step = state.scraper_wizard.step
-        if step in ("rom_select", "folder_select"):
-            state.scraper_wizard.folder_highlighted = index
-        elif step == "game_select":
-            state.scraper_wizard.selected_game_index = index
-        elif step == "image_select":
-            state.scraper_wizard.image_highlighted = index
-        elif step == "video_select":
-            state.scraper_wizard.video_highlighted = index
-        elif step == "rom_list":
-            state.scraper_wizard.batch_current_index = index
-        elif step == "batch_options":
-            state.scraper_wizard.image_highlighted = index
     elif state.dedupe_wizard.show:
         step = state.dedupe_wizard.step
         if step == "mode_select":
@@ -311,8 +271,6 @@ def _handle_select_index(state, index):
         state.systems_settings_highlighted = index
     elif state.mode == "system_settings":
         state.system_settings_highlighted = index
-    elif state.mode == "scraper_downloads":
-        state.scraper_queue.highlighted = index
     else:
         state.highlighted = index
 

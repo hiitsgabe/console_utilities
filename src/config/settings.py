@@ -40,26 +40,8 @@ class Settings:
     nhl07_provider: str = "espn"  # espn, nhl
     api_football_key: str = ""
     we_patcher_language: str = "en"  # en, es, fr, pt
-    # Scraper settings
-    scraper_frontend: str = (
-        "emulationstation_base"  # emulationstation_base, esde_android, retroarch, pegasus
-    )
-    scraper_provider: str = "libretro"  # libretro, screenscraper, thegamesdb
-    scraper_fallback_enabled: bool = True
-    auto_scrape_after_download: bool = False
-    scraper_preferred_system: str = ""  # deprecated, now per-batch in wizard
-    screenscraper_username: str = ""
-    screenscraper_password: str = ""  # base64 encoded
-    thegamesdb_api_key: str = ""
-    rawg_api_key: str = ""
-    igdb_client_id: str = ""
-    igdb_client_secret: str = ""  # base64 encoded
     # Web Companion
     web_companion_enabled: bool = True
-    # Frontend-specific paths
-    esde_media_path: str = ""
-    esde_gamelists_path: str = ""
-    retroarch_thumbnails_path: str = ""
 
     def __post_init__(self):
         """Set default paths if not specified."""

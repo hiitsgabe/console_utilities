@@ -47,7 +47,7 @@ AppState = _state_mod.AppState
 FolderBrowserState = _state_mod.FolderBrowserState
 
 
-def _go_back_stub(selection_type, scraper=False):
+def _go_back_stub(selection_type):
     """Build a stub `self` whose `_go_back()` reaches the folder_browser branch.
 
     A real AppState gives every modal `show=False` by default, so the only
@@ -72,16 +72,6 @@ def _go_back_stub(selection_type, scraper=False):
     state.steam_shortcut.show = False
 
     stub = SimpleNamespace(state=state, settings={"work_dir": "/work"})
-    if scraper:
-        from app import ConsoleUtilitiesApp
-
-        stub.screen_manager = SimpleNamespace(
-            scraper_wizard_modal=SimpleNamespace(clear_thumbs=lambda: None)
-        )
-        # The scraper special-case calls the real _close_scraper_wizard.
-        stub._close_scraper_wizard = lambda: ConsoleUtilitiesApp._close_scraper_wizard(
-            stub
-        )
     return stub
 
 
@@ -90,7 +80,7 @@ PREVIOUSLY_BROKEN_TYPES = [
     "work_dir",
     "dedupe_folder",
     "we_patcher_rom",
-    "retroarch_thumbnails",
+    "ia_download_folder",
 ]
 
 
@@ -132,21 +122,6 @@ def test_x_close_ia_collection_resets_and_restores_parent():
     assert fb.button_index == 0
     assert stub.state.ia_collection_wizard.step == "name"
     assert stub.state.ia_collection_wizard.cursor_position == 0
-
-
-def test_x_close_scraper_batch_resets_and_closes_wizard():
-    """X-close on the scraper folder picker resets AND tears down the scraper wizard."""
-    from app import ConsoleUtilitiesApp
-
-    stub = _go_back_stub("scraper_batch_folder", scraper=True)
-    ConsoleUtilitiesApp._go_back(stub)
-
-    fb = stub.state.folder_browser
-    assert fb.show is False
-    assert fb.scroll_offset == 0
-    assert fb.button_index == 0
-    assert stub.state.scraper_wizard.show is False
-    assert stub.state.scraper_wizard.step == "rom_select"
 
 
 def test_x_close_steam_shortcut_resets_and_restores_results():

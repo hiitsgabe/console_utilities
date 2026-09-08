@@ -17,9 +17,6 @@ _FOLDER_SELECTION_TYPES = frozenset(
         "work_dir",
         "roms_dir",
         "custom_folder",
-        "esde_media_path",
-        "esde_gamelists_path",
-        "retroarch_thumbnails",
         "add_system_folder",
         "ia_collection_folder",
         "dedupe_folder",
@@ -27,7 +24,6 @@ _FOLDER_SELECTION_TYPES = frozenset(
         "ghost_cleaner_folder",
         "ia_download_folder",
         "steam_shortcut",
-        "scraper_batch_folder",
         "folder",
     }
 )

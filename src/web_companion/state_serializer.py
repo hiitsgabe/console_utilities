@@ -458,49 +458,26 @@ def serialize_web_state(state, settings=None, data=None):
                 "progress": 0,
             }
 
-    # Scraper login
+    # API key input
     if state.scraper_login.show:
-        step = state.scraper_login.step
-        provider = state.scraper_login.provider
-        if step == "username":
+        if state.scraper_login.step == "api_key":
             return {
                 "screen_type": "text_input",
-                "title": f"{provider.title()} - Username",
-                "text": state.scraper_login.username,
-                "input_type": "text",
-                "cursor": state.scraper_login.cursor_position,
-            }
-        elif step == "password":
-            return {
-                "screen_type": "text_input",
-                "title": f"{provider.title()} - Password",
-                "text": state.scraper_login.password,
-                "input_type": "password",
-                "cursor": state.scraper_login.cursor_position,
-            }
-        elif step == "api_key":
-            return {
-                "screen_type": "text_input",
-                "title": f"{provider.title()} - API Key",
+                "title": f"{state.scraper_login.provider.title()} - API Key",
                 "text": state.scraper_login.api_key,
                 "input_type": "text",
                 "cursor": state.scraper_login.cursor_position,
             }
-        else:
-            return {
-                "screen_type": "loading",
-                "title": f"{provider.title()} Login",
-                "message": f"Step: {step}",
-                "progress": 0,
-            }
+        return {
+            "screen_type": "loading",
+            "title": f"{state.scraper_login.provider.title()} API Key",
+            "message": f"Step: {state.scraper_login.step}",
+            "progress": 0,
+        }
 
     # Steam shortcut modal
     if state.steam_shortcut.show:
         return _serialize_steam_shortcut(state.steam_shortcut)
-
-    # Scraper wizard
-    if state.scraper_wizard.show:
-        return _serialize_scraper_wizard(state.scraper_wizard, settings)
 
     # Dedupe wizard
     if state.dedupe_wizard.show:
@@ -681,17 +658,6 @@ def serialize_web_state(state, settings=None, data=None):
                     "nhl": "NHL API (Historical)",
                 }
                 value = nhl_labels.get(nhl_provider, nhl_provider)
-            elif label == "Enable Scraper":
-                value = "ON" if s.get("scraper_enabled", False) else "OFF"
-            elif label == "Scraper Frontend":
-                frontend = s.get("scraper_frontend", "emulationstation_base")
-                frontend_labels = {
-                    "emulationstation_base": "ES Base",
-                    "esde_android": "ES-DE Android",
-                    "retroarch": "RetroArch",
-                    "pegasus": "Pegasus",
-                }
-                value = frontend_labels.get(frontend, frontend)
             elif label == "Enable NSZ":
                 value = "ON" if s.get("nsz_enabled", False) else "OFF"
             elif label == "Web Companion":
@@ -804,92 +770,6 @@ def serialize_web_state(state, settings=None, data=None):
                 else [{"name": "No additional systems available", "selected": False}]
             ),
             "highlighted": getattr(state, "add_systems_highlighted", 0),
-        }
-
-    if state.mode == "scraper_menu":
-        from ui.screens.scraper_menu_screen import ScraperMenuScreen
-
-        sm = ScraperMenuScreen()
-        menu_items, divider_indices = sm._get_items(settings or {})
-        s = settings or {}
-        items = []
-        for i, label in enumerate(menu_items):
-            if i in divider_indices:
-                items.append({"name": label, "is_divider": True})
-                continue
-            value = ""
-            if label == "Scraper Provider":
-                provider = s.get("scraper_provider", "libretro")
-                labels = {
-                    "libretro": "Libretro Thumbnails",
-                    "screenscraper": "ScreenScraper",
-                    "thegamesdb": "TheGamesDB",
-                    "rawg": "RAWG",
-                    "igdb": "IGDB (Twitch)",
-                }
-                value = labels.get(provider, provider)
-            elif label == "Provider Fallback":
-                value = "Enabled" if s.get("scraper_fallback_enabled", True) else "Disabled"
-            elif label == "Parallel Downloads":
-                value = str(s.get("scraper_parallel_downloads", 1))
-            elif label == "Mixed Images":
-                value = "ON" if s.get("scraper_mixed_images", False) else "OFF"
-            elif label == "ScreenScraper Login":
-                username = s.get("screenscraper_username", "")
-                if username:
-                    value = username[:12] + "..." if len(username) > 15 else username
-                else:
-                    value = "Not logged in"
-            elif label == "TheGamesDB API Key":
-                value = "Set" if s.get("thegamesdb_api_key", "") else "Not Set"
-            elif label == "RAWG API Key":
-                value = "Set" if s.get("rawg_api_key", "") else "Not Set"
-            elif label == "IGDB Login":
-                client_id = s.get("igdb_client_id", "")
-                if client_id:
-                    value = client_id[:12] + "..." if len(client_id) > 15 else client_id
-                else:
-                    value = "Not configured"
-            elif label == "ES-DE Media Path":
-                path = s.get("esde_media_path", "")
-                value = _shorten_path(path) if path else "Not Set"
-            elif label == "ES-DE Gamelists Path":
-                path = s.get("esde_gamelists_path", "")
-                value = _shorten_path(path) if path else "Not Set"
-            elif label == "RetroArch Thumbnails":
-                path = s.get("retroarch_thumbnails_path", "")
-                value = _shorten_path(path) if path else "Not Set"
-            items.append({"name": label, "selected": False, "value": value})
-        return {
-            "screen_type": "list",
-            "title": "Scraper",
-            "items": items,
-            "highlighted": state.highlighted,
-        }
-
-    if state.mode == "scraper_downloads":
-        items = []
-        for it in state.scraper_queue.items:
-            status_map = {
-                "pending": "Waiting",
-                "searching": "Searching...",
-                "downloading": "Downloading...",
-                "done": "Done",
-                "error": "Error",
-                "skipped": it.skip_reason or "Skipped",
-            }
-            items.append(
-                {
-                    "name": it.name,
-                    "selected": False,
-                    "status": status_map.get(it.status, it.status),
-                }
-            )
-        return {
-            "screen_type": "list",
-            "title": "Scraper Downloads",
-            "items": items,
-            "highlighted": state.scraper_queue.highlighted,
         }
 
     if state.mode == "systems_settings":
@@ -1462,253 +1342,6 @@ def _serialize_ghost_cleaner(wizard):
     }
 
 
-def _serialize_scraper_wizard(wizard, settings=None):
-    """Serialize scraper wizard state based on current step."""
-    step = wizard.step
-
-    if step == "rom_select":
-        items = []
-        for f in wizard.folder_items:
-            if isinstance(f, dict):
-                item_type = f.get("type", "")
-                items.append(
-                    {
-                        "name": f.get("name", ""),
-                        "is_dir": item_type in ("folder", "parent"),
-                        "type": item_type,
-                    }
-                )
-        return {
-            "screen_type": "file_browser",
-            "title": "Select ROM",
-            "current_path": getattr(wizard, "folder_current_path", ""),
-            "entries": items,
-            "highlighted": wizard.folder_highlighted,
-        }
-
-    if step == "folder_select":
-        items = []
-        for f in wizard.folder_items:
-            if isinstance(f, dict):
-                item_type = f.get("type", "")
-                items.append(
-                    {
-                        "name": f.get("name", ""),
-                        "is_dir": item_type in ("folder", "parent"),
-                        "type": item_type,
-                    }
-                )
-        return {
-            "screen_type": "file_browser",
-            "title": "Select ROM Folder",
-            "current_path": getattr(wizard, "folder_current_path", ""),
-            "entries": items,
-            "highlighted": wizard.folder_highlighted,
-            "show_select_button": True,
-        }
-
-    if step == "game_select":
-        items = [
-            {"name": r.get("name", ""), "selected": i == wizard.selected_game_index}
-            for i, r in enumerate(wizard.search_results)
-        ]
-        return {
-            "screen_type": "list",
-            "title": "Select Game Match",
-            "items": items,
-            "highlighted": wizard.selected_game_index,
-        }
-
-    if step == "image_select":
-        items = []
-        for i, img in enumerate(wizard.available_images):
-            name = (
-                img.get("type", img.get("name", f"Image {i}"))
-                if isinstance(img, dict)
-                else str(img)
-            )
-            items.append(
-                {
-                    "name": name,
-                    "selected": i in wizard.selected_images,
-                }
-            )
-        return {
-            "screen_type": "list",
-            "title": "Select Images",
-            "items": items,
-            "highlighted": wizard.image_highlighted,
-            "multi_select": True,
-        }
-
-    if step == "video_select":
-        items = [{"name": "No Video", "selected": wizard.selected_video_index == -1}]
-        for i, vid in enumerate(wizard.available_videos):
-            name = (
-                vid.get("type", vid.get("name", f"Video {i}"))
-                if isinstance(vid, dict)
-                else str(vid)
-            )
-            items.append(
-                {
-                    "name": name,
-                    "selected": wizard.selected_video_index == i,
-                }
-            )
-        return {
-            "screen_type": "list",
-            "title": "Select Video",
-            "items": items,
-            "highlighted": wizard.video_highlighted,
-        }
-
-    if step == "rom_list":
-        items = []
-        for rom in wizard.batch_roms:
-            name = rom.get("name", "")
-            status = rom.get("status", "pending")
-            items.append(
-                {
-                    "name": name,
-                    "selected": status == "pending",
-                    "status": status,
-                }
-            )
-        return {
-            "screen_type": "list",
-            "title": f"ROMs to Scrape ({sum(1 for r in wizard.batch_roms if r.get('status') == 'pending')} selected)",
-            "items": items,
-            "highlighted": wizard.batch_current_index,
-            "multi_select": True,
-            "wizard_action": "scraper_rom_list",
-        }
-
-    if step == "edit_name":
-        return {
-            "screen_type": "text_input",
-            "title": "Edit Game Name",
-            "text": getattr(wizard, "search_name", ""),
-            "input_type": "text",
-            "cursor": getattr(wizard, "search_name_cursor", 0),
-        }
-
-    if step == "batch_options":
-        items = _build_batch_options(wizard, settings)
-        return {
-            "screen_type": "list",
-            "title": "Batch Scraper Options",
-            "items": items,
-            "highlighted": wizard.image_highlighted,
-            "wizard_action": "scraper_batch_options",
-        }
-
-    if step == "batch_processing":
-        current = getattr(wizard, "batch_current_index", 0)
-        total = len(getattr(wizard, "batch_roms", []))
-        return {
-            "screen_type": "loading",
-            "title": "Batch Scraping",
-            "message": getattr(wizard, "current_download", "")
-            or f"Processing {current}/{total}",
-            "progress": int((current / total * 100) if total else 0),
-        }
-
-    if getattr(wizard, "system_picker_active", False):
-        # System picker overlay during batch options
-        items = []
-        search = getattr(wizard, "system_picker_search", "")
-        try:
-            from app import ConsoleUtilitiesApp
-
-            all_systems = [("Auto (detect from folder)", "")] + list(
-                ConsoleUtilitiesApp._ALL_SYSTEMS
-            )
-            query = search.lower().strip()
-            for name, sid in all_systems:
-                if query and query not in name.lower() and query not in sid.lower():
-                    continue
-                items.append({"name": name, "selected": False})
-        except Exception:
-            pass
-        return {
-            "screen_type": "list",
-            "title": "Select System",
-            "items": items,
-            "highlighted": getattr(wizard, "system_picker_highlighted", 0),
-            "search": search,
-            "searchable": True,
-        }
-
-    if step in ("searching", "downloading", "updating_metadata", "batch_scraping"):
-        return {
-            "screen_type": "loading",
-            "title": "Scraper",
-            "message": getattr(wizard, "current_download", "") or step,
-            "progress": int(wizard.download_progress * 100),
-        }
-
-    if step in ("complete", "batch_complete"):
-        return {
-            "screen_type": "confirm",
-            "title": "Scraper Complete",
-            "message": "Scraping finished successfully",
-            "buttons": ["OK", ""],
-            "selected": 0,
-        }
-
-    if step == "error":
-        return {
-            "screen_type": "confirm",
-            "title": "Scraper Error",
-            "message": getattr(wizard, "error_message", "") or "An error occurred",
-            "buttons": ["Retry", ""],
-            "selected": 0,
-        }
-
-    return {
-        "screen_type": "loading",
-        "title": "Scraper",
-        "message": step,
-        "progress": 0,
-    }
-
-
-def _build_batch_options(wizard, settings=None):
-    """Build batch scraper options list."""
-    s = settings or {}
-    items = []
-    batch_system = getattr(wizard, "batch_system", "")
-    system_display = batch_system if batch_system else "Auto"
-    items.append({"name": "System", "value": system_display, "selected": False})
-    auto_select = getattr(wizard, "auto_select", True)
-    items.append(
-        {"name": "Auto-select", "value": "ON" if auto_select else "OFF", "selected": False}
-    )
-    default_images = getattr(wizard, "batch_default_images", [])
-    mixed_images_enabled = (
-        s.get("scraper_mixed_images", False)
-        and s.get("scraper_provider", "libretro") == "screenscraper"
-    )
-    if mixed_images_enabled:
-        image_types = ["box-2D", "boxart", "mixrbv1", "mixrbv2", "screenshot", "fanart"]
-    else:
-        image_types = ["box-2D", "boxart", "screenshot", "wheel", "fanart"]
-    for img_type in image_types:
-        enabled = img_type in default_images
-        items.append(
-            {"name": img_type, "value": "ON" if enabled else "OFF", "selected": False}
-        )
-    download_video = getattr(wizard, "download_video", False)
-    items.append(
-        {
-            "name": "Download Video",
-            "value": "ON" if download_video else "OFF",
-            "selected": False,
-        }
-    )
-    return items
-
-
 def _serialize_steam_shortcut(shortcut):
     """Serialize steam shortcut creator state based on current step."""
     step = shortcut.step
@@ -1781,7 +1414,6 @@ def _build_settings_items(settings):
         ("Show Download All", "show_download_all", False),
         ("Enable Internet Archive", "ia_enabled", False),
         ("Enable Sports Updater", "sports_roster_enabled", False),
-        ("Enable Scraper", "scraper_enabled", False),
         ("Web Companion", "web_companion_enabled", False),
     ]
     for label, key, default in toggles:

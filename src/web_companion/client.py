@@ -1420,12 +1420,6 @@ function renderList(state) {
         } else if (state.wizard_action === 'rename_manual') {
             html += `<button class="btn primary" onclick="sendAction({action:'select'})">Toggle</button>`;
             html += `<button class="btn" onclick="sendAction({action:'back'})">Cancel</button>`;
-        } else if (state.wizard_action === 'scraper_rom_list') {
-            html += `<button class="btn primary" onclick="sendAction({action:'select'})">Toggle</button>`;
-            html += `<button class="btn" onclick="sendAction({action:'start'})">Continue</button>`;
-        } else if (state.wizard_action === 'scraper_batch_options') {
-            html += `<button class="btn primary" onclick="sendAction({action:'select'})">Toggle</button>`;
-            html += `<button class="btn" onclick="sendAction({action:'start'})">Start Batch</button>`;
         } else if (state.wizard_action === 'downloads') {
             html += `<button class="btn" onclick="sendAction({action:'select'})">Cancel/Remove</button>`;
             html += `<button class="btn" onclick="sendAction({action:'back'})">Back</button>`;

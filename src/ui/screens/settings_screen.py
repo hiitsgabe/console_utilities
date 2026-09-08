@@ -67,14 +67,6 @@ class SettingsScreen:
         "Roster Hockey Data Source",
     ]
 
-    # Scraper section
-    SCRAPER_SECTION = [
-        "--- ARTBOX GAMES SCRAPER ---",
-        "Enable Scraper",
-        "Scraper Frontend",
-        "Auto-Scrape After Download",
-    ]
-
     # NSZ section
     NSZ_SECTION = [
         "--- NSZ ---",
@@ -158,15 +150,6 @@ class SettingsScreen:
             if settings.get("sports_roster_provider", "espn") == "api_football":
                 items.append(self.SPORTS_ROSTER_SECTION[3])  # API-Football Key
             items.append(self.SPORTS_ROSTER_SECTION[4])  # Roster Hockey Data Source
-
-        # Add Scraper section
-        scraper_enabled = settings.get("scraper_enabled", False)
-        divider_indices.add(len(items))
-        items.append(self.SCRAPER_SECTION[0])
-        items.append(self.SCRAPER_SECTION[1])
-        if scraper_enabled:
-            items.append(self.SCRAPER_SECTION[2])  # Scraper Frontend
-            items.append(self.SCRAPER_SECTION[3])  # Auto-Scrape After Download
 
         # Add NSZ section
         nsz_enabled = settings.get("nsz_enabled", False)
@@ -287,25 +270,6 @@ class SettingsScreen:
                     "nhl": "NHL API (Historical)",
                 }
                 items.append((item, nhl_labels.get(nhl_provider, nhl_provider)))
-            elif item == "Enable Scraper":
-                value = "ON" if settings.get("scraper_enabled", False) else "OFF"
-                items.append((item, value))
-            elif item == "Scraper Frontend":
-                frontend = settings.get("scraper_frontend", "emulationstation_base")
-                frontend_labels = {
-                    "emulationstation_base": "ES Base",
-                    "esde_android": "ES-DE Android",
-                    "retroarch": "RetroArch",
-                    "pegasus": "Pegasus",
-                }
-                items.append((item, frontend_labels.get(frontend, frontend)))
-            elif item == "Auto-Scrape After Download":
-                value = (
-                    "ON"
-                    if settings.get("auto_scrape_after_download", False)
-                    else "OFF"
-                )
-                items.append((item, value))
             elif item == "Enable NSZ":
                 value = "ON" if settings.get("nsz_enabled", False) else "OFF"
                 items.append((item, value))
@@ -394,9 +358,6 @@ class SettingsScreen:
                 "Roster Soccer Data Source": "toggle_roster_provider",
                 "API-Football Key": "edit_api_football_key",
                 "Roster Hockey Data Source": "toggle_nhl94_provider",
-                "Enable Scraper": "toggle_scraper_enabled",
-                "Scraper Frontend": "toggle_scraper_frontend",
-                "Auto-Scrape After Download": "toggle_auto_scrape_after_download",
                 "Enable NSZ": "toggle_nsz_enabled",
                 "Web Companion": "toggle_web_companion",
                 "Check for Updates": "check_for_updates",
