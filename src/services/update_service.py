@@ -27,7 +27,6 @@ TARGET_ASSET_MAP = {
     "pygame": "pygame.zip",
     "macos": "macos.zip",
     "windows": "windows.zip",
-    "android": "consoleutils.apk",
 }
 
 

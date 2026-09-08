@@ -1,9 +1,7 @@
-.PHONY: run debug stream watch install dev clean test lint format setup build-android bundle bundle-macos bundle-windows release run-android android-status
+.PHONY: run debug stream watch install dev clean test lint format setup bundle bundle-macos bundle-windows release
 
-# Load .env if present (for KEYSTORE_PASSWORD etc.)
+# Load .env if present
 -include .env
-export KEYSTORE_PASSWORD
-export APPETIZE_API_KEY
 
 CONDA_ENV = app_cutil
 CONDA_ACTIVATE = conda run -n $(CONDA_ENV)
@@ -160,51 +158,6 @@ bundle-windows:
 	@echo "✅ Windows exe created: dist/windows.zip"
 	@echo "   Extract and run Console Utilities.exe"
 
-prepare-build-zip:
-	mkdir -p build
-	mkdir -p build/assets/images
-	mkdir -p build/src
-	cp -r src/* build/src
-	cp -r assets/images/background.png build/assets/images/background.png
-	cp -r buildozer.spec build/
-	cp -r main.py build/
-	mkdir -p build/recipes
-	cp -r recipes/* build/recipes
-	cp -r assets/images/logo.png build/icon.png
-	cp -r assets/images/logo_big.png build/presplash.png
-	cd build && zip -r ../build.zip *
-	rm -rf build
-	@echo "Distribution created in dist/ folder"
-	@echo "Copy dist/dw.pygame and dist/download.json to console pygame directory"
-
-# Build Android APK using custom buildozer Docker image
-CMD ?= debug
-
-build-android:
-	@echo "🚀 Building Console Utilities Android APK ($(CMD))..."
-	@mkdir -p dist
-	@# Inject build info into constants before building
-	@if [ -n "$(VERSION)" ]; then \
-		sed -i.bak 's/^APP_VERSION = .*/APP_VERSION = "$(VERSION)"/' src/constants.py; \
-	fi
-	@sed -i.bak 's/^BUILD_TARGET = .*/BUILD_TARGET = "android"/' src/constants.py
-	@rm -f src/constants.py.bak
-	@echo "🚀 Building Docker Image..."
-	docker build --build-arg KEYSTORE_PASSWORD=$(KEYSTORE_PASSWORD) -t rom-builder -f docker/dockerfile.android .
-	@echo "🚀 Running Docker Container..."
-	docker run --name rom-build rom-builder
-	mkdir -p dist/android
-	cp assets/docs/android.md dist/android/README.md
-	cp assets/examples/archive_example.json dist/android/example.json
-	@echo "🚀 Copying APK..."
-	docker cp rom-build:/dist/. ./dist/android/
-	cd dist/android && zip -r ../android.zip *
-	rm -rf dist/android
-	@echo "🚀 Removing Docker Container..."
-	docker rm rom-build
-	@# Restore constants after build
-	@git checkout src/constants.py 2>/dev/null || true
-	@echo "🎉 APK built successfully!"
 # Format code with black
 format:
 	$(CONDA_ACTIVATE) black src/
@@ -223,15 +176,6 @@ release:
 	@gh workflow run release.yml
 	@echo "Check progress: gh run list --workflow=release.yml"
 
-# ─── Appetize.io Cloud Emulator ───────────────────────────────
-# Upload APK to Appetize.io and get a browser link
-run-android:
-	@./scripts/appetize.sh upload
-
-# Check app status on Appetize.io
-android-status:
-	@./scripts/appetize.sh status
-
 # Show help
 help:
 	@echo "Available targets:"
@@ -249,8 +193,5 @@ help:
 	@echo "  bundle        - Create pygame bundle (.pygame file + assets)"
 	@echo "  bundle-macos  - Create macOS .app bundle (standalone)"
 	@echo "  bundle-windows- Create Windows .exe bundle (standalone)"
-	@echo "  build-android      - Build Android APK using Docker"
-	@echo "  run-android        - Upload APK to Appetize.io cloud emulator"
-	@echo "  android-status     - Check app status on Appetize.io"
 	@echo "  release            - Create release and upload to GitHub (VERSION=v1.0.0)"
 	@echo "  help               - Show this help message"

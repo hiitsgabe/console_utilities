@@ -18,7 +18,7 @@ I will never ask you to donate money to this project, or for me, because of this
 
 > ⚠️ **Disclaimer:** This application does not endorse any form of piracy. Only download games you legally own.
 
-A PyGame-based utility suite for handheld gaming consoles, with a retro CRT-themed interface designed for D-pad and controller navigation. Browse, download, organize, and manage game files from configurable sources. Supports HTML directory listings, JSON APIs, and Internet Archive. Runs on Batocera/Knulli handhelds, macOS, Windows, Linux, and Android.
+A PyGame-based utility suite for handheld gaming consoles, with a retro CRT-themed interface designed for D-pad and controller navigation. Browse, download, organize, and manage game files from configurable sources. Supports HTML directory listings, JSON APIs, and Internet Archive. Runs on Batocera/Knulli handhelds, macOS, Windows, and Linux.
 
 ---
 
@@ -119,7 +119,6 @@ DEV_MODE=true python src/app.py
 make bundle            # 🎮 PyGame bundle for consoles
 make bundle-macos      # 🍎 macOS .app standalone
 make bundle-windows    # 🪟 Windows .exe standalone
-make build-android     # 🤖 Android APK (Docker-based)
 ```
 
 ---
@@ -222,7 +221,6 @@ console_utilities/
 ├── workdir/                           # 🗂️ Development runtime data
 ├── dist/                              # 📦 Built distributions
 ├── Makefile                           # 🏗️ Build and development commands
-├── buildozer.spec                     # 🤖 Android build configuration
 ├── environment.yml                    # 🐍 Conda environment specification
 ├── pyproject.toml                     # 📋 Python project configuration
 └── README.md
@@ -245,7 +243,6 @@ console_utilities/
 |----------|---------|
 | 🎮 Console | Knulli RG35xxSP and other Batocera-based handhelds |
 | 💻 Desktop | macOS (.app), Windows (.exe), Linux |
-| 📱 Mobile | Android (APK via Buildozer) |
 | 🖥️ Display | 800x600 resolution, optimized for small screens |
 
 ---
@@ -259,7 +256,6 @@ console_utilities/
 - 🎮 [PyGame Bundle Guide](assets/docs/pygame.md) — Deploying to Batocera/Knulli consoles
 - 🍎 [macOS Build Guide](assets/docs/macos.md) — Building the macOS standalone app
 - 🪟 [Windows Build Guide](assets/docs/windows.md) — Building the Windows standalone app
-- 🤖 [Android Build Guide](assets/docs/android.md) — Building the Android APK
 
 ---
 

@@ -195,72 +195,8 @@ jobs:
           path: dist/windows.zip
           retention-days: 30
 
-  build-android:
-    needs: [resolve-version, download-bundled-data]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Get version
-        id: version
-        run: echo "VERSION=${{ needs.resolve-version.outputs.version }}" >> $GITHUB_OUTPUT
-
-      - name: Download bundled data
-        uses: actions/download-artifact@v4
-        with:
-          name: bundled-data
-          path: assets/
-
-      - name: Inject build info
-        run: |
-          sed -i 's/^APP_VERSION = .*/APP_VERSION = "${{ steps.version.outputs.VERSION }}"/' src/constants.py
-          sed -i 's/^BUILD_TARGET = .*/BUILD_TARGET = "android"/' src/constants.py
-          # Strip 'v' prefix for buildozer (e.g. v1.2.3 -> 1.2.3)
-          CLEAN_VERSION=$(echo "${{ steps.version.outputs.VERSION }}" | sed 's/^v//')
-          sed -i "s/^version = .*/version = ${CLEAN_VERSION}/" buildozer.spec
-          # Generate numeric version code from version (1.2.3 -> 10203)
-          NUMERIC_VERSION=$(echo "$CLEAN_VERSION" | awk -F. '{printf "%d%02d%02d", $1, $2, $3}')
-          if grep -q '^android.numeric_version' buildozer.spec; then
-            sed -i "s/^android.numeric_version = .*/android.numeric_version = ${NUMERIC_VERSION}/" buildozer.spec
-          else
-            sed -i "/^version = /a android.numeric_version = ${NUMERIC_VERSION}" buildozer.spec
-          fi
-
-      - name: Disable buildx alias
-        run: docker buildx rm default 2>/dev/null || true
-
-      - name: Build Android APK via Docker
-        env:
-          DOCKER_BUILDKIT: "0"
-        run: |
-          KS_PASS=$(echo -n "${{ secrets.KEYSTORE_PASSWORD }}" | tr -d '\n')
-          docker build --build-arg "KEYSTORE_PASSWORD=${KS_PASS}" -t rom-builder -f docker/dockerfile.android .
-          docker create --name rom-build rom-builder
-          mkdir -p dist/android
-          docker cp rom-build:/dist/. ./dist/android/
-          docker rm rom-build
-
-      - name: Rename APK for release
-        run: |
-          APK=$(find dist/android -name '*.apk' | head -1)
-          if [ -n "$APK" ]; then
-            cp "$APK" dist/consoleutils.apk
-            echo "✅ APK ready: dist/consoleutils.apk"
-          else
-            echo "❌ No APK found in dist/android/"
-            exit 1
-          fi
-
-      - name: Upload Android bundle
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-bundle
-          path: dist/consoleutils.apk
-          retention-days: 30
-
   release:
-    needs: [resolve-version, build-pygame-bundle, build-macos, build-windows, build-android]
+    needs: [resolve-version, build-pygame-bundle, build-macos, build-windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -286,12 +222,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: windows-bundle
-          path: dist/
-
-      - name: Download Android bundle
-        uses: actions/download-artifact@v4
-        with:
-          name: android-bundle
           path: dist/
 
       - name: Get version
@@ -368,7 +298,6 @@ jobs:
             | 🎮 Pygame | `pygame.zip` | For systems with pygame installed |
             | 🍎 macOS | `macos.zip` | Standalone .app bundle |
             | 🪟 Windows | `windows.zip` | Standalone .exe bundle |
-            | 🤖 Android | `consoleutils.apk` | APK for Android devices |
 
             ### Pygame Bundle Installation
             1. Download `pygame.zip`
@@ -393,11 +322,6 @@ jobs:
             2. Extract the folder
             3. Run `Console Utilities.exe`
 
-            ### Android Installation
-            1. Download `consoleutils.apk`
-            2. Install the APK
-            3. Enable "Install from unknown sources" if needed
-
             ### Requirements (Pygame bundle only)
             - Python 3.9+
             - pygame (pre-installed)
@@ -406,7 +330,6 @@ jobs:
             dist/pygame.zip
             dist/macos.zip
             dist/windows.zip
-            dist/consoleutils.apk
           draft: false
           prerelease: false
         env:
