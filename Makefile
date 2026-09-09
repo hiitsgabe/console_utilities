@@ -1,4 +1,4 @@
-.PHONY: run debug watch install dev clean test lint format setup bundle bundle-windows release
+.PHONY: run debug watch install dev clean test lint format setup bundle bundle-windows bundle-linux release
 
 # Load .env if present
 -include .env
@@ -131,6 +131,29 @@ bundle-windows:
 	@echo "✅ Windows exe created: dist/windows.zip"
 	@echo "   Extract and run Console Utilities.exe"
 
+# Build standalone Linux executable (Python and every library bundled in)
+bundle-linux:
+	@echo "🐧 Building Linux executable..."
+	@rm -rf build/linux dist/linux dist/linux.zip
+	@mkdir -p dist/linux
+	@# Inject build info into constants before building
+	@if [ -n "$(VERSION)" ]; then \
+		sed -i.bak 's/^APP_VERSION = .*/APP_VERSION = "$(VERSION)"/' src/constants.py; \
+	fi
+	@sed -i.bak 's/^BUILD_TARGET = .*/BUILD_TARGET = "linux"/' src/constants.py
+	@rm -f src/constants.py.bak
+	@echo "📦 Running PyInstaller..."
+	@python -m PyInstaller console_utils_linux.spec --distpath dist/linux --workpath build/linux --noconfirm
+	@# Restore constants after build
+	@git checkout src/constants.py 2>/dev/null || true
+	@# Copy Linux-specific docs
+	@cp assets/docs/linux.md dist/linux/README.md 2>/dev/null || echo "No Linux docs found"
+	@# zip stores the unix mode bits, so unzip restores the executable bit
+	@cd dist/linux && zip -qr ../linux.zip console_utilities README.md
+	@rm -rf build/linux dist/linux
+	@echo "✅ Linux executable created: dist/linux.zip"
+	@echo "   Extract and run ./console_utilities/console_utilities"
+
 # Format code with black
 format:
 	$(CONDA_ACTIVATE) black src/
@@ -164,5 +187,6 @@ help:
 	@echo "  test          - Run tests with pytest"
 	@echo "  bundle        - Create pygame bundle (.pygame file + assets)"
 	@echo "  bundle-windows- Create Windows .exe bundle (standalone)"
+	@echo "  bundle-linux  - Create Linux executable bundle (standalone)"
 	@echo "  release            - Create release and upload to GitHub (VERSION=v1.0.0)"
 	@echo "  help               - Show this help message"

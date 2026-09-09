@@ -103,6 +103,65 @@ jobs:
           path: dist/pygame.zip
           retention-days: 30
 
+  build-linux:
+    needs: [resolve-version, download-bundled-data]
+    # Pinned to 22.04 on purpose. PyInstaller bundles everything except glibc
+    # itself, so the binary will not start on a system older than the one it
+    # was built on. 22.04 ships glibc 2.35, which covers current Batocera and
+    # most desktop distros; ubuntu-latest would raise that floor.
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: echo "VERSION=${{ needs.resolve-version.outputs.version }}" >> $GITHUB_OUTPUT
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zip
+
+      - name: Install Python dependencies
+        run: |
+          pip install pyinstaller pygame requests rarfile zstandard pycryptodome retro-roster-patcher
+
+      - name: Download bundled data
+        uses: actions/download-artifact@v4
+        with:
+          name: bundled-data
+          path: assets/
+
+      - name: Build Linux executable
+        run: make bundle-linux VERSION=${{ steps.version.outputs.VERSION }}
+
+      # The app takes no arguments and has no headless mode, so it cannot be
+      # launched here without hanging. Check what can be checked: the zip keeps
+      # the executable bit, and the loader resolves every library it needs.
+      - name: Smoke test the binary
+        run: |
+          unzip -q dist/linux.zip -d /tmp/linuxcheck
+          test -x /tmp/linuxcheck/console_utilities/console_utilities
+          ldd /tmp/linuxcheck/console_utilities/console_utilities > /tmp/ldd.txt
+          cat /tmp/ldd.txt
+          if grep -q "not found" /tmp/ldd.txt; then
+            echo "Unresolved shared library in the bundle"
+            exit 1
+          fi
+
+      - name: Upload Linux bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-bundle
+          path: dist/linux.zip
+          retention-days: 30
+
   build-windows:
     needs: [resolve-version, download-bundled-data]
     runs-on: windows-latest
@@ -160,7 +219,7 @@ jobs:
           retention-days: 30
 
   release:
-    needs: [resolve-version, build-pygame-bundle, build-windows]
+    needs: [resolve-version, build-pygame-bundle, build-linux, build-windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -174,6 +233,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: pygame-bundle
+          path: dist/
+
+      - name: Download Linux bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-bundle
           path: dist/
 
       - name: Download Windows bundle
@@ -254,6 +319,7 @@ jobs:
             | Platform | File | Description |
             |----------|------|-------------|
             | 🎮 Pygame | `pygame.zip` | For systems with pygame installed |
+            | 🐧 Linux | `linux.zip` | Standalone x86_64 binary, nothing to install |
             | 🪟 Windows | `windows.zip` | Standalone .exe bundle |
 
             ### Pygame Bundle Installation
@@ -269,6 +335,16 @@ jobs:
             4. Open the **Pygame / Ports** system — *Console Utilities* will appear there
             5. Launch it like any other game
 
+            ### Linux Installation
+            1. Download `linux.zip`
+            2. Extract it, you'll get a `console_utilities` folder
+            3. Run `./console_utilities/console_utilities`
+
+            No Python, no pygame, no system packages. Everything is inside the
+            folder. Built for x86_64 glibc 2.35 and newer (Ubuntu 22.04 and up,
+            Debian 12, Fedora 36, current Batocera). ARM handhelds should use
+            `pygame.zip` instead.
+
             ### Windows Installation
             1. Download `windows.zip`
             2. Extract the folder
@@ -280,6 +356,7 @@ jobs:
             - zstandard, pycryptodome (installed by install_req.sh)
           files: |
             dist/pygame.zip
+            dist/linux.zip
             dist/windows.zip
           draft: false
           prerelease: false
