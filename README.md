@@ -1,10 +1,4 @@
-A note on this project: I'm building this to get my hands dirty with agentic AI and see what it can actually do for coding. This is a non-commercial, educational project by hiitsgabe.
-
-I know there's a lot of "AI slop" being sold to gamers right now, and I want to be clear: this isn't that. This is my personal sandbox for testing the limits of AI agents while creating something useful. It is experimental and a bit unstable, but it's a genuine effort to create something cool and helpful while I improve my skills w/ AI.
-
-I will never ask you to donate money to this project, or for me, because of this. The only thing I ask is that if you find a bug, you use the issues here on GitHub to report it so I can make it better for everyone. You can also use issues to give ideas. Pull requests are welcomed, help me build this!  :) 
-
-# 🎮 Console Utilities
+# Console Utilities
 
 <div align="center">
   <img src="assets/images/logo_big.png" alt="Console Utilities Logo" width="200"/>
@@ -16,68 +10,68 @@ I will never ask you to donate money to this project, or for me, because of this
 
 ![Screenshot](assets/images/screenshot.png)
 
-> ⚠️ **Disclaimer:** This application does not endorse any form of piracy. Only download games you legally own.
+> **Disclaimer:** This application does not endorse any form of piracy. Only download games you legally own.
 
-A PyGame-based utility suite for handheld gaming consoles, with a retro CRT-themed interface designed for D-pad and controller navigation. Browse, download, organize, and manage game files from configurable sources. Supports HTML directory listings, JSON APIs, and Internet Archive.
+A PyGame utility suite for handheld gaming consoles, with a retro CRT interface built for a D-pad and a controller. Point it at a source, browse what's there, and it downloads the files and drops them where your frontend expects them. It reads plain HTML directory listings, JSON APIs, and the Internet Archive.
 
-**This project is focused on low-end Linux-based devices**, the Batocera, Knulli, and Rocknix handhelds it was built for. Everything is tuned for that hardware: an 800x600 display, controller and keyboard navigation with no mouse or touch input, and no dependency on a desktop environment.
+It's built for low-end Linux handhelds: Batocera, Knulli, and Rocknix. That shapes everything about it. 800x600, controller and keyboard only, no mouse, no touch, and no desktop environment assumed.
 
-**Want to run it on Android or macOS?** Use [retro_toolbox](https://github.com/hiitsgabe/retro_toolbox) instead. This app is not built for those platforms. It does still generate ES-DE Steam shortcuts *for* Android devices, but it does not run on them.
-
----
-
-## ✨ Features
-
-### 📥 Download Management
-- **Batch Downloads** — Select multiple games and download them in a queue with real-time progress, speed, and ETA
-- **Resume Capability** — Interrupted downloads can be resumed right where they left off
-- **Automatic Extraction** — ZIP and RAR files are extracted and organized into the correct system folder
-- **NSZ Decompression** — Built-in NSZ to NSP conversion for Nintendo Switch files
-
-### 🔍 Browsing & Navigation
-- **Multiple View Modes** — List view and grid layout with box art thumbnails
-- **Search** — Filter games by name within any system
-- **Region Filtering** — USA-only filter with configurable regex per system
-- **Installed Detection** — Optionally hide games already downloaded
-
-### ⚽🏒⚾ Sports ROM Patcher
-- **Live Roster Updates** — Fetch current or historical season rosters from public sports APIs (ESPN, NHL API) and patch them into your legally owned game ROMs
-- **Multi-Platform Support** — Ten patchers for retro soccer, basketball, baseball, and hockey titles across PS1, PS2, PSP, SNES, and Genesis
-- **Step-by-Step Workflow** — Guided process: fetch rosters → preview teams → pick your ROM → patch. Soccer adds a league picker and a team color step; hockey adds a season selector
-- **Roster Preview** — View fetched teams and players before committing changes
-- **Player Attributes** — Maps real-world stats (goals, assists, speed, etc.) to in-game attribute scales
-- **Team Customization** — Update team names, kit/jersey colors, and flag designs where supported
-- **Historical Seasons** — The public hockey API reaches back to 1993. ESPN serves the current season only, so every other sport is current-season
-- **Non-Destructive** — Saves patched output to a new file, leaving your original ROM untouched
-
-📖 See the [Sports ROM Patcher Guide](docs/sports-rom-patcher.md) for detailed usage instructions.
-
-### 🛠️ Utilities
-- **🎮 Steam Shortcut Creator** — Search Steam games and create `.steam` shortcut files for ES-DE frontends on Android — browse with banner images, pick a folder, and generate the shortcut
-- **🔗 Direct URL Download** — Download a file from any URL
-- **📚 Internet Archive Integration** — Download individual files or add entire IA collections as systems
-- **🔄 File Deduplication** — Detect and remove duplicate files (safe and fuzzy matching)
-- **✏️ Filename Cleanup** — Batch rename files to clean formats
-- **👻 Ghost File Cleaner** — Find and remove orphaned split archives
-- **📂 ZIP/RAR Extraction** — Extract archives from the file browser
-
-### ⚙️ System Management
-- **Add Custom Systems** — Discover systems from directory listings or manually configure new sources
-- **Per-System Settings** — Custom ROM folders, hide/show systems
-- **Multiple Server Formats** — HTML directory listings, JSON APIs, Internet Archive metadata API
-- **Authentication** — Bearer tokens, cookies, and IA S3 credentials
-
-### 🖥️ Interface
-- **CRT Theme** — Phosphor green retro aesthetic with scanlines, vignette, and bezel effects
-- **Controller & Keyboard** — Full D-pad/gamepad support with acceleration
-- **Web Companion** — Drive the app from a phone or laptop on the same network: the whole UI in a browser, a live screen mirror, a file manager, and the log viewer
-- **Auto-Updates** — Check for and install app updates from within the app
+If you're on Android or macOS, use [retro_toolbox](https://github.com/hiitsgabe/retro_toolbox) instead. This one won't run there.
 
 ---
 
-## 🚀 Installation
+## Features
 
-### 💻 Development Setup
+### Downloading
+
+Select as many games as you like and they go into a queue with live progress, speed, and ETA. If a download dies halfway through, it picks up where it stopped instead of starting over. ZIP and RAR archives are extracted into the right system folder on their own, and NSZ files get converted to NSP along the way.
+
+### Browsing
+
+List view, or a grid with box art. Search within a system, filter to USA releases with a per-system regex, and optionally hide anything you already have.
+
+### Sports ROM patcher
+
+Pulls rosters from ESPN, or historical ones from the public hockey API going back to 1993, and writes them into a ROM you already own. Ten games are covered across soccer, basketball, baseball, and hockey, on PS1, PS2, PSP, SNES, and Genesis.
+
+The flow is the same every time: fetch the rosters, look them over, point it at your ROM, patch. Soccer adds a league picker and a step for team colors. Hockey adds a season selector. Real stats get mapped onto whatever attribute scale the game uses, and team names, kits, and flags are updated where the format allows it. Your original file is never touched: the patched copy is written next to it.
+
+There's more detail in the [Sports ROM Patcher Guide](docs/sports-rom-patcher.md).
+
+### Utilities
+
+- **Steam shortcut creator.** Search Steam, browse the results by banner, pick a folder, and write `.steam` shortcut files for ES-DE frontends on Android.
+- **Direct URL download.** Paste a URL, get the file.
+- **Internet Archive.** Grab individual files, or add an entire collection as a system.
+- **Deduplication.** Find and remove duplicates, with a safe mode and a fuzzy one.
+- **Filename cleanup.** Batch rename files into something readable.
+- **Ghost file cleaner.** Track down orphaned split archives.
+- **Extraction.** Unpack ZIP and RAR files straight from the file browser.
+
+### Systems
+
+Add a system by pointing the app at a directory listing and letting it discover what's there, or configure one by hand. Each system can have its own ROM folder and can be hidden from the menu. HTML listings, JSON APIs, and the Internet Archive metadata API all work, and you can attach bearer tokens, cookies, or IA S3 credentials when a source needs them.
+
+### Interface
+
+Phosphor green, scanlines, vignette, the whole CRT thing. Full D-pad and gamepad support, with acceleration when you hold a direction. There's also a web companion: switch it on and you can drive the entire app from a phone or laptop on the same network, with a live mirror of the screen, a file manager, and the log viewer. App updates can be checked and installed without leaving the app.
+
+---
+
+## Installation
+
+### On a Linux desktop
+
+Grab `linux.zip` from the [releases page](https://github.com/hiitsgabe/console_utilities/releases), extract it, and run it. Python and every library are inside the folder, so there's nothing else to install.
+
+```bash
+unzip linux.zip
+./console_utilities/console_utilities
+```
+
+x86_64 with glibc 2.35 or newer. More detail in the [Linux guide](assets/docs/linux.md).
+
+### Development setup
 
 ```bash
 # Setup conda environment and install dependencies
@@ -99,236 +93,240 @@ pip install -e .[dev]
 DEV_MODE=true python src/app.py
 ```
 
-### 🎮 Console Installation (Batocera/Knulli)
+### On a console (Batocera/Knulli)
 
 1. Create a `downloader` folder inside your console's `pygame` roms directory
 2. Run `make bundle` to create the distribution package
-3. Copy `dist/pygame.zip` contents (`console_utils.pygame` + `assets/`) to the console folder
+3. Copy the contents of `dist/pygame.zip` (`console_utils.pygame` plus `assets/`) into that folder
 4. Rescan games in EmulationStation
-5. Navigate to the PyGame library and launch Console Utilities
+5. Open the PyGame library and launch Console Utilities
 
-### 🏗️ Building for Other Platforms
+### Building
 
 ```bash
-make bundle            # 🎮 PyGame bundle for consoles
-make bundle-windows    # 🪟 Windows .exe standalone
+make bundle            # PyGame bundle for consoles
+make bundle-linux      # Standalone Linux binary
+make bundle-windows    # Windows .exe standalone
 ```
 
----
-
-## 🔧 Configuration
-
-### System Sources (`bundled_data.json`)
-
-Systems are configured via JSON files that define where to find files and how to parse server responses. See the docs for details:
-
-- 📄 [Server Response Format](docs/server-response-format.md) — How your server needs to respond for the app to detect files
-- 📄 [Adding a System](docs/adding-a-system.md) — How to add custom systems
-
-### User Settings (`config.json`)
-
-Runtime settings are auto-generated and stored in `config.json`:
-
-- **📁 Directories** — Working directory, ROMs directory
-- **🖥️ Display** — Box art thumbnails, USA-only filter, skip installed games
-- **📚 Internet Archive** — Enable/disable, S3 credentials
-- **⚽ Sports Roster** — Enable/disable, hockey data source (ESPN or the public hockey API)
-- **🌐 Web Companion** — Enable/disable the browser remote
-- **🔐 NSZ** — Enable/disable, keys file path
+The Linux and Windows bundles carry their own Python and their own copy of every library, so there's nothing to install on the target machine. The Linux one is x86_64 and needs glibc 2.35 or newer. On ARM handhelds, use the pygame bundle.
 
 ---
 
-## 🎯 Controls
+## Configuration
 
-### System Selection
+### System sources (`bundled_data.json`)
+
+Systems live in JSON files that say where to find the files and how to read the server's response. Two docs cover this:
+
+- [Server Response Format](docs/server-response-format.md), what your server has to return for the app to see any files
+- [Adding a System](docs/adding-a-system.md), how to wire up a custom source
+
+### User settings (`config.json`)
+
+Written automatically the first time you change something. It holds:
+
+- **Directories.** Working directory, ROMs directory.
+- **Display.** Box art thumbnails, USA-only filter, skip installed games.
+- **Internet Archive.** On or off, plus S3 credentials.
+- **Sports roster.** On or off, and which hockey data source to use (ESPN or the public hockey API).
+- **Web companion.** On or off.
+- **NSZ.** On or off, and the path to your keys file.
+
+---
+
+## Controls
+
+### System selection
 | Input | Action |
 |-------|--------|
-| ⬆️⬇️ D-pad / Arrow Keys | Navigate systems |
-| 🅱️ Button / Enter | Select system |
-| 🅰️ Button / Escape | Exit application |
+| D-pad up/down, arrow keys | Navigate systems |
+| B button, Enter | Select system |
+| A button, Escape | Exit application |
 | SELECT | Toggle list/grid view |
 
-### Game Selection
+### Game selection
 | Input | Action |
 |-------|--------|
-| ⬆️⬇️ D-pad / Arrow Keys | Navigate games |
-| ⬅️➡️ D-pad / Page Up/Down | Jump by letter |
-| 🅱️ Button / Space | Toggle game selection |
-| 🅰️ Button / Escape | Return to systems |
-| START / Enter | Begin download |
+| D-pad up/down, arrow keys | Navigate games |
+| D-pad left/right, Page Up/Down | Jump by letter |
+| B button, Space | Toggle game selection |
+| A button, Escape | Return to systems |
+| START, Enter | Begin download |
 | SELECT | Toggle view/thumbnails |
 
-### During Download
-| Input | Action |
-|-------|--------|
-| 🅰️ Button / Escape | Cancel download |
-| — | Real-time progress with speed & ETA |
+While a download is running, A or Escape cancels it. Progress, speed, and ETA update live.
 
 ---
 
-## 📁 Project Structure
+## Project structure
 
 ```
 console_utilities/
 ├── src/
-│   ├── app.py                          # 🚀 Main application entry point
-│   ├── state.py                        # 📊 Centralized state management
-│   ├── constants.py                    # 🔢 Global constants and paths
+│   ├── app.py                          # Main application entry point
+│   ├── state.py                        # Centralized state management
+│   ├── constants.py                    # Global constants and paths
 │   ├── config/
-│   │   └── settings.py                # ⚙️ User settings persistence
+│   │   └── settings.py                # User settings persistence
 │   ├── services/
-│   │   ├── data_loader.py            # 📦 System/game data loading
-│   │   ├── download_manager.py       # 📥 Download queue management
-│   │   ├── file_listing.py           # 📋 Remote file listing (HTML/JSON/IA)
-│   │   ├── image_cache.py            # 🖼️ Thumbnail caching
-│   │   ├── installed_checker.py      # ✅ Local file detection
-│   │   ├── internet_archive.py       # 📚 Internet Archive API
-│   │   ├── sports_api/              # 🌐 ESPN and NHL roster clients
-│   │   ├── rom_finder.py            # 🔎 Auto-detect a ROM on disk
-│   │   ├── team_color_cache.py      # 🎨 Team color overrides
-│   │   ├── we_patcher/              # ⚽ PS1 soccer ROM patcher
-│   │   ├── iss_patcher/             # ⚽ SNES soccer ROM patcher
-│   │   ├── pes6_ps2_patcher/        # ⚽ PS2 soccer ISO patcher
-│   │   ├── nbalive95_patcher/       # 🏀 Genesis basketball ROM patcher
-│   │   ├── kgj_mlb_patcher/         # ⚾ SNES baseball ROM patcher
-│   │   ├── mvp_psp_patcher/         # ⚾ PSP baseball ISO patcher
-│   │   ├── nhl94_genesis_patcher/   # 🏒 Genesis hockey ROM patcher
-│   │   ├── nhl94_snes_patcher/      # 🏒 SNES hockey ROM patcher
-│   │   ├── nhl05_ps2_patcher/       # 🏒 PS2 hockey ISO patcher
-│   │   └── nhl07_psp_patcher/       # 🏒 PSP hockey ISO patcher
-│   ├── web_companion/                 # 🌐 Browser remote control and file manager
+│   │   ├── data_loader.py            # System/game data loading
+│   │   ├── download_manager.py       # Download queue management
+│   │   ├── file_listing.py           # Remote file listing (HTML/JSON/IA)
+│   │   ├── image_cache.py            # Thumbnail caching
+│   │   ├── installed_checker.py      # Local file detection
+│   │   ├── internet_archive.py       # Internet Archive API
+│   │   ├── sports_api/              # ESPN and NHL roster clients
+│   │   ├── rom_finder.py            # Auto-detect a ROM on disk
+│   │   ├── team_color_cache.py      # Team color overrides
+│   │   ├── we_patcher/              # PS1 soccer ROM patcher
+│   │   ├── iss_patcher/             # SNES soccer ROM patcher
+│   │   ├── pes6_ps2_patcher/        # PS2 soccer ISO patcher
+│   │   ├── nbalive95_patcher/       # Genesis basketball ROM patcher
+│   │   ├── kgj_mlb_patcher/         # SNES baseball ROM patcher
+│   │   ├── mvp_psp_patcher/         # PSP baseball ISO patcher
+│   │   ├── nhl94_genesis_patcher/   # Genesis hockey ROM patcher
+│   │   ├── nhl94_snes_patcher/      # SNES hockey ROM patcher
+│   │   ├── nhl05_ps2_patcher/       # PS2 hockey ISO patcher
+│   │   └── nhl07_psp_patcher/       # PSP hockey ISO patcher
+│   ├── web_companion/                 # Browser remote control and file manager
 │   ├── input/
-│   │   ├── controller.py             # 🎮 Controller/gamepad input
-│   │   └── navigation.py             # 🕹️ D-pad navigation with acceleration
-│   ├── ui/                            # 🎨 UI components (Atomic Design)
-│   │   ├── theme.py                  # 🎨 Design tokens and theming
-│   │   ├── atoms/                    # 🔵 Basic components
-│   │   ├── molecules/                # 🟢 Composite components
-│   │   ├── organisms/                # 🟡 Complex sections
-│   │   ├── templates/                # 🟠 Page layouts
-│   │   └── screens/                  # 🔴 Complete screens and modals
-│   ├── utils/                         # 🔧 Logging, formatting, NSZ wrapper
-│   └── nsz/                           # 🔐 Embedded NSZ library
+│   │   ├── controller.py             # Controller/gamepad input
+│   │   └── navigation.py             # D-pad navigation with acceleration
+│   ├── ui/                            # UI components (Atomic Design)
+│   │   ├── theme.py                  # Design tokens and theming
+│   │   ├── atoms/                    # Basic components
+│   │   ├── molecules/                # Composite components
+│   │   ├── organisms/                # Complex sections
+│   │   ├── templates/                # Page layouts
+│   │   └── screens/                  # Complete screens and modals
+│   ├── utils/                         # Logging, formatting, NSZ wrapper
+│   └── nsz/                           # Embedded NSZ library
 ├── assets/
-│   ├── bundled_data.json             # 📋 System configuration
-│   ├── docs/                         # 📖 Platform-specific build docs
-│   ├── examples/                     # 📝 Example configuration files
-│   ├── fonts/                        # 🔤 VT323 retro font
-│   └── images/                       # 🖼️ Logo and screenshots
-├── docs/                              # 📖 User documentation
-├── workdir/                           # 🗂️ Development runtime data
-├── dist/                              # 📦 Built distributions
-├── Makefile                           # 🏗️ Build and development commands
-├── environment.yml                    # 🐍 Conda environment specification
-├── pyproject.toml                     # 📋 Python project configuration
+│   ├── bundled_data.json             # System configuration
+│   ├── docs/                         # Platform-specific build docs
+│   ├── examples/                     # Example configuration files
+│   ├── fonts/                        # VT323 retro font
+│   └── images/                       # Logo and screenshots
+├── docs/                              # User documentation
+├── workdir/                           # Development runtime data
+├── dist/                              # Built distributions
+├── Makefile                           # Build and development commands
+├── environment.yml                    # Conda environment specification
+├── pyproject.toml                     # Python project configuration
 └── README.md
 ```
 
 ---
 
-## 📦 Dependencies
+## Dependencies
 
-- 🐍 Python 3.11+
-- 🎮 pygame >= 2.0.0
-- 🌐 requests >= 2.25.0
-- 📦 rarfile >= 4.0 (bundled for console)
-- 🖼️ Pillow >= 9.0.0
-- ⚽ [retro-roster-patcher](https://github.com/hiitsgabe/retro_roster_patcher) >= 0.1.0 — the sports patching engine
-- 👀 watchdog (development only)
-- 🖤 black, flake8, pytest (development only)
+- Python 3.11+
+- pygame >= 2.0.0
+- requests >= 2.25.0
+- rarfile >= 4.0 (bundled for console)
+- Pillow >= 9.0.0
+- [retro-roster-patcher](https://github.com/hiitsgabe/retro_roster_patcher) >= 0.1.0, the sports patching engine
+- watchdog (development only)
+- black, flake8, pytest (development only)
 
-## 🖥️ Compatibility
+## Compatibility
 
 | Platform | Details |
 |----------|---------|
-| 🎮 Primary target | Low-end Linux handhelds: Knulli RG35xxSP, Batocera, and Rocknix devices |
-| 🐧 Linux desktop | Runs from source |
-| 🪟 Windows | Standalone .exe bundle |
-| 📱 Android / 🍎 macOS | The app does not run here. Use [retro_toolbox](https://github.com/hiitsgabe/retro_toolbox). Android devices are still supported as ES-DE shortcut *targets* |
-| 🖥️ Display | 800x600 resolution, optimized for small screens |
+| Primary target | Low-end Linux handhelds: Knulli RG35xxSP, Batocera, and Rocknix devices |
+| Linux desktop | Standalone x86_64 binary (`linux.zip`), or run from source |
+| Windows | Standalone .exe bundle |
+| Android, macOS | Not supported. Use [retro_toolbox](https://github.com/hiitsgabe/retro_toolbox) |
+| Display | 800x600, tuned for small screens |
 
 ---
 
-## 📖 Documentation
+## Documentation
 
-- ⚽ [Sports ROM Patcher Guide](docs/sports-rom-patcher.md) — How the sports roster patcher works
-- 📄 [Server Response Format](docs/server-response-format.md) — How your server needs to respond for the app to detect and list files
-- ➕ [Adding a System](docs/adding-a-system.md) — How to add custom gaming systems
-- 🎮 [PyGame Bundle Guide](assets/docs/pygame.md) — Deploying to Batocera/Knulli consoles
-- 🪟 [Windows Build Guide](assets/docs/windows.md) — Building the Windows standalone app
+- [Sports ROM Patcher Guide](docs/sports-rom-patcher.md), how the roster patcher works
+- [Server Response Format](docs/server-response-format.md), what your server has to return
+- [Adding a System](docs/adding-a-system.md), wiring up a custom source
+- [PyGame Bundle Guide](assets/docs/pygame.md), deploying to Batocera/Knulli
+- [Linux Build Guide](assets/docs/linux.md), the standalone Linux binary
+- [Windows Build Guide](assets/docs/windows.md), building the standalone Windows app
 
 ---
 
-## ⚖️ Legal Notice and Disclaimer
+## Legal notice and disclaimer
 
-**⚠️ IMPORTANT LEGAL DISCLAIMER:**
+**Please read this.**
 
-- **No ROM Data Storage** — This system does not host, store, or distribute any ROM files, game data, or copyrighted content. It is purely a download management and ROM patching tool.
+- **No ROM data storage.** This project does not host, store, or distribute ROM files, game data, or copyrighted content of any kind. It is a download manager and a patching tool, nothing else.
 
-- **No Game Copies** — This application contains no copies of games, ROMs, ISOs, or any copyrighted gaming content whatsoever.
+- **No game copies.** The application contains no copies of games, ROMs, ISOs, or any copyrighted gaming content whatsoever.
 
-- **ROM Patching — Original Copies Only** — The sports ROM patcher feature requires users to provide their own legally obtained ROM or ISO files dumped from original game media they own. This project does not provide, link to, or facilitate the acquisition of any game files. Any ROM or ISO used with the patcher must come from an original copy of the game that you legally own.
+- **Patching works on your own copies only.** The sports patcher requires you to supply a ROM or ISO you legally obtained from original media you own. This project does not provide, link to, or help you acquire any game files.
 
-- **No Affiliation** — This project is not affiliated with, endorsed by, or associated with any game publishers, developers, sports leagues, or rights holders.
+- **No affiliation.** This project is not affiliated with, endorsed by, or associated with any game publisher, developer, sports league, or rights holder.
 
-- **Example Configuration** — Any included configuration files serve as examples only. They demonstrate how the system works but do not endorse or recommend any specific download sources.
+- **Example configuration.** Any configuration files included are examples. They show how the system works; they do not endorse or recommend any particular download source.
 
-- **Legal Responsibility** — Users are solely responsible for:
-  - Ensuring they have legal rights to download any content
-  - Providing only legally owned ROM/ISO files for patching
-  - Complying with copyright laws in their jurisdiction
-  - Verifying the legality of any download sources they configure
+- **Your responsibility.** You alone are responsible for:
+  - Ensuring you have the legal right to download any content
+  - Supplying only legally owned ROM and ISO files for patching
+  - Complying with copyright law in your jurisdiction
+  - Checking the legality of any source you configure
   - Understanding that downloading copyrighted content without permission may be illegal
 
-- **Third-Party Sources** — Any websites or download sources referenced in configuration examples are third-party services. Users should research and evaluate the legal status of such sources independently.
+- **Third-party sources.** Any site or source referenced in a configuration example is a third-party service. Research and evaluate their legal status yourself.
 
-- **Legal Use Only** — This tool is intended exclusively for downloading legally owned content, homebrew games, or content explicitly permitted for distribution. The ROM patching features are intended solely for personal use with games you legally own.
+- **Lawful use only.** This tool is meant for legally owned content, homebrew, and content explicitly cleared for distribution. The patching features are for personal use with games you own.
 
-- **No Liability** — The developers and contributors of this project assume no responsibility or liability for any misuse of this software. Users bear full responsibility for how they use this tool and must ensure compliance with all applicable laws.
+- **No liability.** The developers and contributors accept no responsibility or liability for misuse of this software. You bear full responsibility for how you use it and for complying with applicable law.
 
-**By using this software, you acknowledge that you understand these legal responsibilities and agree to use it only for lawful purposes.**
-
----
-
-## 🙏 Credits & Acknowledgments
-
-This project incorporates the following open source libraries and projects:
-
-- **NSZ Library** — NSZ compression/decompression functionality provided by [nicoboss/nsz](https://github.com/nicoboss/nsz) — A compression/decompression tool with fast compression and decompression for various file formats.
+**By using this software you acknowledge these responsibilities and agree to use it only for lawful purposes.**
 
 ---
 
-## 🐛 Troubleshooting
+## Credits
 
-### Error Logging
-- Check `error.log` in the application directory for detailed error information
-- On Batocera systems: `/userdata/roms/pygame/downloader/error.log`
-- Development: `py_downloads/error.log` in the project root
+- **NSZ library.** Switch file compression and decompression comes from [nicoboss/nsz](https://github.com/nicoboss/nsz).
 
-### Common Issues
+---
+
+## Troubleshooting
+
+### Logs
+
+Errors go to `error.log` in the application directory:
+
+- On Batocera: `/userdata/roms/pygame/downloader/error.log`
+- In development: `py_downloads/error.log` in the project root
+
+### Common issues
 | Problem | Solution |
 |---------|----------|
-| 🚫 No games showing | Verify your system configuration and network connectivity |
-| ❌ Download failures | Check available disk space and directory permissions |
-| 🖥️ Display issues | Ensure pygame dependencies are properly installed |
-| 🖼️ Thumbnails not loading | Check that the `boxarts` URL is correct and accessible |
+| No games showing | Check the system configuration and your network connection |
+| Downloads failing | Check free disk space and directory permissions |
+| Display problems | Make sure the pygame dependencies are installed |
+| Thumbnails not loading | Check that the `boxarts` URL is correct and reachable |
 
 ### Development
 ```bash
-make format    # 🖤 Format code with black
-make lint      # 🔍 Lint code with flake8
-make test      # 🧪 Run tests with pytest
-make clean     # 🧹 Clean build artifacts
+make format    # Format code with black
+make lint      # Lint code with flake8
+make test      # Run tests with pytest
+make clean     # Clean build artifacts
 ```
 
 ---
 
-## 📜 License
+## License
 
-This project is licensed under [**CC BY-NC 4.0**](https://creativecommons.org/licenses/by-nc/4.0/). You're free to share, adapt, and build upon it for non-commercial purposes, with attribution. See the [LICENSE](LICENSE) file for details.
+Licensed under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). You're free to share, adapt, and build on it for non-commercial purposes, with attribution. See [LICENSE](LICENSE) for the details.
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
-Pull requests are welcome — from humans and AI agents alike! 🤖 For major changes, please open an issue first to discuss proposed modifications.
+Pull requests are welcome, from humans and AI agents alike. For anything big, open an issue first so we can talk it through.
+
+---
+
+Built with vibe coding as a study of what agentic AI can actually do, non-commercial and educational, by hiitsgabe. It's experimental and a bit unstable, I'll never ask you for money, and if you find a bug or have an idea, open an issue. :)
