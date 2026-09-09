@@ -1,5 +1,3 @@
-# Console Utilities
-
 <div align="center">
   <img src="assets/images/logo_big.png" alt="Console Utilities Logo" width="200"/>
   <br><br>
