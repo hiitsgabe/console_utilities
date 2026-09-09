@@ -42,12 +42,12 @@ A PyGame-based utility suite for handheld gaming consoles, with a retro CRT-them
 
 ### ⚽🏒⚾ Sports ROM Patcher
 - **Live Roster Updates** — Fetch current or historical season rosters from public sports APIs (ESPN, NHL API) and patch them into your legally owned game ROMs
-- **Multi-Platform Support** — Patchers for retro soccer, baseball, and hockey titles across PS1, SNES, Genesis, and PSP
-- **Step-by-Step Workflow** — Guided process: select season → fetch rosters → preview teams → pick your ROM → patch
+- **Multi-Platform Support** — Ten patchers for retro soccer, basketball, baseball, and hockey titles across PS1, PS2, PSP, SNES, and Genesis
+- **Step-by-Step Workflow** — Guided process: fetch rosters → preview teams → pick your ROM → patch. Soccer adds a league picker and a team color step; hockey adds a season selector
 - **Roster Preview** — View fetched teams and players before committing changes
 - **Player Attributes** — Maps real-world stats (goals, assists, speed, etc.) to in-game attribute scales
 - **Team Customization** — Update team names, kit/jersey colors, and flag designs where supported
-- **Historical Seasons** — Access roster data from past seasons via public APIs (availability varies by provider)
+- **Historical Seasons** — The public hockey API reaches back to 1993. ESPN serves the current season only, so every other sport is current-season
 - **Non-Destructive** — Saves patched output to a new file, leaving your original ROM untouched
 
 📖 See the [Sports ROM Patcher Guide](docs/sports-rom-patcher.md) for detailed usage instructions.
@@ -70,6 +70,7 @@ A PyGame-based utility suite for handheld gaming consoles, with a retro CRT-them
 ### 🖥️ Interface
 - **CRT Theme** — Phosphor green retro aesthetic with scanlines, vignette, and bezel effects
 - **Controller & Keyboard** — Full D-pad/gamepad support with acceleration
+- **Web Companion** — Drive the app from a phone or laptop on the same network: the whole UI in a browser, a live screen mirror, a file manager, and the log viewer
 - **Auto-Updates** — Check for and install app updates from within the app
 
 ---
@@ -131,6 +132,8 @@ Runtime settings are auto-generated and stored in `config.json`:
 - **📁 Directories** — Working directory, ROMs directory
 - **🖥️ Display** — Box art thumbnails, USA-only filter, skip installed games
 - **📚 Internet Archive** — Enable/disable, S3 credentials
+- **⚽ Sports Roster** — Enable/disable, hockey data source (ESPN or the public hockey API)
+- **🌐 Web Companion** — Enable/disable the browser remote
 - **🔐 NSZ** — Enable/disable, keys file path
 
 ---
@@ -180,12 +183,20 @@ console_utilities/
 │   │   ├── image_cache.py            # 🖼️ Thumbnail caching
 │   │   ├── installed_checker.py      # ✅ Local file detection
 │   │   ├── internet_archive.py       # 📚 Internet Archive API
+│   │   ├── sports_api/              # 🌐 ESPN and NHL roster clients
+│   │   ├── rom_finder.py            # 🔎 Auto-detect a ROM on disk
+│   │   ├── team_color_cache.py      # 🎨 Team color overrides
 │   │   ├── we_patcher/              # ⚽ PS1 soccer ROM patcher
 │   │   ├── iss_patcher/             # ⚽ SNES soccer ROM patcher
+│   │   ├── pes6_ps2_patcher/        # ⚽ PS2 soccer ISO patcher
+│   │   ├── nbalive95_patcher/       # 🏀 Genesis basketball ROM patcher
 │   │   ├── kgj_mlb_patcher/         # ⚾ SNES baseball ROM patcher
+│   │   ├── mvp_psp_patcher/         # ⚾ PSP baseball ISO patcher
 │   │   ├── nhl94_genesis_patcher/   # 🏒 Genesis hockey ROM patcher
 │   │   ├── nhl94_snes_patcher/      # 🏒 SNES hockey ROM patcher
+│   │   ├── nhl05_ps2_patcher/       # 🏒 PS2 hockey ISO patcher
 │   │   └── nhl07_psp_patcher/       # 🏒 PSP hockey ISO patcher
+│   ├── web_companion/                 # 🌐 Browser remote control and file manager
 │   ├── input/
 │   │   ├── controller.py             # 🎮 Controller/gamepad input
 │   │   └── navigation.py             # 🕹️ D-pad navigation with acceleration
@@ -220,9 +231,11 @@ console_utilities/
 - 🐍 Python 3.11+
 - 🎮 pygame >= 2.0.0
 - 🌐 requests >= 2.25.0
-- 📦 rarfile (bundled for console)
+- 📦 rarfile >= 4.0 (bundled for console)
+- 🖼️ Pillow >= 9.0.0
+- ⚽ [retro-roster-patcher](https://github.com/hiitsgabe/retro_roster_patcher) >= 0.1.0 — the sports patching engine
 - 👀 watchdog (development only)
-- 🖤 black, flake8 (development only)
+- 🖤 black, flake8, pytest (development only)
 
 ## 🖥️ Compatibility
 
